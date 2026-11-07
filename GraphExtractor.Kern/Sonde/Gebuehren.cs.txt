@@ -3,10 +3,10 @@ using Leihwesen.Ausleihe;
 
 // SONDE — ZWEI Aggregate im SELBEN Namespace, Decider in eigener Datei (Mahnvorgang.Decider.cs.txt), dazu der Ablauf zwischen ihnen aus
 //         GRAPHEN (Entscheidungen 4–6; früher eine Saga mit expliziter Interface-Implementierung):
-//         · FOLGE mit leerem Strom: die Rückgabeprüfung ist ein Graph mit EINEM Knoten; sein Kopf nimmt einen Command ohne Ziel aus dem Decide
+//         · FOLGE mit leerem Strom: die Rückgabeprüfung ist ein Graph mit EINEM Knoten; sein Kopf nimmt einen Command ohne Ziel eines Clients
 //           (PruefeRueckgabe) und gibt auf einem Teil der Fälle nichts aus (ein leerer Strom); die neue Id kommt aus der Herkunft (R13);
-//         · WAHL: die Schadensaufnahme gibt genau einen von drei Fällen aus — einen Command an den nächsten Knoten, Arbeit für einen Akteur draußen
-//           (ein Command ohne Ziel, den ein Akteur hört) oder einen Hinweis (flüchtig, an die Akteure, die ihn hören);
+//         · WAHL: die Schadensaufnahme gibt genau einen von drei Fällen aus — einen Command an den nächsten Knoten, einen Command an den
+//           Schadensfall (die Begutachtung vor Ort; auf das Fakt reagiert das Archiv) oder einen Hinweis (flüchtig, an die Akteure, die ihn hören);
 //         · KETTE, DIE MITTRÄGT: die Schätzung (TECHNIK im Konstruktor) gibt ihren Betrag an das Gutachten (KONFIG-Record), das Gutachten trägt
 //           Betrag und Zuschlag zur Mahnung — jedes Auf nimmt genau eine Nachricht, keiner muss zusammenführen.
 
@@ -29,14 +29,15 @@ public sealed class SchadenBeiRueckgabe : IFunktion
     }
 }
 
-// Ein Command ohne Ziel aus dem Decide des Schadensfalls: der Schaden ist zu schätzen (der Kopf der Schadensbewertung).
+// Der Kopf der Schadensbewertung: der Schaden ist zu schätzen — die Gutachterin gibt ihn hinein, sie reagiert auf das gemeldete Fakt.
 public record SchaetzeSchaden(Id<Schadensfall> Fall, Guid LeserId) : ICommand;
 
-// Was nur Knoten einander geben (Commands ohne Ziel, nie im Log) — und was draußen ankommt: Arbeit für einen Akteur, ein Hinweis.
+// Was nur Knoten einander geben (Commands ohne Ziel, nie im Log) — und was den Graphen verlässt: ein Command an den Schadensfall, ein Hinweis.
 public record SchadenErfasst(Guid LeserId, decimal Neuwert, int AlterJahre) : ICommand;
 public record SchadenGeschaetzt(Guid LeserId, decimal Betrag) : ICommand;
 public record GutachtenErhalten(Guid LeserId, decimal Betrag, decimal Zuschlag) : ICommand;
-public record BegutachteVorOrt(Id<Schadensfall> Fall, Guid LeserId) : ICommand;
+public record BegutachteVorOrt(Id<Schadensfall> AggregateId, Guid LeserId) : ICommand<Schadensfall>;
+public record BegutachtungAngefordert(Guid LeserId) : IEvent;
 public record NichtSchaetzbar(string Grund) : ITransientEvent;
 
 // WAHL: genau einer der drei Fälle je Lauf.
@@ -45,7 +46,7 @@ public sealed class Schadensaufnahme : IFunktion
     public OneOf<SchadenErfasst, BegutachteVorOrt, NichtSchaetzbar> Auf(SchaetzeSchaden s)
     {
         if (s.LeserId == Guid.Empty) return new NichtSchaetzbar("unbekannter Leser");
-        if (s.Fall.Wert.ToByteArray()[0] % 2 == 0) return new BegutachteVorOrt(s.Fall, s.LeserId);
+        if (s.Fall.Wert.ToByteArray()[0] % 2 == 0) return new BegutachteVorOrt(s.Fall, s.LeserId);   // an den Schadensfall
         return new SchadenErfasst(s.LeserId, 25m, 2);
     }
 }
@@ -110,20 +111,27 @@ public sealed record Schadensbewertung(
 public partial class Schadensfall : IState
 {
     public bool Gemeldet { get; set; }
+    public bool Begutachtet { get; set; }
 
     public partial class Decider : IDecider<Schadensfall>
     {
-        public IEnumerable<OneOf<SchadenGemeldet, SchaetzeSchaden, SchadenExistiert>> Decide(MeldeSchaden c)
+        public IEnumerable<OneOf<SchadenGemeldet, SchadenExistiert>> Decide(MeldeSchaden c)
         {
             if (this.State.Gemeldet) { yield return new SchadenExistiert(c.AggregateId); yield break; }
             yield return new SchadenGemeldet(c.LeserId);
-            yield return new SchaetzeSchaden(c.AggregateId, c.LeserId);
+        }
+
+        public IEnumerable<OneOf<BegutachtungAngefordert>> Decide(BegutachteVorOrt c)
+        {
+            if (this.State.Begutachtet) yield break;
+            yield return new BegutachtungAngefordert(c.LeserId);
         }
     }
 
     public partial class Applier : IApplier<Schadensfall>
     {
         public void Apply(SchadenGemeldet e) { this.State.Gemeldet = true; }
+        public void Apply(BegutachtungAngefordert e) { this.State.Begutachtet = true; }
     }
 }
 

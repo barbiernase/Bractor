@@ -31,10 +31,9 @@ public sealed class IstClientAttribute<TClient> : Attribute where TClient : ICli
 public interface IVerkoerpert<TAkteur> where TAkteur : IAkteur { }
 
 /// <summary>
-/// Am Akteur (<see cref="IAkteur"/>): zu ihm kommt <typeparamref name="T"/>. Ein Command ohne Ziel ist ARBEIT — die Werkstatt gibt ihn genau einer
-/// Sitzung, die den Akteur verkörpert, und stellt ihn erneut zu, bis eine Antwort kommt (die erste gewinnt; die Antwort sind Commands über sein
-/// <c>IDarf</c>). Ein Event oder ein Hinweis ist KENNTNIS — gepusht, verlierbar, ohne Ausgabe (docs/konzept-akteure.md §5); verlässlich liest ein
-/// Client nur über „lies das Log ab Position“.
+/// Am Akteur (<see cref="IAkteur"/>): zu ihm kommt <typeparamref name="T"/> — ein Fakt: ein Event oder ein Hinweis, nie ein Command (CQRS058). Ein
+/// Client, der ihn verkörpert, reagiert darauf mit Commands über sein <c>IDarf</c> oder nimmt es zur Kenntnis (docs/konzept-akteure.md §5); gepusht
+/// wird es verlierbar, verlässlich liest er über „lies das Log ab Position“ (genau einmal mit dem Stand seiner Reaktionen).
 /// </summary>
 public interface IHoert<T> { }
 

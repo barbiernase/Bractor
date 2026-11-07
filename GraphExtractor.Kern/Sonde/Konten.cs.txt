@@ -3,8 +3,8 @@ using Abstractions;
 // SONDE — fremdes Szenario 1 (docs/12 §12.6): BENUTZER MIT EINDEUTIGER E-MAIL.
 //
 // „Keine zwei Benutzer mit derselben Adresse“ ist eine Invariante über viele Benutzer — sie gehört in EIN Aggregat: die Adresse selbst
-// (Eindeutigkeits-Aggregat, Id aus der normalisierten Adresse abgeleitet). Der Benutzer beantragt; sein Decide gibt die Prüfung der Adresse als
-// Command ohne Ziel an den Kopf eines Graphen. Dessen einziger Knoten reserviert die Adresse und hört die ANTWORTEN darauf (zwei Events des
+// (Eindeutigkeits-Aggregat, Id aus der normalisierten Adresse abgeleitet). Der Benutzer beantragt; auf das Fakt gibt die Adressprüfung (ein Client)
+// die Prüfung der Adresse als Command ohne Ziel an den Kopf eines Graphen. Dessen einziger Knoten reserviert die Adresse und hört die ANTWORTEN darauf (zwei Events des
 // fremden Aggregats, je eines ein Auf — R2): reserviert → bestätigen, vergeben → ablehnen. Die Absage ist ein FAKT (der Modellierer entscheidet über
 // den Typ), weil der Ablauf an ihr weitergeht. Die Zugehörigkeit zum Benutzer ist ein fachliches Feld im Event (docs/10 A2).
 
@@ -24,7 +24,7 @@ public record ReserviereAdresse(Id<Adresse> AggregateId, string Email, Id<Benutz
 public record AdresseReserviert(string Email, Id<Benutzer> BenutzerId) : IEvent;
 public record AdresseVergeben(Id<Benutzer> BenutzerId, Id<Benutzer> Inhaber) : IEvent;
 
-/// <summary>Ein Command ohne Ziel aus dem Decide: die Adresse des neuen Benutzers ist zu prüfen.</summary>
+/// <summary>Der Kopf der Adressprüfung: die Adresse des neuen Benutzers ist zu prüfen — die Adressprüfung reagiert damit auf den Antrag.</summary>
 public record PruefeAdresse(Id<Benutzer> BenutzerId, string Email) : ICommand;
 
 public enum Kontostatus { Beantragt = 1, Aktiv = 2, Abgelehnt = 3 }
@@ -36,12 +36,10 @@ public partial class Benutzer : IState
 
     public partial class Decider : IDecider<Benutzer>
     {
-        public IEnumerable<OneOf<RegistrierungBeantragt, PruefeAdresse, BenutzerExistiert>> Decide(RegistriereBenutzer c)
+        public IEnumerable<OneOf<RegistrierungBeantragt, BenutzerExistiert>> Decide(RegistriereBenutzer c)
         {
             if (this.State.Version > 0) { yield return new BenutzerExistiert(c.AggregateId); yield break; }
-            var email = Adressschluessel.Normalisiere(c.Email);
-            yield return new RegistrierungBeantragt(c.AggregateId, email, c.Name);
-            yield return new PruefeAdresse(c.AggregateId, email);
+            yield return new RegistrierungBeantragt(c.AggregateId, Adressschluessel.Normalisiere(c.Email), c.Name);
         }
 
         public IEnumerable<OneOf<BenutzerBestaetigt>> Decide(BestaetigeBenutzer c)
@@ -116,5 +114,8 @@ public sealed record Adresspruefung([Kopf] Registrierung Reservierung) : IGraph;
 
 // Wer hineingibt: ein Mensch am Registrierungs-Formular; er hört, wie es ausgeht (Kenntnis zweier Events). Der Client nennt nur ihn.
 public sealed record Besucher : IAkteur, IDarf<RegistriereBenutzer>, IHoert<BenutzerBestaetigt>, IHoert<RegistrierungAbgelehnt>;
+
+// Ein Dienst, der reagiert: auf jeden Antrag gibt er die Prüfung seiner Adresse an den Kopf der Adressprüfung.
+public sealed record Adresspruefer : IAkteur, IHoert<RegistrierungBeantragt>, IDarf<PruefeAdresse>;
 
 public sealed record Registrierungsseite : IClient, IVerkoerpert<Besucher>;

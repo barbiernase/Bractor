@@ -1,10 +1,9 @@
 """
-Reconnect: nach einem Verbindungsabbruch verbindet der Client neu, nimmt seine Arbeit wieder an UND verarbeitet weiter.
+Reconnect: nach einem Verbindungsabbruch verbindet der Client neu UND verarbeitet weiter.
 
-Regression: früher endeten Lese- und Verarbeitungsschleife mit der ersten Verbindung;
-der Monitor verband zwar neu und meldete die Arbeit erneut an, aber niemand las mehr — der Worker war taub, seine Aufträge
-liefen nur noch per Lease-Ablauf zu anderen. Ohne Server: der Proxy ist ein Fake, der je Verbindung genau einen Auftrag liefert
-und dann die Verbindung verliert.
+Regression: früher endeten Lese- und Verarbeitungsschleife mit der ersten Verbindung; der Monitor verband zwar neu, aber niemand
+las mehr — der Worker war taub. Ohne Server: der Proxy ist ein Fake, der je Verbindung genau ein Event liefert und dann die
+Verbindung verliert.
 """
 
 import asyncio
@@ -18,7 +17,7 @@ class FakeClient(CqrsClient):   # kein [State] → State bleibt None
 
 
 class FakeProxy:
-    """Je connect() eine Sitzung: ein ArbeitsAuftrag in die Queue, dann Verbindungsabbruch."""
+    """Je connect() eine Sitzung: ein Event in die Queue, dann Verbindungsabbruch."""
 
     def __init__(self, sitzungen: int):
         self.event_queue: asyncio.Queue = asyncio.Queue()
@@ -40,7 +39,7 @@ class FakeProxy:
         return SimpleNamespace(session_id=self.session_id)
 
     async def read_loop(self):
-        await self.event_queue.put(("arbeits_auftrag", SimpleNamespace(vorgang=f"v{self.verbindungen}")))
+        await self.event_queue.put(("event", SimpleNamespace(vorgang=f"v{self.verbindungen}")))
         await asyncio.sleep(0.05)
         if self.verbindungen >= self._sitzungen:
             await asyncio.Event().wait()   # letzte Sitzung bleibt offen, bis der Test abbricht
@@ -52,20 +51,19 @@ class FakeProxy:
         self.disconnected.set()
 
 
-def test_nach_reconnect_wird_weiter_verarbeitet_und_neu_angeboten():
+def test_nach_reconnect_wird_weiter_verarbeitet():
     client = FakeClient(registry=SimpleNamespace(), nutzlast={})
     proxy = FakeProxy(sitzungen=3)
     client._proxy = proxy
     client._connection._proxy = proxy
     client._connection._backoff_base = 0.01
 
-    angenommen, genommen = [], []
+    genommen = []
 
-    async def nimm_an(_antwort=None):
-        angenommen.append(proxy.session_id)
+    async def nimm(msg, *rest):
+        genommen.append(msg.vorgang)
 
-    client._arbeit.nimm_an = nimm_an
-    client._arbeit.nimm = lambda msg: genommen.append(msg.vorgang)
+    client._router._handle_event = nimm
     client._build_capabilities_request = lambda: object()
 
     async def lauf():
@@ -83,5 +81,4 @@ def test_nach_reconnect_wird_weiter_verarbeitet_und_neu_angeboten():
     asyncio.run(lauf())
 
     assert proxy.verbindungen == 3, "nach jedem Abbruch neu verbunden"
-    assert angenommen == ["s1", "s2", "s3"], "nach jedem Handshake die Arbeit neu angenommen"
-    assert genommen == ["v1", "v2", "v3"], "auch nach dem Reconnect werden Aufträge verarbeitet"
+    assert genommen == ["v1", "v2", "v3"], "auch nach dem Reconnect werden Events verarbeitet"

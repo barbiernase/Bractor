@@ -9,19 +9,17 @@ namespace Infrastructure.Akteure;
 /// <param name="Name">Einfacher Typname des Akteurs (Schlüssel der Composition-Root-Abbildung).</param>
 /// <param name="Typ">Der Akteur-Typ selbst.</param>
 /// <param name="Commands">darf auslösen (<c>IDarf</c>): Commands an Aggregate und Commands ohne Ziel an den Kopf eines Graphen — von sich aus oder
-/// als Antwort auf seine Arbeit</param>
+/// als Reaktion auf ein Fakt, das er hört</param>
 /// <param name="Queries">darf fragen</param>
 /// <param name="TransientEvents">darf veröffentlichen (verlierbare Hinweise vom Client)</param>
-/// <param name="Hoert">Kenntnis (<c>IHoert</c> eines Events oder Hinweises): gepusht, verlierbar</param>
-/// <param name="Arbeit">Arbeit (<c>IHoert</c> eines Commands ohne Ziel): die Werkstatt gibt sie einer Sitzung, die ihn verkörpert, bis zur Antwort</param>
+/// <param name="Hoert">was er hört (<c>IHoert</c> eines Events oder Hinweises): gepusht, Events auch im Log lesbar</param>
 public sealed record AkteurRechte(
     string Name,
     Type Typ,
     IReadOnlySet<Type> Commands,
     IReadOnlySet<Type> Queries,
     IReadOnlySet<Type> TransientEvents,
-    IReadOnlySet<Type> Hoert,
-    IReadOnlySet<Type> Arbeit)
+    IReadOnlySet<Type> Hoert)
 {
     /// <summary>Der Client der Sitzung (<c>IClient</c>) — null bei einem Token ohne Client.</summary>
     public Type? VertragTyp { get; init; }
@@ -49,7 +47,7 @@ public sealed record AkteurRechte(
         static HashSet<Type> U(IEnumerable<IReadOnlySet<Type>> s) => s.SelectMany(x => x).ToHashSet();
         return new AkteurRechte(string.Join("+", akteure.Select(a => a.Name)), typeof(IAkteur),
             U(akteure.Select(a => a.Commands)), U(akteure.Select(a => a.Queries)),
-            U(akteure.Select(a => a.TransientEvents)), U(akteure.Select(a => a.Hoert)), U(akteure.Select(a => a.Arbeit)))
+            U(akteure.Select(a => a.TransientEvents)), U(akteure.Select(a => a.Hoert)))
         { Teile = akteure };
     }
 

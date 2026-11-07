@@ -1,15 +1,14 @@
 # GENERIERT von Cqrs.Codegen aus den Clients der Domäne (record X : IClient, docs/konzept-akteure.md §4).
 # Nicht von Hand ändern — ./codegen.sh --force erzeugt die Datei neu, ./codegen.sh --check prüft auf Drift.
 #
-# Je Client eine abstrakte Basis aus den Akteuren, die er verkörpert: je gehörtem Command (Arbeit) eine Methode `auf_<command>`, die die
-# Antwort liefert — Commands über das IDarf des Akteurs, gern in Stücken (yield) —, und je gehörtem Event oder Hinweis eine Methode
-# `auf_<event>`: die Reaktion (Commands des IDarf) oder nichts (Kenntnis). Die Basis verdrahtet den Dispatch und meldet Client + Hash am Handshake.
+# Je Client eine abstrakte Basis aus den Akteuren, die er verkörpert: je gehörtem Event oder Hinweis eine Methode `auf_<event>` —
+# die Reaktion (Commands des IDarf, gern in Stücken: yield) oder nichts (Kenntnis). Die Basis verdrahtet den Dispatch und meldet
+# Client + Hash am Handshake.
 from __future__ import annotations
 
 from abc import abstractmethod
 from typing import AsyncIterator, ClassVar, TypeVar
 
-from cqrs_client.arbeit import Arbeit, Herkunft
 from cqrs_client.router import MessageContext
 from cqrs_client.vertrag import ClientVertragBasis
 
@@ -96,7 +95,6 @@ class ArbeitsplatzBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "Arbeitsplatz"
     AKTEURE: ClassVar[tuple] = ("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer")
     VERTRAG_HASH: ClassVar[str] = "095f9149cfc76d4d"
-    ARBEIT: ClassVar[dict] = {}
     HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis
         BildPaarDurchKiKlassifiziertDto: "auf_bild_paar_durch_ki_klassifiziert",
         BildPaarGelabeltDto: "auf_bild_paar_gelabelt",
@@ -259,7 +257,6 @@ class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "KlassifikationsWorker"
     AKTEURE: ClassVar[tuple] = ("Klassifizierer",)
     VERTRAG_HASH: ClassVar[str] = "e7dd2142dc11d49c"
-    ARBEIT: ClassVar[dict] = {}
     HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis
         BildVerfuegbarDto: "auf_bild_verfuegbar",
         ImagePairKomplettDto: "auf_image_pair_komplett",
@@ -290,7 +287,6 @@ class ReaktionsWorkerBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "ReaktionsWorker"
     AKTEURE: ClassVar[tuple] = ("Datensatzpfleger", "Teilmelder")
     VERTRAG_HASH: ClassVar[str] = "23f2d1708aa2efd3"
-    ARBEIT: ClassVar[dict] = {}
     HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis
         EinfrierenAngefordertDto: "auf_einfrieren_angefordert",
         RangeAngefordertDto: "auf_range_angefordert",
@@ -321,7 +317,6 @@ class TrainingsWorkerBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "TrainingsWorker"
     AKTEURE: ClassVar[tuple] = ("TrainingsSystem",)
     VERTRAG_HASH: ClassVar[str] = "bc9b0f0d5825ddb4"
-    ARBEIT: ClassVar[dict] = {}
     HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis
         TrainingAngefordertDto: "auf_training_angefordert",
     }

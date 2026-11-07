@@ -8,13 +8,13 @@
 
 # ══ LEIHWESEN ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-# ── Ausleihe: Commands im Sub-Namespace, Property-Records, if/else; eine FRIST in der Entscheidung (docs/10 §10.2); zwei Decides geben je einen
-#    Command ohne Ziel aus (an den Kopf eines Graphen) — er gehört dem Aggregat, das ihn abgibt ──
+# ── Ausleihe: Commands im Sub-Namespace, Property-Records, if/else; eine FRIST in der Entscheidung (docs/10 §10.2); ein Decide gibt nur Fakten aus,
+#    auf Rückgabe und Mahnung reagiert das Archiv mit den Köpfen zweier Graphen ──
 enum Leihwesen.Ausleihe.Zustand | Neu = 1, Gebraucht = 2, Beschaedigt = 3
 aggregat Leihwesen.Ausleihe.Leihvorgang | LeserId:Guid, Offen:bool
 decide Leihvorgang.LeiheAus -> Ausgeliehen; BereitsAusgeliehen; Frist<MahneRueckgabe>
-decide Leihvorgang.GibZurueck -> Zurueckgegeben; PruefeRueckgabe; NichtAusgeliehen
-decide Leihvorgang.MahneRueckgabe -> RueckgabeAngemahnt; BemesseMahnung
+decide Leihvorgang.GibZurueck -> Zurueckgegeben; NichtAusgeliehen
+decide Leihvorgang.MahneRueckgabe -> RueckgabeAngemahnt
 apply Leihvorgang.Ausgeliehen
 apply Leihvorgang.Zurueckgegeben
 apply Leihvorgang.RueckgabeAngemahnt
@@ -27,8 +27,8 @@ record Leihwesen.Ausleihe.Signatur valueobject | Regal:string, Nummer:int
 record Leihwesen.Ausleihe.Ausgeliehen event aggregat=Leihvorgang | Medium:Signatur, LeserId:Guid, Tage:int
 record Leihwesen.Ausleihe.Zurueckgegeben event aggregat=Leihvorgang | LeserId:Guid { get; init; }, Zustand:Zustand { get; init; }
 record Leihwesen.Ausleihe.RueckgabeAngemahnt event aggregat=Leihvorgang | LeserId:Guid
-record Leihwesen.Ausleihe.PruefeRueckgabe command aggregat=Leihvorgang | LeserId:Guid, Zustand:Zustand
-record Leihwesen.Ausleihe.BemesseMahnung command aggregat=Leihvorgang | LeserId:Guid
+record Leihwesen.Ausleihe.PruefeRueckgabe command | LeserId:Guid, Zustand:Zustand
+record Leihwesen.Ausleihe.BemesseMahnung command | LeserId:Guid
 record Leihwesen.Ausleihe.BereitsAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
 record Leihwesen.Ausleihe.NichtAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
 record Leihwesen.Ausleihe.HoleLeihstand query aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>
@@ -38,11 +38,13 @@ record Leihwesen.Ausleihe.NichtVerliehen queryresponse aggregat=Leihvorgang | Vo
 code Leihwesen.Ausleihe.Fristrechnung class teile=2 domaene=Leihwesen.Ausleihe block=§geteilt
 
 # ── Gebuehren: ZWEI Aggregate in einem Namespace, Decider in eigener Datei; der Ablauf zwischen ihnen aus GRAPHEN ──
-aggregat Leihwesen.Gebuehren.Schadensfall | Gemeldet:bool
+aggregat Leihwesen.Gebuehren.Schadensfall | Gemeldet:bool, Begutachtet:bool
 aggregat Leihwesen.Gebuehren.Mahnvorgang | Betrag:decimal
-decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchaetzeSchaden; SchadenExistiert
+decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchadenExistiert
+decide Schadensfall.BegutachteVorOrt -> BegutachtungAngefordert
 decide Mahnvorgang.EroeffneMahnung -> MahnungEroeffnet; MahnungExistiert
 apply Schadensfall.SchadenGemeldet
+apply Schadensfall.BegutachtungAngefordert
 apply Mahnvorgang.MahnungEroeffnet
 record Leihwesen.Gebuehren.MeldeSchaden command erzeugung aggregat=Schadensfall | AggregateId:Id<Schadensfall>, LeserId:Guid
 record Leihwesen.Gebuehren.SchadenGemeldet event aggregat=Schadensfall | LeserId:Guid
@@ -50,20 +52,21 @@ record Leihwesen.Gebuehren.SchadenExistiert rejection aggregat=Schadensfall | Id
 record Leihwesen.Gebuehren.EroeffneMahnung command erzeugung aggregat=Mahnvorgang | AggregateId:Id<Mahnvorgang>, Betrag:decimal
 record Leihwesen.Gebuehren.MahnungEroeffnet event aggregat=Mahnvorgang | Betrag:decimal
 record Leihwesen.Gebuehren.MahnungExistiert rejection aggregat=Mahnvorgang | Id:Id<Mahnvorgang>
-# Der Kopf der Schadensbewertung kommt aus dem Decide (gehört dem Schadensfall); was nur Knoten einander geben, gehört dem Knoten, der es ausgibt;
-#    Arbeit für einen Akteur ist ein Command ohne Ziel aus einem Knoten; der Hinweis aus einem Knoten gehört seiner Funktion
-record Leihwesen.Gebuehren.SchaetzeSchaden command aggregat=Schadensfall | Fall:Id<Schadensfall>, LeserId:Guid
+# Den Kopf der Schadensbewertung gibt die Gutachterin hinein (sie reagiert auf das gemeldete Fakt); was nur Knoten einander geben, gehört dem
+#    Knoten, der es ausgibt; die Begutachtung vor Ort ist ein Command an den Schadensfall; der Hinweis aus einem Knoten gehört seiner Funktion
+record Leihwesen.Gebuehren.SchaetzeSchaden command | Fall:Id<Schadensfall>, LeserId:Guid
 record Leihwesen.Gebuehren.SchadenErfasst command | LeserId:Guid, Neuwert:decimal, AlterJahre:int
 record Leihwesen.Gebuehren.SchadenGeschaetzt command | LeserId:Guid, Betrag:decimal
 record Leihwesen.Gebuehren.GutachtenErhalten command | LeserId:Guid, Betrag:decimal, Zuschlag:decimal
-record Leihwesen.Gebuehren.BegutachteVorOrt command | Fall:Id<Schadensfall>, LeserId:Guid
+record Leihwesen.Gebuehren.BegutachteVorOrt command aggregat=Schadensfall | AggregateId:Id<Schadensfall>, LeserId:Guid
+record Leihwesen.Gebuehren.BegutachtungAngefordert event aggregat=Schadensfall | LeserId:Guid
 record Leihwesen.Gebuehren.NichtSchaetzbar rejection | Grund:string
 # Konfig-Records (Werte am Knoten der Instanz): einer im Konstruktor einer Technik-Umsetzung, einer im Konstruktor einer Funktion
 record Leihwesen.Gebuehren.WertTabellenKonfig konfig | Mindestwert:decimal, Abschreibungsjahre:int=5
 record Leihwesen.Gebuehren.GutachtenKonfig konfig | Zuschlag:decimal, Bedenkzeit:TimeSpan
 # FOLGE mit leerem Strom (0 oder 1 Schadensfall), Id aus der Herkunft (R13)
 funktion Leihwesen.Gebuehren.SchadenBeiRueckgabe() | Auf(PruefeRueckgabe) herkunft -> strom MeldeSchaden
-# WAHL: genau einer von drei Fällen — an den nächsten Knoten, Arbeit für einen Akteur, ein Hinweis
+# WAHL: genau einer von drei Fällen — an den nächsten Knoten, ein Command an den Schadensfall, ein Hinweis
 funktion Leihwesen.Gebuehren.Schadensaufnahme() | Auf(SchaetzeSchaden) -> SchadenErfasst; BegutachteVorOrt; NichtSchaetzbar
 # KETTE: die Schätzung mit Technik, das Gutachten mit Konfig trägt den Betrag weiter
 funktion Leihwesen.Gebuehren.Schadensschaetzer(tabelle:IWertTabelle) | Auf(SchadenErfasst) -> SchadenGeschaetzt
@@ -72,7 +75,7 @@ funktion Leihwesen.Gebuehren.Gutachtenanfrage(konfig:GutachtenKonfig) | Auf(Scha
 funktion Leihwesen.Gebuehren.MahnungNachSchaetzung() | Auf(GutachtenErhalten) herkunft -> EroeffneMahnung
 # Technik (ohne Marker): Schnittstelle im Konstruktor einer Funktion (Methoden, Typen wie geschrieben) + Umsetzung mit Konfig-Record
 technik Leihwesen.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
-# Die Graphen: ein Knoten (Kopf aus dem Decide, Ausgang ein Aggregat-Command); Wahl + Kette — jede Kante als Von am nehmenden Knoten
+# Die Graphen: ein Knoten (Kopf von einem Client, Ausgang ein Aggregat-Command); Wahl + Kette — jede Kante als Von am nehmenden Knoten
 graph Leihwesen.Gebuehren.Rueckgabepruefung | knoten Pruefung:SchadenBeiRueckgabe [Kopf] | koepfe PruefeRueckgabe | aus MeldeSchaden
 graph Leihwesen.Gebuehren.Schadensbewertung | knoten Aufnahme:Schadensaufnahme [Kopf], Schaetzung:Schadensschaetzer [Von Aufnahme], Gutachten:Gutachtenanfrage [Von Schaetzung], Mahnung:MahnungNachSchaetzung [Von Gutachten] | koepfe SchaetzeSchaden | aus BegutachteVorOrt, NichtSchaetzbar, EroeffneMahnung
 kante Schadensbewertung | Aufnahme -SchadenErfasst-> Schaetzung
@@ -81,7 +84,7 @@ kante Schadensbewertung | Gutachten -GutachtenErhalten-> Mahnung
 
 # ── Prüfung (Fluss.cs.txt): der Ablauf als Graph — ein Command von einem Akteur am Kopf; der Start gibt einen Aggregat-Command aus und hört
 #    dessen Event als ANTWORT; die Antwort öffnet JE Seite einen Unterlauf (Strom); der Prüfer mit Technik (zwei Umsetzungen) meldet seine Seite der Prüfung, die ZÄHLT;
-#    die Frist bleibt beim Aggregat. Dazu eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen (Kopf aus dem Decide der Ausleihe) ──
+#    die Frist bleibt beim Aggregat. Dazu eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen (Kopf von einem Client, der auf die Mahnung reagiert) ──
 aggregat Leihwesen.Pruefung.Seitenpruefung | LeserId:Guid, Seiten:int, Geprueft:int, Beschaedigte:int, Fertig:bool
 decide Seitenpruefung.StartePruefung -> PruefungGestartet; PruefungLaeuftSchon; Frist<BrichPruefungAb>
 decide Seitenpruefung.BrichPruefungAb -> PruefungAbgebrochen
@@ -132,10 +135,10 @@ ausgang LeihAuskunftLeser.OffeneAusleihen einzeln | response:OffeneAusleihenAntw
 
 # ── Akteure (Entscheidung 13): IAkteur + IDarf<T> (was er hineingibt) + IHoert<T> (was zu ihm kommt) in der Basisliste — frei benannt, keine Art.
 #    Die Theke gibt auch einen Command ohne Ziel an einen Graph-Kopf und hört Hinweise (aus einem Decide, aus einem Knoten, des Frameworks);
-#    die KI-Gutachterin hört ein Event; das Archiv nimmt ARBEIT an (BegutachteVorOrt aus einem Knoten) und antwortet über sein IDarf ──
+#    die KI-Gutachterin hört ein Event und reagiert auf ein zweites; das Archiv reagiert auf Fakten mit Commands über sein IDarf ──
 akteur Leihwesen.Lesen.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen, RueckgabeGescannt | hoert NichtAusgeliehen, NichtSchaetzbar, LaufGescheitert
-akteur Leihwesen.Lesen.Gutachterin | darf EroeffneMahnung | hoert MahnungEroeffnet
-akteur Leihwesen.Lesen.Archiv | darf EroeffneMahnung | hoert BegutachteVorOrt, Ausgeliehen
+akteur Leihwesen.Lesen.Gutachterin | darf EroeffneMahnung, SchaetzeSchaden | hoert MahnungEroeffnet, SchadenGemeldet
+akteur Leihwesen.Lesen.Archiv | darf EroeffneMahnung, PruefeRueckgabe, BemesseMahnung | hoert BegutachtungAngefordert, Ausgeliehen, Zurueckgegeben, RueckgabeAngemahnt
 # ── Clients (Entscheidung 13): ein Record mit IClient, der nur nennt, wen er verkörpert. Lesesaal verkörpert zwei Akteure, das Archiv läuft über
 #    zwei Clients (Lesesaal + Depot) ──
 client Leihwesen.Lesen.Lesesaal | verkoerpert Theke, Archiv
@@ -197,8 +200,8 @@ sicht Leihwesen.Gebuehren.Mahnstelle akteur domaene=Leihwesen.Ausleihe block=§a
 besitz Leihwesen.Ausleihe.Befehle.LeiheAus command -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.Befehle.GibZurueck command -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.Befehle.MahneRueckgabe command -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.PruefeRueckgabe command -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.BemesseMahnung command -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.PruefeRueckgabe command -> §rand
+besitz Leihwesen.Ausleihe.BemesseMahnung command -> §rand
 besitz Leihwesen.Ausleihe.Ausgeliehen event -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.Zurueckgegeben event -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.RueckgabeAngemahnt event -> aggregate:Leihvorgang
@@ -213,12 +216,13 @@ besitz Leihwesen.Ausleihe.Fristrechnung code -> §begriffe
 besitz Leihwesen.Gebuehren.MeldeSchaden command -> aggregate:Schadensfall
 besitz Leihwesen.Gebuehren.SchadenGemeldet event -> aggregate:Schadensfall
 besitz Leihwesen.Gebuehren.SchadenExistiert rejection -> aggregate:Schadensfall
-besitz Leihwesen.Gebuehren.SchaetzeSchaden command -> aggregate:Schadensfall
+besitz Leihwesen.Gebuehren.SchaetzeSchaden command -> §rand
 besitz Leihwesen.Gebuehren.EroeffneMahnung command -> aggregate:Mahnvorgang
 besitz Leihwesen.Gebuehren.MahnungEroeffnet event -> aggregate:Mahnvorgang
 besitz Leihwesen.Gebuehren.MahnungExistiert rejection -> aggregate:Mahnvorgang
 besitz Leihwesen.Gebuehren.SchadenErfasst command -> bausteinfunktion:Schadensaufnahme
-besitz Leihwesen.Gebuehren.BegutachteVorOrt command -> bausteinfunktion:Schadensaufnahme
+besitz Leihwesen.Gebuehren.BegutachteVorOrt command -> aggregate:Schadensfall
+besitz Leihwesen.Gebuehren.BegutachtungAngefordert event -> aggregate:Schadensfall
 besitz Leihwesen.Gebuehren.NichtSchaetzbar rejection -> bausteinfunktion:Schadensaufnahme
 besitz Leihwesen.Gebuehren.SchadenGeschaetzt command -> bausteinfunktion:Schadensschaetzer
 besitz Leihwesen.Gebuehren.GutachtenErhalten command -> bausteinfunktion:Gutachtenanfrage
@@ -257,7 +261,7 @@ besitz Leihwesen.Lesen.VormerkungenAntwort queryresponse -> reader:VormerkAuskun
 enum Kundenportal.Konten.Kontostatus | Beantragt = 1, Aktiv = 2, Abgelehnt = 3
 aggregat Kundenportal.Konten.Benutzer | Email:string="", Status:Kontostatus
 aggregat Kundenportal.Konten.Adresse | Inhaber:Id<Benutzer>
-decide Benutzer.RegistriereBenutzer -> RegistrierungBeantragt; PruefeAdresse; BenutzerExistiert
+decide Benutzer.RegistriereBenutzer -> RegistrierungBeantragt; BenutzerExistiert
 decide Benutzer.BestaetigeBenutzer -> BenutzerBestaetigt
 decide Benutzer.LehneRegistrierungAb -> RegistrierungAbgelehnt
 decide Adresse.ReserviereAdresse -> AdresseReserviert; AdresseVergeben
@@ -276,10 +280,11 @@ record Kundenportal.Konten.RegistrierungAbgelehnt event aggregat=Benutzer | Grun
 record Kundenportal.Konten.ReserviereAdresse command aggregat=Adresse | AggregateId:Id<Adresse>, Email:string, BenutzerId:Id<Benutzer>
 record Kundenportal.Konten.AdresseReserviert event aggregat=Adresse | Email:string, BenutzerId:Id<Benutzer>
 record Kundenportal.Konten.AdresseVergeben event aggregat=Adresse | BenutzerId:Id<Benutzer>, Inhaber:Id<Benutzer>
-record Kundenportal.Konten.PruefeAdresse command aggregat=Benutzer | BenutzerId:Id<Benutzer>, Email:string
+record Kundenportal.Konten.PruefeAdresse command | BenutzerId:Id<Benutzer>, Email:string
 funktion Kundenportal.Konten.Registrierung() | Auf(PruefeAdresse) -> ReserviereAdresse || Auf(AdresseReserviert) -> BestaetigeBenutzer || Auf(AdresseVergeben) -> LehneRegistrierungAb
 graph Kundenportal.Konten.Adresspruefung | knoten Reservierung:Registrierung [Kopf] | koepfe PruefeAdresse | aus ReserviereAdresse, BestaetigeBenutzer, LehneRegistrierungAb
 akteur Kundenportal.Konten.Besucher | darf RegistriereBenutzer | hoert BenutzerBestaetigt, RegistrierungAbgelehnt
+akteur Kundenportal.Konten.Adresspruefer | darf PruefeAdresse | hoert RegistrierungBeantragt
 client Kundenportal.Konten.Registrierungsseite | verkoerpert Besucher
 code Kundenportal.Konten.Adressschluessel class teile=1 domaene=Kundenportal.Konten block=§geteilt
 sicht Kundenportal.Konten.Kontostatus enum domaene=Kundenportal.Konten block=Benutzer
@@ -291,7 +296,7 @@ besitz Kundenportal.Konten.BestaetigeBenutzer command -> aggregate:Benutzer
 besitz Kundenportal.Konten.BenutzerBestaetigt event -> aggregate:Benutzer
 besitz Kundenportal.Konten.LehneRegistrierungAb command -> aggregate:Benutzer
 besitz Kundenportal.Konten.RegistrierungAbgelehnt event -> aggregate:Benutzer
-besitz Kundenportal.Konten.PruefeAdresse command -> aggregate:Benutzer
+besitz Kundenportal.Konten.PruefeAdresse command -> §rand
 besitz Kundenportal.Konten.ReserviereAdresse command -> aggregate:Adresse
 besitz Kundenportal.Konten.AdresseReserviert event -> aggregate:Adresse
 besitz Kundenportal.Konten.AdresseVergeben event -> aggregate:Adresse
@@ -300,12 +305,12 @@ besitz Kundenportal.Konten.Adressschluessel code -> §begriffe
 
 # ── Anlagen (Messnetz.cs.txt): SENSOR-STROM MIT ALARM — Zähl-Aggregat; eine EIGENE QUELLFUNKTION (Lausche) mit Konfig, gesichertem Zustand und
 #    Technik am Kopf der Messkette, dahinter ein GRAPH IM GRAPHEN (aufgefaltete Kanten Aufbereitung.Plausi …); der Alarm öffnet die Störung über einen
-#    Graphen; die Störung gibt ARBEIT aus dem Decide an die Schichtleitung und alarmiert über zwei Wege nebeneinander ──
+#    Graphen, auf die Störung alarmiert die Schichtleitung (sie reagiert auf beide Fakten) über zwei Wege nebeneinander ──
 aggregat Anlagen.Messung.Sensor | Grenzwert:double, AlarmNach:int, Hintereinander:int, Alarm:bool
 aggregat Anlagen.Messung.Stoerungsfall | Offen:bool
 decide Sensor.RichteSensorEin -> SensorEingerichtet
-decide Sensor.MeldeMesswert -> GrenzwertUeberschritten; AlarmAusgeloest; WertWiederImRahmen; OeffneStoerungFuer; SensorUnbekannt
-decide Stoerungsfall.OeffneStoerung -> StoerungGeoeffnet; PruefeStoerungVorOrt; AlarmiereBereitschaft; StoerungLaeuftSchon
+decide Sensor.MeldeMesswert -> GrenzwertUeberschritten; AlarmAusgeloest; WertWiederImRahmen; SensorUnbekannt
+decide Stoerungsfall.OeffneStoerung -> StoerungGeoeffnet; StoerungLaeuftSchon
 decide Stoerungsfall.QuittiereStoerung -> StoerungQuittiert; KeineStoerung
 decide Stoerungsfall.VermerkeAlarmierung -> AlarmierungVermerkt
 apply Sensor.SensorEingerichtet
@@ -322,7 +327,7 @@ record Anlagen.Messung.MeldeMesswert command aggregat=Sensor | AggregateId:Id<Se
 record Anlagen.Messung.GrenzwertUeberschritten event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset, Hintereinander:int
 record Anlagen.Messung.AlarmAusgeloest event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
 record Anlagen.Messung.WertWiederImRahmen event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
-record Anlagen.Messung.OeffneStoerungFuer command aggregat=Sensor | Sensor:Id<Sensor>, Wert:double
+record Anlagen.Messung.OeffneStoerungFuer command | Sensor:Id<Sensor>, Wert:double
 record Anlagen.Messung.OeffneStoerung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Wert:double
 record Anlagen.Messung.StoerungGeoeffnet event aggregat=Stoerungsfall | Wert:double
 record Anlagen.Messung.StoerungLaeuftSchon rejection aggregat=Stoerungsfall | SensorId:Id<Stoerungsfall>
@@ -331,8 +336,7 @@ record Anlagen.Messung.StoerungQuittiert event aggregat=Stoerungsfall | Von:stri
 record Anlagen.Messung.KeineStoerung rejection aggregat=Stoerungsfall | SensorId:Id<Stoerungsfall>
 record Anlagen.Messung.VermerkeAlarmierung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Weg:string
 record Anlagen.Messung.AlarmierungVermerkt event aggregat=Stoerungsfall | Weg:string
-record Anlagen.Messung.PruefeStoerungVorOrt command aggregat=Stoerungsfall | Fall:Id<Stoerungsfall>, Wert:double
-record Anlagen.Messung.AlarmiereBereitschaft command aggregat=Stoerungsfall | Fall:Id<Stoerungsfall>
+record Anlagen.Messung.AlarmiereBereitschaft command | Fall:Id<Stoerungsfall>
 record Anlagen.Messung.Rohwert command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
 record Anlagen.Messung.Plausibel command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
 record Anlagen.Messung.SensorabfrageKonfig konfig | Sensoren:string[], Intervall:TimeSpan
@@ -364,10 +368,10 @@ kante Alarmierung | Verteilung -AlarmVerteilt-> Anruf
 kante Alarmierung | Verteilung -AlarmVerteilt-> Funk
 kante Alarmierung | Anruf -PerAnrufErreicht-> Quittung
 kante Alarmierung | Funk -PerFunkErreicht-> Quittung
-# Das Sensornetz ist der Akteur der Instanz der Messkette (es darf, was sie verlässt); die Schichtleitung nimmt ARBEIT an (aus dem Decide) und
-#    antwortet mit der Quittung, dazu Kenntnis zweier Events
+# Das Sensornetz ist der Akteur der Instanz der Messkette (es darf, was sie verlässt); die Schichtleitung hört zwei Events, reagiert mit den Köpfen
+#    der Störungsöffnung und der Alarmierung und quittiert
 akteur Anlagen.Messung.Sensornetz | darf MeldeMesswert | hoert -
-akteur Anlagen.Messung.Schichtleitung | darf RichteSensorEin, QuittiereStoerung | hoert PruefeStoerungVorOrt, AlarmAusgeloest, StoerungGeoeffnet
+akteur Anlagen.Messung.Schichtleitung | darf RichteSensorEin, QuittiereStoerung, OeffneStoerungFuer, AlarmiereBereitschaft | hoert AlarmAusgeloest, StoerungGeoeffnet
 client Anlagen.Messung.SensorGateway | verkoerpert Sensornetz
 client Anlagen.Messung.Leitstand | verkoerpert Schichtleitung
 sicht Anlagen.Messung.Sensornetz akteur domaene=Anlagen.Messung block=§akteure
@@ -379,7 +383,7 @@ besitz Anlagen.Messung.MeldeMesswert command -> aggregate:Sensor
 besitz Anlagen.Messung.GrenzwertUeberschritten event -> aggregate:Sensor
 besitz Anlagen.Messung.AlarmAusgeloest event -> aggregate:Sensor
 besitz Anlagen.Messung.WertWiederImRahmen event -> aggregate:Sensor
-besitz Anlagen.Messung.OeffneStoerungFuer command -> aggregate:Sensor
+besitz Anlagen.Messung.OeffneStoerungFuer command -> §rand
 besitz Anlagen.Messung.OeffneStoerung command -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.StoerungGeoeffnet event -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.StoerungLaeuftSchon rejection -> aggregate:Stoerungsfall
@@ -388,8 +392,7 @@ besitz Anlagen.Messung.StoerungQuittiert event -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.KeineStoerung rejection -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.VermerkeAlarmierung command -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.AlarmierungVermerkt event -> aggregate:Stoerungsfall
-besitz Anlagen.Messung.PruefeStoerungVorOrt command -> aggregate:Stoerungsfall
-besitz Anlagen.Messung.AlarmiereBereitschaft command -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.AlarmiereBereitschaft command -> §rand
 besitz Anlagen.Messung.Rohwert command -> bausteinfunktion:Sensorabfrage
 besitz Anlagen.Messung.Plausibel command -> bausteinfunktion:Plausibilisierung
 besitz Anlagen.Messung.AlarmVerteilt command -> bausteinfunktion:Alarmverteilung
@@ -491,7 +494,7 @@ besitz Warenkatalog.Import.Artikelzaehlung projektion -> store:IArtikelprotokoll
 #    Tendenz GABELT an zwei Knoten derselben generischen Funktion (je Typargument ein Baustein; die Karte ist die offene Definition); das Modell FÜHRT
 #    beide im Zustand ZUSAMMEN (je Glättung ein Auf), nimmt Technik mit eigenem Zustand und WÄHLT zwischen Prognose (Command) und Warnung (Hinweis an den Warndienst) ──
 aggregat Wetterdienst.Vorhersage.Station | Stillgelegt:bool, Letzte:double
-decide Station.MeldeTemperatur -> TemperaturGemeldet; BildePrognose; StationStillgelegt
+decide Station.MeldeTemperatur -> TemperaturGemeldet; StationStillgelegt
 decide Station.VermerkePrognose -> PrognoseVermerkt
 apply Station.TemperaturGemeldet
 apply Station.PrognoseVermerkt
@@ -500,7 +503,7 @@ record Wetterdienst.Vorhersage.TemperaturGemeldet event aggregat=Station | Grad:
 record Wetterdienst.Vorhersage.StationStillgelegt rejection aggregat=Station | StationId:Id<Station>
 record Wetterdienst.Vorhersage.VermerkePrognose command aggregat=Station | AggregateId:Id<Station>, Grad:double, Gelernt:int
 record Wetterdienst.Vorhersage.PrognoseVermerkt event aggregat=Station | Grad:double, Gelernt:int
-record Wetterdienst.Vorhersage.BildePrognose command aggregat=Station | Station:Id<Station>, Grad:double
+record Wetterdienst.Vorhersage.BildePrognose command | Station:Id<Station>, Grad:double
 record Wetterdienst.Vorhersage.Tendenz command | Station:Id<Station>, Grad:double
 # Der generische Command heißt auf der Karte ohne Typparameter; die Typargumente sind leere Records (Wert-Typen ohne Nutzer im Feld: eine Insel)
 record Wetterdienst.Vorhersage.Geglaettet command | Station:Id<Station>, Grad:double
@@ -556,7 +559,7 @@ besitz Wetterdienst.Vorhersage.KarteSkaliert command -> bausteinfunktion:Kartens
 besitz Wetterdienst.Vorhersage.LoescheKarte command -> §rand
 besitz Wetterdienst.Vorhersage.SkalierungsKonfig konfig -> bausteinfunktion:Kartenskalierung
 besitz Wetterdienst.Vorhersage.ZeichneKarte command -> §rand
-akteur Wetterdienst.Vorhersage.Warndienst | darf MeldeTemperatur, ZeichneKarte, LoescheKarte | hoert Unwetter, StationStillgelegt, KarteBereit, KarteGeloescht
+akteur Wetterdienst.Vorhersage.Warndienst | darf MeldeTemperatur, ZeichneKarte, LoescheKarte, BildePrognose | hoert Unwetter, StationStillgelegt, KarteBereit, KarteGeloescht, TemperaturGemeldet
 client Wetterdienst.Vorhersage.WetterApp | verkoerpert Warndienst
 # Zustand und Marker-Schnittstelle der Typargumente sind eigene Typen ohne Marker — Code-Karten
 code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
@@ -570,7 +573,7 @@ besitz Wetterdienst.Vorhersage.TemperaturGemeldet event -> aggregate:Station
 besitz Wetterdienst.Vorhersage.StationStillgelegt rejection -> aggregate:Station
 besitz Wetterdienst.Vorhersage.VermerkePrognose command -> aggregate:Station
 besitz Wetterdienst.Vorhersage.PrognoseVermerkt event -> aggregate:Station
-besitz Wetterdienst.Vorhersage.BildePrognose command -> aggregate:Station
+besitz Wetterdienst.Vorhersage.BildePrognose command -> §rand
 besitz Wetterdienst.Vorhersage.Tendenz command -> bausteinfunktion:Tendenzbildung
 besitz Wetterdienst.Vorhersage.Geglaettet command -> bausteinfunktion:Glaettung
 besitz Wetterdienst.Vorhersage.GlaettungsKonfig konfig -> bausteinfunktion:Glaettung
@@ -593,6 +596,7 @@ lage Depot -> Domain.Akteure
 lage Mahnstelle -> Domain.Akteure
 lage Mahnportal -> Domain.Akteure
 lage Besucher -> Domain.Akteure
+lage Adresspruefer -> Domain.Akteure
 lage Registrierungsseite -> Domain.Akteure
 lage Sensornetz -> Domain.Akteure
 lage Schichtleitung -> Domain.Akteure
@@ -620,7 +624,9 @@ lage GutachtenKonfig -> Domain.Pipeline
 lage SchadenErfasst -> Domain.Pipeline
 lage SchadenGeschaetzt -> Domain.Pipeline
 lage GutachtenErhalten -> Domain.Pipeline
-lage BegutachteVorOrt -> Domain.Pipeline
+lage SchaetzeSchaden -> Domain.Pipeline
+lage PruefeRueckgabe -> Domain.Pipeline
+lage BemesseMahnung -> Domain.Pipeline
 lage PruefeVormerkung -> Domain.Pipeline
 lage Pruefungsstart -> Domain.Pipeline
 lage Seitenpruefer -> Domain.Pipeline
@@ -634,6 +640,7 @@ lage RueckgabeGescannt -> Domain.Pipeline
 lage SeiteZuPruefen -> Domain.Pipeline
 lage Registrierung -> Domain.Pipeline
 lage Adresspruefung -> Domain.Pipeline
+lage PruefeAdresse -> Domain.Pipeline
 lage Sensorabfrage -> Domain.Pipeline
 lage Plausibilisierung -> Domain.Pipeline
 lage Messwertpruefung -> Domain.Pipeline
@@ -646,6 +653,8 @@ lage Messwertaufbereitung -> Domain.Pipeline
 lage Messkette -> Domain.Pipeline
 lage Stoerungsoeffnung -> Domain.Pipeline
 lage Alarmierung -> Domain.Pipeline
+lage OeffneStoerungFuer -> Domain.Pipeline
+lage AlarmiereBereitschaft -> Domain.Pipeline
 lage ISensorbus -> Domain.Pipeline
 lage Feldbus -> Domain.Pipeline
 lage ITelefonie -> Domain.Pipeline
@@ -668,6 +677,7 @@ lage Tendenzbildung -> Domain.Pipeline
 lage Glaettung -> Domain.Pipeline
 lage Prognosemodell -> Domain.Pipeline
 lage Prognose -> Domain.Pipeline
+lage BildePrognose -> Domain.Pipeline
 lage Kurzglaettung -> Domain.Pipeline
 lage IStatistik -> Domain.Pipeline
 lage Statistik -> Domain.Pipeline

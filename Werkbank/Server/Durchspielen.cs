@@ -5,7 +5,7 @@ namespace Werkbank.Server;
 
 /// <summary>
 /// Durchspielen (CLAUDE.md W6, Werkbank P5): nur echte Eingänge — die Werkbank ist Client des laufenden Hosts (JSON-Eingang
-/// hinter dem Akteur-Tor), Ausführer von Hand-Funktionen, legt Dateien dorthin, wo der echte Treiber sie findet, und stellt die Uhr der
+/// hinter dem Akteur-Tor), legt Dateien dorthin, wo der echte Treiber sie findet, und stellt die Uhr der
 /// Sim-DB vor. Was der Editor dafür braucht (Formular-Schema eines Records, Tokens, Sandbox-Pfad), kommt fertig von hier (Frontend-Bauregel).
 /// </summary>
 public sealed partial class Durchspielen(WerkbankServer werkbank)

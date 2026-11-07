@@ -17,9 +17,8 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS108 (GR-ANTWORT; Fehler) — eine Funktion hört ein Event, das keiner ihrer Commands entscheiden kann: eine Funktion liest nie das Log, ein
 ///   Event erreicht sie nur als Antwort auf einen eigenen Command (docs/04 §4.4) — dieses käme nie.</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
-/// <item>CQRS116 (GR-EMPFAENGER; Fehler) — ein Command ohne Ziel, der seinen Erzeuger verlässt (aus einem Decide, von einem Akteur, aus einem Knoten,
-///   den kein Knoten desselben Graphen nimmt), hat genau einen Empfänger: den Kopf genau eines Graphen oder einen Akteur, der ihn hört (Arbeit,
-///   <c>IHoert&lt;TCmd&gt;</c>). Kein Empfänger, mehrere, oder ein Typ, den ein Graph nimmt und zugleich ein Akteur hört, sind ein Fehler. Ein Graph
+/// <item>CQRS116 (GR-EMPFAENGER; Fehler) — ein Command ohne Ziel, der seinen Erzeuger verlässt (von einem Akteur, aus einem Knoten, den kein Knoten
+///   desselben Graphen nimmt), hat genau einen Empfänger: den Kopf genau eines Graphen. Kein Empfänger oder mehrere sind ein Fehler. Ein Graph
 ///   in einem Katalog ist eine Blaupause (docs/konzept-funktionen-im-editor.md §3): er läuft erst als Knoten eines Graphen der Anwendung — seine Köpfe
 ///   empfangen nichts, seine Ausgänge verlassen nichts, geprüft wird dort, wo er steht.</item>
 /// <item>CQRS117 (GR-GRAPH-KNOTEN; Warnung) — eine Funktion, die in keinem Graphen ein Knoten ist, läuft nie (ein Graph läuft als Instanz).</item>
@@ -158,9 +157,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     genommen.Add(u!.Ein);
                     erzeugt.Add(u.Aus);
                 }
-            // Ein Akteur: was er hineingibt, erzeugt er; die Commands ohne Ziel, die er hört (Arbeit), nimmt er.
-            if (IstT(t, iAkteur) && t.TypeKind != TypeKind.Interface)
-                genommen.UnionWith(Clientvertragslesart.LiesAkteur(t).Arbeit.Select(x => x.Ein));
+            // Ein Akteur: was er hineingibt, erzeugt er.
             if (IstT(t, iAkteur))
                 erzeugt.UnionWith(t.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => i.TypeArguments[0]));
         }
@@ -178,7 +175,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             else if (IstT(t, iAggregatCommand) && !entschieden.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command", "kein Aggregat entscheidet ihn (Decide)"));
             else if (IstT(t, iCommand) && !IstT(t, iAggregatCommand) && !t.IsGenericType && !genommen.Contains(t))
-                ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command ohne Ziel", "kein Knoten eines Graphen nimmt ihn, kein Akteur hört ihn"));
+                ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command ohne Ziel", "kein Knoten eines Graphen nimmt ihn"));
         }
 
         // Offene Ausgänge: Events/Ablehnungen ohne Erzeuger, Responses ohne Reader-Handle.
@@ -207,7 +204,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                         befehle.Count == 0 ? "sie gibt keinen Command aus" : "ihre Commands: " + string.Join(", ", befehle.Select(b => b.Name))));
         }
 
-        // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf oder hört genau ein Akteur.
+        // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf.
         var graphen = typen.Where(Graphform.IstGraph).Select(Graphform.Lies).Where(g => g.Gueltig).ToList();
         // Was läuft: die Graphen der Anwendung; ein Graph im Katalog ist eine Blaupause und zählt erst als Knoten eines von ihnen.
         var laufen = graphen.Where(g => !Abstractions.Projektstruktur.IstKatalog(g.Typ.ContainingAssembly?.Name ?? "")).ToList();
@@ -216,20 +213,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         void Empfaengt(ITypeSymbol typ, string wer) => (koepfe.TryGetValue(N(typ), out var l) ? l : koepfe[N(typ)] = new List<string>()).Add(wer);
         foreach (var g in laufen)
             foreach (var (typ, _) in g.Koepfe) Empfaengt(typ, g.Typ.Name);
-        var imGraphen = new HashSet<string>(graphen.SelectMany(g => g.Knoten).SelectMany(k => k.Eingaenge).Select(N));
-        foreach (var a in typen.Where(t => IstT(t, iAkteur) && t.TypeKind != TypeKind.Interface))
-            foreach (var arbeit in Clientvertragslesart.LiesAkteur(a).Arbeit)
-            {
-                Empfaengt(arbeit.Ein, "Akteur " + a.Name);
-                if (imGraphen.Contains(N(arbeit.Ein)))
-                    ctx.ReportDiagnostic(Diagnostic.Create(Empfaenger, Location.None, arbeit.Ein.Name, "Akteur " + a.Name,
-                        "ein Knoten eines Graphen nimmt ihn, und der Akteur hört ihn — ein Command hat genau einen Empfänger"));
-            }
         var verlassen = new List<(ITypeSymbol Typ, string Von)>();
-        foreach (var t in typen.Where(t => t.TypeKind == TypeKind.Class && Generisch(t, iDecider)))
-            foreach (var m in Methoden(t, Abstractions.Aggregatvertrag.Decide))
-                foreach (var x in Faelle(m.ReturnType).Where(Nachrichtenform.IstOhneZiel))
-                    verlassen.Add((x, "Decide " + m.Parameters[0].Type.Name));
         foreach (var g in laufen)
             foreach (var (von, typ) in g.Ausgaenge.Where(a => Nachrichtenform.IstOhneZiel(a.Typ)))
                 verlassen.Add((typ, $"{g.Typ.Name}.{von.Name}"));

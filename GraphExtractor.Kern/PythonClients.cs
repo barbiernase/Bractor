@@ -40,7 +40,7 @@ public static class PythonClients
                             Rumpfe = b.Auf.Select(a => new ClientRumpf
                             {
                                 Event = a.Event, Methode = a.Methode, Rumpf = PythonQuelle.Rumpf(text, k.Name, a.Methode), Signatur = a.Def,
-                                Ausgaenge = a.Ausgaenge, Akteur = a.Akteur,
+                                Ausgaenge = a.Ausgaenge,
                             }).ToList(),
                         });
                     }

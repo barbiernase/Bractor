@@ -36,7 +36,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         ILogger<CqrsClientServiceImpl>? logger = null,
         Konsum? konsum = null,
         IEventStoreRepository? log = null,
-        Werkstatt? werkstatt = null,
         Infrastructure.Funktionen.Verkettung? koepfe = null,
         Infrastructure.Eingaenge.IOffeneEingaenge? offene = null,
         Infrastructure.Funktionen.IFunktionsWege? wege = null)
@@ -48,8 +47,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             konsum ?? Konsum.Standard,
             log,
             _logger,
-            werkstatt,    // null = keine Arbeit in dieser Anwendung → Annehmen wird abgewiesen
-            koepfe, offene, wege);   // Commands ohne Ziel an Graph-Köpfe und Akteure
+            koepfe, offene, wege);   // Commands ohne Ziel an Graph-Köpfe
     }
 
     public override async Task Connect(

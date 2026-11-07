@@ -9,8 +9,8 @@ namespace Domain.SourceGeneration;
 /// <summary>
 /// <b>CQRS058 — Akteur.</b> Ein Akteur ist ein Record mit <c>IAkteur</c>. <c>IDarf&lt;T&gt;</c> ist EIN Wort für alles, was er hineingibt: ein
 /// konkreter Command (an ein Aggregat oder ohne Ziel), eine Query, ein Hinweis. <c>IHoert&lt;T&gt;</c> ist EIN Wort für alles, was zu ihm kommt: ein
-/// Command ohne Ziel (Arbeit), ein Event oder ein Hinweis (Kenntnis) — nie ein Command an ein Aggregat. Beide stehen nur an einem Akteur; alles
-/// andere ist ein Build-Fehler (docs/konzept-akteure.md).
+/// Event oder ein Hinweis — ein Fakt, auf das er reagiert oder das er zur Kenntnis nimmt; nie ein Command (Schritt 6: es gibt keine Arbeit). Beide
+/// stehen nur an einem Akteur; alles andere ist ein Build-Fehler (docs/konzept-akteure.md).
 /// <para><b>CQRS063/064 — Client</b> (<c>docs/konzept-akteure.md</c> §4): ein Client ist ein Record mit <c>IClient</c>, der nur nennt, wen er
 /// verkörpert (<c>IVerkoerpert&lt;A&gt;</c>), und selbst nichts deklariert (063); verkörpern kann er nur einen konkreten Akteur (064). Was über seine
 /// Leitung geht, sind die <c>IDarf</c> und <c>IHoert</c> seiner Akteure — es gibt kein zweites Wort dafür.</para>
@@ -91,10 +91,11 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
                 Melde($"IDarf<{t.Name}> — dürfen kann man nur, was man hineingibt: einen konkreten Command, eine Query oder einen Hinweis");
         foreach (var t in hoert.Select(h => h.TypeArguments[0]))
         {
-            if (Hat(t, x.AggregatCommand))
-                Melde($"IHoert<{t.Name}> — einen Command an ein Aggregat hört kein Akteur (sein Empfänger ist das Aggregat); Arbeit ist ein Command ohne Ziel");
-            else if (!(Konkret(t) && (Hat(t, x.Command) || Hat(t, x.Event) || Hat(t, x.Hinweis))))
-                Melde($"IHoert<{t.Name}> — hören kann man einen Command ohne Ziel (Arbeit), ein Event oder einen Hinweis (Kenntnis)");
+            if (Hat(t, x.Command))
+                Melde($"IHoert<{t.Name}> — einen Command hört kein Akteur (sein Empfänger ist ein Aggregat bzw. der Kopf eines Graphen); hören kann man "
+                    + "ein Fakt: ein Event oder einen Hinweis, auf das der Client reagiert");
+            else if (!(Konkret(t) && (Hat(t, x.Event) || Hat(t, x.Hinweis))))
+                Melde($"IHoert<{t.Name}> — hören kann man ein Event oder einen Hinweis");
         }
     }
 

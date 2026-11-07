@@ -11,8 +11,7 @@ namespace Infrastructure.SourceGeneration
     /// <summary>
     /// Akteure (<c>docs/konzept-akteure.md</c>): erzeugt <c>GeneratedAkteurRechte</c> — je <c>IAkteur</c>-Record seine Befugnisse, reflexionsfrei als
     /// Tabelle, alles aus der Basisliste (die eine Lesart <see cref="Clientvertragslesart.LiesAkteur"/>): was er hineingibt (<c>IDarf&lt;T&gt;</c>,
-    /// nach Art: Command, Query, Hinweis), was er als Kenntnis hört (<c>IHoert</c> eines Events oder Hinweises) und welche Arbeit er bekommt
-    /// (<c>IHoert</c> eines Commands ohne Ziel).
+    /// nach Art: Command, Query, Hinweis) und was er hört (<c>IHoert</c> eines Events oder Hinweises).
     /// <para><b>Clients</b> (<c>GeneratedClientVertraege</c>, docs/konzept-akteure.md §4): je <c>IClient</c>-Record die verkörperten Akteure
     /// (<c>IVerkoerpert</c>) und der Client-Hash (<c>Abstractions.Clientvertragsregeln</c>), gegen den der Handshake prüft.</para>
     /// </summary>
@@ -70,8 +69,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            Commands: {Menge(g.Sendet.Where(t => !Hinweis(t)).Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            Queries: {Menge(g.Fragt.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            TransientEvents: {Menge(g.Sendet.Where(Hinweis).Select(t => t.ToDisplayString(fq)))},");
-                sb.AppendLine($"            Hoert: {Menge(g.Kenntnis.Select(t => t.ToDisplayString(fq)))},");
-                sb.AppendLine($"            Arbeit: {Menge(g.Arbeit.Select(x => x.Ein.ToDisplayString(fq)))}),");
+                sb.AppendLine($"            Hoert: {Menge(g.Kenntnis.Select(t => t.ToDisplayString(fq)))}),");
             }
             sb.AppendLine("    };");
             sb.AppendLine("}");

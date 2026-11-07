@@ -34,9 +34,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     private readonly IAggregateHandlerFactory _handlerFactory;
     private readonly IEventStoreRepository _eventStore;
     private readonly Infrastructure.Verteilen.Verteilung? _verteilung;
-    // Wer die Folgen einer Entscheidung hört (docs/03 §3.1): je Folge und Hörer ein offener Eingang in derselben Transaktion.
-    private readonly Infrastructure.Funktionen.Verkettung _folgen;
-    private readonly Infrastructure.Funktionen.IFunktionsWege? _wege;
     private readonly ILogger? _logger;
 
     // ★ Snapshot-Naht (docs/04-konsum-und-prozess-maschine.md §4.8): abgeleiteter, nicht-autoritativer Cache. Null → aus,
@@ -91,14 +88,10 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         string? snapshotSchemaVersion = null,
         SnapshotOptions? snapshotOptions = null,
         IDeadLetterSink? deadLetters = null,
-        Passivierung? passivierung = null,
-        Infrastructure.Funktionen.Verkettung? folgen = null,
-        Infrastructure.Funktionen.IFunktionsWege? wege = null)
+        Passivierung? passivierung = null)
         // PF-5: Leerlauf bis zur Passivierung (Snapshot beim Stoppen, die nächste Nachricht rehydriert).
         : base(logger, (passivierung ?? Passivierung.Standard).Aggregat)
     {
-        _folgen = folgen ?? Infrastructure.Funktionen.Verkettung.Leer;
-        _wege = wege;
         _handlerFactory = handlerFactory;
         _eventStore = eventStore;
         _verteilung = verteilung;
@@ -441,8 +434,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         public IEvent? Ablehnung { get; set; }
         public int VersionVorher { get; set; }
         public int VersionNachher { get; set; }
-        /// <summary>Die offenen Eingänge der Folgen (nach dem Commit auf dem schnellen Weg an die Funktionen).</summary>
-        public IReadOnlyList<(EingangOffen Eingang, object Folge)> Eingaenge { get; set; } = Array.Empty<(EingangOffen, object)>();
         public CommandResult? Ergebnis { get; set; }
         public bool Beantwortet { get; set; }
     }
@@ -589,13 +580,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         }
 
         List<IEvent> alle;
-        List<object> folgen;
-        try
-        {
-            var entschieden = _handler!.HandleCommand(env.Payload).ToList();
-            alle = entschieden.OfType<IEvent>().ToList();
-            folgen = entschieden.Where(Entscheidungsausgabe.IstCommand).ToList();
-        }
+        try { alle = Entscheidungsausgabe.NurEvents(env.Payload, _handler!.HandleCommand(env.Payload)); }
         catch (Exception ex)
         {
             e.Fehler = ex.Message;
@@ -605,22 +590,11 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         var persistent = alle.Where(x => x is not ITransientEvent).ToList();
         var ablehnungen = alle.Where(x => x is ITransientEvent).ToList();
 
-        if (ablehnungen.Count > 0 && (persistent.Count > 0 || ablehnungen.Count > 1 || folgen.Count > 0))
+        if (ablehnungen.Count > 0 && (persistent.Count > 0 || ablehnungen.Count > 1))
         {
             e.Fehler = $"Decider für {env.Payload.GetType().Name} lieferte ein ungültiges gemischtes Ergebnis: {persistent.Count} persistente(s) " +
-                       $"Event(s) + {folgen.Count} Folge(n) + {ablehnungen.Count} Ablehnung(en). Eine Ablehnung (ITransientEvent) muss die einzige Ausgabe sein.";
+                       $"Event(s) + {ablehnungen.Count} Ablehnung(en). Eine Ablehnung (ITransientEvent) muss die einzige Ausgabe sein.";
             e.Sofort = new CommandResult { Success = false, ErrorMessage = e.Fehler };
-            return;
-        }
-
-        // Die offenen Eingänge der Folgen — vor jedem Apply (ein Fehler hier, etwa eine nicht serialisierbare Folge, lässt den Zustand unberührt);
-        //   ihre Herkunft ist der Stand nach der Entscheidung.
-        IReadOnlyList<(EingangOffen Eingang, object Folge)> eingaenge;
-        try { eingaenge = Infrastructure.Eingaenge.Folgenbeilagen.Von(folgen, _folgen, env.CommandId, _state.Version + persistent.Count, env.UserId, env.CorrelationId); }
-        catch (Exception ex)
-        {
-            e.Fehler = ex.Message;
-            e.Sofort = new CommandResult { Success = false, ErrorMessage = ex.Message };
             return;
         }
 
@@ -629,7 +603,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         e.VersionVorher = _state.Version;
         if (alle.Count == 0)
         {
-            // Noop: nur die Quittung (gewirkt) und die offenen Eingänge der Folgen, die Version bleibt.
+            // Noop: nur die Quittung (gewirkt), die Version bleibt.
             e.Ausgang = KommandoAusgang.Gewirkt;
         }
         else if (ablehnungen.Count == 1)
@@ -657,9 +631,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             }
         }
         e.VersionNachher = _state.Version;
-        e.Eingaenge = eingaenge;
         e.Teil = new AppendTeil(schreibe, env.CorrelationId, env.CommandId.ToString(), env.UserId, e.Spur,
-            [new Quittung(env.CommandId, e.Ausgang), .. fristen, .. eingaenge.Select(x => (Beilage)x.Eingang)]);
+            [new Quittung(env.CommandId, e.Ausgang), .. fristen]);
     }
 
     /// <summary>
@@ -700,7 +673,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 {
                     geschrieben = true;
                     _verarbeiteteCommandIds.Add(e.Env.CommandId);
-                    if (e.Eingaenge.Count > 0 && _wege is not null) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(e.Eingaenge, _wege, _id);
                     if (e.Persistent.Count > 0 && _verteilung != null)
                     {
                         try { await PublishEventsAsync(e.Persistent, e.Env, e.VersionVorher); }
@@ -821,28 +793,17 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             }
 
             // 1. Events erzeugen (Decider) — wirft keine Exceptions mehr für Domänen-Ablehnungen
-            var entschieden = _handler!.HandleCommand(cmdEnvelope.Payload).ToList();
-            var allEvents = entschieden.OfType<IEvent>().ToList();
-            var folgen = entschieden.Where(Entscheidungsausgabe.IstCommand).ToList();
-            if (folgen.Count > 0 && allEvents.Any(e => e is ITransientEvent))
-                throw new InvalidOperationException($"Decider für {cmdEnvelope.Payload.GetType().Name} lieferte eine Ablehnung und {folgen.Count} Folge(n) — "
-                    + "eine Ablehnung (ITransientEvent) muss die einzige Ausgabe sein.");
-            // Die offenen Eingänge der Folgen (docs/03 §3.1): Herkunft ist der Stand nach der Entscheidung.
-            var zuzustellen = Infrastructure.Eingaenge.Folgenbeilagen.Von(folgen, _folgen, cmdEnvelope.CommandId, expectedVersion + allEvents.Count,
-                cmdEnvelope.UserId, cmdEnvelope.CorrelationId);
-            var eingaenge = zuzustellen.Select(x => (Beilage)x.Eingang).ToList();
+            var allEvents = Entscheidungsausgabe.NurEvents(cmdEnvelope.Payload, _handler!.HandleCommand(cmdEnvelope.Payload));
 
             // 2. Noop — keine Events (z.B. DeaktiviereLagerartikel bei bereits inaktivem Artikel): nur die Quittung, die Version bleibt. Die Inbox
             //    kennt die CommandId, eine Wiederholung bleibt ein Noop.
             if (!allEvents.Any())
             {
-                if (await QuittiereOhneEventsAsync(cmdEnvelope, expectedVersion, KommandoAusgang.Gewirkt, eingaenge) is var noop and not AppendErgebnis.Geschrieben)
+                if (await QuittiereOhneEventsAsync(cmdEnvelope, expectedVersion, KommandoAusgang.Gewirkt) is var noop and not AppendErgebnis.Geschrieben)
                 {
                     await QuittiereEntschiedenAsync(context, cmdEnvelope, noop);
                     return;
                 }
-                if (zuzustellen.Count > 0 && _wege is not null) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(zuzustellen, _wege, _id);
-
                 Antworte(context, new CommandResult
                 {
                     Success = true,
@@ -909,7 +870,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             //    ★ Phase 1: Metadaten mit ins Log stempeln (nach Log-Read verfügbar).
             //    ★ Inbox: die Quittung reist in DERSELBEN Transaktion wie der Effekt (Inbox-Tabelle) → exactly-once-wirksam, crash-fest.
             var append = await AppendeAsync(cmdEnvelope, expectedVersion, persistentEvents, KommandoAusgang.Gewirkt,
-                [.. Fristen(persistentEvents, expectedVersion, cmdEnvelope.UserId), .. eingaenge]);
+                [.. Fristen(persistentEvents, expectedVersion, cmdEnvelope.UserId)]);
             if (append != AppendErgebnis.Geschrieben)
             {
                 // Mehrdeutiger Commit (G-3): die Events stehen im Log, der Actor hat sie beim Rehydrieren schon gefaltet. Die Pushes an
@@ -932,8 +893,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             //   darf nicht mit halb-mutiertem _state weiterlaufen (sonst dauerhafte spurious Concurrency-Conflicts
             //   bis zum Recycling). Darum: der äußere catch fängt nur PRE-Append-Fehler; ein POST-Append-Fehler
             //   rehydriert den State frisch aus dem (nun aktuellen) Log und quittiert WAHR (Erfolg).
-            // Die offenen Eingänge der Folgen auf dem schnellen Weg (verlierbar — die Zeile ist das Netz).
-            if (zuzustellen.Count > 0 && _wege is not null) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(zuzustellen, _wege, _id);
             try
             {
                 // 6. Events applyen (Applier) — mutiert _state.

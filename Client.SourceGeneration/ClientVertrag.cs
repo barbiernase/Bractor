@@ -23,8 +23,6 @@ internal sealed class ClientVertragInfo
     public List<string> Fragt { get; private set; } = new List<string>();
     /// <summary>Was der Client als Kenntnis hört (<c>IHoert&lt;T&gt;</c> seiner Akteure) — genau das wird abonniert.</summary>
     public List<string> Hoert { get; private set; } = new List<string>();
-    /// <summary>Die verkörperten Akteure, die Arbeit hören (<c>IHoert</c> eines Commands ohne Ziel) — ein C#-Client nimmt (noch) keine an (CQRS094).</summary>
-    public List<string> Arbeit { get; private set; } = new List<string>();
 
     public static readonly ClientVertragInfo Leer = new ClientVertragInfo();
 
@@ -48,7 +46,6 @@ internal sealed class ClientVertragInfo
             Sendet = v.Sendet.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
             Fragt = v.Fragt.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
             Hoert = v.Hoert.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
-            Arbeit = v.Arbeit.Select(t => t.Akteur.Name).ToList(),
         };
     }
 }
@@ -61,12 +58,6 @@ internal static class ClientVertragDiagnosen
         "CQRS093", "Client ohne Vertrag",
         "Die Client-Assembly '{0}' nennt ihren Client nicht — [assembly: IstClient<MeinClient>] ergänzen (record MeinClient : IClient, IVerkoerpert<A>); "
         + "ohne Client wüsste niemand, für welche Akteure sie spricht und was sie hört (docs/konzept-akteure.md §4)",
-        Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
-
-    public static readonly DiagnosticDescriptor TeileImCSharpClient = new DiagnosticDescriptor(
-        "CQRS094", "C#-Client verkörpert Akteure mit Arbeit",
-        "Der Client '{0}' verkörpert Akteure, die Arbeit hören ({1}: IHoert eines Commands ohne Ziel) — Arbeit nimmt heute nur das Python-SDK an "
-        + "(generierte Basen mit einem Handler je Command); ein C#-Client verkörpert Akteure ohne Arbeit",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor CommandOhneSendet = new DiagnosticDescriptor(

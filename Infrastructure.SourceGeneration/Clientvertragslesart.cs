@@ -6,16 +6,6 @@ using System.Linq;
 
 namespace Infrastructure.SourceGeneration
 {
-    /// <summary>Ein Eingang der Arbeit eines Akteurs: der gehörte Command ohne Ziel und die Commands, die er als Antwort geben darf (sein IDarf).</summary>
-    internal sealed class Arbeitseingang
-    {
-        public Arbeitseingang(INamedTypeSymbol ein, List<INamedTypeSymbol> aus) { Ein = ein; Aus = aus; }
-        public INamedTypeSymbol Ein { get; }
-        public List<INamedTypeSymbol> Aus { get; }
-        /// <summary>Eine Antwort darf in Stücken kommen (ein langer Lauf meldet Fortschritt) — immer.</summary>
-        public bool Strom => true;
-    }
-
     /// <summary>Ein Akteur (<c>IAkteur</c>), gelesen aus seiner Basisliste: was er hineingibt (<c>IDarf</c>) und was zu ihm kommt (<c>IHoert</c>).</summary>
     internal sealed class GelesenerAkteur
     {
@@ -24,10 +14,8 @@ namespace Infrastructure.SourceGeneration
         public List<INamedTypeSymbol> Sendet { get; set; } = new List<INamedTypeSymbol>();
         /// <summary>Seine Queries.</summary>
         public List<INamedTypeSymbol> Fragt { get; set; } = new List<INamedTypeSymbol>();
-        /// <summary>Kenntnis: die Events und Hinweise, die er hört (gepusht, verlierbar).</summary>
+        /// <summary>Was er hört: Events und Hinweise — er reagiert darauf oder nimmt sie zur Kenntnis.</summary>
         public List<INamedTypeSymbol> Kenntnis { get; set; } = new List<INamedTypeSymbol>();
-        /// <summary>Arbeit: die Commands ohne Ziel, die er hört, je mit den Commands, die er als Antwort geben darf.</summary>
-        public List<Arbeitseingang> Arbeit { get; set; } = new List<Arbeitseingang>();
     }
 
     /// <summary>Ein Client (<c>IClient</c>, docs/konzept-akteure.md §4), gelesen aus seinem Record und seinen Akteuren.</summary>
@@ -40,13 +28,11 @@ namespace Infrastructure.SourceGeneration
         public string Hash { get; set; } = "";
         /// <summary>Die verkörperten Akteure (<c>IVerkoerpert&lt;A&gt;</c>), nach Name sortiert — die einzige Angabe des Clients.</summary>
         public List<INamedTypeSymbol> Akteure { get; set; } = new List<INamedTypeSymbol>();
-        /// <summary>Die Arbeit der verkörperten Akteure, nach Akteur sortiert (nur die Akteure, die Commands hören).</summary>
-        public List<(INamedTypeSymbol Akteur, List<Arbeitseingang> Eingaenge)> Arbeit { get; } = new List<(INamedTypeSymbol, List<Arbeitseingang>)>();
         /// <summary>Was er hineingibt: Commands und Hinweise der verkörperten Akteure.</summary>
         public List<INamedTypeSymbol> Sendet { get; set; } = new List<INamedTypeSymbol>();
         /// <summary>Die Queries der verkörperten Akteure.</summary>
         public List<INamedTypeSymbol> Fragt { get; set; } = new List<INamedTypeSymbol>();
-        /// <summary>Kenntnis der verkörperten Akteure — genau das wird gepusht.</summary>
+        /// <summary>Was die verkörperten Akteure hören — genau das wird gepusht und im Log gelesen.</summary>
         public List<INamedTypeSymbol> Hoert { get; set; } = new List<INamedTypeSymbol>();
     }
 
@@ -68,20 +54,14 @@ namespace Infrastructure.SourceGeneration
 
         private static bool Hat(ITypeSymbol t, string m) => t.ToDisplayString() == m || t.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString() == m);
 
-        /// <summary>Liest einen Akteur: IDarf nach Art (senden, fragen), IHoert nach Arbeit (Command ohne Ziel) oder Kenntnis (Event, Hinweis).</summary>
+        /// <summary>Liest einen Akteur: IDarf nach Art (senden, fragen), IHoert (Events und Hinweise; einen Command hört kein Akteur, CQRS058).</summary>
         public static GelesenerAkteur LiesAkteur(INamedTypeSymbol a)
         {
             var g = new GelesenerAkteur { Typ = a };
             var darf = Generisch(a, "Abstractions.IDarf<");
             g.Sendet = darf.Where(t => Art(t) == Abstractions.Clientvertragsregeln.Befugnisart.Sendet).ToList();
             g.Fragt = darf.Where(t => Art(t) == Abstractions.Clientvertragsregeln.Befugnisart.Fragt).ToList();
-            var antworten = g.Sendet.Where(t => Hat(t, Abstractions.Clientvertragsregeln.ICommand)).OrderBy(t => t.Name, System.StringComparer.Ordinal).ToList();
-            foreach (var h in Generisch(a, "Abstractions.IHoert<"))
-            {
-                if (IstArbeit(h)) g.Arbeit.Add(new Arbeitseingang(h, antworten));
-                else g.Kenntnis.Add(h);
-            }
-            g.Arbeit = g.Arbeit.OrderBy(x => x.Ein.Name, System.StringComparer.Ordinal).ToList();
+            g.Kenntnis = Generisch(a, "Abstractions.IHoert<").Where(Hoerbar).ToList();
             return g;
         }
 
@@ -95,11 +75,8 @@ namespace Infrastructure.SourceGeneration
             v.Sendet = U(a => a.Sendet);
             v.Fragt = U(a => a.Fragt);
             v.Hoert = U(a => a.Kenntnis);
-            foreach (var a in akteure.Where(a => a.Arbeit.Count > 0)) v.Arbeit.Add((a.Typ, a.Arbeit));
 
             var kanon = Abstractions.Clientvertragsregeln.ClientKanon(v.Name, v.Akteure.Select(a => a.Name),
-                v.Arbeit.Select(x => new KeyValuePair<string, IEnumerable<Abstractions.Clientvertragsregeln.Eingang>>(x.Akteur.Name,
-                    x.Eingaenge.Select(r => new Abstractions.Clientvertragsregeln.Eingang(r.Ein.Name, r.Aus.Select(y => y.Name).ToList(), r.Strom)))),
                 v.Sendet.Select(t => t.Name), v.Fragt.Select(t => t.Name), v.Hoert.Select(t => t.Name));
             v.Hash = Abstractions.Clientvertragsregeln.Hash(kanon);
             return v;
@@ -109,8 +86,8 @@ namespace Infrastructure.SourceGeneration
         public static Abstractions.Clientvertragsregeln.Befugnisart Art(ITypeSymbol t) =>
             Abstractions.Clientvertragsregeln.Art(m => Hat(t, m), t.TypeKind == TypeKind.Interface);
 
-        /// <summary>Ist ein gehörter Typ Arbeit (ein Command ohne Ziel)? Die eine Regel <c>Abstractions.Clientvertragsregeln.IstArbeit</c>.</summary>
-        public static bool IstArbeit(ITypeSymbol t) => Abstractions.Clientvertragsregeln.IstArbeit(m => Hat(t, m));
+        /// <summary>Kann ein Akteur den Typ hören (ein Event oder Hinweis)? Die eine Regel <c>Abstractions.Clientvertragsregeln.Hoerbar</c>.</summary>
+        public static bool Hoerbar(ITypeSymbol t) => Abstractions.Clientvertragsregeln.Hoerbar(m => Hat(t, m));
 
         public static bool Implementiert(INamedTypeSymbol t, INamedTypeSymbol? iface) =>
             iface != null && (SymbolEqualityComparer.Default.Equals(t, iface)

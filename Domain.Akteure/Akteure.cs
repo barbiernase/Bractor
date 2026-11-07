@@ -14,8 +14,8 @@ using Domain.Projections.Trainingslauf;
 namespace Domain.Akteure;
 
 // Die Akteure der Domäne — Domänen-Experten draußen (docs/konzept-akteure.md §2). Je Akteur steht, was er SELBST hineingibt (IDarf<T>: ein Command,
-// eine Query, ein Hinweis) und was zu ihm kommt (IHoert<T>): ein Command ohne Ziel ist Arbeit (die Werkstatt gibt ihn einer Sitzung, die ihn verkörpert,
-// bis eine Antwort kommt — Commands über sein IDarf), ein Event oder Hinweis ist Kenntnis (gepusht, verlierbar). Was eine Funktion oder eine Frist
+// eine Query, ein Hinweis) und was zu ihm kommt (IHoert<T>): ein Event oder Hinweis — ein Fakt, auf das sein Client reagiert oder das er zur Kenntnis
+// nimmt. Was eine Funktion oder eine Frist
 // erzeugt (NimmRangeAuf, MarkiereAlsHaengengeblieben …), trägt den Akteur der Kette — es steht hier bewusst NICHT: am Tor käme es so nie durch.
 // Ausnahme: ein Akteur, für den eine Instanz mit Quellkopf hineingibt (Akteur in ihrer Datei), darf, was sie verlässt — der Start prüft es
 // (docs/04 §4.4). Welche Software für welche Akteure an der Leitung spricht, steht in Clients.cs.

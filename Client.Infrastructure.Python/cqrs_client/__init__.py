@@ -8,8 +8,7 @@ z. B. Domain.Leitung/domain.proto) reisen darin als Nutzlast(typ, daten) — Pay
 
 Öffentliche API:
     - CqrsClient[S]: Basisklasse für Clients
-    - ClientVertragBasis[S]: Basis der generierten Client-Basen (Arbeit + Kenntnis aus dem Vertrag)
-    - Arbeit, Herkunft, ArbeitsLaeufer: Arbeit für Akteure (IHoert eines Commands ohne Ziel, arbeit.py)
+    - ClientVertragBasis[S]: Basis der generierten Client-Basen (Reaktionen aus dem Vertrag)
     - handle: Dispatch-Deskriptor (@handle.register)
     - CategoryRegistry: Typ-Klassifizierung
     - MessageContext: Handler-Kontext
@@ -19,7 +18,6 @@ z. B. Domain.Leitung/domain.proto) reisen darin als Nutzlast(typ, daten) — Pay
 
 from .client import CqrsClient
 from .vertrag import ClientVertragBasis, VertragsVerletzung
-from .arbeit import AkteursArbeit, Arbeit, ArbeitsLaeufer, ArbeitsVerletzung, Herkunft
 from .dispatch import HandleDescriptor, HandlerBase, handle
 from .leitung import Nutzlast
 from .mapper import NutzlastTabelle, PayloadMapper, UnbekannteNutzlast
@@ -28,12 +26,7 @@ from .router import MessageContext
 from .versioning import VersionTracker
 
 __all__ = [
-    "AkteursArbeit",
-    "Arbeit",
-    "ArbeitsLaeufer",
-    "ArbeitsVerletzung",
     "ClientVertragBasis",
-    "Herkunft",
     "CqrsClient",
     "VertragsVerletzung",
     "CategoryRegistry",

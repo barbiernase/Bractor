@@ -13,11 +13,10 @@ public static class PythonQuelle
     public sealed record Klasse(string Name, IReadOnlyList<string> Basen, int Zeile);
     public sealed record Methode(string Name, int DefZeile, int RumpfStart, int RumpfEnde, string Einzug);
     /// <summary>
-    /// Eine Methode der generierten Client-Basis: Eingang (ein Command ohne Ziel bei Arbeit, sonst Event oder Hinweis), Methodenname, die
-    /// <c>def</c>-Zeile (Signatur), der Akteur, dessen Arbeit es ist (null = Kenntnis), Strom (eine Antwort darf in Stücken kommen) und die
-    /// Antwort-Commands (das <c>IDarf</c> des Akteurs).
+    /// Eine Methode der generierten Client-Basis: das gehörte Event bzw. der Hinweis, Methodenname, die <c>def</c>-Zeile (Signatur) und die Commands,
+    /// mit denen sie reagieren darf (das <c>IDarf</c> der verkörperten Akteure, <c>SPONTAN</c>).
     /// </summary>
-    public sealed record BasisAuf(string Event, string Methode, string Def, string? Akteur, bool Strom, IReadOnlyList<string> Ausgaenge);
+    public sealed record BasisAuf(string Event, string Methode, string Def, IReadOnlyList<string> Ausgaenge);
     public sealed record ClientBasis(string Client, string Basis, IReadOnlyList<BasisAuf> Auf);
 
     private static readonly Regex KlassenKopf = new(@"^class\s+(\w+)\s*(?:\((.*)\))?\s*:", RegexOptions.Compiled);
@@ -137,18 +136,18 @@ public static class PythonQuelle
         return string.Join("\n", zeilen.Select(z => z.Length >= min ? z[min..] : z.TrimStart())).Trim('\n');
     }
 
-    // ── Die GENERIERTE Basis (vertraege.py, Cqrs.Codegen): je Client-Basis CLIENT, ARBEIT (je Akteur die gehörten Commands ohne Ziel mit Methode
-    //    und Antworten) und HOERT (Kenntnis) ──
+    // ── Die GENERIERTE Basis (vertraege.py, Cqrs.Codegen): je Client-Basis CLIENT, HOERT (je gehörtem Event die Methode) und SPONTAN (die Commands und
+    //    Hinweise, die die Akteure hineingeben) ──
     private static readonly Regex ClientWert = new(@"^\s+CLIENT\s*:\s*ClassVar\[str\]\s*=\s*""(\w+)""", RegexOptions.Compiled);
-    private static readonly Regex BlockKopf = new(@"^\s+(ARBEIT|HOERT)\s*:\s*ClassVar\[dict\]\s*=\s*\{(.*)$", RegexOptions.Compiled);
-    private static readonly Regex AkteurKopf = new(@"^\s+""(\w+)""\s*:\s*\{", RegexOptions.Compiled);
-    private static readonly Regex ArbeitEintrag = new(@"^\s+(\w+)\s*:\s*Arbeit\(\s*""(\w+)""\s*,\s*\(([^)]*)\)\s*\)\s*,?\s*$", RegexOptions.Compiled);
+    private static readonly Regex HoertKopf = new(@"^\s+HOERT\s*:\s*ClassVar\[dict\]\s*=\s*\{(.*)$", RegexOptions.Compiled);
     private static readonly Regex HoertEintrag = new(@"^\s+(\w+)\s*:\s*""(\w+)""\s*,?\s*$", RegexOptions.Compiled);
+    private static readonly Regex SpontanWert = new(@"^\s+SPONTAN\s*:\s*ClassVar\[tuple\]\s*=\s*\(([^)]*)\)", RegexOptions.Compiled);
 
     /// <summary>
-    /// Die Client-Basen der generierten <c>vertraege.py</c>: je Arbeit eines verkörperten Akteurs (<c>ARBEIT</c>: <c>CmdDto: Arbeit("auf_cmd",
-    /// (Antwort…))</c>, die Antwort kommt als Strom) und je Kenntnis (<c>HOERT</c>) die Methode der Basis. <paramref name="dtoEndung"/> ist die
-    /// Endung, mit der der Generator die Nachrichten-Typen benennt (Proto-DTO) — der Name der Nachricht ist der Typ ohne sie.
+    /// Die Client-Basen der generierten <c>vertraege.py</c>: je gehörtem Event (<c>HOERT</c>) die Methode der Basis, mit den Commands, die die Reaktion
+    /// ausgeben darf (<c>SPONTAN</c> ohne Hinweise lässt sich am Text nicht trennen — es sind die Typen, die die Akteure hineingeben).
+    /// <paramref name="dtoEndung"/> ist die Endung, mit der der Generator die Nachrichten-Typen benennt (Proto-DTO) — der Name der Nachricht ist der
+    /// Typ ohne sie.
     /// </summary>
     public static IReadOnlyList<ClientBasis> ClientBasen(string vertraege, string dtoEndung = "Dto")
     {
@@ -157,41 +156,24 @@ public static class PythonQuelle
         string Ohne(string t) => t.EndsWith(dtoEndung, StringComparison.Ordinal) ? t[..^dtoEndung.Length] : t;
         foreach (var k in Klassen(vertraege))
         {
-            string? client = null, block = null, akteur = null;
-            var auf = new List<BasisAuf>();
-            void Nimm(string eingang, string methode, string? ak, bool strom, IReadOnlyList<string> ausgaenge)
-            {
-                var def = FindeMethode(vertraege, k.Name, methode) is { } m ? DefText(z, m) : $"async def {methode}(self, e, ctx, state):";
-                auf.Add(new(Ohne(eingang), methode, def, ak, strom, ausgaenge));
-            }
+            string? client = null;
+            var imHoert = false;
+            var gehoert = new List<(string Event, string Methode)>();
+            var spontan = new List<string>();
             for (var i = k.Zeile + 1; i < z.Length; i++)
             {
                 if (z[i].Trim().Length > 0 && Einzug(z[i]) == 0) break;
                 if (ClientWert.Match(z[i]) is { Success: true } c) { client = c.Groups[1].Value; continue; }
-                if (BlockKopf.Match(z[i]) is { Success: true } b)
-                {
-                    // Ein leerer Block steht in einer Zeile ({}), sonst bis zur schließenden Klammer auf der Einrückung des Kopfs.
-                    block = b.Groups[2].Value.TrimStart().StartsWith('}') ? null : b.Groups[1].Value;
-                    akteur = null;
-                    continue;
-                }
-                if (block == null) continue;
-                if (z[i].Trim().StartsWith('}'))
-                {
-                    if (block == "ARBEIT" && akteur != null) akteur = null;
-                    else block = null;
-                    continue;
-                }
-                if (block == "ARBEIT" && AkteurKopf.Match(z[i]) is { Success: true } a) akteur = a.Groups[1].Value;
-                else if (block == "ARBEIT" && akteur != null && ArbeitEintrag.Match(z[i]) is { Success: true } t)
-                {
-                    var antworten = Regex.Matches(t.Groups[3].Value, @"\w+").Select(x => Ohne(x.Value)).ToList();
-                    Nimm(t.Groups[1].Value, t.Groups[2].Value, akteur, true, antworten);
-                }
-                else if (block == "HOERT" && HoertEintrag.Match(z[i]) is { Success: true } h)
-                    Nimm(h.Groups[1].Value, h.Groups[2].Value, null, false, []);
+                if (SpontanWert.Match(z[i]) is { Success: true } sp) { spontan = Regex.Matches(sp.Groups[1].Value, @"\w+").Select(x => Ohne(x.Value)).ToList(); continue; }
+                if (HoertKopf.Match(z[i]) is { Success: true } h) { imHoert = !h.Groups[1].Value.TrimStart().StartsWith('}'); continue; }
+                if (!imHoert) continue;
+                if (z[i].Trim().StartsWith('}')) { imHoert = false; continue; }
+                if (HoertEintrag.Match(z[i]) is { Success: true } e) gehoert.Add((Ohne(e.Groups[1].Value), e.Groups[2].Value));
             }
-            if (client != null) erg.Add(new(client, k.Name, auf));
+            if (client == null) continue;
+            var auf = gehoert.Select(g => new BasisAuf(g.Event, g.Methode,
+                FindeMethode(vertraege, k.Name, g.Methode) is { } m ? DefText(z, m) : $"async def {g.Methode}(self, e, ctx, state):", spontan)).ToList();
+            erg.Add(new(client, k.Name, auf));
         }
         return erg;
     }
@@ -212,7 +194,6 @@ public static class PythonQuelle
         b.AppendLine("from dataclasses import dataclass");
         b.AppendLine("from typing import AsyncIterator  # noqa: F401");
         b.AppendLine();
-        b.AppendLine("from cqrs_client.arbeit import Herkunft  # noqa: F401");
         b.AppendLine("from cqrs_client.router import MessageContext  # noqa: F401");
         if (dtos.Count > 0) b.AppendLine($"from {paket}.generated import {string.Join(", ", dtos)}  # noqa: F401");
         b.AppendLine($"from {paket}.generated.vertraege import {basis.Basis}");

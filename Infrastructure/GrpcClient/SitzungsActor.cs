@@ -22,8 +22,6 @@ public sealed record VonClient(Leitung.ClientMessage Nachricht);
 
 /// <summary>Eine andere Sitzung leitet eine Query an diese weiter — dieser Client beantwortet sie (Zuständiger).</summary>
 
-/// <summary>Eine fertige Server-Nachricht, die ein Hintergrund-Teil der Sitzung schreiben will (Arbeitsaufträge an Funktionen draußen).</summary>
-public sealed record ServerNachricht(Leitung.ServerMessage Nachricht);
 
 /// <summary>Was alle Sitzungen eines Knotens teilen.</summary>
 public sealed record SitzungsDienste(
@@ -35,7 +33,6 @@ public sealed record SitzungsDienste(
     Konsum Konsum,
     IEventStoreRepository? Log,
     ILogger Logger,
-    Werkstatt? Werkstatt = null,
     Infrastructure.Funktionen.Verkettung? Koepfe = null,
     Infrastructure.Eingaenge.IOffeneEingaenge? Offene = null,
     Infrastructure.Funktionen.IFunktionsWege? Wege = null);
@@ -43,17 +40,14 @@ public sealed record SitzungsDienste(
 /// <summary>
 /// Die Sitzung einer gRPC-Verbindung als Actor (docs/konzept-akteure.md §5): der <b>einzige Schreiber</b> auf den
 /// Antwort-Stream. Die Lese-Schleife der Verbindung reicht jede Nachricht des Clients nur weiter (<see cref="VonClient"/>); Pushes kommen vom
-/// Verteiler des Knotens (<see cref="Zustellung"/>, begrenzt über den <see cref="Rueckstau"/>); was wartet (Query, Antwort einer Funktion
-/// draußen), läuft neben der Mailbox, geschrieben wird danach wieder im Actor.
+/// Verteiler des Knotens (<see cref="Zustellung"/>, begrenzt über den <see cref="Rueckstau"/>); was wartet (Query, Log), läuft neben der Mailbox,
+/// geschrieben wird danach wieder im Actor.
 /// Nach dem Handshake meldet sie ihre wirksame Liste (Vertrag ∩ Token) beim Verteiler an; gezielte Antworten (Ablehnung, <c>CommandFailed</c>)
 /// erreichen sie über ihre Sitzungs-Id, gleich, was sie hört. Endet die Sitzung (Stream zu, Ablehnung am Handshake), beendet sie
 /// <see cref="Ende"/>; den Status bekommt der Client vom <see cref="CqrsClientServiceImpl"/>.
 /// </summary>
-public sealed class SitzungsActor : RahmenActor, IArbeiter
+public sealed class SitzungsActor : RahmenActor
 {
-    /// <summary>So lange darf ein Auftrag an einen Worker ohne Regung bleiben (das SDK meldet alle 10 s ein Lebenszeichen).</summary>
-    public static readonly TimeSpan GeduldDraussen = TimeSpan.FromSeconds(60);
-
     /// <summary>So lange sammelt die Sitzung „P hat S weiterverarbeitet“, bevor sie dem Client die betroffenen Queries nennt.</summary>
     public static readonly TimeSpan Zusammenfassen = TimeSpan.FromMilliseconds(200);
 
@@ -77,8 +71,6 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
     private readonly Rueckstau _rueckstau = new();
     private readonly ILogger _logger;
     private PID? _verteiler;
-    private ActorSystem? _system;
-    private PID? _selbst;
     // Beobachtung (docs/konzept-akteure.md §5, „P hat S weiterverarbeitet“): je gehaltener Antwort, was sie zeigt; die betroffenen Queries sammeln sich bis zur
     //   nächsten Aktualisierung an den Client.
     private readonly Dictionary<IQuery, Beobachtung> _beobachtungen = new();
@@ -104,16 +96,7 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
     protected override Task BeginneAsync(IContext context)
     {
         _verteiler = PID.FromAddress(context.System.Address, VerteilerActor.Name);
-        _system = context.System;
-        _selbst = context.Self;
         MeldeAn(context, new HashSet<Type>());   // gezielte Antworten schon vor dem Handshake
-        return Task.CompletedTask;
-    }
-
-    protected override Task BeimStoppenAsync(IContext context)
-    {
-        // Funktionen draußen: der Arbeiter ist fort, seine laufenden Aufträge scheitern sofort und werden anderswo erneut gerechnet.
-        _d.Werkstatt?.Abmelden(this);
         return Task.CompletedTask;
     }
 
@@ -134,10 +117,6 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
                 foreach (var e in z.Envelopes)
                     await SchreibeAsync(new Leitung.ServerMessage { Event = new Leitung.EventNotification { Envelope = _d.Mapper.MapToDto(e) } });
                 _rueckstau.Erledigt();
-                break;
-
-            case ServerNachricht n:
-                await SchreibeAsync(n.Nachricht);
                 break;
 
             case Verarbeitet v:
@@ -194,7 +173,7 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
                 await HandshakeAsync(context, m.Capabilities);
                 break;
             case Leitung.ClientMessage.MessageOneofCase.Command:
-                // Ein Command ohne Ziel geht an den Kopf eines Graphen bzw. an einen Akteur (Arbeit); einer an ein Aggregat an sein Aggregat.
+                // Ein Command ohne Ziel geht an den Kopf eines Graphen; einer an ein Aggregat an sein Aggregat.
                 if (m.Command.Envelope?.Payload is { } nutzlast && _d.Mapper.CommandOhneZiel(nutzlast) is { } ohneZiel)
                     await AnKopfAsync(context, m.Command.Envelope, ohneZiel);
                 else await CommandAsync(m.Command);
@@ -207,15 +186,6 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
                 break;
             case Leitung.ClientMessage.MessageOneofCase.LiesLog:
                 await LiesLogAsync(context, m.LiesLog);
-                break;
-            case Leitung.ClientMessage.MessageOneofCase.ArbeitAnnehmen:
-                await ArbeitAnnehmenAsync(m.ArbeitAnnehmen);
-                break;
-            case Leitung.ClientMessage.MessageOneofCase.ArbeitsErgebnis:
-                await ArbeitsErgebnisAsync(m.ArbeitsErgebnis);
-                break;
-            case Leitung.ClientMessage.MessageOneofCase.ArbeitLebt:
-                if (Guid.TryParse(m.ArbeitLebt.Vorgang, out var lebt)) _d.Werkstatt?.Regt(this, lebt);
                 break;
             default:
                 _logger.LogWarning("{Session} unknown message type: {MessageCase}", _id, m.MessageCase);
@@ -345,9 +315,8 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
     }
 
     /// <summary>
-    /// Ein Command ohne Ziel von einem Akteur (docs/04 §4.4): ein offener Eingang je Empfänger (der Kopf eines Graphen bzw. ein Akteur, der ihn als
-    /// Arbeit hört; Kennung aus der Command-Id — wer wiederholt, schickt dieselbe), danach der schnelle Weg und die Quittung an den Client. Genau
-    /// einmal am Empfänger.
+    /// Ein Command ohne Ziel von einem Akteur (docs/04 §4.4): ein offener Eingang je Empfänger (der Kopf eines Graphen; Kennung aus der Command-Id —
+    /// wer wiederholt, schickt dieselbe), danach der schnelle Weg und die Quittung an den Client. Genau einmal am Empfänger.
     /// </summary>
     private async Task AnKopfAsync(IContext context, Leitung.CommandEnvelopeDto dto, ICommand command)
     {
@@ -526,89 +495,6 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
         // Nur an die Akteure, die ihn hören (über die Verteiler an ihre Sitzungen); Funktionen hören keine Hinweise.
         _d.Verteilung?.Melde(envelope with { ZielSitzung = null });
         _logger.LogDebug("{Session} TransientEvent published: {Payload}", _id, envelope.Payload.GetType().Name);
-    }
-
-    // ═════════════════════════════════════════
-    // ARBEIT FÜR AKTEURE (IHoert eines Commands ohne Ziel an einem verkörperten Akteur)
-    // ═════════════════════════════════════════
-
-    string IArbeiter.Name => _id;
-
-    TimeSpan? IArbeiter.Geduld => GeduldDraussen;
-
-    /// <summary>Ein Auftrag der Werkstatt an diesen Worker: als Server-Nachricht an den Actor (der einzige Schreiber am Stream).</summary>
-    void IArbeiter.Sende(AuftragDraussen a)
-    {
-        if (_system is null || _selbst is null) return;
-        var nutzlast = _d.Mapper.Nachricht(a.Eingang);
-        _system.Root.Send(_selbst, new ServerNachricht(new Leitung.ServerMessage
-        {
-            ArbeitsAuftrag = new Leitung.ArbeitsAuftrag
-            {
-                Vorgang = a.Vorgang.ToString(),
-                Korrelation = a.Korrelation ?? "",
-                Fuer = a.Funktion.Name,
-                Eingang = nutzlast,
-                Akteur = a.Herkunft.Akteur ?? "",
-                Stream = a.Herkunft.Stream.ToString(),
-                Version = a.Herkunft.Version,
-                ZeitUtc = a.Herkunft.Zeit.ToUnixTimeMilliseconds(),
-            }
-        }));
-    }
-
-    /// <summary>
-    /// Der Client nimmt die Arbeit von Akteuren an (je Akteur mit seinen Plätzen): die Sitzung wird ein Arbeiter in der Werkstatt dieses Knotens — nur
-    /// für Akteure, die sie verkörpert (verkörpert ∩ Token) und die Arbeit hören; ohne Tor/Akteur offen.
-    /// </summary>
-    private async Task ArbeitAnnehmenAsync(Leitung.ArbeitAnnehmen request)
-    {
-        if (_d.Werkstatt is not { } werkstatt)
-        {
-            await FehlerAsync("ARBEIT_NICHT_VERFUEGBAR", "Dieser Host hat keine Arbeit für Akteure", "");
-            return;
-        }
-        var akteur = _sitzung.Akteur;
-        var unbekannt = new List<string>();
-        var nichtBefugt = new List<string>();
-        foreach (var a in request.Angebote)
-        {
-            if (!Anwendung.Akteure.Rechte.TryGetValue(a.Akteur, out var rechte) || rechte.Arbeit.Count == 0) { unbekannt.Add(a.Akteur); continue; }
-            if (akteur is not null && akteur.Einzelne.All(x => x.Name != a.Akteur)) { nichtBefugt.Add(a.Akteur); continue; }
-            werkstatt.Anmelden(this, a.Akteur, a.Plaetze);
-        }
-        if (nichtBefugt.Count > 0)
-            await FehlerAsync("ARBEIT_NICHT_BEFUGT",
-                $"{akteur!.Name} verkörpert nicht: {string.Join(", ", nichtBefugt)} (die Sitzung verkörpert nur die Akteure ihres Clients ∩ Token)", "");
-        if (unbekannt.Count > 0)
-        {
-            _logger.LogWarning("{Session} nimmt Arbeit unbekannter Akteure an: [{Unbekannt}]", _id, string.Join(", ", unbekannt));
-            await FehlerAsync("ARBEIT_UNBEKANNT_AKTEUR",
-                $"Kein Akteur mit Arbeit (IHoert eines Commands ohne Ziel) dieses Namens: {string.Join(", ", unbekannt)}", "");
-        }
-    }
-
-    /// <summary>Die Antwort des Workers auf einen Auftrag (ganz oder ein Stück eines Stroms, oder ein Fehler) an die Werkstatt.</summary>
-    private async Task ArbeitsErgebnisAsync(Leitung.ArbeitsErgebnis request)
-    {
-        if (_d.Werkstatt is not { } werkstatt || !Guid.TryParse(request.Vorgang, out var auftrag))
-        {
-            await FehlerAsync("ARBEITS_ERGEBNIS_UNGUELTIG", $"Antwort ohne gültigen Auftrag oder ohne Arbeit auf diesem Host: '{request.Vorgang}'", request.Vorgang);
-            return;
-        }
-        var fehler = string.IsNullOrEmpty(request.Fehler) ? null : request.Fehler;
-        List<object>? ausgaben = null;
-        if (fehler is null)
-        {
-            try { ausgaben = request.Commands.Select(_d.Mapper.Antwortcommand).ToList(); }
-            catch (Exception ex) { fehler = $"Antwort nicht lesbar: {ex.Message}"; }
-        }
-        var ausgang = werkstatt.Ergebnis(this, auftrag, ausgaben, request.Ab, request.Fertig, fehler);
-        if (ausgang == Werkstattausgang.Abgelehnt && string.IsNullOrEmpty(request.Fehler))
-            await FehlerAsync("ARBEITS_ERGEBNIS_ABGELEHNT", $"Antwort auf {auftrag} außerhalb des IDarf, außer der Reihe oder nicht lesbar — der Auftrag wird wiederholt",
-                request.Vorgang);
-        else if (ausgang == Werkstattausgang.Unbekannt)
-            await FehlerAsync("ARBEIT_UNBEKANNT", $"Eingang {auftrag} läuft auf diesem Knoten nicht (schon beantwortet, abgebrochen oder nie vergeben)", request.Vorgang);
     }
 
     // ═════════════════════════════════════════

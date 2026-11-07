@@ -22,8 +22,8 @@ namespace Domain.SourceGeneration;
 /// Offen ist X (bzw. ein OneOf-Typargument), wenn es ein Interface, ein Typ-Parameter, <c>object</c> oder eine abstrakte
 /// Klasse ist. <c>Task</c>/<c>ValueTask</c>/<c>void</c> ohne Ergebnis sind erlaubt (reine Effekte, z. B. Projektionen).
 ///
-/// <b>CQRS114 — ein Decide gibt keinen Command an ein Aggregat aus</b> (Plan „Commands und Funktionsgraphen“, Entscheidung 3): seine Ausgaben sind
-/// Events, Hinweise, Fristen und Commands ohne Ziel (an den Kopf eines Graphen). Aggregate reden nur über Graphen miteinander.
+/// <b>CQRS114 — ein Decide gibt nur Events, Hinweise und Fristen aus</b> (docs/plan-katalog-und-graphen.md §1, Schritt 6): keinen Command, weder an ein
+/// Aggregat noch ohne Ziel. Was nach einem Fakt geschehen soll, stößt ein Client an, der darauf reagiert; Aggregate reden über Graphen und Clients.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
@@ -46,9 +46,9 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
 
     private static readonly DiagnosticDescriptor AggregatCommand = new(
         AggregatCommandId,
-        "Decide gibt einen Command an ein Aggregat aus",
-        "'{0}' gibt den Command '{1}' an ein Aggregat aus — ein Decide gibt Events, Hinweise, Fristen und Commands ohne Ziel aus; Aggregate reden über "
-        + "Graphen miteinander: gib einen Command ohne Ziel aus, den ein Graph nimmt, und dort den Command an das Aggregat (GR-DECIDE-AUSGABE)",
+        "Decide gibt einen Command aus",
+        "'{0}' gibt den Command '{1}' aus — ein Decide gibt nur Events, Hinweise und Fristen aus: gib ein Event aus, das den Fakt nennt, und lass einen "
+        + "Client darauf reagieren (IHoert am Akteur), der den Command hineingibt (GR-DECIDE-AUSGABE)",
         "CQRS.Vertrag",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -105,8 +105,8 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
         else return;
         if (element == null) return;   // Task/void: reine Effekte
 
-        if (decide && m.IAggregatCommand != null)
-            foreach (var fall in Teile(element).Where(t => Ist(t, m.IAggregatCommand)))
+        if (decide && m.ICommand != null)
+            foreach (var fall in Teile(element).Where(t => Ist(t, m.ICommand)))
                 ctx.ReportDiagnostic(Diagnostic.Create(AggregatCommand, mm.Locations.FirstOrDefault(), typ.Name + "." + mm.Name + "(" + p0.Name + ")", fall.Name));
 
         var offen = OffeneTypen(element).FirstOrDefault();

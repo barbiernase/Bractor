@@ -134,11 +134,10 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     }
 
     [Theory, InlineData(false), InlineData(true)]
-    public async Task Der_offene_Eingang_einer_Folge_wird_mit_der_Entscheidung_gueltig_einmal_je_Kennung(bool schnell)
+    public async Task Ein_offener_Eingang_eines_Clients_liegt_einmal_je_Kennung_bis_er_fertig_ist(bool schnell)
     {
-        // Die offenen Eingänge (docs/04 §4.4) reisen als Beilage im Append der Entscheidung, auch ohne Events (ein Noop mit Folge, nur die Quittung
-        //   mit Kopf-Prüfung): scheitert der Append an der Version, gibt es keinen Eingang; dieselbe Kennung ein zweites Mal legt keinen zweiten.
-        var es = EventStore(schnell: schnell);
+        // Ein Command ohne Ziel eines Clients (docs/04 §4.4) legt je Kopf einen offenen Eingang — mit der Herkunft, die er nennt (Stream und Version des
+        //   Fakts, auf das er reagiert); dieselbe Kennung ein zweites Mal legt keinen zweiten. Fällig wird er nach dem Fenster des schnellen Wegs.
         var store = schnell ? _fx.Store : _fx.Rich;
         var k = Guid.NewGuid();
         var kennung = Guid.NewGuid();
@@ -155,17 +154,12 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         }
         EingangOffen Eingang(Guid id, int version) => new(id, "Probe", "X", "{}", version, null, null);
 
-        await es.AppendEventsAsync(k, 0, new IEvent[] { new ImagePairInspiziert() });
-        var konflikt = () => es.AppendEventsAsync(k, 0, Array.Empty<IEvent>(), beilagen: [new Quittung(Guid.NewGuid(), KommandoAusgang.Gewirkt), Eingang(kennung, 0)]);
-        await konflikt.Should().ThrowAsync<ConcurrencyException>();
-        (await Eingaenge()).Anzahl.Should().Be(0, "die Entscheidung fiel auf Version 0, der Stream steht auf 1");
-
-        await es.AppendEventsAsync(k, 1, Array.Empty<IEvent>(), beilagen: [new Quittung(Guid.NewGuid(), KommandoAusgang.Gewirkt), Eingang(kennung, 1)]);
+        var eingaenge = new Infrastructure.Eingaenge.OffeneEingaenge(store);
+        await eingaenge.LegeAsync([Eingang(kennung, 1)], k, default);
         (await Eingaenge()).Should().Be((1, 1));
-        await es.AppendEventsAsync(k, 1, new IEvent[] { new ImagePairInspiziert() }, beilagen: [Eingang(kennung, 2)]);
+        await eingaenge.LegeAsync([Eingang(kennung, 2)], k, default);
         (await Eingaenge()).Should().Be((1, 1), "dieselbe Kennung legt keinen zweiten Eingang");
 
-        var eingaenge = new Infrastructure.Eingaenge.OffeneEingaenge(store);
         (await eingaenge.FaelligeAsync(10_000, default)).Should().NotContain(e => e.Kennung == kennung,
             "fällig erst nach dem Fenster des schnellen Wegs (Zustellung direkt nach dem Commit)");
         await eingaenge.VerschiebeAsync([kennung], TimeSpan.Zero, default);

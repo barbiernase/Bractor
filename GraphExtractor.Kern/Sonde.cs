@@ -19,8 +19,8 @@ namespace GraphExtractor;
 /// drei Klassen — und ALLE allgemeinen Primitive des Funktionsmodells (Plan „Commands und Funktionsgraphen“): Funktionen als Klassen (Technik als
 /// Schnittstelle und als Klasse, Konfig-Record, Zustand, Lese-Fähigkeit, Strom, Antwort auf den eigenen Command), Graphen mit jedem Muster aus
 /// Entscheidung 5 (Folge, Fork, Wahl, Join, Je + Sammeln, Rennen, Warten mit Frist), Graph im Graphen, eine generische Funktion mit Typargument als
-/// Knoten, Quellfunktionen (eigene und aus dem Katalog) am Kopf, Commands ohne Ziel aus einem Decide an einen Graph-Kopf und an einen Akteur
-/// (Arbeit), Kenntnis (IHoert eines Events/Hinweises), Clients als Records, Hinweise nur als Ausgaben.
+/// Knoten, Quellfunktionen (eigene und aus dem Katalog) am Kopf, Commands ohne Ziel von Akteuren an einen Graph-Kopf, Reaktionen (ein Akteur hört
+/// ein Fakt und darf den Command, der folgt — ein Decide gibt nur Fakten aus), Clients als Records, Hinweise nur als Ausgaben.
 ///
 /// Dazu Bausteine, die im Editor GEZEICHNET werden (<c>Sonde/Gezeichnet.gesten.json</c>: neuer Store mit einer im Panel benannten
 /// und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel, Akteur mit darf und hoert, Client als Record, eine neue
@@ -348,7 +348,7 @@ public static class Sonde
             z.Add($"reader {S(r, "namespace")}.{S(r, "name")} hinter={string.Join(",", A(r, "projektionen").Select(x => (string?)x))} | "
                   + string.Join("; ", A(r, "handles").Select(h => $"{S(h, "query")} -> {Fns(h)} => {string.Join("|", A(h, "responses").Select(x => (string?)x))}")));
         string Namen(JsonNode n, string k) => A(n, k).Any() ? string.Join(", ", A(n, k).Select(x => (string?)x)) : "-";
-        // Akteure (Entscheidung 13): was einer hineingibt (IDarf) und was zu ihm kommt (IHoert: Arbeit oder Kenntnis) — die Basisliste in Reihenfolge.
+        // Akteure (Entscheidung 13): was einer hineingibt (IDarf) und was zu ihm kommt (IHoert: Events und Hinweise) — die Basisliste in Reihenfolge.
         foreach (var ak in A(b, "akteure").Where(Sonde))
             z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")} | darf {Namen(ak, "darf")} | hoert {Namen(ak, "hoert")}");
         // Clients (docs/konzept-akteure.md §4): ein Record, der nur nennt, wen er verkörpert (was über seine Leitung geht, sagen die Akteur-Zeilen).

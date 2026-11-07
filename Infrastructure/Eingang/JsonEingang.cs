@@ -23,8 +23,6 @@ namespace Infrastructure.Eingang;
 ///   die generierte Registry, die Felder über den generierten Wire-Kontext (keine Reflection). Die Antwort auf einen Command nennt Ausgang und
 ///   Versionen; mit <c>"zeigeEvents": true</c> dazu die geschriebenen Events, gelesen aus dem Log. Die Antwort auf eine Query nennt den Stand je
 ///   gezeigter Id (<c>staende</c>) — fragt sie ein Aggregat, seine Version als OCC-Stand.</item>
-/// <item><c>GET /eingang/auftraege</c>, <c>POST /eingang/ergebnis</c> — Hand (<c>Umgebung:Hand</c>): die Werkbank beantwortet die Arbeit der Akteure,
-///   die sie verkörpert (<see cref="HandAusfuehrer"/>).</item>
 /// </list>
 /// </summary>
 public static class JsonEingang
@@ -130,56 +128,6 @@ public static class JsonEingang
                 return Results.Json(new { ok = true, antwort = Darstellung(antwort.Data), staende }, Json);
             }
             catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }, Json, statusCode: 500); }
-        });
-
-        // Hand (Umgebung:Hand): die wartende Arbeit der Akteure, die die Werkbank verkörpert, samt Command, Herkunft und den möglichen Antworten
-        //   (das IDarf des Akteurs); „funktion“ nennt den Akteur.
-        g.MapGet("/auftraege", (IServiceProvider sp) =>
-        {
-            var hand = sp.GetService<HandAusfuehrer>();
-            return Results.Json(new
-            {
-                funktionen = hand?.Bausteine.Select(b => b.Name) ?? [],
-                eingaenge = (hand?.OffeneEingaenge ?? []).Select(e => new
-                {
-                    vorgang = e.Vorgang,
-                    funktion = e.Funktion.Name,
-                    eingang = Darstellung(e.Eingang),
-                    stream = e.Stream,
-                    version = e.Version,
-                    akteur = e.Akteur,
-                    seit = e.Seit,
-                    ausgaben = e.Funktion.Eingang(e.Eingang.GetType())?.Ausgaben.Select(t => t.Name) ?? [],
-                }),
-            }, Json);
-        });
-
-        // Die Antwort ist eine Liste von Commands [{typ, daten}] (oder ein Fehler) — die erste Antwort gewinnt (sie beendet den Lauf).
-        g.MapPost("/ergebnis", (JsonElement body, IServiceProvider sp) =>
-        {
-            var hand = sp.GetService<HandAusfuehrer>();
-            if (hand is null) return Results.Json(new { ok = false, fehler = "keine Arbeit von Hand in dieser Umgebung (Umgebung:Hand)" }, Json, statusCode: 404);
-            if (!body.TryGetProperty("vorgang", out var vg) || !Guid.TryParse(vg.GetString(), out var vorgang))
-                return Results.Json(new { ok = false, fehler = "vorgang fehlt" }, Json, statusCode: 400);
-            if (hand.OffeneEingaenge.FirstOrDefault(e => e.Vorgang == vorgang) is not { } offen)
-                return Results.Json(new { ok = false, fehler = $"Auftrag {vorgang} wartet hier nicht (mehr)" }, Json, statusCode: 404);
-            var fehler = body.TryGetProperty("fehler", out var fb) && fb.GetString() is { Length: > 0 } feb ? feb : null;
-            var moeglich = offen.Funktion.Eingang(offen.Eingang.GetType())?.Ausgaben ?? [];
-            var ausgaben = new List<object>();
-            if (fehler is null && body.TryGetProperty("ausgaben", out var liste) && liste.ValueKind == JsonValueKind.Array)
-                foreach (var a in liste.EnumerateArray())
-                {
-                    var name = a.TryGetProperty("typ", out var tn) ? tn.GetString() : null;
-                    var typ = moeglich.FirstOrDefault(x => x.Name == name);
-                    if (typ is null)
-                        return Results.Json(new { ok = false, fehler = $"{name} darf {offen.Funktion.Name} nicht antworten ({string.Join(", ", moeglich.Select(x => x.Name))})" }, Json, statusCode: 400);
-                    try { ausgaben.Add(EingangJson.Lies(a.TryGetProperty("daten", out var dd) ? dd : default, typ)); }
-                    catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException)
-                    { return Results.Json(new { ok = false, fehler = $"{typ.Name} nicht lesbar: {e.Message}" }, Json, statusCode: 400); }
-                }
-            var ausgang = hand.Antworte(vorgang, fehler is null ? ausgaben : null, fehler);
-            return Results.Json(new { ok = ausgang is not Werkstattausgang.Unbekannt, ausgang = ausgang.ToString() }, Json,
-                statusCode: ausgang is Werkstattausgang.Unbekannt ? 404 : 200);
         });
     }
 

@@ -43,17 +43,15 @@ public class ClientVertragTests
         var ap = C("Arbeitsplatz");
         ap.Verkoerpert.Should().BeEquivalentTo("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer");
         var r = ap.Rechte(GeneratedAkteurRechte.Alle, token: null)!;
-        r.Arbeit.Should().BeEmpty("der Arbeitsplatz handelt spontan, seine Akteure haben keine Arbeit");
         r.Hoert.Should().Contain(typeof(ImagePairKomplett)).And.Contain(typeof(PhysischesProduktGelabelt)).And.Contain(typeof(ModellAktiviert));
         r.Hoert.Should().BeEquivalentTo(new[] { "Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer" }.SelectMany(n => A(n).Hoert).Distinct(),
             "ein Client hat keinen eigenen Kenntnis-Satz — er hört, was seine Akteure hören");
     }
 
     [Fact]
-    public void Arbeit_sendet_und_fragt_sind_die_IHoert_und_IDarf_der_verkoerperten_Akteure()
+    public void Hoert_sendet_und_fragt_sind_die_IHoert_und_IDarf_der_verkoerperten_Akteure()
     {
         var ml = C("KlassifikationsWorker").Rechte(GeneratedAkteurRechte.Alle, token: null)!;
-        ml.Arbeit.Should().BeEmpty();
         ml.Hoert.Should().BeEquivalentTo(new[] { typeof(BildVerfuegbar), typeof(ImagePairKomplett), typeof(ModellAktiviert) });
         ml.Commands.Should().BeEquivalentTo(new[] { typeof(KlassifiziereBildPaarDurchKi), typeof(KlassifiziereEinzelBildDurchKi) });
         ml.Queries.Should().BeEquivalentTo(new[] { typeof(HoleAktivesModell) });
@@ -149,7 +147,7 @@ public class ClientVertragTests
     [Fact]
     public void Der_Client_Hash_kommt_aus_der_kanonischen_Form()
     {
-        var kanon = Abstractions.Clientvertragsregeln.ClientKanon("KlassifikationsWorker", ["Klassifizierer"], [],
+        var kanon = Abstractions.Clientvertragsregeln.ClientKanon("KlassifikationsWorker", ["Klassifizierer"],
             ["KlassifiziereEinzelBildDurchKi", "KlassifiziereBildPaarDurchKi"], ["HoleAktivesModell"],
             ["ModellAktiviert", "ImagePairKomplett", "BildVerfuegbar"]);
         kanon.Should().Be("KlassifikationsWorker|A:Klassifizierer"

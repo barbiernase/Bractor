@@ -28,7 +28,6 @@ public static class FunktionsLaufzeitWiring
             return new FunktionsWege(new Bote(sp.GetRequiredService<ActorSystem>().Cluster(), logger), sp.GetRequiredService<FunktionsOrte>(), logger);
         });
         if (Anwendung.Funktionen.Bausteine.Count == 0) return services;
-        services.TryAddSingleton<Werkstatt>();
         services.TryAddSingleton<IEingangsZustellung>(sp => new WegeZustellung(sp.GetRequiredService<IFunktionsWege>()));
         services.TryAddSingleton<IZustandsAblage>(sp => new ZustandsAblage(sp.GetRequiredService<Marten.IDocumentStore>()));
         services.AddHostedService<FunktionsOrteTakt>();
@@ -41,11 +40,7 @@ public static class FunktionsLaufzeitWiring
         FunktionsBausteinWiring.Knoten(new GraphInstanzen([instanz])).Any(x => MitZustand(x.Baustein, x.Konfig, instanz.Ort(x.Knoten.Name), dienste));
 
     /// <summary>Rechnet die Funktion mit dieser Konfig am Ort <paramref name="ort"/> (<c>instanz/knoten</c>) im Host mit Zustand?</summary>
-    public static bool MitZustand(FunktionsBaustein b, KnotenKonfig k, string ort, IServiceProvider dienste)
-    {
-        if (b.Draussen) return false;
-        return b.Zustand is not null || dienste.GetService<TechnikWahl>()?.MitZustand(ort) == true;
-    }
+    public static bool MitZustand(FunktionsBaustein b, KnotenKonfig k, string ort, IServiceProvider dienste) => b.Zustand is not null || dienste.GetService<TechnikWahl>()?.MitZustand(ort) == true;
 }
 
 /// <summary>Bringt einen offenen Eingang über die Wege zum Kopf seiner Instanz (durabel: „angenommen“ sofort, ausgetragen trägt der Parent).</summary>
@@ -70,12 +65,11 @@ public sealed class WegeZustellung(IFunktionsWege wege) : IEingangsZustellung
 
 /// <summary>
 /// Spawnt beim Start (nach dem Cluster-Beitritt) die Wurzel der Graphen dieses Knotens: je Instanz ein Graph-Actor mit je Knoten einem Parent — im
-/// Host mit seiner Funktion (eine Aktivierung je Kind, mit dem Knoten-Bereich für Konfig-Records und Technik); die Arbeit eines Akteurs (draußen) geben
-/// die Kinder an die Arbeiter der <see cref="Werkstatt"/>; ein Knoten mit Zustand rechnet mit genau einem Kind. Die Wurzel meldet eine Instanz als
-/// gehalten, sobald ihre Arbeiter da sind; eine Instanz, die einen anderen Rechner nennt, legt er gar nicht an (<see cref="EigenerRechner"/>).
+/// Host mit seiner Funktion (eine Aktivierung je Kind, mit dem Knoten-Bereich für Konfig-Records und Technik); ein Knoten mit Zustand rechnet mit genau
+/// einem Kind. Eine Instanz, die einen anderen Rechner nennt, legt er gar nicht an (<see cref="EigenerRechner"/>).
 /// </summary>
 public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system, FunktionsOrte orte, IFunktionsWege wege, Verkettung koepfe,
-    GraphInstanzen instanzen, Werkstatt werkstatt, ILoggerFactory? logs = null) : IHostedService
+    GraphInstanzen instanzen, ILoggerFactory? logs = null) : IHostedService
 {
     public Task StartAsync(CancellationToken ct)
     {
@@ -86,7 +80,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
         var verteilung = dienste.GetService<Infrastructure.Verteilen.Verteilung>();
         Action<HinweisZustellen>? hinweise = verteilung is null ? null : h =>
         {
-            // An die Akteure draußen, die ihn hören: über die Verteiler an ihre Sitzungen (Funktionen hören keine Hinweise).
+            // An die Akteure, die ihn hören: über die Verteiler an ihre Sitzungen (Funktionen hören keine Hinweise).
             verteilung.Melde(new EventEnvelope
             {
                 AggregateId = h.Stream, AggregateVersion = h.Version, CorrelationId = h.Korrelation, UserId = h.Akteur, Payload = h.Hinweis,
@@ -99,7 +93,6 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
         foreach (var instanz in instanzen.Alle.Where(rechner.Bedient))
         {
             var knoten = new Dictionary<string, Func<FunktionsParent>>(StringComparer.Ordinal);
-            var draussen = new List<string>();
             var mitZustand = FunktionsLaufzeitWiring.MitZustand(instanz, dienste);
             foreach (var (_, k, b, kk) in FunktionsBausteinWiring.Knoten(new GraphInstanzen([instanz])))
             {
@@ -118,33 +111,18 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                     Vorwaermen: bindung.Vorwaermen, Wiederholungen: wiederholungen);
                 FunktionsTraeger traeger;
                 IZustandsAblage? zustandsAblage = null;
-                if (b.Draussen)
+                var technikZustand = dienste.GetService<TechnikWahl>()?.MitZustand(instanz.Ort(k.Name)) == true;
+                var bereich = new KnotenKontext(instanz.Name, k.Name, kk);
+                var ablage = dienste.GetService<IZustandsAblage>();
+                traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, b.Baue!, b.Zustand, b.Name, technikZustand, bereich, ablage,
+                    quelle: b.Lausche is not null), b.Rechne, b.Liest, antworten)
+                { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Uebersetzungen = instanz.Graph.UebersetzungenVon(k.Name),
+                    Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
+                // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Rechner der Instanz (der Zustand ist ein Cache und soll alles sehen).
+                if (mitZustand && (b.Zustand is not null || technikZustand))
                 {
-                    // Draußen (die Arbeit eines Akteurs): kein Bereich, keine Umsetzung — eine Sitzung, die ihn verkörpert, rechnet in der Werkstatt. Die Kinder warten dort auf einen freien Platz; ein
-                    //   Platz wird frei, sobald die Antwort vollständig ist, das Kind bringt sie danach hinaus (so wartet der Arbeiter nicht auf die Kette).
-                    var baustein = b;
-                    traeger = new FunktionsTraeger(b.Name, null, null, false, antworten,
-                        (kennung, nachricht, herkunft, korrelation, t) => werkstatt.RechneAsync(baustein, kennung, nachricht, herkunft, korrelation, t))
-                    { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Uebersetzungen = instanz.Graph.UebersetzungenVon(k.Name),
-                        Zeitlimit = kk.Zeitlimit };
-                    draussen.Add(b.Name);
-                    konfig = konfig with { Vorwaermen = false };
-                }
-                else
-                {
-                    var technikZustand = dienste.GetService<TechnikWahl>()?.MitZustand(instanz.Ort(k.Name)) == true;
-                    var bereich = new KnotenKontext(instanz.Name, k.Name, kk);
-                    var ablage = dienste.GetService<IZustandsAblage>();
-                    traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, b.Baue!, b.Zustand, b.Name, technikZustand, bereich, ablage,
-                        quelle: b.Lausche is not null), b.Rechne, b.Liest, antworten)
-                    { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Uebersetzungen = instanz.Graph.UebersetzungenVon(k.Name),
-                        Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
-                    // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Rechner der Instanz (der Zustand ist ein Cache und soll alles sehen).
-                    if (mitZustand && (b.Zustand is not null || technikZustand))
-                    {
-                        konfig = konfig with { Parallel = 1 };
-                        zustandsAblage = ablage;   // der Parent sichert seinen Schnappschuss mit den Kennungen, die er enthält
-                    }
+                    konfig = konfig with { Parallel = 1 };
+                    zustandsAblage = ablage;   // der Parent sichert seinen Schnappschuss mit den Kennungen, die er enthält
                 }
                 var t0 = traeger;
                 var k0 = konfig;
@@ -154,15 +132,14 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             var i0 = instanz;
             var knoten0 = knoten;
             plaene.Add(new InstanzPlan(instanz.Name, () => new GraphActor(i0, knoten0, dienste.GetService<IOffeneEingaenge>(), hinweise, logger,
-                dienste.GetService<IZustandsAblage>(), async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t)), draussen.Distinct().ToList(), mitZustand, Quelle: instanz.Graph.Quelle is not null,
+                dienste.GetService<IZustandsAblage>(), async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t)), mitZustand, Quelle: instanz.Graph.Quelle is not null,
                 Festgelegt: instanz.Rechner is not null && !rechner.Einzelknoten));
         }
         _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger)), FunktionenWurzel.Wurzelname);
         var wurzel = _wurzel;
-        werkstatt.Beobachte((f, slots) => system.Root.Send(wurzel, new PlaetzeGeaendert(f, slots)));
         orte.Beobachte(doppelt => system.Root.Send(wurzel, new RechnerDoppelt(doppelt)));
         Console.WriteLine($"  ✓ Graphen {system.Address}/{FunktionenWurzel.Wurzelname}: " + string.Join(", ", plaene.Select(p => p.Instanz
-            + (p.Draussen.Count > 0 ? $" (draußen: {string.Join(", ", p.Draussen)})" : "") + (p.MitZustand ? " (mit Zustand)" : ""))));
+            + (p.MitZustand ? " (mit Zustand)" : ""))));
         return Task.CompletedTask;
     }
 

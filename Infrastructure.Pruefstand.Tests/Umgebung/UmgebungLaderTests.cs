@@ -123,11 +123,10 @@ public class UmgebungLaderTests
         => Bindung("Bildverkleinerung", null).Should().Be(new BausteinBindung("Bildverkleinerung"));
 
     [Fact]
-    public void Eine_Funktion_laeuft_im_Host_ein_Akteur_ohne_Arbeit_ist_kein_Baustein()
+    public void Ein_Baustein_ist_eine_Funktion_ein_Akteur_ist_keiner()
     {
-        FunktionsBausteinWiring.Baustein("Bildverkleinerung")!.Draussen.Should().BeFalse("eine Funktion ist eine Klasse im Host");
-        FunktionsBausteinWiring.Baustein("Klassifizierer").Should().BeNull("der Klassifizierer reagiert auf ein Fakt, er hat keine Arbeit");
-        FunktionsBausteinWiring.Baustein("Inspekteur").Should().BeNull("ein Akteur ohne Arbeit ist kein Baustein");
+        FunktionsBausteinWiring.Baustein("Bildverkleinerung").Should().NotBeNull("eine Funktion ist eine Klasse im Host");
+        FunktionsBausteinWiring.Baustein("Klassifizierer").Should().BeNull("der Klassifizierer reagiert als Client auf ein Fakt");
     }
 
     // ── Instanzen: geprüft gegen die Graphen ───────────────────────────────────────────────────────────────────────────
@@ -171,19 +170,6 @@ public class UmgebungLaderTests
                 ["linie1"] = new() { Graph = "Linienimport", Akteur = "Inspekteur" },
             }, Graphen, rechte))
             .Should().Throw<BootFehler>().WithMessage("*Inspekteur darf NimmBildAuf nicht*");
-    }
-
-    [Fact]
-    public void Hand_mit_einem_Akteur_ohne_Arbeit_ist_ein_Boot_Fehler()
-        => FluentActions.Invoking(() => new ServiceCollection().BindeGraphen(new UmgebungKonfig { Umgebung = { Hand = ["Inspekteur"] } }))
-            .Should().Throw<BootFehler>().WithMessage("*'Inspekteur'*kein Akteur, der Arbeit hört*");
-
-    [Fact]
-    public void Ohne_Hand_bleibt_der_Hand_Ausfuehrer_weg()
-    {
-        var s = new ServiceCollection();
-        s.BindeGraphen(new UmgebungKonfig());
-        s.Should().NotContain(d => d.ServiceType == typeof(HandAusfuehrer));
     }
 
     [Fact]
@@ -233,7 +219,7 @@ public class UmgebungLaderTests
         var b = GeneratedFunktionsBausteine.Alle.ToDictionary(x => x.Name);
         b.Keys.Should().Contain(["Bildeinlesen", "Bildverkleinerung", "Kontrastausgleich", "Dateinamendeutung"]);
         b.Keys.Should().NotContain(["RangeAufloesung", "MitgliederEinfrieren"], "die Datensatz-Reaktionen rechnet ein Client (Schritt 6)");
-        b.Keys.Should().NotContain(["Klassifizierer", "TrainingsSystem"], "die Arbeit eines Akteurs ist keine generierte Funktion");
-        b.Values.Should().OnlyContain(x => !x.Draussen, "eine Funktion ist eine Klasse im Host");
+        b.Keys.Should().NotContain(["Klassifizierer", "TrainingsSystem"], "ein Akteur ist keine Funktion");
+        b.Values.Should().OnlyContain(x => x.Baue != null, "eine Funktion ist eine Klasse im Host");
     }
 }

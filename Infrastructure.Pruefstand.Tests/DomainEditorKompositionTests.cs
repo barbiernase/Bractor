@@ -53,14 +53,14 @@ public sealed class DomainEditorKompositionTests
         Grammatik.KonsumVon(Grammatik.Event, Grammatik.Projektion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
         Grammatik.KonsumVon(Grammatik.Event, Grammatik.Funktion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
         Grammatik.KonsumVon(Grammatik.Command, Grammatik.Funktion)!.Regel.Should().Be("GR-KANTE", "ein Command ohne Ziel geht an die Knoten desselben Graphen");
-        Grammatik.KonsumVon(Grammatik.Command, Grammatik.Akteur)!.Kardinalitaet.Should().Be(Grammatik.GenauEins, "Arbeit hat genau einen Empfänger");
+        Grammatik.KonsumVon(Grammatik.Command, Grammatik.Akteur).Should().BeNull("einen Command hört kein Akteur — er hört Fakten");
         Grammatik.ErzeugungVon(Grammatik.Projektion, Grammatik.Event).Should().BeNull("eine Projektion schreibt keine Fakten");
         // docs/10 §10.5: ein Hinweis geht nie in eine Projektion, eine Projektion erzeugt keine Nachricht, die Frist nimmt die Uhr.
         Grammatik.KonsumVon(Grammatik.Transient, Grammatik.Projektion).Should().BeNull("Hinweise hören nur Akteure");
         Grammatik.Erzeugungen.Should().NotContain(e => e.Baustein == Grammatik.Projektion);
         Grammatik.KonsumVon(Grammatik.Frist, Grammatik.Uhr)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
         Grammatik.ErzeugungVon(Grammatik.Uhr, Grammatik.Command).Should().NotBeNull();
-        Grammatik.ErzeugungVon(Grammatik.Aggregat, Grammatik.Command)!.Regel.Should().Be("GR-DECIDE-COMMAND", "ein Decide gibt nur Commands ohne Ziel aus");
+        Grammatik.ErzeugungVon(Grammatik.Aggregat, Grammatik.Command).Should().BeNull("ein Decide gibt nur Events, Hinweise und Fristen aus (CQRS114)");
         // docs/04 §4.3.1: Events gehen gebündelt in eine Projektion — und nur dorthin.
         Grammatik.KonsumVon(Grammatik.Event, Grammatik.Buendel)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
         Grammatik.KonsumVon(Grammatik.Gebuendelt, Grammatik.Projektion)!.Regel.Should().Be("GR-BUENDEL");

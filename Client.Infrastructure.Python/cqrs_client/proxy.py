@@ -231,34 +231,6 @@ class GrpcProxy:
         await self._send(msg)
 
     # ═══════════════════════════════════════════════════
-    # ARBEIT FÜR AKTEURE (IHoert eines Commands ohne Ziel, docs/konzept-akteure.md §5)
-    # ═══════════════════════════════════════════════════
-
-    async def send_arbeit_annehmen(self, angebote: list[tuple[str, int]]) -> None:
-        """„Ich nehme die Arbeit von Akteur A mit n Plätzen an“ — die Sitzung wird ein Arbeiter in der Werkstatt des Knotens, der Server gibt ihr Aufträge."""
-        msg = L.ClientMessage(
-            arbeit_annehmen=L.ArbeitAnnehmen(
-                angebote=[L.ArbeitsAngebot(akteur=a, plaetze=p) for a, p in angebote]
-            )
-        )
-        await self._send(msg)
-
-    async def send_arbeits_ergebnis(self, vorgang: str, commands: list[L.Nutzlast] | None = None, ab: int = 0,
-                                    fertig: bool = True, fehler: str = "") -> None:
-        """
-        Die Antwort auf einen Auftrag — ganz oder als Stück: `commands` = die Commands (Nutzlast) in der Reihenfolge der Arbeit, `ab` = Stelle des
-        ersten Commands dieses Stücks, `fertig` = die Antwort ist vollständig; ein nicht leerer `fehler` = gescheitert.
-        """
-        msg = L.ClientMessage(arbeits_ergebnis=L.ArbeitsErgebnis(
-            vorgang=vorgang, commands=list(commands or []), ab=ab, fertig=fertig, fehler=fehler))
-        await self._send(msg)
-
-    async def send_arbeit_lebt(self, vorgang: str) -> None:
-        """Lebenszeichen eines laufenden Auftrags — ohne Regung gibt der Server ihn nach 60 s weiter."""
-        msg = L.ClientMessage(arbeit_lebt=L.ArbeitLebtMeldung(vorgang=vorgang))
-        await self._send(msg)
-
-    # ═══════════════════════════════════════════════════
     # READ-LOOP (Server → Client)
     # ═══════════════════════════════════════════════════
 
@@ -266,7 +238,7 @@ class GrpcProxy:
         """
         Empfängt ServerMessages, dispatcht nach oneof-Feld.
 
-        Events/ArbeitsAufträge → event_queue.
+        Events → event_queue.
         QueryResponse → pending Future completieren.
         """
         try:
@@ -282,9 +254,6 @@ class GrpcProxy:
 
                 if field_name == "event":
                     await self._event_queue.put(("event", payload))
-
-                elif field_name == "arbeits_auftrag":
-                    await self._event_queue.put(("arbeits_auftrag", payload))
 
                 elif field_name == "query_response":
                     self._complete_future(

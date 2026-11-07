@@ -4,8 +4,8 @@ using Leihwesen.Ausleihe.Befehle;
 // SONDE — Aggregat mit Commands in eigenem Sub-Namespace, Property-Records, if/else-Guards, alles in EINER Datei. Die Ausleihe setzt eine
 //         FRIST (docs/10 §10.2): die Uhr schickt nach Ablauf der Leihdauer die Mahnung an DENSELBEN Leihvorgang; ist er schon zurück, wirkt sie nicht.
 //         Der Leihvorgang beantwortet eine Query DIREKT (Frage im Decider, docs/03 §3.2): Ziel ist das Glied Id<Leihvorgang>, die Antwort ein OneOf.
-//         Zwei Decides geben je einen COMMAND OHNE ZIEL aus (Entscheidung 3): die Rückgabe ist zu prüfen, die Mahnung zu bemessen — sie nimmt je ein
-//         Graph am Kopf (Gebuehren.cs.txt bzw. Fluss.cs.txt), durabel als offener Eingang im selben Commit.
+//         Ein Decide gibt nur Fakten aus (Schritt 6): auf die Rückgabe und die Mahnung reagiert das Archiv (Lesen.cs.txt) mit den Commands, die
+//         je ein Graph am Kopf nimmt (Gebuehren.cs.txt bzw. Fluss.cs.txt) — die Rückgabe ist zu prüfen, die Mahnung zu bemessen.
 
 namespace Leihwesen.Ausleihe.Befehle
 {
@@ -37,10 +37,10 @@ namespace Leihwesen.Ausleihe
 
     public record RueckgabeAngemahnt(Guid LeserId) : IEvent;
 
-    /// <summary>Ein Command ohne Ziel aus dem Decide: die Rückgabe ist zu prüfen (der Graph der Rückgabeprüfung nimmt ihn am Kopf).</summary>
+    /// <summary>Ein Command ohne Ziel: die Rückgabe ist zu prüfen (der Graph der Rückgabeprüfung nimmt ihn am Kopf; das Archiv reagiert damit auf die Rückgabe).</summary>
     public record PruefeRueckgabe(Guid LeserId, Zustand Zustand) : ICommand;
 
-    /// <summary>Ein Command ohne Ziel aus dem Decide: die Mahnung ist zu bemessen (der Graph der Mahnbemessung nimmt ihn am Kopf).</summary>
+    /// <summary>Ein Command ohne Ziel: die Mahnung ist zu bemessen (der Graph der Mahnbemessung nimmt ihn am Kopf; das Archiv reagiert damit auf die Mahnung).</summary>
     public record BemesseMahnung(Guid LeserId) : ICommand;
 
     public record BereitsAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
@@ -70,7 +70,7 @@ namespace Leihwesen.Ausleihe
                 }
             }
 
-            public IEnumerable<OneOf<Zurueckgegeben, PruefeRueckgabe, NichtAusgeliehen>> Decide(GibZurueck befehl)
+            public IEnumerable<OneOf<Zurueckgegeben, NichtAusgeliehen>> Decide(GibZurueck befehl)
             {
                 if (!this.State.Offen)
                 {
@@ -78,14 +78,12 @@ namespace Leihwesen.Ausleihe
                     yield break;
                 }
                 yield return new Zurueckgegeben { LeserId = this.State.LeserId, Zustand = befehl.Zustand };
-                yield return new PruefeRueckgabe(this.State.LeserId, befehl.Zustand);
             }
 
-            public IEnumerable<OneOf<RueckgabeAngemahnt, BemesseMahnung>> Decide(MahneRueckgabe befehl)
+            public IEnumerable<OneOf<RueckgabeAngemahnt>> Decide(MahneRueckgabe befehl)
             {
                 if (!this.State.Offen) yield break;
                 yield return new RueckgabeAngemahnt(this.State.LeserId);
-                yield return new BemesseMahnung(this.State.LeserId);
             }
 
             public OneOf<Leihstand, NichtVerliehen> Frage(HoleLeihstand frage) =>

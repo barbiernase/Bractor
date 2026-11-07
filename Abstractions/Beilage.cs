@@ -30,12 +30,11 @@ public sealed record Quittung(Guid CommandId, KommandoAusgang Ausgang) : Beilage
 public sealed record FristFaellig(int Version, string Befehl, string Daten, TimeSpan Nach, string? Akteur) : Beilage;
 
 /// <summary>
-/// Ein offener Eingang am Kopf einer Instanz (docs/04 §4.4): ein Command ohne Ziel aus einem Decide (bzw. eine Quell- oder Client-Nachricht), je
-/// Instanz, deren Graph ihn am Kopf nimmt, eine Zeile — <paramref name="Kennung"/> abgeleitet (<see cref="Eingangsvertrag"/>), ein zweites Legen
-/// derselben Kennung schreibt nichts. Die Nachricht als Diskriminator und Wire-JSON, dazu ihre Herkunft: die Version des Streams nach der Entscheidung,
-/// Akteur und Korrelation der Kette.
+/// Ein offener Eingang am Kopf einer Instanz (docs/04 §4.4): ein Command ohne Ziel von einem Client, je Instanz, deren Graph ihn am Kopf nimmt, eine
+/// Zeile — <paramref name="Kennung"/> abgeleitet (<see cref="Eingangsvertrag"/>), ein zweites Legen derselben Kennung schreibt nichts. Die Nachricht als
+/// Diskriminator und Wire-JSON, dazu ihre Herkunft: die Version des Fakts, auf das der Client reagiert (sonst 0), Akteur und Korrelation der Kette.
 /// </summary>
-public sealed record EingangOffen(Guid Kennung, string Instanz, string Typ, string Daten, int Version, string? Akteur, string? Korrelation) : Beilage;
+public sealed record EingangOffen(Guid Kennung, string Instanz, string Typ, string Daten, int Version, string? Akteur, string? Korrelation);
 
 /// <summary>
 /// Der Append trug eine Quittung, deren CommandId die Inbox schon kennt: nichts ist geschrieben. Den Ausgang des ersten Mals liefert

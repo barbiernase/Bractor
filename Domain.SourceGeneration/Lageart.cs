@@ -15,7 +15,6 @@ internal sealed class Lageart
     private const string A = "Abstractions.";
     private readonly HashSet<string> _konfigs = new();
     private readonly HashSet<string> _aggregatQueries = new(), _aggregatAntworten = new();
-    private readonly HashSet<string> _ausDecide = new();
     private readonly Infrastructure.SourceGeneration.Funktionsform.Technikmenge _technik = new();
 
     /// <summary>Ist der Vertrag (Abstractions) in der Compilation? Sonst gibt es nichts zu prüfen.</summary>
@@ -38,11 +37,6 @@ internal sealed class Lageart
                     _aggregatQueries.Add(Name(f.Query));
                     foreach (var a in f.Antworten) _aggregatAntworten.Add(Name(a));
                 }
-            // Commands ohne Ziel aus einem Decide (Nachrichtenform, docs/03 §3.1): sie liegen bei der Schreibseite; die übrigen geben nur Knoten
-            //   einander (bei den Abläufen).
-            if (Infrastructure.SourceGeneration.Nachrichtenform.IstDecider(t))
-                foreach (var d in Infrastructure.SourceGeneration.Nachrichtenform.Decides(t))
-                    foreach (var f in Infrastructure.SourceGeneration.Nachrichtenform.CommandsVon(d)) _ausDecide.Add(Name(f));
             // Konfig-Records: was der Konstruktor einer Funktion oder einer Technik-Umsetzung als Konfig bindet (Ctorbindung, CQRS090).
             if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (Hat(t, "IFunktion") || technik.IstUmsetzung(t)))
                 foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? Enumerable.Empty<IParameterSymbol>())
@@ -71,7 +65,8 @@ internal sealed class Lageart
         }
         if (Hat(t, "IState")) return Projektstruktur.Primitive.Aggregat;
         if (Hat(t, "IAggregatCommand")) return Projektstruktur.Primitive.Command;
-        if (Hat(t, "ICommand")) return _ausDecide.Contains(Name(t)) ? Projektstruktur.Primitive.Command : Projektstruktur.Primitive.KnotenCommand;
+        // Ein Command ohne Ziel geht an einen Knoten bzw. den Kopf eines Graphen (ein Decide gibt keinen aus, CQRS114): er liegt bei den Abläufen.
+        if (Hat(t, "ICommand")) return Projektstruktur.Primitive.KnotenCommand;
         if (Hat(t, "IGraph")) return Projektstruktur.Primitive.Graph;
         if (Hat(t, "ITransientEvent")) return Projektstruktur.Primitive.Hinweis;
         if (Hat(t, "IEvent")) return Projektstruktur.Primitive.Event;

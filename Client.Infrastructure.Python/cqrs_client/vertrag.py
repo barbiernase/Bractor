@@ -22,8 +22,6 @@ Stücke, yield) — oder nichts (Kenntnis):
         async def auf_modell_aktiviert(self, e, ctx, state): ...
 
 Was die Basis übernimmt — der Worker schreibt nichts davon von Hand:
-  - Arbeit: sie wird nach jedem Handshake angenommen (je Akteur mit `PLAETZE`, Standard 1); der Server gibt Aufträge, nimmt die erste Antwort an
-    und sendet ihre Commands selbst — der Client ist nur die Hand, die Garantie bleibt beim Server (`arbeit.py`);
   - Reaktion: Dispatch Event-Typ → `auf_<event>`; was sie ausgibt, muss ein Command aus `SPONTAN` sein (sonst `VertragsVerletzung`). Genau einmal
     wirkt sie mit einem Stand (`reaktion_stand`, cqrs_client.reaktionen): der Client liest das Log ab dort und leitet die Command-Ids ab;
   - Vollständigkeit: fehlt eine Methode, lässt sich der Worker nicht instanziieren (ABC) — der Bruch fällt beim Start auf;
@@ -33,17 +31,43 @@ Was die Basis übernimmt — der Worker schreibt nichts davon von Hand:
 
 from __future__ import annotations
 
+import inspect
 import logging
 from abc import ABCMeta
-from typing import Any, ClassVar, TypeVar
+from typing import Any, AsyncIterator, ClassVar, TypeVar
 
-from .arbeit import AkteursArbeit, _stuecke
 from .client import CqrsClient
 from .dispatch import HandleDescriptor, HandlerMeta
 
 log = logging.getLogger(__name__)
 
 S = TypeVar("S")
+
+
+def _einzeln(x: Any) -> list:
+    """Ein Stück → seine Commands (eine Liste/ein Tupel ist ein Stück aus mehreren, None ist keins)."""
+    if x is None:
+        return []
+    if isinstance(x, (list, tuple)):
+        return [y for y in x if y is not None]
+    return [x]
+
+
+async def _stuecke(ergebnis) -> AsyncIterator[list]:
+    """Stücke (Async-/Sync-Generator) → je yield ein Stück; Coroutine oder Wert → ein Stück (None = keins)."""
+    if inspect.isasyncgen(ergebnis):
+        async for x in ergebnis:
+            if (stueck := _einzeln(x)):
+                yield stueck
+    elif inspect.isgenerator(ergebnis):
+        for x in ergebnis:
+            if (stueck := _einzeln(x)):
+                yield stueck
+    else:
+        if inspect.isawaitable(ergebnis):
+            ergebnis = await ergebnis
+        if (stueck := _einzeln(ergebnis)):
+            yield stueck
 
 
 class VertragsVerletzung(TypeError):
@@ -82,44 +106,32 @@ class ClientVertragBasis(CqrsClient[S], metaclass=VertragsMeta):
     """
     Basis der generierten Client-Basen. Die generierte Unterklasse setzt:
         CLIENT, AKTEURE, VERTRAG_HASH — Handshake-Name, verkörperte Akteure, Stand;
-        ARBEIT  — Akteur → {Command-DTO: Arbeit(Methode, Antworten)}: die gehörten Commands ohne Ziel;
         HOERT   — Event-DTO → Methode `auf_<event>`: die Reaktion bzw. Kenntnis;
         SPONTAN — Commands, die von sich aus hineingehen (IDarf der verkörperten Akteure);
         FRAGT   — die Queries (IDarf der verkörperten Akteure; leer = nicht geprüft).
-    Wie viele Aufträge eines Akteurs gleichzeitig laufen, sagt `PLAETZE` (Akteur → Zahl, Standard 1).
     """
 
     CLIENT: ClassVar[str] = ""
     AKTEURE: ClassVar[tuple[str, ...]] = ()
     VERTRAG_HASH: ClassVar[str] = ""
-    ARBEIT: ClassVar[dict] = {}
     HOERT: ClassVar[dict] = {}
     SPONTAN: ClassVar[tuple[type, ...]] = ()
     FRAGT: ClassVar[tuple[type, ...]] = ()
-    PLAETZE: ClassVar[dict[str, int]] = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._declared_command_types = list(cls.SPONTAN)
 
     def __init__(self, registry, nutzlast, config: dict[str, Any] | None = None):
-        # Die Vertrags-Typen kennt der Vertrag selbst — die (handgepflegte) Registry wird um sie ergänzt: Kenntnis, Commands (von sich aus, gehörte
-        # Arbeit und ihre Antworten) und Queries.
-        arbeits_commands = {t for gehoert in self.ARBEIT.values() for c, a in gehoert.items() for t in (c, *a.antworten)}
-        registry = registry.ergaenzt(events=set(self.HOERT), commands=set(self.SPONTAN) | arbeits_commands, queries=set(self.FRAGT))
-        arbeit = [AkteursArbeit(akteur, gehoert, self._rufe_arbeit, plaetze=self.PLAETZE.get(akteur))
-                  for akteur, gehoert in self.ARBEIT.items()]
-        super().__init__(registry, nutzlast, config, arbeit=arbeit)
-
-    def _rufe_arbeit(self, methode: str, c, h):
-        return getattr(self, methode)(c, h, self.state)
+        # Die Vertrags-Typen kennt der Vertrag selbst — die (handgepflegte) Registry wird um sie ergänzt: was er hört, was er sendet, was er fragt.
+        registry = registry.ergaenzt(events=set(self.HOERT), commands=set(self.SPONTAN), queries=set(self.FRAGT))
+        super().__init__(registry, nutzlast, config)
 
     def _build_capabilities_request(self):
         request = super()._build_capabilities_request()
         request.vertrag = self.CLIENT
         request.vertrag_hash = self.VERTRAG_HASH
-        log.info("Client %s (verkörpert %s, Arbeit für %s, Hash %s)", self.CLIENT, ", ".join(self.AKTEURE),
-                 ", ".join(self.ARBEIT) or "niemanden", self.VERTRAG_HASH)
+        log.info("Client %s (verkörpert %s, Hash %s)", self.CLIENT, ", ".join(self.AKTEURE), self.VERTRAG_HASH)
         return request
 
     async def query(self, query_dto):

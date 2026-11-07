@@ -24,11 +24,6 @@ internal sealed class BeilagenSchreiber
     private List<string>? _fristBefehle, _fristDaten;
     private List<string?>? _fristAkteure;
     // Kennungen der Quell-Nachrichten in einem Stream je Schlüssel.
-    // Offene Eingänge der Funktionen (Folgen).
-    private List<Guid>? _eingaenge, _eingangStreams;
-    private List<string>? _eingangFunktionen, _eingangTypen, _eingangDaten;
-    private List<int>? _eingangVersionen;
-    private List<string?>? _eingangAkteure, _eingangKorrelationen;
     // Das Verzeichnis der Schlüssel der Bündel (Typ, Feld, Schlüssel je Event; die Sequenz liest die Anweisung aus mt_events).
     private List<string>? _rueckTypen, _rueckFelder;
     private List<Guid>? _rueckSchluessel, _rueckStreams;
@@ -45,16 +40,6 @@ internal sealed class BeilagenSchreiber
                     (_commands ??= new()).Add(q.CommandId);
                     (_streams ??= new()).Add(streamId);
                     (_abgelehnt ??= new()).Add(q.Ausgang == KommandoAusgang.Abgelehnt);
-                    break;
-                case EingangOffen e:
-                    (_eingaenge ??= new()).Add(e.Kennung);
-                    (_eingangFunktionen ??= new()).Add(e.Instanz);
-                    (_eingangTypen ??= new()).Add(e.Typ);
-                    (_eingangDaten ??= new()).Add(e.Daten);
-                    (_eingangStreams ??= new()).Add(streamId);
-                    (_eingangVersionen ??= new()).Add(e.Version);
-                    (_eingangAkteure ??= new()).Add(e.Akteur);
-                    (_eingangKorrelationen ??= new()).Add(e.Korrelation);
                     break;
                 case FristFaellig f:
                     (_fristStreams ??= new()).Add(streamId);
@@ -100,9 +85,6 @@ internal sealed class BeilagenSchreiber
         if (_commands is not null) InboxTabelle.Quittiere(session, InboxTabelle.Name(store), _commands, _streams!, _abgelehnt!);
         if (_fristStreams is not null)
             Infrastructure.Uhr.FristVerzeichnis.Lege(session, store, _fristStreams, _fristVersionen!, _fristNach!, _fristBefehle!, _fristDaten!, _fristAkteure!);
-        if (_eingaenge is not null)
-            Infrastructure.Eingaenge.OffeneEingaenge.Lege(session, store, _eingaenge, _eingangFunktionen!, _eingangTypen!, _eingangDaten!, _eingangStreams!,
-                _eingangVersionen!, _eingangAkteure!, _eingangKorrelationen!);
         if (_rueckTypen is not null)
             RueckblickTabelle.Lege(session, store, _rueckTypen, _rueckFelder!, _rueckSchluessel!, _rueckStreams!, _rueckVersionen!);
     }

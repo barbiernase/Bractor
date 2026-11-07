@@ -41,7 +41,7 @@ public static class Grammatik
 
     public static readonly IReadOnlyList<SorteInfo> Sorten =
     [
-        new(Command, "Command", "▶", "wirkt genau einmal (Command-Id, Inbox)", "Absicht an genau einen Empfänger: ein Aggregat (Ziel im Typ), einen Knoten desselben Graphen, den Kopf eines Graphen oder einen Akteur (Arbeit)"),
+        new(Command, "Command", "▶", "wirkt genau einmal (Command-Id, Inbox)", "Absicht an genau einen Empfänger: ein Aggregat (Ziel im Typ), einen Knoten desselben Graphen oder den Kopf eines Graphen"),
         new(Event, "Event", "◆", "durabel; wirkt bei jedem Hörer genau einmal", "Fakt im Log"),
         new(Transient, "Hinweis", "◇", "höchstens einmal (verlierbar)", "flüchtig: Ablehnung, Fortschritt, Live-Anzeige (ITransientEvent)"),
         new(Frist, "Frist", "⏳", "durabel; feuert mindestens einmal, wirkt genau einmal", "Zeit aus dem Decide eines Aggregats — die Uhr macht daraus den Command an dasselbe Aggregat"),
@@ -76,8 +76,8 @@ public static class Grammatik
         // Konsum: Sorte → Eingang
         new("GR-COMMAND", "Command → genau ein Empfänger", "Ein Command hat genau einen Empfänger, vom Absender aus: nennt er sein Ziel im Typ "
             + "(ICommand<TAggregat> mit Id<TAggregat> AggregateId), entscheidet ihn genau dieses Aggregat; ohne Typargument (ICommand) bekommt ihn der "
-            + "Knoten desselben Graphen, der seinen Erzeuger in [Von] nennt, sonst der Kopf genau eines Graphen oder ein Akteur, der ihn hört (Arbeit). Kein Empfänger, mehrere, oder "
-            + "ein Typ, den ein Graph nimmt und ein Akteur hört, ist ein Fehler. Ein Graph in einem Katalog ist eine Blaupause: sein Kopf empfängt und sein "
+            + "Knoten desselben Graphen, der seinen Erzeuger in [Von] nennt, sonst der Kopf genau eines Graphen. Kein Empfänger oder mehrere sind ein "
+            + "Fehler; einen Command hört kein Akteur. Ein Graph in einem Katalog ist eine Blaupause: sein Kopf empfängt und sein "
             + "Ausgang verlässt erst dort etwas, wo er als Knoten eines Graphen der Anwendung steht.", "error",
             [Comp("ICommand<TAggregat> liefert das Ziel aus Id<TAggregat> AggregateId (IAggregatCommand)"),
              An("CQRS013", "Domain.SourceGeneration/ModellAnalyzer.cs (Ziel nicht im Typ: IAggregatCommand von Hand, AggregateId ohne Typargument)"),
@@ -85,17 +85,11 @@ public static class Grammatik
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider bzw. ohne Knoten, der ihn nimmt)"),
              An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Ziel ohne bzw. mit mehreren Empfängern)")]),
         new("GR-EVENT", "Event → Projektionen, Akteure, das eigene Aggregat", "Ein persistentes Event hören Projektionen (beliebig viele; einzeln oder "
-            + "in einem Bündel) und Akteure zur Kenntnis (IHoert, gepusht an ihre Sitzungen); gefaltet wird es im eigenen Aggregat. Eine Funktion liest nie "
+            + "in einem Bündel) und Akteure (IHoert: gepusht an ihre Sitzungen, im Log lesbar — ihr Client reagiert darauf oder nimmt es zur Kenntnis); "
+            + "gefaltet wird es im eigenen Aggregat. Eine Funktion liest nie "
             + "das Log: sie hört ein Event nur als Antwort auf einen eigenen Command (docs/04 §4.4).", "error",
             [Comp("Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Auf einer Projektion)"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (eine Funktion, die nur Events hört, hat keinen Einstieg)")]),
-        new("GR-DECIDE-COMMAND", "Command ohne Ziel aus dem Decide → Graph-Kopf oder Akteur", "Ein Decide kann neben Events einen Command ohne Ziel "
-            + "ausgeben, nie einen an ein Aggregat. Er geht nicht ins Log; für seinen Empfänger (die Instanz, deren Graph ihn am Kopf nimmt, oder den Akteur, "
-            + "der ihn als Arbeit hört) steht in derselben Transaktion ein offener Eingang (Kennung aus Command und Stelle), den die Laufzeit zustellt, bis "
-            + "seine Kette bzw. die Arbeit fertig ist — genau einmal wirksam (docs/03 §3.2, docs/04 §4.4).", "error",
-            [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag: Commands ohne Ziel stehen in der Signatur)"),
-             An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (genau ein Empfänger: Graph-Kopf oder Akteur)"),
-             new("laufzeit", null, "Infrastructure/Eingaenge/Folgen.cs (offene Eingänge im Commit, schneller Weg danach)")]),
         new("GR-ANTWORT", "Antwort → die Funktion, die den Command schickte", "Ein Event hört eine Funktion nur als Antwort auf einen eigenen Command: "
             + "die Antwort trägt die Events, die das Ziel entschied, und das Kind rechnet sie gleich weiter. Ein Event-Eingang, den keiner ihrer Commands "
             + "entscheiden kann, käme nie (docs/04 §4.4).", "error",
@@ -192,12 +186,12 @@ public static class Grammatik
             + "(eine Implementierung); Auf und Frage nehmen sie als Parameter.", "error",
             [Gen("CQRS053", "Projections.SourceGeneration/ProjectionServicesGenerator.cs"), An("CQRS051", "Domain.SourceGeneration (FaehigkeitAnalyzer)")]),
         // Erzeugung: Baustein-Ausgang → Sorte
-        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt Events, Hinweise, Fristen und Commands ohne Ziel — nie einen "
-            + "Command an ein Aggregat (Aggregate reden über Graphen miteinander, CQRS114); auf "
-            + "eine direkte Query (Frage) Antworten.", "error",
-            [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), An("CQRS114", "Domain.SourceGeneration/AusgabeVertragAnalyzer.cs (Decide gibt einen Command an ein Aggregat aus)")]),
+        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt Events, Hinweise und Fristen — nie einen Command, weder an "
+            + "ein Aggregat noch ohne Ziel (CQRS114): was nach einem Fakt geschehen soll, stößt ein Client an, der es hört (Aggregate reden über Graphen und "
+            + "Clients miteinander); auf eine direkte Query (Frage) Antworten.", "error",
+            [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), An("CQRS114", "Domain.SourceGeneration/AusgabeVertragAnalyzer.cs (Decide gibt einen Command aus)")]),
         new("GR-AUS-PROJEKTION", "Projektion erzeugt keine Nachricht", "Eine Projektion wirkt nur in ihrem Store (Schreib-Fähigkeiten genau eines Stores, R9) "
-            + "und gibt nichts aus (Auf liefert Task) — was auf eine Entscheidung hin etwas sendet, nimmt ihren Command ohne Ziel (ein Graph).", "error",
+            + "und gibt nichts aus (Auf liefert Task) — was auf eine Entscheidung hin etwas sendet, ist ein Client, der ihr Event hört.", "error",
             [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Rückgabe Task)"), Gen("CQRS052", "Infrastructure.SourceGeneration/PullPathGenerator.cs (ein Store je Projektion)")]),
         new("GR-AUS-READER", "Reader erzeugt Antworten", "Ein Reader antwortet je Frage mit einer Antwort oder OneOf<…> (auch als Task) und liest nur über "
             + "Lese-Fähigkeiten. Welche Projektionen hinter einer Frage stehen, folgt aus ihnen: die, die in denselben Store schreiben; was eine Antwort "
@@ -207,7 +201,7 @@ public static class Grammatik
         new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Command ohne Ziel oder ein Event als "
             + "Antwort auf einen eigenen Command) ein Auf mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden "
             + "Commands und Hinweise (konkret, OneOf, je auch als Task; IEnumerable bzw. IAsyncEnumerable — kein void, kein T?, kein ValueTask) — vollständig in der Signatur. Eine Funktion ist eine Klasse und läuft im Host; eine "
-            + "Schnittstelle mit IFunktion ist ein Formfehler — was draußen gerechnet wird, ist Arbeit eines Akteurs (GR-ARBEIT). Eine Funktion ohne Auf ist "
+            + "Schnittstelle mit IFunktion ist ein Formfehler — was draußen gerechnet wird, rechnet ein Client (GR-AKTEUR). Eine Funktion ohne Auf ist "
             + "ein Formfehler; was sie ruft, ist Technik (GR-TECHNIK).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form der Funktion)"),
              new("boot", null, "Infrastructure/Funktionen/FunktionsBausteinWiring.cs (BindungVon: Parallel, Warteschlange, Wiederholungen je Knoten)")]),
@@ -295,8 +289,8 @@ public static class Grammatik
         new("GR-ZUSTAND", "Regel Z: Zustand nur in Aggregaten und Lesemodellen", "Projektionen sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat.", "warning",
             [An("CQRS083", "Domain.SourceGeneration/ModellAnalyzer.cs (Instanzfelder, die Zustand halten)")]),
         new("GR-AKTEUR", "Akteur: IDarf hinein, IHoert heraus", "Ein Akteur (record X : IAkteur) gibt nur hinein, was er per IDarf<T> darf: einen "
-            + "Command, eine Query, einen Hinweis. Zu ihm kommt, was er per IHoert<T> hört: ein Command ohne Ziel ist Arbeit, ein Event oder Hinweis "
-            + "Kenntnis; einen Command an ein Aggregat hört kein Akteur.", "error",
+            + "Command, eine Query, einen Hinweis. Zu ihm kommt, was er per IHoert<T> hört: ein Event oder ein Hinweis — sein Client reagiert darauf mit "
+            + "Commands seines IDarf (genau einmal über den Stand seiner Reaktionen) oder nimmt es zur Kenntnis; einen Command hört kein Akteur.", "error",
             [An("CQRS058", "Domain.SourceGeneration/AkteurAnalyzer.cs"), Gen("CQRS059", "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (Name eindeutig)"),
              new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (Handshake + jede hineingehende Nachricht)")]),
         new("GR-HERKUNFT", "Alles kommt von einem Akteur", "Sobald es Akteure gibt: jeder Command und jede Query kommt von einem Akteur — direkt "
@@ -304,12 +298,6 @@ public static class Grammatik
             + "Rahmen „ohne Akteur“.", "warning",
             [new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (ohne IDarf abgewiesen)"),
              Offen("Editor-Sicht: Rahmen „ohne Akteur“ (board.sicht); Fixpunkt im Generator (docs/konzept-akteure.md §2.3)")]),
-        new("GR-ARBEIT", "Arbeit für einen Akteur", "Hört ein Akteur einen Command ohne Ziel, ist er dessen einziger Empfänger: die Werkstatt gibt ihn "
-            + "einer Sitzung, die den Akteur verkörpert (verkörpert ∩ Token), und stellt ihn erneut zu, bis eine Antwort kommt — die erste gewinnt; die "
-            + "Antwort sind Commands seines IDarf, ihre Ids folgen aus dem Auftrag. Ein Command, den ein Graph nimmt und ein Akteur hört, ist ein Fehler.", "error",
-            [An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (genau ein Empfänger: Graph-Kopf oder Akteur)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/Arbeit.cs (je Akteur mit Arbeit eine Instanz, ein Knoten draußen)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/Werkstatt.cs (Aufträge an Sitzungen, die erste Antwort gewinnt)")]),
         new("GR-CLIENT", "Client: nennt nur, wen er verkörpert", "Ein Client (record X : IClient) nennt in seiner Basisliste nur, wen er verkörpert "
             + "(IVerkoerpert<A>) — keine eigenen Member, keine client-internen Typen. Was über seine Leitung geht, sind die IDarf und IHoert seiner "
             + "Akteure; Handshake-Name ist der Record-Name.", "error",
@@ -321,9 +309,8 @@ public static class Grammatik
             [An("CQRS064", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Infrastructure/Akteure/ClientVertrag.cs (Rechte = verkörperte Akteure ∩ Token)")]),
         new("GR-CLIENT-CODE", "Client-Code = seine Akteure", "Eine C#-Client-Assembly nennt ihren Client ([assembly: IstClient<X>]); was ihr Code an "
             + "Commands erzeugt und an Queries stellt, muss ein verkörperter Akteur dürfen (IDarf), worauf ein Handler hört, muss einer hören (IHoert) — "
-            + "abonniert wird nur das. Arbeit nimmt heute nur das Python-SDK an (je gehörtem Command ein Handler in der generierten Basis).", "error",
+            + "abonniert wird nur das.", "error",
             [Gen("CQRS093", "Client.SourceGeneration/ClientVertrag.cs (Client-Assembly nennt ihren Client nicht)"),
-             Gen("CQRS094", "Client.SourceGeneration/ClientVertrag.cs (C#-Client verkörpert Akteure mit Arbeit)"),
              An("CQRS095", "Client.SourceGeneration/ClientVertrag.cs (Command darf kein verkörperter Akteur)"),
              An("CQRS096", "Client.SourceGeneration/ClientVertrag.cs (Query darf kein verkörperter Akteur)"),
              An("CQRS097", "Client.SourceGeneration/ClientVertrag.cs (Server-Event nicht Kenntnis)")]),
@@ -344,8 +331,8 @@ public static class Grammatik
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"),
         new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FORM"),
         new(Gerufen, Funktion, Beliebig, "GR-TECHNIK"),
-        // Was ein Akteur hört (IHoert): ein Event oder Hinweis zur Kenntnis, ein Command ohne Ziel als Arbeit (er ist dann sein einziger Empfänger).
-        new(Event, Akteur, Beliebig, "GR-EVENT"), new(Transient, Akteur, Beliebig, "GR-TRANSIENT"), new(Command, Akteur, GenauEins, "GR-ARBEIT"),
+        // Was ein Akteur hört (IHoert): ein Event oder ein Hinweis — sein Client reagiert darauf oder nimmt es zur Kenntnis.
+        new(Event, Akteur, Beliebig, "GR-EVENT"), new(Transient, Akteur, Beliebig, "GR-TRANSIENT"),
         // Ein Command ohne Ziel zwischen Knoten: jeder Knoten desselben Graphen, der seinen Erzeuger in [Von] nennt, bzw. der Kopf genau eines Graphen.
         new(Command, Funktion, GenauEins, "GR-KANTE"),
         new(Frist, Uhr, GenauEins, "GR-FRIST"),
@@ -356,7 +343,6 @@ public static class Grammatik
     [
         new(Aggregat, Event, "GR-AUS-AGGREGAT"), new(Aggregat, Transient, "GR-AUS-AGGREGAT"), new(Aggregat, Frist, "GR-AUS-AGGREGAT"),
         new(Funktion, Command, "GR-FUNKTION-FORM"), new(Funktion, Transient, "GR-FUNKTION-FORM"),
-        new(Aggregat, Command, "GR-DECIDE-COMMAND"),
         new(Reader, Response, "GR-AUS-READER"), new(Aggregat, Response, "GR-AUS-AGGREGAT"),
         new(Buendel, Gebuendelt, "GR-BUENDEL"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),

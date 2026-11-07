@@ -51,8 +51,6 @@ public sealed partial class Sicht
                 }
             if (ein.Count == 0) P(ein, null, "Außenwelt (Client)", "abgeleitet: kein interner Erzeuger · kein Akteur");
             foreach (var d in _decider) if (S(d, "command") == nm) P(aus, "dec:" + S(d, "_id"), "Decide @ " + Agg(d, "— kein Aggregat"));
-            // Arbeit: ein Command ohne Ziel, den ein Akteur hört (✕ nimmt ihm das Hören).
-            HoererPartner(aus, nm, "Arbeit");
         }
         else if (k is "event" or "rejection")
         {
@@ -103,7 +101,7 @@ public sealed partial class Sicht
             foreach (var f in _bausteinFunktionen.Where(f => L(f, "lauscht").Contains(n)))
                 P(e, "fb:" + S(f, "_id"), "ƒ " + S(f, "name") + ".Lausche()", "Strom");
         }
-        // Akteure, die die Nachricht hören (◀ IHoert) — Arbeit bei einem Command ohne Ziel, sonst Kenntnis.
+        // Akteure, die die Nachricht hören (◀ IHoert) — ihr Client reagiert darauf oder nimmt sie zur Kenntnis.
         void HoererPartner(List<Partner> a, string n, string mark)
         {
             foreach (var ak in _akteure)

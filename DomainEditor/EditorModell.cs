@@ -706,8 +706,7 @@ public sealed record ClientImpl
 }
 
 /// <summary>
-/// Der Rumpf eines getragenen Funktions-Eingangs bzw. einer Kenntnis in der Implementierung (<see cref="Methode"/> wie die generierte Basis sie
-/// nennt; null Rumpf = fehlt).
+/// Der Rumpf einer Reaktion auf ein gehörtes Event in der Implementierung (<see cref="Methode"/> wie die generierte Basis sie nennt; null Rumpf = fehlt).
 /// </summary>
 public sealed record ClientRumpf
 {
@@ -716,7 +715,6 @@ public sealed record ClientRumpf
     public string? Rumpf { get; init; }
     /// <summary>Die Signatur aus der generierten Basis (<c>async def …(self, e: …Dto, …, state) -&gt; …:</c>) — gilt auch für einen fehlenden Rumpf.</summary>
     public string? Signatur { get; init; }
-    /// <summary>Die Antwort-Commands einer Arbeit (das <c>IDarf</c> des Akteurs; leer = Kenntnis) und der Akteur, dessen Arbeit es ist (null = Kenntnis).</summary>
+    /// <summary>Die Commands, mit denen die Reaktion antworten darf (das <c>IDarf</c> der verkörperten Akteure).</summary>
     public IReadOnlyList<string> Ausgaenge { get; init; } = [];
-    public string? Akteur { get; init; }
 }

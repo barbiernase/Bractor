@@ -6,8 +6,8 @@ using Abstractions;
 // Viele Messwerte, wenige Fakten: ein Sensor zählt Überschreitungen seines Grenzwerts hintereinander (Zähl-Aggregat) und löst nach N den
 // Alarm aus; ein Messwert im Rahmen ändert nichts. Die Werte holt eine EIGENE QUELLFUNKTION (Lausche statt Auf, Entscheidung 8) am Kopf eines
 // Graphen — mit Konfig, gesichertem Zustand und Technik; dahinter liegt ein GRAPH IM GRAPHEN (die Aufbereitung, eine Schachtel mit Signatur).
-// Der Alarm öffnet die Störung desselben Sensors über einen Graphen am Kopf (Command ohne Ziel aus dem Decide). Die geöffnete Störung gibt ARBEIT
-// an die Schichtleitung (ein Akteur hört einen Command ohne Ziel aus dem Decide und antwortet mit seinem IDarf) und alarmiert die Bereitschaft:
+// Ein Decide gibt nur Fakten aus (Schritt 6): auf den Alarm öffnet die Schichtleitung die Störung desselben Sensors über einen Graphen am Kopf,
+// auf die geöffnete Störung alarmiert sie die Bereitschaft (sie hört die Fakten und gibt die Commands an die Köpfe):
 // zwei Wege nebeneinander (Anruf und Funk) — jeder meldet für sich, die Quittung nimmt beide in je einem Auf, und die Störung vermerkt jede
 // Alarmierung (wer nur die erste gelten lassen will, entscheidet es im Decide, nicht im Graphen).
 
@@ -22,7 +22,7 @@ public record GrenzwertUeberschritten(double Wert, DateTimeOffset GemessenAm, in
 public record AlarmAusgeloest(double Wert, DateTimeOffset GemessenAm) : IEvent;
 public record WertWiederImRahmen(double Wert, DateTimeOffset GemessenAm) : IEvent;
 
-/// <summary>Ein Command ohne Ziel aus dem Decide des Sensors: die Störung desselben Sensors ist zu öffnen.</summary>
+/// <summary>Der Kopf der Störungsöffnung: die Störung desselben Sensors ist zu öffnen — die Schichtleitung reagiert damit auf den Alarm.</summary>
 public record OeffneStoerungFuer(Id<Sensor> Sensor, double Wert) : ICommand;
 
 public partial class Sensor : IState
@@ -40,7 +40,7 @@ public partial class Sensor : IState
             yield return new SensorEingerichtet(c.Ort, c.Grenzwert, c.AlarmNach);
         }
 
-        public IEnumerable<OneOf<GrenzwertUeberschritten, AlarmAusgeloest, WertWiederImRahmen, OeffneStoerungFuer, SensorUnbekannt>> Decide(MeldeMesswert c)
+        public IEnumerable<OneOf<GrenzwertUeberschritten, AlarmAusgeloest, WertWiederImRahmen, SensorUnbekannt>> Decide(MeldeMesswert c)
         {
             if (this.State.Version == 0) { yield return new SensorUnbekannt(c.AggregateId); yield break; }
             if (c.Wert <= this.State.Grenzwert)
@@ -50,10 +50,7 @@ public partial class Sensor : IState
             }
             yield return new GrenzwertUeberschritten(c.Wert, c.GemessenAm, this.State.Hintereinander + 1);
             if (!this.State.Alarm && this.State.Hintereinander + 1 >= this.State.AlarmNach)
-            {
                 yield return new AlarmAusgeloest(c.Wert, c.GemessenAm);
-                yield return new OeffneStoerungFuer(c.AggregateId, c.Wert);
-            }
         }
     }
 
@@ -77,8 +74,7 @@ public record KeineStoerung(Id<Stoerungsfall> SensorId) : ITransientEvent;
 public record VermerkeAlarmierung(Id<Stoerungsfall> AggregateId, string Weg) : ICommand<Stoerungsfall>;
 public record AlarmierungVermerkt(string Weg) : IEvent;
 
-/// <summary>Commands ohne Ziel aus dem Decide der Störung: Arbeit für die Schichtleitung und der Kopf der Alarmierung.</summary>
-public record PruefeStoerungVorOrt(Id<Stoerungsfall> Fall, double Wert) : ICommand;
+/// <summary>Der Kopf der Alarmierung — die Schichtleitung gibt ihn hinein, sie reagiert auf die geöffnete Störung.</summary>
 public record AlarmiereBereitschaft(Id<Stoerungsfall> Fall) : ICommand;
 
 // Je Sensor ein Störungsfall (dieselbe Id wie der Sensor): offen oder nicht — eine Störung läuft höchstens einmal zugleich.
@@ -88,12 +84,10 @@ public partial class Stoerungsfall : IState
 
     public partial class Decider : IDecider<Stoerungsfall>
     {
-        public IEnumerable<OneOf<StoerungGeoeffnet, PruefeStoerungVorOrt, AlarmiereBereitschaft, StoerungLaeuftSchon>> Decide(OeffneStoerung c)
+        public IEnumerable<OneOf<StoerungGeoeffnet, StoerungLaeuftSchon>> Decide(OeffneStoerung c)
         {
             if (this.State.Offen) { yield return new StoerungLaeuftSchon(c.AggregateId); yield break; }
             yield return new StoerungGeoeffnet(c.Wert);
-            yield return new PruefeStoerungVorOrt(c.AggregateId, c.Wert);
-            yield return new AlarmiereBereitschaft(c.AggregateId);
         }
 
         public IEnumerable<OneOf<StoerungQuittiert, KeineStoerung>> Decide(QuittiereStoerung c)
@@ -228,11 +222,11 @@ public sealed record Alarmierung(
     [Von(nameof(Verteilung))] Funkruf Funk,
     [Von(nameof(Anruf), nameof(Funk))] Alarmquittung Quittung) : IGraph;
 
-// Wer hineingibt: das Sensornetz (Akteur der Instanz der Messkette — es darf, was sie verlässt); die Schichtleitung richtet ein, nimmt
-// ARBEIT an (die Prüfung vor Ort) und antwortet mit der Quittung; sie hört Alarm und Störung (Kenntnis).
+// Wer hineingibt: das Sensornetz (Akteur der Instanz der Messkette — es darf, was sie verlässt); die Schichtleitung richtet ein und quittiert;
+// sie REAGIERT auf Alarm und Störung mit den Köpfen der Störungsöffnung und der Alarmierung.
 public sealed record Sensornetz : IAkteur, IDarf<MeldeMesswert>;
 public sealed record Schichtleitung : IAkteur, IDarf<RichteSensorEin>, IDarf<QuittiereStoerung>,
-    IHoert<PruefeStoerungVorOrt>, IHoert<AlarmAusgeloest>, IHoert<StoerungGeoeffnet>;
+    IHoert<AlarmAusgeloest>, IHoert<StoerungGeoeffnet>, IDarf<OeffneStoerungFuer>, IDarf<AlarmiereBereitschaft>;
 
 public sealed record SensorGateway : IClient, IVerkoerpert<Sensornetz>;
 public sealed record Leitstand : IClient, IVerkoerpert<Schichtleitung>;

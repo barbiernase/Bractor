@@ -265,7 +265,7 @@ public sealed partial class Sicht
                 if (IstRec(nm)) P("akt:" + S(a, "_id"), Rec(nm));
                 else if (BausteinFunktion(nm) is { } fb) P("akt:" + S(a, "_id"), "fb:" + S(fb, "_id"));
             }
-        // Was ein Akteur hört (IHoert): Arbeit (ein Command ohne Ziel) oder Kenntnis (ein Event, ein Hinweis) — die Nachricht kommt zu ihm.
+        // Was ein Akteur hört (IHoert): ein Event, ein Hinweis — die Nachricht kommt zu ihm.
         foreach (var a in _akteure)
             foreach (var nm in L(a, "hoert"))
                 if (IstRec(nm)) P(Rec(nm), "akt:" + S(a, "_id"));

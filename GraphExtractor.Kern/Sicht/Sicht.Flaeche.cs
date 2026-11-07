@@ -25,7 +25,7 @@ public sealed partial class Sicht
 
     /// <summary>
     /// Eine Kante von einem Ausgangsport (<paramref name="Von"/>, Typ) zu einem Eingangsport (<paramref name="Nach"/>, Typ). Art: <c>schreiben</c>,
-    /// <c>lesen</c>, <c>kenntnis</c>, <c>arbeit</c>, <c>ruecklauf</c>, <c>quelle</c>; <c>liest</c> verbindet einen Graphen mit der Gruppe eines Stores
+    /// <c>lesen</c>, <c>kenntnis</c>, <c>ruecklauf</c>, <c>quelle</c>; <c>liest</c> verbindet einen Graphen mit der Gruppe eines Stores
     /// (Typ = die Lese-Fähigkeit, keine Ports).
     /// </summary>
     public sealed record FlaechenKante(string Von, string Nach, string Typ, string Art);
@@ -302,7 +302,7 @@ public sealed partial class Sicht
                 {
                     if (nk.Id == k.Id || nk.Karte == k.Karte) continue;
                     var a = np.Sorte is "query" or "antwort" ? "lesen"
-                        : nk.Spalte == "eingang" ? (np.Sorte == "command" ? "arbeit" : "kenntnis")
+                        : nk.Spalte == "eingang" ? "kenntnis"
                         : k.Spalte == "aggregate" && nk.Spalte == "graphen" ? "ruecklauf"
                         : "schreiben";
                     kanten.Add(new(k.Id, nk.Id, p.Typ, a));

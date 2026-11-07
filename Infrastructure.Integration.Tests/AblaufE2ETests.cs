@@ -52,7 +52,7 @@ public class AblaufE2ETests
             [nameof(Bildverkleinerung)] = Bild(true),
             [nameof(Kontrastausgleich)] = Bild(true),
         }.Concat(eingang is null ? [] : [new KeyValuePair<string, KnotenKonfig>(nameof(Core.Katalog.Dateiwaechter), Waechter(eingang))])
-            .ToDictionary(x => x.Key, x => x.Value), akteure: Infrastructure.Komposition.Anwendung.Akteure.Rechte);
+            .ToDictionary(x => x.Key, x => x.Value));
         s.AddSingleton(instanzen);
         TechnikExtensions.BindeTechnik(s, instanzen);
     }

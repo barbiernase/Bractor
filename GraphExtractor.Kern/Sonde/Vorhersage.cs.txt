@@ -23,7 +23,7 @@ public record StationStillgelegt(Id<Station> StationId) : ITransientEvent;
 public record VermerkePrognose(Id<Station> AggregateId, double Grad, int Gelernt) : ICommand<Station>;
 public record PrognoseVermerkt(double Grad, int Gelernt) : IEvent;
 
-/// <summary>Ein Command ohne Ziel aus dem Decide: aus der neuen Temperatur ist eine Prognose zu bilden.</summary>
+/// <summary>Der Kopf der Prognose: aus der neuen Temperatur ist eine Prognose zu bilden — der Warndienst gibt ihn hinein, er reagiert auf das Fakt.</summary>
 public record BildePrognose(Id<Station> Station, double Grad) : ICommand;
 
 public partial class Station : IState
@@ -33,11 +33,10 @@ public partial class Station : IState
 
     public partial class Decider : IDecider<Station>
     {
-        public IEnumerable<OneOf<TemperaturGemeldet, BildePrognose, StationStillgelegt>> Decide(MeldeTemperatur c)
+        public IEnumerable<OneOf<TemperaturGemeldet, StationStillgelegt>> Decide(MeldeTemperatur c)
         {
             if (this.State.Stillgelegt) { yield return new StationStillgelegt(c.AggregateId); yield break; }
             yield return new TemperaturGemeldet(c.Grad);
-            yield return new BildePrognose(c.AggregateId, c.Grad);
         }
 
         public IEnumerable<OneOf<PrognoseVermerkt>> Decide(VermerkePrognose c)
@@ -195,8 +194,8 @@ public sealed record Kartenausgabe(
     [Von(nameof(Daumen))] Daumenmeldung Meldung) : IGraph;
 
 // Draußen: der Warndienst meldet Temperaturen, bestellt und löscht Karten und hört die Warnung, die Stilllegung und die Karten (Hinweise:
-// Kenntnis); die Wetter-App verkörpert ihn.
+// Kenntnis); auf eine gemeldete Temperatur reagiert er mit dem Kopf der Prognose; die Wetter-App verkörpert ihn.
 public sealed record Warndienst : IAkteur, IDarf<MeldeTemperatur>, IDarf<ZeichneKarte>, IDarf<LoescheKarte>, IHoert<Unwetter>,
-    IHoert<StationStillgelegt>, IHoert<KarteBereit>, IHoert<KarteGeloescht>;
+    IHoert<StationStillgelegt>, IHoert<KarteBereit>, IHoert<KarteGeloescht>, IHoert<TemperaturGemeldet>, IDarf<BildePrognose>;
 
 public sealed record WetterApp : IClient, IVerkoerpert<Warndienst>;

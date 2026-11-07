@@ -37,8 +37,8 @@ public static class Nachrichtenform
 }
 
 /// <summary>
-/// Die Commands ohne Ziel einer Entscheidung als Beilagen (<see cref="EingangOffen"/>): je Command und Instanz, deren Graph ihn am Kopf nimmt (die Köpfe),
-/// ein offener Eingang mit der Kennung aus Command-Id, Stelle und Instanz (<see cref="Eingangsvertrag"/>) — derselbe Command ergibt dieselben Kennungen.
+/// Ein Command ohne Ziel eines Clients als offene Eingänge (<see cref="EingangOffen"/>): je Instanz, deren Graph ihn am Kopf nimmt, einer mit der Kennung
+/// aus Command-Id und Instanz (<see cref="Eingangsvertrag"/>) — derselbe Command ergibt dieselben Kennungen.
 /// </summary>
 public static class Folgenbeilagen
 {
@@ -54,24 +54,6 @@ public static class Folgenbeilagen
         var (typ, daten) = Nachrichtenform.Schreibe(command);
         return hoerer.Select(f => (new EingangOffen(Eingangsvertrag.Eingang(commandId, f), f, typ, daten, version, ImAuftrag.IstAkteur(akteur) ? akteur : null,
             korrelation), (object)command)).ToList();
-    }
-
-    public static IReadOnlyList<(EingangOffen Eingang, object Folge)> Von(IReadOnlyList<object> folgen, Infrastructure.Funktionen.Verkettung plan, Guid commandId,
-        int version, string? akteur, string? korrelation)
-    {
-        if (folgen.Count == 0) return Array.Empty<(EingangOffen, object)>();
-        var aus = new List<(EingangOffen, object)>();
-        for (var stelle = 0; stelle < folgen.Count; stelle++)
-        {
-            var hoerer = plan.Hoerer(folgen[stelle].GetType());
-            if (hoerer.Count == 0) continue;
-            var kennung = Eingangsvertrag.AusEntscheidung(commandId, stelle);
-            var (typ, daten) = Nachrichtenform.Schreibe(folgen[stelle]);
-            foreach (var instanz in hoerer)
-                aus.Add((new EingangOffen(Eingangsvertrag.Eingang(kennung, instanz), instanz, typ, daten, version,
-                    ImAuftrag.IstAkteur(akteur) ? akteur : null, korrelation), folgen[stelle]));
-        }
-        return aus;
     }
 
     /// <summary>

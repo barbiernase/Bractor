@@ -21,8 +21,7 @@ public sealed record KindLausche(PID Graph);
 public sealed record LauschenEndete(string? Fehler);
 
 /// <summary>
-/// Ein KIND eines Knotens (docs/04 §4.4): eine Umsetzung seiner Funktion mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Aufruf zugleich — oder,
-/// draußen, der Platz eines Arbeiters in der <see cref="Werkstatt"/>. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command an ein
+/// Ein KIND eines Knotens (docs/04 §4.4): eine Umsetzung seiner Funktion mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Aufruf zugleich. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command an ein
 /// Aggregat sofort über den Emitter mit der Id aus Aufruf, Ort und Stelle (die Inbox verwirft eine Wiederholung; die Antwort rechnet die Funktion gleich
 /// weiter), einen Command ohne Ziel an einen Knoten desselben Graphen erst mit dem Erfolg (im Ergebnis an den Parent, der ihn nach der Wegtabelle
 /// weitergibt), einen anderen an den Kopf der Instanz, die ihn nimmt (gewartet wird, bis ihre Kette fertig ist), einen Hinweis verlierbar. Geht eine
@@ -137,10 +136,7 @@ public sealed class FunktionsKindActor(
         // Die Spur nennt den Schritt der Kette (Instanz und Knoten) — seine Karte; Herkunft und Ids leiten weiter aus der Funktion ab.
         using var spur = Spur.Von(ursache, traeger.Instanz is { Length: > 0 } inst ? WirkerId.FuerKnoten(inst, traeger.Knoten) : WirkerId.FuerFunktion(traeger.Name));
         var stelle = 0;
-        var strom = traeger.Draussen is { } draussen
-            ? draussen(kennung, argumente.Length == 1 ? argumente[0]! : throw new InvalidOperationException($"{traeger.Ort}: draußen rechnet ein Auf mit genau einem Eingang"),
-                herkunft, a.Kontext.Korrelation, ct)
-            : traeger.Rechne!(_aktivierung!.Umsetzung, auf, argumente, herkunft, bereich, ct);
+        var strom = traeger.Rechne!(_aktivierung!.Umsetzung, auf, argumente, herkunft, bereich, ct);
         await foreach (var x in strom.WithCancellation(ct))
         {
             var i = stelle++;

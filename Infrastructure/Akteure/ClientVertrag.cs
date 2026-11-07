@@ -15,7 +15,7 @@ public sealed record ClientVertrag(string Name, Type Typ, string Hash, IReadOnly
 {
     /// <summary>
     /// Die Befugnisse einer Sitzung, die diesen Client spricht — <b>verkörperte Akteure ∩ Akteure des Tokens</b>, für beide Richtungen: hinein (IDarf)
-    /// wie heraus (IHoert, Arbeit). Je solchem Akteur ein Teil (<see cref="AkteurRechte.Teile"/>); oben steht ihre Vereinigung.
+    /// wie heraus (IHoert). Je solchem Akteur ein Teil (<see cref="AkteurRechte.Teile"/>); oben steht ihre Vereinigung.
     /// </summary>
     /// <param name="akteure">die generierte Akteur-Tabelle (<see cref="GeneratedAkteurRechte.Alle"/>)</param>
     /// <param name="token">die Befugnis des Tokens (null = Tor aus → alle verkörperten Akteure)</param>
@@ -29,7 +29,7 @@ public sealed record ClientVertrag(string Name, Type Typ, string Hash, IReadOnly
         if (teile.Count == 0) return null;
         static HashSet<Type> U(IEnumerable<IReadOnlySet<Type>> s) => s.SelectMany(x => x).ToHashSet();
         return new AkteurRechte(Name, Typ, U(teile.Select(t => t.Commands)), U(teile.Select(t => t.Queries)), U(teile.Select(t => t.TransientEvents)),
-            U(teile.Select(t => t.Hoert)), U(teile.Select(t => t.Arbeit)))
+            U(teile.Select(t => t.Hoert)))
         { VertragTyp = Typ, VertragHash = Hash, Teile = teile };
     }
 }

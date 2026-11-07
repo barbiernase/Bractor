@@ -195,11 +195,11 @@ namespace Infrastructure.SourceGeneration
         {
             var f = new Form { Typ = t };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
-            // Eine Funktion ist eine Klasse im Host: was draußen gerechnet wird, ist Arbeit eines Akteurs — ein Command, den er hört (IHoert).
+            // Eine Funktion ist eine Klasse im Host: was draußen gerechnet wird, rechnet ein Client, der auf ein Fakt reagiert (IHoert).
             if (t.TypeKind == TypeKind.Interface)
             {
-                f.Fehler.Add(("eine Funktion ist eine Klasse im Host — eine Funktions-Schnittstelle gibt es nicht; was draußen gerechnet wird, ist Arbeit "
-                    + "eines Akteurs: ein Command ohne Ziel, den er hört (IHoert), seine Antwort sind Commands über sein IDarf", ort));
+                f.Fehler.Add(("eine Funktion ist eine Klasse im Host — eine Funktions-Schnittstelle gibt es nicht; was draußen gerechnet wird, rechnet "
+                    + "ein Client: er hört ein Fakt (IHoert) und gibt seine Commands über das IDarf seines Akteurs hinein", ort));
                 return f;
             }
             f.Zustand = ZustandVon(t, f.Fehler);

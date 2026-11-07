@@ -9,7 +9,7 @@ using Leihwesen.Lesen;
 //         · JE: die Antwort öffnet als Strom je Seite einen Unterlauf; der Prüfer rechnet mit TECHNIK (zwei Umsetzungen, die Instanz wählt);
 //         · ZÄHLEN im Aggregat: jeder Prüfer meldet seine Seite der Prüfung, die mitzählt und nach der letzten abschließt (kein Einsammeln
 //           im Graphen); das Rennen gegen die Zeit bleibt eine FRIST des Aggregats;
-//         · eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen, ihr Eingang ein Command ohne Ziel aus dem Decide der Ausleihe,
+//         · eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen, ihr Eingang ein Command ohne Ziel, mit dem ein Client auf die Mahnung der Ausleihe reagiert,
 //           ihre Ausgabe ein Strom (0 oder 1 Mahnung).
 
 namespace Leihwesen.Pruefung;

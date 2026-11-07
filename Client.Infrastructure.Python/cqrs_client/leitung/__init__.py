@@ -33,9 +33,6 @@ class ClientMessage(betterproto.Message):
     transient_event: "TransientEventRequest" = betterproto.message_field(
         7, group="message"
     )
-    arbeit_annehmen: "ArbeitAnnehmen" = betterproto.message_field(10, group="message")
-    arbeits_ergebnis: "ArbeitsErgebnis" = betterproto.message_field(11, group="message")
-    arbeit_lebt: "ArbeitLebtMeldung" = betterproto.message_field(12, group="message")
     lies_log: "LiesLog" = betterproto.message_field(13, group="message")
 
 
@@ -101,7 +98,6 @@ class ServerMessage(betterproto.Message):
         6, group="message"
     )
     query_response: "QueryResponse" = betterproto.message_field(7, group="message")
-    arbeits_auftrag: "ArbeitsAuftrag" = betterproto.message_field(11, group="message")
     aktualisiert: "Aktualisiert" = betterproto.message_field(12, group="message")
     log_seite: "LogSeite" = betterproto.message_field(13, group="message")
 
@@ -182,62 +178,6 @@ class AggregateMetaDto(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class TransientEventRequest(betterproto.Message):
     envelope: "EventEnvelopeDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class ArbeitAnnehmen(betterproto.Message):
-    """
-    Arbeit für Akteure (docs/konzept-akteure.md §5): hört ein Akteur einen Command ohne Ziel (IHoert), nimmt eine Sitzung, die ihn verkörpert
-     (verkörpert ∩ Token), seine Arbeit an — je Akteur mit so vielen Plätzen, wie sie zugleich rechnen kann. Die Werkstatt ihres Knotens gibt ihr Aufträge
-     und stellt sie erneut zu, bis eine Antwort kommt; die erste gewinnt. Nichts wird festgehalten: die Antwort sind Commands über das IDarf des Akteurs,
-     ihre Ids leitet der Server aus dem Auftrag ab.
-    """
-
-    angebote: List["ArbeitsAngebot"] = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class ArbeitsAngebot(betterproto.Message):
-    akteur: str = betterproto.string_field(1)
-    """Einfacher Name des Akteurs, z. B. "Klassifizierer"."""
-
-    plaetze: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class ArbeitsAuftrag(betterproto.Message):
-    """
-    Ein Auftrag: seine Kennung (vorgang, gleich bei jeder Wiederholung — draußen der Schlüssel zum Entdoppeln von Wirkungen), der Akteur, dessen Arbeit
-     es ist (fuer), der Command und seine Herkunft (der Akteur der Kette, Stream, Version, Zeit).
-    """
-
-    vorgang: str = betterproto.string_field(1)
-    korrelation: str = betterproto.string_field(2)
-    fuer: str = betterproto.string_field(3)
-    eingang: "Nutzlast" = betterproto.message_field(4)
-    akteur: str = betterproto.string_field(5)
-    stream: str = betterproto.string_field(6)
-    version: int = betterproto.int32_field(7)
-    zeit_utc: int = betterproto.int64_field(8)
-
-
-@dataclass(eq=False, repr=False)
-class ArbeitsErgebnis(betterproto.Message):
-    """
-    Die Antwort auf einen Auftrag — ganz oder in Stücken (ein langer Lauf meldet Fortschritt): Commands über das IDarf des Akteurs, ab = Stelle des
-     ersten Commands dieses Stücks, fertig = die Antwort ist vollständig. Nicht leeres fehler = draußen gescheitert (der Auftrag wird erneut zugestellt).
-    """
-
-    vorgang: str = betterproto.string_field(1)
-    commands: List["Nutzlast"] = betterproto.message_field(2)
-    ab: int = betterproto.int32_field(3)
-    fertig: bool = betterproto.bool_field(4)
-    fehler: str = betterproto.string_field(5)
-
-
-@dataclass(eq=False, repr=False)
-class ArbeitLebtMeldung(betterproto.Message):
-    vorgang: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)

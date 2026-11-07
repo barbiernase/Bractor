@@ -5,8 +5,8 @@ using FluentAssertions;
 namespace Infrastructure.Pruefstand.Tests;
 
 /// <summary>
-/// Der Python-Quelltext eines Clients (docs/konzept-akteure.md §4): Implementierung = Klasse, die die generierte Basis erbt; je Arbeit eines
-/// verkörperten Akteurs und je Kenntnis ihr Rumpf. Lesen, Ersetzen und Anhängen ändern nur den einen Rumpf — der Rest der Datei bleibt Wort für Wort.
+/// Der Python-Quelltext eines Clients (docs/konzept-akteure.md §4): Implementierung = Klasse, die die generierte Basis erbt; je gehörtem Event ihr
+/// Rumpf (die Reaktion). Lesen, Ersetzen und Anhängen ändern nur den einen Rumpf — der Rest der Datei bleibt Wort für Wort.
 /// </summary>
 public class PythonQuelleTests
 {
@@ -16,18 +16,15 @@ public class PythonQuelleTests
 
             CLIENT: ClassVar[str] = "Kasse"
             AKTEURE: ClassVar[tuple] = ("Kassierer",)
-            ARBEIT: ClassVar[dict] = {   # IHoert eines Commands ohne Ziel: Arbeit des Akteurs, die Antwort sind Commands seines IDarf
-                "Kassierer": {
-                    KassiereBestellungDto: Arbeit("kassierung", (KassiereDto, StorniereDto,)),
-                },
-            }
-            HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Kenntnis, verlierbar
+            HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis
+                BestelltDto: "auf_bestellt",
                 StorniertDto: "auf_storniert",
             }
+            SPONTAN: ClassVar[tuple] = (KassiereDto, StorniereDto,)   # IDarf der Akteure: Commands und Hinweise
 
             @abstractmethod
-            async def kassierung(self, c: KassiereBestellungDto, h: Herkunft, state: S) -> AsyncIterator[KassiereDto | StorniereDto]:
-                \"\"\"IHoert<KassiereBestellung> — Arbeit des Kassierer\"\"\"
+            async def auf_bestellt(self, e: BestelltDto, ctx: MessageContext, state: S) -> AsyncIterator[KassiereDto | StorniereDto] | None:
+                \"\"\"IHoert<Bestellt> — die Reaktion\"\"\"
                 raise NotImplementedError
 
             @abstractmethod
@@ -42,7 +39,7 @@ public class PythonQuelleTests
             def __init__(self):
                 self.n = 0
 
-            async def kassierung(
+            async def auf_bestellt(
                 self, e: BestelltDto, h, state
             ):
                 state.offen += 1
@@ -58,25 +55,22 @@ public class PythonQuelleTests
         """;
 
     [Fact]
-    public void Die_generierte_Basis_nennt_Client_Arbeit_Kenntnisse_Methoden_und_Signatur()
+    public void Die_generierte_Basis_nennt_Client_Gehoertes_Methoden_und_Signatur()
     {
         var b = PythonQuelle.ClientBasen(Basis).Single();
         b.Client.Should().Be("Kasse");
         b.Basis.Should().Be("KasseBasis");
-        b.Auf.Select(a => (a.Event, a.Methode)).Should().Equal(("KassiereBestellung", "kassierung"), ("Storniert", "auf_storniert"));
+        b.Auf.Select(a => (a.Event, a.Methode)).Should().Equal(("Bestellt", "auf_bestellt"), ("Storniert", "auf_storniert"));
         b.Auf[0].Ausgaenge.Should().Equal("Kassiere", "Storniere");
-        b.Auf[0].Akteur.Should().Be("Kassierer");
-        b.Auf[0].Strom.Should().BeTrue("eine Antwort darf in Stücken kommen");
-        b.Auf[1].Akteur.Should().BeNull("eine Kenntnis ist keine Arbeit");
-        b.Auf[1].Ausgaenge.Should().BeEmpty();
-        b.Auf[0].Def.Should().StartWith("async def kassierung(self, c: KassiereBestellungDto").And.EndWith(":");
+        b.Auf[1].Ausgaenge.Should().Equal(["Kassiere", "Storniere"], "jede Reaktion darf mit dem IDarf der Akteure antworten");
+        b.Auf[0].Def.Should().StartWith("async def auf_bestellt(self, e: BestelltDto").And.EndWith(":");
     }
 
     [Fact]
     public void Eine_Implementierung_ist_eine_Klasse_mit_der_Basis_und_ihr_Rumpf_ist_lesbar()
     {
         PythonQuelle.Klassen(Impl).Single().Basen.Should().Equal("KasseBasis");
-        PythonQuelle.Rumpf(Impl, "Kasse", "kassierung").Should()
+        PythonQuelle.Rumpf(Impl, "Kasse", "auf_bestellt").Should()
             .Be("state.offen += 1\nif e.betrag > 0:\n    return KassiereDto(aggregate_id=e.id)");
         PythonQuelle.Rumpf(Impl, "Kasse", "auf_storniert").Should().Be("state.offen -= 1");
         PythonQuelle.Rumpf(Impl, "Kasse", "auf_gibtsnicht").Should().BeNull();
@@ -87,7 +81,7 @@ public class PythonQuelleTests
     {
         var neu = PythonQuelle.SetzeRumpf(Impl, "Kasse", "auf_storniert", "state.offen = 0\nreturn")!;
         PythonQuelle.Rumpf(neu, "Kasse", "auf_storniert").Should().Be("state.offen = 0\nreturn");
-        PythonQuelle.Rumpf(neu, "Kasse", "kassierung").Should().Be(PythonQuelle.Rumpf(Impl, "Kasse", "kassierung"));
+        PythonQuelle.Rumpf(neu, "Kasse", "auf_bestellt").Should().Be(PythonQuelle.Rumpf(Impl, "Kasse", "auf_bestellt"));
         neu.Should().Contain("def hilfe():\n    return 1");
     }
 
@@ -108,11 +102,11 @@ public class PythonQuelleTests
         var b = PythonQuelle.ClientBasen(Basis).Single();
         var neu = PythonQuelle.NeueImplementierung("kasse_client", b, "Kasse");
         neu.Should().Contain("from kasse_client.generated.vertraege import KasseBasis")
-           .And.Contain("from kasse_client.generated import KassiereBestellungDto, KassiereDto, StorniereDto, StorniertDto")
+           .And.Contain("from kasse_client.generated import BestelltDto, KassiereDto, StorniereDto, StorniertDto")
            .And.Contain("class Kasse(KasseBasis[KasseState]):");
         var k = PythonQuelle.Klassen(neu).Single(x => x.Name == "Kasse");
         k.Basen.Should().Equal("KasseBasis");
-        PythonQuelle.Rumpf(neu, "Kasse", "kassierung").Should().Be("raise NotImplementedError");
+        PythonQuelle.Rumpf(neu, "Kasse", "auf_bestellt").Should().Be("raise NotImplementedError");
         PythonQuelle.Rumpf(neu, "Kasse", "auf_storniert").Should().Be("raise NotImplementedError");
         neu.Should().Contain("state: KasseState)").And.NotContain("state: S)");
     }
@@ -126,7 +120,6 @@ public class PythonQuelleTests
         impl.Datei.Should().Be("Domain.Client.Worker.Python.ML/domain_client/training_worker.py");
         var r = impl.Rumpfe.Single(x => x.Methode == "auf_training_angefordert");
         r.Event.Should().Be("TrainingAngefordert");
-        r.Akteur.Should().BeNull("eine Reaktion auf ein Fakt ist keine Arbeit");
         r.Rumpf.Should().NotBeNullOrWhiteSpace("der Rumpf ist die Logik draußen");
         r.Signatur.Should().Contain("MeldeFortschrittDto", "die Reaktion gibt Commands seines IDarf aus");
     }

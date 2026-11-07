@@ -39,7 +39,6 @@ def test_generat_nennt_die_fakten_und_das_idarf():
     assert KlassifikationsWorkerBasis.CLIENT == "KlassifikationsWorker"
     assert KlassifikationsWorkerBasis.AKTEURE == ("Klassifizierer",)
     assert re.fullmatch(r"[0-9a-f]{16}", KlassifikationsWorkerBasis.VERTRAG_HASH)
-    assert KlassifikationsWorkerBasis.ARBEIT == {} and TrainingsWorkerBasis.ARBEIT == {}, "Schritt 6: kein Decide gibt einen Auftrag aus"
     assert set(KlassifikationsWorkerBasis.HOERT) == {g.BildVerfuegbarDto, g.ImagePairKomplettDto, g.ModellAktiviertDto}
     assert g.KlassifiziereBildPaarDurchKiDto in KlassifikationsWorkerBasis.SPONTAN
     assert TrainingsWorkerBasis.HOERT == {g.TrainingAngefordertDto: "auf_training_angefordert"}
@@ -54,7 +53,6 @@ def test_training_worker_meldet_sich_als_client():
     assert req.vertrag == "TrainingsWorker", "am Handshake steht der CLIENT (er leitet die Akteure ab)"
     assert req.vertrag_hash == TrainingsWorkerBasis.VERTRAG_HASH
     assert "TrainingAngefordert" in req.message_types
-    assert w.arbeit.angebote == [], "keine Arbeit — der Worker reagiert"
 
 
 def test_stub_classifier_reagiert_auf_das_komplette_paar_mit_genau_einem_urteil():
@@ -115,9 +113,6 @@ def test_die_generierte_nutzlast_tabelle_traegt_jeden_vertragstyp():
         return [k for _, k in inspect.getmembers(modul, inspect.isclass) if k.__module__ == modul.__name__]
 
     for basis in eigene(vertraege):
-        for gehoert in basis.__dict__.get("ARBEIT", {}).values():
-            for command, a in gehoert.items():
-                noetig |= {command, *a.antworten}
         noetig |= set(basis.__dict__.get("HOERT", {}))
         noetig |= set(basis.__dict__.get("SPONTAN", ())) | set(basis.__dict__.get("FRAGT", ()))
     assert noetig, "die Beispielanwendung hat Verträge"

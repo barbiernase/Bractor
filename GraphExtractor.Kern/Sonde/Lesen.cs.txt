@@ -101,15 +101,17 @@ public sealed class LeihAuskunftLeser : IReader
 public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>, IDarf<RueckgabeGescannt>,
     IHoert<NichtAusgeliehen>, IHoert<NichtSchaetzbar>, IHoert<LaufGescheitert>;
 
-// Eine KI als Akteur (frei benannt, keine Art mehr): darf eine Mahnung eröffnen und hört, wenn eine eröffnet ist (ein Event: Kenntnis).
-public sealed record Gutachterin : IAkteur, IDarf<EroeffneMahnung>, IHoert<MahnungEroeffnet>;
+// Eine KI als Akteur (frei benannt, keine Art mehr): darf eine Mahnung eröffnen und hört, wenn eine eröffnet ist (ein Event: Kenntnis); auf einen
+// gemeldeten Schaden REAGIERT sie mit dem Kopf der Schadensbewertung (Schritt 6: ein Decide gibt nur Fakten aus, die Folge stößt ein Client an).
+public sealed record Gutachterin : IAkteur, IDarf<EroeffneMahnung>, IHoert<MahnungEroeffnet>, IHoert<SchadenGemeldet>, IDarf<SchaetzeSchaden>;
 
-// ARBEIT (docs/konzept-akteure.md §5): das Archiv hört einen Command ohne Ziel aus einem Graphen (die Schadensaufnahme wählt die Begutachtung vor
-// Ort); seine Antwort ist ein gewöhnlicher Command über sein IDarf. Dazu Kenntnis eines Events.
-public sealed record Archiv : IAkteur, IHoert<BegutachteVorOrt>, IDarf<EroeffneMahnung>, IHoert<Ausgeliehen>;
+// REAKTIONEN: das Archiv hört Fakten — die Begutachtung vor Ort (aus dem Schadensfall, den ein Knoten wählte), die Rückgabe und die Mahnung — und gibt
+// die Commands an die Köpfe ihrer Graphen bzw. einen Command über sein IDarf. Dazu Kenntnis eines Events.
+public sealed record Archiv : IAkteur, IHoert<BegutachtungAngefordert>, IDarf<EroeffneMahnung>, IHoert<Ausgeliehen>,
+    IHoert<Zurueckgegeben>, IDarf<PruefeRueckgabe>, IHoert<RueckgabeAngemahnt>, IDarf<BemesseMahnung>;
 
 // Clients (docs/konzept-akteure.md §4): frei benannt — ein Record mit IClient, der nur nennt, wen er verkörpert. EIN Client verkörpert ZWEI Akteure
-// (die Theke und das Archiv, das Arbeit annimmt), und ein Akteur läuft über ZWEI Clients (das Archiv: Lesesaal + Depot). Was über die
+// (die Theke und das Archiv, das reagiert), und ein Akteur läuft über ZWEI Clients (das Archiv: Lesesaal + Depot). Was über die
 // Leitung geht, sind das IDarf und IHoert der Akteure.
 public sealed record Lesesaal : IClient, IVerkoerpert<Theke>, IVerkoerpert<Archiv>;
 public sealed record Depot : IClient, IVerkoerpert<Archiv>;

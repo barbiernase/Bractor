@@ -119,8 +119,7 @@ public class FunktionsZustandGarantieTests
 
     /// <summary>Je Graph eine Instanz, die Merkmalbildung (Zustand im Zählwerk) auf dem Rechner <paramref name="rechner"/> festgelegt.</summary>
     private static void Festgelegt(IServiceCollection s, string rechner) =>
-        s.Replace(ServiceDescriptor.Singleton(new GraphInstanzen(GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen,
-                akteure: global::Infrastructure.Komposition.Anwendung.Akteure.Rechte).Alle
+        s.Replace(ServiceDescriptor.Singleton(new GraphInstanzen(GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen).Alle
             .Select(i => i.Graph.Name == nameof(Merkmalbildung) ? i with { Rechner = rechner } : i).ToList())));
 
     private static bool Haelt(IHost h) => h.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Merkmalbildung));

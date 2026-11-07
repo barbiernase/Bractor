@@ -68,17 +68,11 @@ class MessageRouter:
         mapper: PayloadMapper,
         registry: CategoryRegistry,
         version_tracker: VersionTracker,
-        on_arbeit=None,
     ) -> None:
         """
         Hauptschleife — läuft bis die Verbindung abbricht.
 
-        `on_arbeit` (optional): nimmt einen ArbeitsAuftrag (Arbeit eines verkörperten Akteurs) entgegen — er läuft entkoppelt,
-        die Schleife wartet nicht auf ihn (ArbeitsLaeufer.nimm).
-
-        Verarbeitet zwei Arten von Messages aus der event_queue:
-        - "event": EventNotification → Payload extrahieren → Handler → yield Outputs
-        - "arbeits_auftrag": Arbeit eines verkörperten Akteurs → on_arbeit
+        Verarbeitet die Events aus der event_queue: EventNotification → Payload extrahieren → Handler → yield Outputs.
         """
         while proxy.is_connected:
             try:
@@ -96,11 +90,6 @@ class MessageRouter:
                         msg, proxy, handle, instance, state,
                         mapper, registry, version_tracker
                     )
-                elif msg_type == "arbeits_auftrag":
-                    if on_arbeit is None:
-                        log.warning("ArbeitsAuftrag %s ohne angenommene Arbeit — ignoriert", msg.vorgang)
-                    else:
-                        on_arbeit(msg)
                 else:
                     log.warning("Unknown message type in queue: %s", msg_type)
             except Exception as e:

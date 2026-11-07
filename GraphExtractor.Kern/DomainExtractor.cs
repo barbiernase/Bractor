@@ -929,7 +929,7 @@ public sealed partial class DomainExtractor
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(),
             Verkoerpert = akteure.Select(a => a.Name).ToList(),
             Kenntnis = akteure.SelectMany(a => a.Interfaces.Where(i => Gen(i, _iHoert)).Select(i => i.TypeArguments[0]))
-                .Where(h => !Abstractions.Clientvertragsregeln.IstArbeit(m => h.Fq() == m || h.AllInterfaces.Any(i => i.OriginalDefinition.Fq() == m)))
+                .Where(h => Abstractions.Clientvertragsregeln.Hoerbar(m => h.Fq() == m || h.AllInterfaces.Any(i => i.OriginalDefinition.Fq() == m)))
                 .Select(h => h.Name).Distinct().ToList(),
             Sendet = Je(Abstractions.Clientvertragsregeln.Befugnisart.Sendet),
             Fragt = Je(Abstractions.Clientvertragsregeln.Befugnisart.Fragt),

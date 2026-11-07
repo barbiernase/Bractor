@@ -170,11 +170,9 @@ public static class TechnikExtensions
     public static IServiceCollection BindeTechnik(this IServiceCollection services, GraphInstanzen instanzen)
         => services.BindeTechnik(HostKnoten(instanzen), Anwendung.Technik.Umsetzungen, Anwendung.Technik.Braucht, Anwendung.Technik.Konfigs);
 
-    /// <summary>Die Knoten der Instanzen, die im Host rechnen (alle außer der Arbeit eines Akteurs): ihr Kontext (Instanz, Knoten, Konfig) und die
-    /// Klasse ihrer Funktion.</summary>
+    /// <summary>Die Knoten der Instanzen, die im Host rechnen: ihr Kontext (Instanz, Knoten, Konfig) und die Klasse ihrer Funktion.</summary>
     public static IEnumerable<(KnotenKontext Knoten, Type Umsetzung)> HostKnoten(GraphInstanzen instanzen) =>
         from x in FunktionsBausteinWiring.Knoten(instanzen)
-        where !x.Baustein.Draussen
         select (new KnotenKontext(x.Instanz.Name, x.Knoten.Name, x.Konfig), x.Baustein.Typ);
 
     /// <param name="knoten">Die Knoten im Host — von der Klasse ihrer Umsetzung aus wird gebunden, je Knoten mit seiner Wahl und seinen Werten.</param>

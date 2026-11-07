@@ -86,7 +86,6 @@ public class AkteurRechteTests
     public void Die_Worker_hoeren_Fakten_und_reagieren_ueber_ihr_IDarf()
     {
         var k = R("Klassifizierer");
-        k.Arbeit.Should().BeEmpty();
         k.Hoert.Should().BeEquivalentTo(new[] { typeof(BildVerfuegbar), typeof(ImagePairKomplett), typeof(ModellAktiviert) });
         k.Commands.Should().BeEquivalentTo(new[] { typeof(KlassifiziereBildPaarDurchKi), typeof(KlassifiziereEinzelBildDurchKi) });
         k.Queries.Should().BeEquivalentTo(new[] { typeof(HoleAktivesModell) });
@@ -98,9 +97,9 @@ public class AkteurRechteTests
     }
 
     [Fact]
-    public void Arbeit_hat_in_der_Beispieldomaene_kein_Akteur()
-        => GeneratedAkteurRechte.Alle.Values.Where(a => a.Arbeit.Count > 0).Select(a => a.Name)
-            .Should().BeEmpty("Schritt 6: kein Decide gibt einen Auftrag aus, die Worker reagieren auf Fakten");
+    public void Gehoert_werden_nur_Fakten()
+        => GeneratedAkteurRechte.Alle.Values.SelectMany(a => a.Hoert).Should().OnlyContain(t => typeof(IEvent).IsAssignableFrom(t),
+            "ein Akteur hört Events und Hinweise, nie einen Command (CQRS058)");
 
     [Fact]
     public void Vereinigung_vereinigt_auch_Arbeit_und_Hoeren()

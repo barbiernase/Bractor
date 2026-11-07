@@ -537,7 +537,6 @@
 #de .ds-tab{background:transparent;color:#b9c2d6;border:1px solid transparent;border-radius:6px;padding:3px 10px;cursor:pointer;font:600 12px system-ui}
 #de .ds-tab:hover{background:#1b2232}
 #de .ds-tab.an{background:#1d2433;border-color:#35507a;color:#e6ecf7}
-#de .ds-tab.warte{color:#ffe1a0}
 #de .ds-hint{color:#8b93a7;font-size:11px;margin-right:6px}
 #de .ds-inhalt{flex:1;min-height:0;overflow:auto;padding:8px 12px;display:flex;gap:18px}
 #de .ds-links{flex:0 0 min(470px,46%);display:flex;flex-direction:column;gap:6px;overflow:auto}
@@ -552,10 +551,6 @@
 #de .ds-vz.gelb{border-color:#6a5a30;background:#1a160c}
 #de .ds-vz summary{cursor:pointer;overflow-wrap:anywhere}
 #de .ds-zeit{color:#8b93a7;font-size:11px;margin-right:6px}
-#de .ds-auftraege{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;width:100%}
-#de .ds-auftrag{border:1px solid #6a5a30;background:#16130b;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;width:min(460px,100%);box-sizing:border-box}
-#de .ds-auf{display:flex;gap:6px;align-items:baseline}
-#de .ds-auf code{font-size:11px;color:#c4cde0;overflow-wrap:anywhere}
 #de .ds-worker{display:flex;flex-direction:column;gap:6px;width:100%}
 #de .ds-wz{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid #232a38;border-radius:6px;padding:6px 8px}
 #de .ds-wz code{font-size:11px;color:#c4cde0}

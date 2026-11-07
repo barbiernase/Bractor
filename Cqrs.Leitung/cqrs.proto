@@ -32,9 +32,6 @@ message ClientMessage {
         CapabilitiesRequest capabilities = 4;
         QueryRequest query = 5;
         TransientEventRequest transient_event = 7;
-        ArbeitAnnehmen arbeit_annehmen = 10;
-        ArbeitsErgebnis arbeits_ergebnis = 11;
-        ArbeitLebtMeldung arbeit_lebt = 12;
         LiesLog lies_log = 13;
     }
 }
@@ -87,7 +84,6 @@ message ServerMessage {
         ErrorResponse error = 5;
         CapabilitiesResponse capabilities_response = 6;
         QueryResponse query_response = 7;
-        ArbeitsAuftrag arbeits_auftrag = 11;
         Aktualisiert aktualisiert = 12;
         LogSeite log_seite = 13;
     }
@@ -147,47 +143,6 @@ message AggregateMetaDto {
 
 message TransientEventRequest {
     EventEnvelopeDto envelope = 1;
-}
-
-// Arbeit für Akteure (docs/konzept-akteure.md §5): hört ein Akteur einen Command ohne Ziel (IHoert), nimmt eine Sitzung, die ihn verkörpert
-// (verkörpert ∩ Token), seine Arbeit an — je Akteur mit so vielen Plätzen, wie sie zugleich rechnen kann. Die Werkstatt ihres Knotens gibt ihr Aufträge
-// und stellt sie erneut zu, bis eine Antwort kommt; die erste gewinnt. Nichts wird festgehalten: die Antwort sind Commands über das IDarf des Akteurs,
-// ihre Ids leitet der Server aus dem Auftrag ab.
-message ArbeitAnnehmen {
-    repeated ArbeitsAngebot angebote = 1;
-}
-
-message ArbeitsAngebot {
-    // Einfacher Name des Akteurs, z. B. "Klassifizierer".
-    string akteur = 1;
-    int32 plaetze = 2;
-}
-
-// Ein Auftrag: seine Kennung (vorgang, gleich bei jeder Wiederholung — draußen der Schlüssel zum Entdoppeln von Wirkungen), der Akteur, dessen Arbeit
-// es ist (fuer), der Command und seine Herkunft (der Akteur der Kette, Stream, Version, Zeit).
-message ArbeitsAuftrag {
-    string vorgang = 1;
-    string korrelation = 2;
-    string fuer = 3;
-    Nutzlast eingang = 4;
-    string akteur = 5;
-    string stream = 6;
-    int32 version = 7;
-    int64 zeit_utc = 8;
-}
-
-// Die Antwort auf einen Auftrag — ganz oder in Stücken (ein langer Lauf meldet Fortschritt): Commands über das IDarf des Akteurs, ab = Stelle des
-// ersten Commands dieses Stücks, fertig = die Antwort ist vollständig. Nicht leeres fehler = draußen gescheitert (der Auftrag wird erneut zugestellt).
-message ArbeitsErgebnis {
-    string vorgang = 1;
-    repeated Nutzlast commands = 2;
-    int32 ab = 3;
-    bool fertig = 4;
-    string fehler = 5;
-}
-
-message ArbeitLebtMeldung {
-    string vorgang = 1;
 }
 
 message ErrorResponse {

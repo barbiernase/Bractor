@@ -10,8 +10,6 @@ public sealed record AblaufSchritt
     public required Guid AggregatId { get; init; }
     public required string AggregatTyp { get; init; }
     public required IReadOnlyList<Ereignis> Ausgang { get; init; }
-    /// <summary>Die Commands ohne Ziel der Entscheidung (docs/03 §3.1) — nicht im Log; die Kanten, die sie nehmen, rechnen sie.</summary>
-    public IReadOnlyList<object> Folgen { get; init; } = Array.Empty<object>();
     public required IReadOnlyDictionary<string, object?> ZustandVorher { get; init; }
     public required IReadOnlyDictionary<string, object?> ZustandNachher { get; init; }
 
@@ -19,7 +17,7 @@ public sealed record AblaufSchritt
     public bool Unrouted { get; init; }
 
     public override string ToString() => $"{(Von is null ? "→" : Von + " →")} {AggregatTyp}/{AggregatId.ToString()[..8]}: {Command.GetType().Name} ⇒ "
-        + (Unrouted ? "UNROUTED" : string.Join(", ", Ausgang.Select(e => e.Typ + (e.Persistent ? "" : "!")).Concat(Folgen.Select(f => "→" + f.GetType().Name))));
+        + (Unrouted ? "UNROUTED" : string.Join(", ", Ausgang.Select(e => e.Typ + (e.Persistent ? "" : "!"))));
 }
 
 /// <summary>
@@ -68,7 +66,10 @@ public sealed class AblaufBauer
         return this;
     }
 
-    /// <summary>Eine Kante einer Funktion: ihr <c>Auf</c> für <typeparamref name="TEingang"/> (ein Event oder ein Command ohne Ziel), das nichts oder eine Ausgabe liefert.</summary>
+    /// <summary>
+    /// Eine Kante: das <c>Auf</c> einer Funktion für einen Command ohne Ziel bzw. die Reaktion eines Clients auf ein Event (<typeparamref name="TEingang"/>),
+    /// die nichts oder eine Ausgabe liefert.
+    /// </summary>
     public AblaufBauer Funktion<TEingang>(string funktion, Func<TEingang, Herkunft, IAusgabe?> auf) where TEingang : class
     {
         _kanten.Add(new Kante(funktion, typeof(TEingang), (e, h) => auf((TEingang)e, h) is { } a ? new[] { a } : Array.Empty<IAusgabe>()));
@@ -141,10 +142,8 @@ public sealed class AblaufBauer
             var vorher = Zustandsspiegel.Von(i.State);
             var ausgang = new List<Ereignis>();
             var neu = new List<(IEvent Event, int Version)>();
-            var folgen = new List<object>();
-            foreach (var x in i.Handler.HandleCommand(cmd).ToList())
+            foreach (var e in Entscheidungsausgabe.NurEvents(cmd, i.Handler.HandleCommand(cmd)))
             {
-                if (x is not IEvent e) { folgen.Add(x); continue; }
                 var persistent = e is not ITransientEvent;
                 ausgang.Add(new Ereignis(e, persistent));
                 if (!persistent) continue;
@@ -155,14 +154,9 @@ public sealed class AblaufBauer
             }
             schritte.Add(new AblaufSchritt
             {
-                Command = cmd, Von = von, AggregatId = cmd.Ziel, AggregatTyp = art.Typ, Ausgang = ausgang, Folgen = folgen,
+                Command = cmd, Von = von, AggregatId = cmd.Ziel, AggregatTyp = art.Typ, Ausgang = ausgang,
                 ZustandVorher = vorher, ZustandNachher = Zustandsspiegel.Von(i.State),
             });
-            // Die Folgen gehen an die Kanten, die sie hören — Herkunft ist der Stand nach der Entscheidung.
-            foreach (var f in folgen)
-                foreach (var k in _kanten.Where(k => k.Eingang == f.GetType()))
-                    foreach (var a in k.Auf(f, new Herkunft(cmd.Ziel, i.State.Version, Zeit, null, WirkerId.FuerFunktion(k.Funktion))))
-                        Weiter(a, k.Funktion, new Herkunft(cmd.Ziel, i.State.Version, Zeit, null, WirkerId.FuerFunktion(k.Funktion)));
             foreach (var (e, version) in neu)
             {
                 if (e is FristGesetzt f) { _fristen.Add((cmd.Ziel, version, f)); continue; }

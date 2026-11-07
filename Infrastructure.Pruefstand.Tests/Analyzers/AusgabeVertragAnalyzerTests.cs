@@ -40,6 +40,7 @@ namespace Probe {
 public record Mach(Id<Ding> AggregateId) : ICommand<Ding>;
 public record Anderes(Id<Ding> AggregateId) : ICommand<Ding>;
 public record Gemacht() : IEvent;
+public record Weiter() : ICommand;
 public record Abgelehnt() : ITransientEvent;
 public record Hole() : IQuery;
 public record Antwort() : IQueryResponse;
@@ -49,6 +50,20 @@ public partial class Ding : IState { public int Version { get; set; } public Gui
 ";
 
     private static async Task<string[]> Ids(string code) => (await Analysiere(code)).Select(d => d.Id).ToArray();
+
+    [Fact]
+    public async Task Ein_Decide_gibt_keinen_Command_aus_weder_ohne_Ziel_noch_an_ein_Aggregat_CQRS114()
+    {
+        (await Ids(@"namespace Probe { public class D : IDecider<Ding> {
+            public IEnumerable<OneOf<Gemacht, Weiter>> Decide(Mach c) { yield return new Gemacht(); } } }"))
+            .Should().Equal(AusgabeVertragAnalyzer.AggregatCommandId);
+        (await Ids(@"namespace Probe { public class D : IDecider<Ding> {
+            public IEnumerable<OneOf<Gemacht, Anderes>> Decide(Mach c) { yield return new Gemacht(); } } }"))
+            .Should().Equal(AusgabeVertragAnalyzer.AggregatCommandId);
+        (await Analysiere(@"namespace Probe { public class D : IDecider<Ding> {
+            public IEnumerable<OneOf<Gemacht, Weiter>> Decide(Mach c) { yield return new Gemacht(); } } }")).Single().GetMessage()
+            .Should().Contain("nur Events, Hinweise und Fristen").And.Contain("Client");
+    }
 
     [Fact]
     public async Task Decide_mit_OneOf_oder_konkretem_Typ_ist_geschlossen()

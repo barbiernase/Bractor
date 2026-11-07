@@ -23,26 +23,6 @@ static class Clientvertragsregeln
     /// der Schlüssel der generierten Tabelle. Akteur- und Client-Namen dürfen sich nicht überschneiden (CQRS059).</summary>
     public static string ClientName(string recordName) => recordName;
 
-    /// <summary>
-    /// Kanonische Textform der ARBEIT eines Akteurs: <c>Akteur:Command&gt;AusgabeA,AusgabeB;…</c> — je gehörtem Command ohne Ziel die Commands, die
-    /// der Akteur als Antwort geben darf (sein <c>IDarf</c>), nach einfachem Namen sortiert (die Namen sind auch die Proto-Namen). Ändert sich, was
-    /// ein Akteur hört oder darf, ändert sich der Hash jedes Clients, der ihn verkörpert — seine Python-Basis ist dann veraltet.
-    /// </summary>
-    public static string Kanon(string akteur, IEnumerable<Eingang> eingaenge)
-    {
-        var sb = new StringBuilder(akteur).Append(':');
-        var erste = true;
-        foreach (var r in eingaenge.OrderBy(x => x.Typ, System.StringComparer.Ordinal))
-        {
-            if (!erste) sb.Append(';');
-            erste = false;
-            sb.Append(r.Typ).Append('>')
-              .Append(string.Join(",", r.Ausgaenge.Distinct().OrderBy(x => x, System.StringComparer.Ordinal)));
-            if (r.Strom) sb.Append('*');
-        }
-        return sb.ToString();
-    }
-
     /// <summary>Hash: die ersten 16 Hex-Zeichen von SHA-256 über die kanonische Form.</summary>
     public static string Hash(string kanon)
     {
@@ -56,17 +36,15 @@ static class Clientvertragsregeln
     }
 
     /// <summary>
-    /// Kanonische Textform eines Clients: <c>Client|A:…|W:&lt;Kanon der Arbeit eines Akteurs&gt;|…|S:…|F:…|H:…</c> — <c>A</c> = die verkörperten
-    /// Akteure, <c>W</c> = ihre Arbeit nach Akteur sortiert, <c>S</c> = sendet, <c>F</c> = fragt, <c>H</c> = hört als Kenntnis (jeweils sortierte
-    /// einfache Namen). Alles folgt aus den Akteuren: bekommt einer eine Befugnis dazu, ändert sich der Hash jedes Clients, der ihn verkörpert.
+    /// Kanonische Textform eines Clients: <c>Client|A:…|S:…|F:…|H:…</c> — <c>A</c> = die verkörperten Akteure, <c>S</c> = sendet, <c>F</c> = fragt,
+    /// <c>H</c> = hört (jeweils sortierte einfache Namen). Alles folgt aus den Akteuren: bekommt einer eine Befugnis dazu, ändert sich der Hash jedes
+    /// Clients, der ihn verkörpert.
     /// </summary>
-    public static string ClientKanon(string client, IEnumerable<string> akteure, IEnumerable<KeyValuePair<string, IEnumerable<Eingang>>> arbeit,
-        IEnumerable<string> sendet, IEnumerable<string> fragt, IEnumerable<string> hoert)
+    public static string ClientKanon(string client, IEnumerable<string> akteure, IEnumerable<string> sendet, IEnumerable<string> fragt,
+        IEnumerable<string> hoert)
     {
         string Liste(IEnumerable<string> x) => string.Join(",", x.Distinct().OrderBy(n => n, System.StringComparer.Ordinal));
         var sb = new StringBuilder(client).Append("|A:").Append(Liste(akteure));
-        foreach (var t in arbeit.OrderBy(t => t.Key, System.StringComparer.Ordinal))
-            sb.Append("|W:").Append(Kanon(t.Key, t.Value));
         sb.Append("|S:").Append(Liste(sendet)).Append("|F:").Append(Liste(fragt)).Append("|H:").Append(Liste(hoert));
         return sb.ToString();
     }
@@ -76,7 +54,7 @@ static class Clientvertragsregeln
     {
         /// <summary>Kein Weg über die Leitung (CQRS058 meldet so ein <c>IDarf</c>).</summary>
         Keine,
-        /// <summary>Hinein: ein Command oder ein Hinweis (von sich aus oder als Antwort auf Arbeit).</summary>
+        /// <summary>Hinein: ein Command oder ein Hinweis.</summary>
         Sendet,
         /// <summary>Eine Query.</summary>
         Fragt,
@@ -98,23 +76,9 @@ static class Clientvertragsregeln
         : Befugnisart.Keine;
 
     /// <summary>
-    /// Ist ein <c>IHoert&lt;T&gt;</c> ARBEIT (ein Command ohne Ziel: zugestellt bis zur Antwort) oder KENNTNIS (ein Event oder Hinweis: gepusht,
-    /// verlierbar)? <paramref name="hat"/> wie bei <see cref="Art"/>; ein Command an ein Aggregat hört kein Akteur (CQRS058).
+    /// Kann ein Akteur <c>T</c> hören (<c>IHoert&lt;T&gt;</c>)? Nur ein Event oder einen Hinweis — was zu ihm kommt, ist ein Fakt (er reagiert darauf
+    /// oder nimmt es zur Kenntnis); einen Command hört kein Akteur (CQRS058, Schritt 6: es gibt keine Arbeit aus einem Decide). <paramref name="hat"/>
+    /// wie bei <see cref="Art"/>.
     /// </summary>
-    public static bool IstArbeit(System.Func<string, bool> hat) => hat(ICommand) && !hat("Abstractions.IAggregatCommand");
-
-    /// <summary>Ein Eingang der Arbeit eines Akteurs (ein gehörter Command): sein Typ (einfacher Name), die erlaubten Antworten, Strom ja/nein.</summary>
-    public sealed class Eingang
-    {
-        public Eingang(string typ, IReadOnlyList<string> ausgaenge, bool strom)
-        {
-            Typ = typ;
-            Ausgaenge = ausgaenge;
-            Strom = strom;
-        }
-
-        public string Typ { get; }
-        public IReadOnlyList<string> Ausgaenge { get; }
-        public bool Strom { get; }
-    }
+    public static bool Hoerbar(System.Func<string, bool> hat) => hat(IEvent) || hat(ITransientEvent);
 }

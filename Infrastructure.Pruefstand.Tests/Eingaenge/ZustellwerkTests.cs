@@ -73,22 +73,20 @@ public class ZustellwerkTests
     }
 
     [Fact]
-    public void Kennungen_sind_abgeleitet_dieselbe_Entscheidung_ergibt_dieselben()
+    public void Kennungen_sind_abgeleitet_derselbe_Command_ergibt_dieselben()
     {
         var cmd = Guid.NewGuid();
-        Eingangsvertrag.AusEntscheidung(cmd, 0).Should().Be(Eingangsvertrag.AusEntscheidung(cmd, 0));
-        Eingangsvertrag.AusEntscheidung(cmd, 0).Should().NotBe(Eingangsvertrag.AusEntscheidung(cmd, 1));
-        var folge = Eingangsvertrag.AusEntscheidung(cmd, 0);
-        Eingangsvertrag.Eingang(folge, "A").Should().NotBe(Eingangsvertrag.Eingang(folge, "B"), "je hörende Funktion ein eigener Eingang");
+        Eingangsvertrag.Eingang(cmd, "A").Should().Be(Eingangsvertrag.Eingang(cmd, "A"));
+        Eingangsvertrag.Eingang(cmd, "A").Should().NotBe(Eingangsvertrag.Eingang(cmd, "B"), "je Kopf ein eigener Eingang");
     }
 
     [Fact]
-    public void Ein_Command_ohne_Ziel_geht_an_einen_Graphen_ein_Event_und_ein_Command_an_ein_Aggregat_nicht()
+    public void Ein_Decide_gibt_nur_Events_aus_ein_Command_ist_ein_Fehler()
     {
-        Entscheidungsausgabe.IstCommand(new Melde()).Should().BeTrue();
-        Entscheidungsausgabe.IstCommand(new Gemeldet()).Should().BeFalse();
-        Entscheidungsausgabe.IstCommand(new AnAggregat()).Should().BeFalse("ein Decide gibt keinen Command an ein Aggregat aus (CQRS114)");
-        Entscheidungsausgabe.Als(new Melde()).Should().BeOfType<Melde>("ein Command ohne Ziel bleibt er selbst");
+        Entscheidungsausgabe.NurEvents(new Melde(), [new Gemeldet()]).Should().ContainSingle().Which.Should().BeOfType<Gemeldet>();
+        FluentActions.Invoking(() => Entscheidungsausgabe.NurEvents(new Melde(), [new Gemeldet(), new Melde()]))
+            .Should().Throw<InvalidOperationException>().WithMessage("*gab Melde aus*nur Events, Hinweise und Fristen*CQRS114*");
+        FluentActions.Invoking(() => Entscheidungsausgabe.NurEvents(new Melde(), [new AnAggregat()])).Should().Throw<InvalidOperationException>();
     }
 
     private sealed record Melde : ICommand;

@@ -32,8 +32,6 @@ public sealed class UmgebungKopf
     /// Leer = <c>CQRS_PYTHON</c> bzw. <c>python3</c> (<see cref="UmgebungKonfig.Python"/>).
     /// </summary>
     public string Python { get; set; } = "";
-    /// <summary>Die Akteure, deren Arbeit (gehörte Commands ohne Ziel) die Werkbank von Hand beantwortet — sie verkörpert sie (Sim).</summary>
-    public string[] Hand { get; set; } = [];
 }
 
 /// <summary>Der Event-Store (Postgres/Marten) — die Wahrheit.</summary>

@@ -113,20 +113,6 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
         diag.Select(d => d.Id).Should().Equal("CQRS093");
     }
 
-    [Fact]
-    public void Ein_CSharp_Client_verkoerpert_keine_Akteure_mit_Arbeit_CQRS094()
-    {
-        var comp = Probe(Handler + @"
-namespace Probe {
-    public sealed record ZuPruefen(Guid Id) : ICommand;
-    public sealed record Rechner : IAkteur, IHoert<ZuPruefen>, IDarf<Mach>;
-    public sealed record PultMitArbeit : IClient, IVerkoerpert<Gast>, IVerkoerpert<Rechner>;
-}", vertrag: "Probe.PultMitArbeit");
-        var (_, diag) = Generiert(comp, new WiringGenerator().AsSourceGenerator());
-        diag.Select(d => d.Id).Should().Equal("CQRS094");
-        diag[0].GetMessage().Should().Contain("PultMitArbeit").And.Contain("Rechner");
-    }
-
     private static string Abschnitt(string generat, string name)
     {
         var i = generat.IndexOf("IReadOnlyList<Type> " + name, StringComparison.Ordinal);

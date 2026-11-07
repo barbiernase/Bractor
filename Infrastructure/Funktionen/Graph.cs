@@ -125,20 +125,17 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmg
     /// <summary>
     /// Je Graph eine Instanz unter seinem Namen — für Prüfstände ohne Umgebung (Tests); jeder Knoten mit den Standards bzw. der Konfig, die
     /// <paramref name="jeFunktion"/> für seine Funktion nennt. Ein Graph mit Quelle läuft nur, wenn sie für seine Quelle eine Konfig nennt (eine Quelle
-    /// braucht ihre Werte — welches Verzeichnis, welcher Takt). Mit <paramref name="akteure"/> dazu je Akteur mit Arbeit seine Instanz
-    /// (<see cref="Arbeit"/>).
+    /// braucht ihre Werte — welches Verzeichnis, welcher Takt).
     /// </summary>
-    public static GraphInstanzen JeGraphEine(IReadOnlyList<GraphPlan> graphen, IReadOnlyDictionary<string, KnotenKonfig>? jeFunktion = null,
-        IReadOnlyDictionary<string, Infrastructure.Akteure.AkteurRechte>? akteure = null) =>
+    public static GraphInstanzen JeGraphEine(IReadOnlyList<GraphPlan> graphen, IReadOnlyDictionary<string, KnotenKonfig>? jeFunktion = null) =>
         new(graphen.Where(g => g.Quelle is not { } q || jeFunktion?.ContainsKey(g.KnotenNamens(q)!.Funktion) == true)
             .Select(g => new GraphInstanz(g.Name, g, null, g.Knoten
                 .Where(k => jeFunktion?.ContainsKey(k.Funktion) == true)
-                .ToDictionary(k => k.Name, k => jeFunktion![k.Funktion])))
-            .Concat(akteure is null ? [] : Arbeit.Instanzen(akteure)).ToList());
+                .ToDictionary(k => k.Name, k => jeFunktion![k.Funktion]))).ToList());
 
     /// <summary>
-    /// Die Instanzen aus der Umgebung, geprüft; ein Fehler ist ein Boot-Fehler mit der Datei als Karte. Mit <paramref name="akteure"/> dazu je Akteur
-    /// mit Arbeit seine Instanz (<see cref="Arbeit"/>; ein Name, den schon eine Datei trägt, ist ein Boot-Fehler).
+    /// Die Instanzen aus der Umgebung, geprüft; ein Fehler ist ein Boot-Fehler mit der Datei als Karte. Mit <paramref name="akteure"/> wird der Akteur
+    /// einer Instanz geprüft: er darf, was sie verlässt.
     /// </summary>
     public static GraphInstanzen Aus(IReadOnlyDictionary<string, GraphInstanzKonfig> konfig, IReadOnlyList<GraphPlan> graphen,
         IReadOnlyDictionary<string, Infrastructure.Akteure.AkteurRechte>? akteure = null)
@@ -164,13 +161,6 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmg
                 throw new BootFehler($"Instanz {name}: Rechner '{r}' ist kein Name — ein Rechner ist genau ein Name (kein Muster, keine Liste).", Karte());
             alle.Add(new GraphInstanz(name, g, string.IsNullOrEmpty(k.Akteur) ? null : k.Akteur, k.Knoten, k.Rechner));
         }
-        if (akteure is not null)
-            foreach (var arbeit in Arbeit.Instanzen(akteure))
-            {
-                if (alle.Any(i => i.Name == arbeit.Name))
-                    throw new BootFehler($"Instanz {arbeit.Name}: der Name gehört dem Akteur {arbeit.Name}, dessen Arbeit eine eigene Instanz ist.", "instanz:" + arbeit.Name);
-                alle.Add(arbeit);
-            }
         foreach (var doppelt in alle.Where(i => i.Graph.MitCommandKopf).GroupBy(i => i.Graph.Name).Where(x => x.Count() > 1))
             throw new BootFehler($"Der Graph {doppelt.Key} hat einen Command-Kopf und läuft je Umgebung genau einmal — Instanzen: "
                 + string.Join(", ", doppelt.Select(i => i.Name)) + " (ein Command hat genau einen Empfänger).", "instanz:" + doppelt.Last().Name);

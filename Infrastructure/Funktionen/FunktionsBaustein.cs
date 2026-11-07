@@ -44,9 +44,6 @@ public sealed record FunktionsBaustein(
     FunktionsZustandsform? Zustand = null,
     int? Lausche = null)
 {
-    /// <summary>Rechnet draußen: die Arbeit eines Akteurs, eine Sitzung, die ihn verkörpert, gibt die Antwort.</summary>
-    public bool Draussen => Baue is null;
-
     /// <summary>Der Wirker im Log (Spur): <c>funktion:&lt;Name&gt;</c>.</summary>
     public string Wirker => WirkerId.FuerFunktion(Name);
 

@@ -268,8 +268,8 @@ app.MapPost("/api/werkbank/uhr", async (string versatz) =>
     }
     catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }); }
 });
-// ── DURCHSPIELEN (CLAUDE.md W6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Hand-Funktionen beantworten,
-//   Datei in den Pfad der Quelle legen, Uhr vorstellen, externe Worker starten. Die Formulare kommen aus dem gelesenen Code.
+// ── DURCHSPIELEN (CLAUDE.md W6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Datei in den Pfad der Quelle legen,
+//   Uhr vorstellen, externe Worker starten (die Clients, die auf Fakten reagieren). Die Formulare kommen aus dem gelesenen Code.
 var durchspielen = new Werkbank.Server.Durchspielen(werkbank);
 var worker = new Werkbank.Server.Worker(slnRoot);
 app.Lifetime.ApplicationStopping.Register(() => worker.StoppeAlleAsync().GetAwaiter().GetResult());
