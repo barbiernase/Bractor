@@ -24,7 +24,8 @@ public static class Reaktionslauf
         {
             try
             {
-                var proxy = new global::Client.Infrastructure.Connection.GrpcProxy(Leitung.GeneratedNutzlast.Instanz) { AkteurToken = token };
+                // Je Verbindung ein Proxy, geschlossen beim Ende — ein offener Stream hielte den Host beim Stoppen auf.
+                await using var proxy = new global::Client.Infrastructure.Connection.GrpcProxy(Leitung.GeneratedNutzlast.Instanz) { AkteurToken = token };
                 await proxy.ConnectAsync(adresse, Microsoft.Extensions.DependencyInjection.GeneratedWiring_Domain_Client_Worker.Vertrag,
                     Microsoft.Extensions.DependencyInjection.GeneratedWiring_Domain_Client_Worker.VertragHash);
                 melde?.Invoke($"verbunden mit {adresse}");
