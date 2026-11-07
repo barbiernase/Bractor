@@ -137,8 +137,7 @@ Katalog-Commands, und die Anbindung übersetzt. Drei lesen eine Projektion (`Ran
    wer einen Output nicht braucht, nimmt einen Graphen ohne ihn. Ein „verwerfen“ kommt erst, wenn ein echter Fall es verlangt.
 3. **Allgemeiner Katalog:** genau einer je Lösung, `Allgemein.Katalog`, nur Commands (keine Funktionen). Alternative: jeder Katalog darf die
    Commands jedes anderen nutzen, ohne besonderen Katalog.
-4. **Zwischenergebnisse anbinden** (ein Output, den im Graphen noch ein Knoten weiter nimmt): vorerst nicht, nur die Outputs des Graphen. Später
-   über den Typ möglich, ohne neue Code-API.
+4. **Zwischenergebnisse anbinden**: umgesetzt (Abgriff über den Typ, ohne neue Code-API) — an jedem Port eines Knotens dockt eine Übersetzung an.
 
 5. **Ein Output für eine andere Domäne:** ein Ablauf übersetzt nur in Commands der eigenen Domäne, so bleibt die Zuordnung eindeutig. Braucht
    eine zweite Domäne das Ergebnis, bekommt sie einen eigenen Ablauf (eigener Lauf), oder der Client stößt sie über die Projektion an.

@@ -875,3 +875,16 @@
 #de .fl-ue-z.offen{color:#ffb35c}
 #de .ue-modal{padding:18px 22px;max-width:760px}
 #de .ue-modal-k{font:700 13px ui-monospace,monospace;color:#d5e2f7;margin-bottom:12px}
+/* Der ganze Graph in der Ablauf-Karte: Spalten nach Tiefe, Knoten mit Ein- und Ausgangsports, jeder Fall eines OneOf ein Port */
+#de .gnode2.fk-ablauf{width:auto;min-width:330px}
+#de .fl-g{display:flex;gap:34px;align-items:flex-start;padding:8px 2px 4px}
+#de .fl-g-sp{display:flex;flex-direction:column;gap:12px}
+#de .fl-g-k{min-width:170px;background:#1d1830;border:1px solid #6a5ab0;border-radius:8px;padding:5px 0 4px}
+#de .fl-g-k.eigen{border-style:dashed;border-color:#8a7a5a;background:#1d1a14}
+#de .fl-g-t{font:700 11.5px ui-monospace,monospace;color:#e6defc;padding:0 8px 3px}
+#de .fl-g-r{font-size:10px;color:#9a8fc0;padding:0 8px 3px}
+#de .fl-g-ein{font:11px ui-monospace,monospace;color:#b9c7e0;padding:1px 8px}
+#de .fl-g-port{display:flex;align-items:center;gap:5px;justify-content:flex-end;font:11px ui-monospace,monospace;color:#d5e2f7;padding:1px 8px}
+#de .fl-g-port.s-hinweis{color:#e0a0c8}
+#de .fl-g-m{color:#ffd27a;font-size:10px}
+#de .fl-ab-plus.frei{border-color:#d9822b;color:#ffb35c}

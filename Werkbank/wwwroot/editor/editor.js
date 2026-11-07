@@ -2043,7 +2043,7 @@
     return false;}
   function flMarkiere(){if(!world)return;let n=0;world.classList.toggle("auswahl",!!FLPORT);
     world.querySelectorAll(".gnode2.fk").forEach(el=>{const fk=FLKARTE.get(el.dataset.id);if(!fk)return;let hat=false;
-      el.querySelectorAll(".fk-port[data-port]").forEach(pe=>{const i=pe.dataset.port.indexOf("|"),p=fk.ports.find(q=>q.richtung===pe.dataset.port.slice(0,i)&&q.typ===pe.dataset.port.slice(i+1));
+      el.querySelectorAll("[data-port]").forEach(pe=>{const i=pe.dataset.port.indexOf("|"),p=fk.ports.find(q=>q.richtung===pe.dataset.port.slice(0,i)&&q.typ===pe.dataset.port.slice(i+1));
         const ja=!!p&&flPassend(fk,p);pe.classList.toggle("kand",ja);if(ja){hat=true;n++;}});
       el.classList.toggle("kand-karte",hat);el.classList.toggle("leise",!!FLPORT&&!hat&&el.dataset.id!==(FLPORT&&FLPORT.karte));});
     return n;}
@@ -2090,22 +2090,30 @@
     eing.append(h("button",{class:"fl-ab-plus",title:"Wer stößt den Graphen an: ein Client (Akteur, Nachricht der Anwendung, Übersetzung in den Input) oder eine Quelle",
       onclick:e=>flEingang(ab,e)},"＋ Eingang"));
     box.append(eing);
-    // Der Katalog-Graph auf einer Ebene (Teilgraphen aufgefaltet); je Output, wohin er geht. Übersetzt wird in der Spalte Übersetzungen — hier steht
-    //   nur, ob ein Output schon übersetzt ist, und an einem offenen „＋ ↦“.
-    if(!zu){const fl=komFlach(schachtel.karte)||innen,knoten=[...fl.knoten].sort((a,b)=>a.tiefe-b.tiefe);
-      knoten.forEach(k=>{const f=k.karte&&k.karte.startsWith("fb:")?funModell(k.karte):null;
-        box.append(h("div",{class:"fl-ab-fn",title:f?"Doppelklick: im Katalog-Modal öffnen":"",ondblclick:()=>{if(f)katOeffne(funKatalog(f),f.name);}},
-          "ƒ "+k.name+(k.kopf&&!k.rahmen?" · Kopf":"")));
-        k.aus.forEach(t=>{const weiter=fl.kanten.filter(e=>e.von===k.name&&komBasis(e.typ)===komBasis(t)).map(e=>"ƒ "+e.nach),
-            raus=fl.ausgaenge.some(a=>komBasis(a.typ)===komBasis(t)&&a.knoten.includes(k.name)),sorte=komSorte(t);
-          const z=h("div",{class:"fl-ab-out"},h("span",{class:"fl-ab-t"},"└ "+(FL_SORTE[sorte]||"")+t));
-          if(weiter.length)z.append(h("span",{class:"fl-ab-w"},"→ "+weiter.join(", ")));
-          if(raus&&sorte==="hinweis")z.append(h("span",{class:"fl-ab-w"},"→ Akteure, die ihn hören"));
-          else if(raus&&ab.genommen(t).length)z.append(h("span",{class:"fl-ab-w"},"→ ƒ "+ab.genommen(t).join(", ")));
-          else if(raus){const n=ab.uebersetzt(t).length;
-            z.append(n?h("span",{class:"fl-ab-w"},"→ ↦ ("+n+")"):h("button",{class:"fl-ab-plus offen",title:"Offen — übersetzen in einen Command eines Aggregats dieser Domäne; die Übersetzung steht danach in der Spalte Übersetzungen",
-              onclick:e=>komCommandAn(fk.id,schachtel,t,e)},"＋ ↦"));}
-          box.append(z);});});}
+    // Der GANZE GRAPH (Konzept §4): die Knoten des Ablaufs auf einer Ebene (Teilgraphen aufgefaltet, ohne die Übersetzungen) nebeneinander nach
+    //   ihrer Tiefe; an jedem Knoten je Auf sein Eingang und jeder Fall seines Outputs als Port. An JEDEM Command-Port — auch einem Zwischenschritt —
+    //   dockt „＋ ↦“ eine Übersetzung an (Abgriff); sie steht danach in der Spalte Übersetzungen, die Kante beginnt an diesem Port (data-port). Die
+    //   Kanten im Graphen zeichnet flKanten (data-gport).
+    if(!zu){const F=komFlach(fk.id),istUe=n=>{const x=F.knoten.find(y=>y.name===n);return !!x&&x.art==="uebersetzung";};
+      const knoten=F.knoten.filter(k=>k.art!=="uebersetzung"),tiefen=[...new Set(knoten.map(k=>k.tiefe))].sort((x,y)=>x-y);
+      const gr=h("div",{class:"fl-g"});
+      tiefen.forEach(t=>{const sp=h("div",{class:"fl-g-sp"});
+        knoten.filter(k=>k.tiefe===t).sort((x,y)=>String(x.rahmen||"").localeCompare(String(y.rahmen||""))).forEach(k=>{
+          const f=k.karte&&k.karte.startsWith("fb:")?funModell(k.karte):null,o=komOrt(fk.id,k);
+          const kb=h("div",{class:"fl-g-k"+(k.graph===fk.id?" eigen":""),title:(k.rahmen?"aus ⬡ "+k.rahmen+" · ":"")+k.typ+(f?" — Doppelklick: im Katalog-Modal öffnen":""),
+            ondblclick:()=>{if(f&&funKatalog(f))katOeffne(funKatalog(f),f.name);else if(f)komKarte("fb:"+f._id,true);}},
+            h("div",{class:"fl-g-t"},(KOM_SYM[k.art]||"ƒ")+" "+(k.lokal||k.name)),k.rahmen?h("div",{class:"fl-g-r"},"⬡ "+k.rahmen):null);
+          komGruppen(k).forEach(g2=>{
+            if(g2.ein){const pe=h("div",{class:"fl-g-ein"},"◀ "+g2.ein);pe.dataset.gport="ein|"+k.name+"|"+komBasis(g2.ein);kb.append(pe);}
+            g2.aus.forEach(x=>{const typ=x.typ,sorte=komSorte(typ),n=F.kanten.filter(e=>e.von===k.name&&komBasis(e.typ)===komBasis(typ)&&istUe(e.nach)).length;
+              const ziel=(recByName(komBasis(typ))||{}).aggregat;
+              const pa=h("div",{class:"fl-g-port s-"+sorte},h("span",{class:"fl-g-pl"},(FL_SORTE[sorte]||"")+typ),x.mult?h("span",{class:"fl-g-m"},x.mult):null,
+                sorte==="command"&&!ziel?h("button",{class:"fl-ab-plus"+(n?"":" frei"),title:"Diese Nachricht in einen Command eines Aggregats dieser Domäne übersetzen — auch ein Zwischenschritt; die Übersetzung steht in der Spalte Übersetzungen",
+                  onclick:e=>{e.stopPropagation();komCommandAn(fk.id,o.id===fk.id?{...k,name:o.name}:schachtel,typ,e);}},n?"↦ "+n+" ＋":"＋ ↦"):null);
+              pa.dataset.gport="aus|"+k.name+"|"+komBasis(typ);pa.dataset.port="aus|"+typ;kb.append(pa);});});
+          sp.append(kb);});
+        gr.append(sp);});
+      box.append(gr);}
     return box;}
   // ＋ Eingang am Ablauf: ein Client (die Übersetzung aus einer Nachricht der Anwendung in den Input des Graphen, dann der Akteur) oder eine Quelle,
   //   deren Meldung der Input ist (sie speist den Graphen, er nimmt dann nicht mehr von außen).
@@ -2161,7 +2169,8 @@
     fk.ports.filter(p=>p.richtung==="ein").forEach(p=>ports.append(zeile(p)));
     if(fk.art==="akteur"&&fk.spalte==="eingang")ports.append(plus("ein","＋ hört","hoert"));
     if(fk.art==="projektion")ports.append(plus("ein","＋ Event","event"));
-    fk.ports.filter(p=>p.richtung==="aus").forEach(p=>ports.append(zeile(p)));
+    // Steht ein Ausgang schon im Graphen der Karte (Ablauf aufgeklappt), hängt seine Kante dort — keine zweite Zeile.
+    fk.ports.filter(p=>p.richtung==="aus"&&!el.querySelector('.fl-g [data-port="'+CSS.escape("aus|"+p.typ)+'"]')).forEach(p=>ports.append(zeile(p)));
     if(fk.art==="akteur"&&fk.spalte==="ausgang")ports.append(plus("aus","＋ darf","darf"));
     if(ports.childNodes.length)el.append(ports);
     return el;
@@ -2237,8 +2246,17 @@
   //   „liest“ vom Graphen zur Store-Gruppe.
   function flKanten(frag){
     const ELS=new Map([...world.querySelectorAll(".gnode2.fk")].map(e=>[e.dataset.id,e])),SP=FL().spalten;
+    // Der Punkt eines Ports in Weltkoordinaten — aus seiner Lage in der Karte (auch tief im Graphen einer Ablauf-Karte), durch den Zoom geteilt.
+    const lage=(e,p,ri,innen)=>{const q=e.getBoundingClientRect(),r=p.getBoundingClientRect(),s=PAN.s||1;
+      return {x:e.offsetLeft+(innen?(ri==="aus"?r.right:r.left)-q.left:(ri==="aus"?q.width:0))/s,y:e.offsetTop+(r.top+r.height/2-q.top)/s};};
     const punkt=(id,ri,typ)=>{const e=ELS.get(id);if(!e)return null;const p=e.querySelector('[data-port="'+CSS.escape(ri+"|"+typ)+'"]');
-      return {x:e.offsetLeft+(ri==="aus"?e.offsetWidth:0),y:e.offsetTop+(p?p.offsetTop+p.offsetHeight/2:14)};};
+      if(!p)return {x:e.offsetLeft+(ri==="aus"?e.offsetWidth:0),y:e.offsetTop+14};return lage(e,p,ri,!!p.closest(".fl-g"));};
+    // Die Kanten im Graphen einer Ablauf-Karte: vom Output-Port eines Knotens zum Eingang des nächsten.
+    world.querySelectorAll(".gnode2.fk-ablauf").forEach(e=>{const F=komFlach(e.dataset.id);if(!F)return;
+      F.kanten.forEach(k=>{const a=e.querySelector('[data-gport="'+CSS.escape("aus|"+k.von+"|"+komBasis(k.typ))+'"]'),b=e.querySelector('[data-gport="'+CSS.escape("ein|"+k.nach+"|"+komBasis(k.typ))+'"]');
+        if(!a||!b)return;const A=lage(e,a,"aus",true),B=lage(e,b,"ein",true),c=Math.max(20,Math.abs(B.x-A.x)*0.5);
+        const p=document.createElementNS(SVGNS,"path");p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y);
+        p.setAttribute("fill","none");p.setAttribute("stroke","#8f7fd0");p.setAttribute("stroke-width","1.6");if(k.verlierbar)p.setAttribute("stroke-dasharray","5 4");frag.append(p);});});
     const band=id=>{const k=FLKARTE.get(id);return k&&k.band!==undefined?FLGEO.baender.find(b=>b.id===(k.band||null)):null;};
     const ix=id=>{const k=FLKARTE.get(id);return k?SP.indexOf(k.spalte):-1;};
     FL().kanten.forEach((k,i)=>{const st=FL_KANTE[k.art]||FL_KANTE.schreiben;let d;

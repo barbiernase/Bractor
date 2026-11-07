@@ -107,8 +107,13 @@ public sealed partial class Sicht
             knoten.Add(o);
         }
         // Wo eine Kante an einer Schachtel tatsächlich beginnt bzw. endet: an den Knoten ihrer Ausgänge bzw. Köpfe für diesen Typ.
-        IEnumerable<string> Quellen(string n, string typ) => innen.TryGetValue(n, out var f)
-            ? Alle(f["ausgaenge"]).Where(a => Basis(S(a, "typ")) == Basis(typ)).SelectMany(a => L(a, "knoten")).Distinct() : [pfad + n];
+        // Ein Ausgang der Schachtel kommt von seinen Knoten; ein Zwischenstand (Abgriff einer Übersetzung) von dem inneren Knoten, der ihn ausgibt.
+        IEnumerable<string> Quellen(string n, string typ)
+        {
+            if (!innen.TryGetValue(n, out var f)) return [pfad + n];
+            var raus = Alle(f["ausgaenge"]).Where(a => Basis(S(a, "typ")) == Basis(typ)).SelectMany(a => L(a, "knoten")).Distinct().ToList();
+            return raus.Count > 0 ? raus : Alle(f["knoten"]).Where(x => L(x, "aus").Any(a => Basis(a) == Basis(typ))).Select(x => S(x, "name")).ToList();
+        }
         IEnumerable<string> Ziele(string n, string typ) => innen.TryGetValue(n, out var f)
             ? Alle(f["koepfe"]).Where(a => Basis(S(a, "typ")) == Basis(typ)).SelectMany(a => L(a, "knoten")).Distinct() : [pfad + n];
         foreach (var e in Alle(k["kanten"]))
@@ -159,8 +164,12 @@ public sealed partial class Sicht
         foreach (var kn in knoten)
         {
             var n = S(kn, "name");
+            // Eine Übersetzung, die einen Graphen nennt, greift auch seine Zwischenstände ab (Abgriff, Graphform): alles, was seine Funktionen ausgeben.
+            var abgriff = uebersetzungen.ContainsKey(n);
             foreach (var v in L(kn, "von").Where(ports.ContainsKey))
-                foreach (var a in ports[v].Aus)
+                foreach (var a in abgriff && ports[v].Art == "graph" && GraphNamens(Basis(typVon[v])) is { } ig
+                             ? ports[v].Aus.Concat(InnereFunktionen(ig).SelectMany(f => Alle(f["eingaenge"]).SelectMany(e => L(e, "ausgaben")))).Distinct().ToList()
+                             : ports[v].Aus)
                     foreach (var t in ports[n].Ein.Where(e => e == a || (Basis(e) == Basis(a) && Args(a).Length > 0 && Args(e) == Args(typVon[v]))))
                     {
                         innen.Add(v + "|" + Basis(t));

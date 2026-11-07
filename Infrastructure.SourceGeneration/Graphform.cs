@@ -21,7 +21,9 @@ namespace Infrastructure.SourceGeneration
     /// im Logik-Code. Eine Kante ist gesichert, mit <c>Verlierbar = true</c> an ihrem <c>[Von]</c> verlierbar.</para>
     /// <para>Ein Knoten kann auch eine ÜBERSETZUNG sein (<c>Uebersetze&lt;TEin, TAus&gt;</c>, <see cref="Uebersetzungsform"/>): eine Operation, die
     /// <c>TEin</c> nimmt und genau ein <c>TAus</c> gibt; für Kanten, Köpfe und Ausgänge gelten dieselben Regeln. Ihre Zuordnung prüfen eigene Regeln
-    /// (<see cref="Form.Regelfehler"/>).</para>
+    /// (<see cref="Form.Regelfehler"/>). Nennt eine Übersetzung eine Schachtel in <c>[Von]</c>, nimmt sie ihren Typ auch als ZWISCHENSTAND (Abgriff):
+    /// ist er kein Ausgang der Schachtel, von dem einen inneren Knoten, der ihn ausgibt (mehrere sind ein Fehler) — so lässt sich jede Nachricht eines
+    /// Graphen aus dem Katalog in die Domäne übersetzen, auch eine, die im Graphen weiterläuft.</para>
     /// </summary>
     internal static class Graphform
     {
@@ -369,6 +371,20 @@ namespace Infrastructure.SourceGeneration
                     var quelle = s.Glieder.FirstOrDefault(x => x.Name == name);
                     if (quelle == null) continue;   // kein Knoten (gemeldet) oder einer mit Formfehler
                     var aus = Ausgaenge(quelle);
+                    // ABGRIFF (docs/konzept-funktionen-im-editor.md §4.2): eine Übersetzung, die eine Schachtel nennt, nimmt ihren Typ auch als
+                    //   Zwischenstand — von dem einen inneren Knoten, der ihn ausgibt, wenn er kein Ausgang der Schachtel ist. Den Port wählt der Typ.
+                    if (glied.Knoten?.Uebersetzung != null && quelle.Innen != null)
+                        foreach (var (pk, pop, port) in ports)
+                        {
+                            if (aus.Any(a => port.Typen.Any(y => V(y) == V(a.Typ)))) continue;
+                            var innen = AlleAusgaben(quelle.Innen).Where(a => port.Typen.Any(y => V(y) == V(a.Typ))).ToList();
+                            var erzeuger = innen.Select(a => a.Knoten).Distinct().ToList();
+                            if (erzeuger.Count > 1)
+                                g.Fehler.Add(($"'{glied.Name}' greift {Liste(port.Typen)} aus '{name}' ab, aber {erzeuger.Count} Knoten darin geben ihn aus "
+                                    + $"({string.Join(", ", erzeuger.Select(k => k.Name))}) — ein Zwischenstand wird über seinen Typ gewählt: gleiche Bedeutung heißt "
+                                    + "gleicher Typ, verschiedene Bedeutung verschiedene Typen", glied.Ort));
+                            else aus = aus.Concat(innen).ToList();
+                        }
                     var speist = false;
                     foreach (var (vk, vop, x) in aus)
                         foreach (var (nk, nop, port) in ports.Where(z => z.Port.Typen.Any(y => V(y) == V(x))))
@@ -417,6 +433,11 @@ namespace Infrastructure.SourceGeneration
         private static List<(Knoten Knoten, Operation Op, Funktionsform.Port Port)> Eingaenge(Glied glied) =>
             glied.Innen != null ? glied.Innen.Offen
                 : glied.Knoten!.Operationen.SelectMany(o => o.Auf.Ports.Select(p => (glied.Knoten, o, p))).ToList();
+
+        /// <summary>Was alle Knoten einer Schachtel (auch tief darin) an Commands ohne Ziel ausgeben — Ausgänge wie Zwischenstände (Abgriff).</summary>
+        private static List<(Knoten Knoten, Operation Op, INamedTypeSymbol Typ)> AlleAusgaben(Schachtel s) =>
+            s.Glieder.SelectMany(gl => gl.Innen != null ? AlleAusgaben(gl.Innen)
+                : gl.Knoten!.Operationen.SelectMany(o => o.Ausgaben.Where(Funktionsform.IstCommandOhneZiel).Select(x => (gl.Knoten, o, x)))).ToList();
 
         /// <summary>Was ein Glied an Commands ohne Ziel ausgibt (je Erzeuger): die eines Knotens bzw. die Ausgänge eines inneren Graphen.</summary>
         private static List<(Knoten Knoten, Operation Op, INamedTypeSymbol Typ)> Ausgaenge(Glied glied) =>

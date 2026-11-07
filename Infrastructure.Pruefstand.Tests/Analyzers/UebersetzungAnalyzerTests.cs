@@ -54,6 +54,33 @@ public class UebersetzungAnalyzerTests
                 [Von(nameof(R)), Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] Uebersetze<Gerechnet, Buche> Hinaus) : IGraph;
             """)).Should().BeEmpty("Bezug ⇄ Konto ausdrücklich (Id ⇄ Guid), Betrag nach Namen (int → int bzw. int → decimal erweitert), Faktor und Text aus dem Standard");
 
+    // ABGRIFF (docs/konzept-funktionen-im-editor.md §4.2): eine Übersetzung, die eine Schachtel nennt, nimmt ihren Typ auch als Zwischenstand —
+    //   von dem einen inneren Knoten, der ihn ausgibt; geben ihn mehrere aus, ist das ein Fehler (gleiche Bedeutung = gleicher Typ).
+    private const string Kette = """
+        public record Weiter(Guid Bezug, int Betrag) : ICommand;
+        public sealed class Zweiter : IFunktion { public Weiter Auf(Gerechnet g) => default!; }
+        public sealed class Nochmal : IFunktion { public Gerechnet Auf(Gerechnet g) => default!; }
+        public sealed record Kette([Kopf] Rechner R, [Von(nameof(R))] Zweiter Z) : IGraph;
+        """;
+
+    [Fact]
+    public async Task Eine_Uebersetzung_greift_einen_Zwischenstand_aus_der_Schachtel_ab()
+        => (await Befunde(Kette + """
+            public sealed record Ablauf([Kopf] Kette K,
+                [Von(nameof(K)), Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] Uebersetze<Gerechnet, Buche> Mitte,
+                [Von(nameof(K)), Feld(nameof(Buche.AggregateId), nameof(Weiter.Bezug))] Uebersetze<Weiter, Buche> Ende) : IGraph;
+            """)).Should().BeEmpty("Gerechnet läuft in der Kette weiter (zu Z) und wird zugleich übersetzt; Weiter ist ihr Ausgang");
+
+    [Fact]
+    public async Task Ein_Zwischenstand_von_zwei_inneren_Knoten_ist_mehrdeutig()
+    {
+        var befunde = await Befunde(Kette.Replace("[Von(nameof(R))] Zweiter Z", "[Von(nameof(R))] Nochmal N, [Von(nameof(N))] Zweiter Z") + """
+            public sealed record Ablauf([Kopf] Kette K,
+                [Von(nameof(K)), Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] Uebersetze<Gerechnet, Buche> Mitte) : IGraph;
+            """);
+        befunde.Should().Contain(b => b.Id == "CQRS115" && b.Text.Contains("greift Gerechnet aus 'K' ab") && b.Text.Contains("2 Knoten"));
+    }
+
     [Fact]
     public async Task Ein_Parameter_ohne_Quelle_ist_CQRS119()
     {
