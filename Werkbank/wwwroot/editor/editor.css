@@ -865,3 +865,13 @@
 #de .fl-ab-ue{color:#7fd39a;background:#14261b;border:1px solid #2f6b44;border-radius:5px;padding:0 5px;cursor:pointer}
 #de .fl-ab-plus{background:transparent;border:1px solid #4b3f7a;color:#b9a9f0;border-radius:5px;padding:0 6px;font-size:10px;cursor:pointer}
 #de .fl-ab-plus.offen{border-color:#d9822b;color:#ffb35c;background:#2a1c0e}
+/* Teilgraph auf einer Ebene: ein Rahmen um seine Knoten im Graph-Modal */
+#de .kom-rahmen{position:absolute;box-sizing:border-box;border:1.5px dashed #6a5ab0;border-radius:12px;background:#7a63c80d;z-index:0}
+#de .kom-rahmen-t{position:absolute;left:10px;top:5px;font:700 11px ui-monospace,monospace;color:#b9a9f0;cursor:default}
+#de .kom-welt>.kom-k{z-index:1}
+/* Übersetzung in der Spalte Übersetzungen und ihr kleines Modal */
+#de .gnode2.fk-uebersetzung{border-color:#2f6b44;background:#121d16}
+#de .fl-ue-z{margin:2px 10px 6px;font-size:11px;color:#7fd39a}
+#de .fl-ue-z.offen{color:#ffb35c}
+#de .ue-modal{padding:18px 22px;max-width:760px}
+#de .ue-modal-k{font:700 13px ui-monospace,monospace;color:#d5e2f7;margin-bottom:12px}

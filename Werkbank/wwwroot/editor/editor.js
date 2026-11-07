@@ -2010,14 +2010,15 @@
   //   Akteuren kommt. Karten, Ports, Bänder und Kanten rechnet der Server (board.sicht.flaeche); hier nur Anordnung und Zeichnen. Eine Karte der
   //   Fläche öffnet (Doppelklick) die Karte der Sicht dahinter im Modal, ein Port den Typ seiner Nachricht; ein Klick hebt die Kette hervor.
   const FL_SPALTE={ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf)",neu:["akteur","client"]},quellen:{t:"Quellen",u:"lauschen am Kopf eines Graphen",neu:["quelle"]},
-    graphen:{t:"Graphen",u:"rechnen vor dem Aggregat",neu:["graph"]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
+    graphen:{t:"Graphen",u:"rechnen vor dem Aggregat",neu:["graph"]},
+    uebersetzungen:{t:"Übersetzungen",u:"Output eines Graphen ↦ Command eines Aggregats",neu:[]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
     projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["store"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört)",neu:["akteur"]}};
-  const FL_SYM={akteur:"👤",quelle:"⚡",graph:"⬡",aggregate:"▣",projektion:"⇶",reader:"⌕",store:"🗄"};
+  const FL_SYM={akteur:"👤",quelle:"⚡",graph:"⬡",uebersetzung:"↦",aggregate:"▣",projektion:"⇶",reader:"⌕",store:"🗄"};
   const FL_SORTE={command:"",event:"",hinweis:"✉ ",query:"? ",antwort:"↩ ",frist:"⏱ "};
   // Kantenarten: Farbe, Strich, leise (tritt zurück, bis eine ihrer Karten gewählt ist).
   const FL_KANTE={schreiben:{c:"#9aa6bb"},quelle:{c:"#9aa6bb"},lesen:{c:"#7aa2e0",d:"2 4",leise:1},kenntnis:{c:"#8a8f9c",d:"6 4",leise:1},
     arbeit:{c:"#4fb06a"},ruecklauf:{c:"#e08a3c",d:"8 5"},liest:{c:"#a07ad6",d:"1 4",leise:1}};
-  const FL_LEER={spalten:["ausgang","quellen","graphen","aggregate","projektionen","eingang"],baender:[],gruppen:[],karten:[],kanten:[]};
+  const FL_LEER={spalten:["ausgang","quellen","graphen","uebersetzungen","aggregate","projektionen","eingang"],baender:[],gruppen:[],karten:[],kanten:[]};
   const FL=()=>SICHT().flaeche||FL_LEER;
   const FL_KOPF=96, FL_BAND_PAD=30, FL_GAP_Y=16, FL_GR_KOPF=22, FL_GR_PAD=10;
   let FLGEO={spalten:{},baender:[],gruppen:new Map()}, FLKARTE=new Map();
@@ -2069,8 +2070,10 @@
     // Die Übersetzungen hinter der Schachtel: je Typ, den sie nimmt, die Knoten mit ihrem Command.
     const ue=d.knoten.filter(k=>k.art==="uebersetzung"&&d.kanten.some(e=>e.von===schachtel.name&&e.nach===k.name));
     const uebersetzt=t=>ue.filter(k=>komBasis(k.ein[0])===komBasis(t));
-    const offen=innen.ausgaenge.filter(a=>a.sorte==="command"&&!uebersetzt(a.typ).length);
-    return {id:gid,g,d,schachtel,innen,uebersetzt,offen,dom:ablaufDomaene(g.namespace)};}
+    // Ein Knoten des Ablaufs selbst, der einen Output nimmt (eine Funktion der Anwendung, bis der Bestand umgezogen ist).
+    const genommen=t=>d.kanten.filter(e=>e.von===schachtel.name&&komBasis(e.typ)===komBasis(t)&&!ue.some(u=>u.name===e.nach)).map(e=>e.nach);
+    const offen=innen.ausgaenge.filter(a=>a.sorte==="command"&&!uebersetzt(a.typ).length&&!genommen(a.typ).length);
+    return {id:gid,g,d,schachtel,innen,uebersetzt,genommen,offen,dom:ablaufDomaene(g.namespace)};}
   function ablaeufeDerDomaene(dom){return (MODEL.graphen||[]).map(g=>ablaufVon("gr:"+g._id)).filter(a=>a&&a.dom===dom);}
   function flAblaufInnen(fk){const ab=ablaufVon(fk.id);if(!ab)return null;const {d,schachtel,innen}=ab;
     const zu=(ANSICHT.ablaufZu||[]).includes(ab.g.name),box=h("div",{class:"fl-ablauf"});
@@ -2087,19 +2090,20 @@
     eing.append(h("button",{class:"fl-ab-plus",title:"Wer stößt den Graphen an: ein Client (Akteur, Nachricht der Anwendung, Übersetzung in den Input) oder eine Quelle",
       onclick:e=>flEingang(ab,e)},"＋ Eingang"));
     box.append(eing);
-    if(!zu){const knoten=[...innen.knoten].sort((a,b)=>a.tiefe-b.tiefe);
+    // Der Katalog-Graph auf einer Ebene (Teilgraphen aufgefaltet); je Output, wohin er geht. Übersetzt wird in der Spalte Übersetzungen — hier steht
+    //   nur, ob ein Output schon übersetzt ist, und an einem offenen „＋ ↦“.
+    if(!zu){const fl=komFlach(schachtel.karte)||innen,knoten=[...fl.knoten].sort((a,b)=>a.tiefe-b.tiefe);
       knoten.forEach(k=>{const f=k.karte&&k.karte.startsWith("fb:")?funModell(k.karte):null;
-        box.append(h("div",{class:"fl-ab-fn",title:f?"Doppelklick: im Katalog-Modal öffnen":"",ondblclick:()=>{if(f)katOeffne(funKatalog(f),f.name);else if(k.art==="graph"&&k.karte)komOeffne(k.karte);}},
-          (k.art==="graph"?"⬡ ":"ƒ ")+k.name+(k.kopf?" · Kopf":"")));
-        k.aus.forEach(t=>{const weiter=innen.kanten.filter(e=>e.von===k.name&&komBasis(e.typ)===komBasis(t)).map(e=>"ƒ "+e.nach),
-            raus=innen.ausgaenge.some(a=>komBasis(a.typ)===komBasis(t)&&a.knoten.includes(k.name)),sorte=komSorte(t);
+        box.append(h("div",{class:"fl-ab-fn",title:f?"Doppelklick: im Katalog-Modal öffnen":"",ondblclick:()=>{if(f)katOeffne(funKatalog(f),f.name);}},
+          "ƒ "+k.name+(k.kopf&&!k.rahmen?" · Kopf":"")));
+        k.aus.forEach(t=>{const weiter=fl.kanten.filter(e=>e.von===k.name&&komBasis(e.typ)===komBasis(t)).map(e=>"ƒ "+e.nach),
+            raus=fl.ausgaenge.some(a=>komBasis(a.typ)===komBasis(t)&&a.knoten.includes(k.name)),sorte=komSorte(t);
           const z=h("div",{class:"fl-ab-out"},h("span",{class:"fl-ab-t"},"└ "+(FL_SORTE[sorte]||"")+t));
           if(weiter.length)z.append(h("span",{class:"fl-ab-w"},"→ "+weiter.join(", ")));
           if(raus&&sorte==="hinweis")z.append(h("span",{class:"fl-ab-w"},"→ Akteure, die ihn hören"));
-          else if(raus){const ues=ab.uebersetzt(t);
-            ues.forEach(u=>{const c=komBasis(u.aus[0]||""),r=recByName(c)||{};z.append(h("span",{class:"fl-ab-ue",title:"Übersetzung "+u.name+" — Klick: im Ablauf öffnen",
-              onclick:()=>komOeffne(fk.id,u.name)},"↦ "+c+(r.aggregat?" ▣ "+r.aggregat:"")));});
-            z.append(h("button",{class:"fl-ab-plus"+(ues.length?"":" offen"),title:ues.length?"Noch eine Übersetzung (Gabel)":"Offen — übersetzen in einen Command eines Aggregats dieser Domäne (sonst baut der Ablauf nicht)",
+          else if(raus&&ab.genommen(t).length)z.append(h("span",{class:"fl-ab-w"},"→ ƒ "+ab.genommen(t).join(", ")));
+          else if(raus){const n=ab.uebersetzt(t).length;
+            z.append(n?h("span",{class:"fl-ab-w"},"→ ↦ ("+n+")"):h("button",{class:"fl-ab-plus offen",title:"Offen — übersetzen in einen Command eines Aggregats dieser Domäne; die Übersetzung steht danach in der Spalte Übersetzungen",
               onclick:e=>komCommandAn(fk.id,schachtel,t,e)},"＋ ↦"));}
           box.append(z);});});}
     return box;}
@@ -2117,11 +2121,13 @@
     const dg=n?diagFuer(n.id):[],nurWarn=dg.length>0&&dg.every(x=>x.art==="warnung");
     const el=h("div",{class:"gnode2 fk fk-"+fk.art+" n-"+(fk.art==="quelle"?"funktion":fk.art)+(dg.length?(nurWarn?" diagwarn":" diag"):"")});
     el.dataset.id=fk.id;el.dataset.karte=pid||"";
-    const loeschbar=n&&fk.art!=="quelle"&&fk.spalte!=="eingang";
+    const loeschbar=n&&fk.art!=="quelle"&&fk.art!=="uebersetzung"&&fk.spalte!=="eingang";
     const head=h("div",{class:"ghead"},
       h("span",{class:"gtitle hatname",title:(NODELABEL[n?n.kind:fk.art]||fk.art)+" · "+fk.name+(pid?" — Klick: Kette · Doppelklick: öffnen":"")},
         h("span",{class:"gk"},(FL_SYM[fk.art]||"")+" "),h("span",{class:"gn"},fk.name)),
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
+      fk.art==="uebersetzung"?h("span",{class:"gx",title:"Die Übersetzung entfernen — der Output des Graphen ist danach wieder offen",
+        onclick:e=>{e.stopPropagation();menueFix(e.clientX,e.clientY,"✕ ↦ "+fk.name,[{t:"✕ Übersetzung entfernen",gefahr:1,fn:()=>komKnotenEntfernen(fk.karte,fk.name)}]);}},"✕"):null,
       fk.art==="graph"||fk.art==="aggregate"||fk.gruppe?h("span",{class:"gx fk-kom",title:fk.art==="graph"?"Komposition öffnen (Doppelklick)":"Von innen öffnen (Doppelklick)",
         onclick:e=>{e.stopPropagation();flInnen(fk);}},"⧉"):null,
       loeschbar?h("span",{class:"gx",title:"Löschen",onclick:e=>{e.stopPropagation();delNode(n);}},"✕"):null);
@@ -2136,6 +2142,10 @@
       if(inst.length)el.append(h("div",{class:"fk-chips"},...inst.map(i=>h("button",{class:"fk-chip",title:"Instanz "+i+" — Klick: Panel",
         onclick:e=>{e.stopPropagation();komKarte("host:inst:"+i);}},"⬡ "+i))));}
     if(fk.art==="graph"){const inn=flAblaufInnen(fk);if(inn){el.classList.add("fk-ablauf");el.append(inn);}}
+    if(fk.art==="uebersetzung"){const k=((komDaten(fk.karte)||{}).knoten||[]).find(x=>x.name===fk.name),u=k&&k.uebersetzung;
+      if(u){const offen=(u.ziele||[]).filter(z=>!["feld","name","standard"].includes(z.regel)).length||(u.fehler||[]).length;
+        el.append(h("div",{class:"fl-ue-z"+(offen?" offen":""),title:"Doppelklick: die Feldzuordnung",ondblclick:e=>{e.stopPropagation();ueOeffne(fk);}},
+          offen?"⚠ "+offen+" Feld"+(offen>1?"er":"")+" offen":"✓ alle Felder zugeordnet"));}}
     const ports=h("div",{class:"fk-ports"});
     const zeile=p=>{const rid="rec:"+String(p.typ).split("<")[0],hat=NODEBY.has(rid);
       const r=h("div",{class:"fk-port "+p.richtung+" s-"+p.sorte+(p.eigen?" eigen":""),
@@ -2197,7 +2207,7 @@
   function flRahmen(ebene){const aus={x2:0,y2:0};
     FL().spalten.forEach(s=>{const g=FLGEO.spalten[s];if(!g)return;const d=FL_SPALTE[s];
       const neu=e=>{e.stopPropagation();if(d.neu[0]==="store"){stoNeuAnlegen(e);return;}if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
-      const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋")),h("div",{class:"fl-u"},d.u),
+      const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),d.neu.length?h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋"):null),h("div",{class:"fl-u"},d.u),
         s==="ausgang"&&MODEL.clients.length?h("div",{class:"fk-chips"},...MODEL.clients.map(c=>h("button",{class:"fk-chip",title:"Client "+c.name+" verkörpert "+(c.verkoerpert||[]).join(", ")+" — Klick: Panel",
           onclick:e=>{e.stopPropagation();komKarte("cl:"+c._id);}},"🔌 "+clientAnzeige(c)))):null);
       Object.assign(k.style,{left:g.x+"px",top:"0px",width:g.w+"px"});ebene.append(k);aus.x2=Math.max(aus.x2,g.x+g.w);});
@@ -2254,6 +2264,10 @@
   //   Instanzen. Alles aus board.sicht.komposition und board.sicht.baukasten; ein Graph im Graphen öffnet eine Ebene tiefer (Brotkrumen).
   let KOM=null;   // {pfad:[Graph-Karten-Id …], reiter:"komposition"|"instanzen", wahl:{art:"knoten",name}|{art:"baustein",gruppe,name}|null}
   const komDaten=id=>(SICHT().komposition||{})[id];
+  // Ein Graph auf einer Ebene (docs/konzept-funktionen-im-editor.md §3): seine Teilgraphen aufgefaltet (board.sicht.komposition[…].flach) — jeder
+  //   Knoten mit Pfad als Namen, seinem lokalen Namen und dem Graphen, dem er gehört; Gesten treffen diesen Graphen (komOrt).
+  const komFlach=id=>{const d=komDaten(id);return d&&d.flach?{...d,...d.flach}:d;};
+  const komOrt=(id,k)=>({id:(k&&k.graph)||id,name:(k&&k.lokal)||(k&&k.name)});
   const KOM_LEER={funktionen:[],graphen:[],katalog:[],technik:[],konfig:[],nachrichten:[]};
   const komBaukasten=()=>SICHT().baukasten||KOM_LEER;
   const komBasis=t=>String(t||"").split("<")[0];
@@ -2271,11 +2285,22 @@
   // Ein Graph, der gerade angelegt wurde und sich öffnen soll, sobald der Server seine Komposition liefert.
   let KOM_NACH=null;
   // Öffnen: der Pfad von der obersten Graph-Karte hinab (über die Eltern), optional ein Knoten gewählt.
-  function komOeffne(grId,knoten){const pfad=[grId];
+  function komOeffne(grId,knoten){const ab=ablaufVon(grId);if(ab){grId=ab.schachtel.karte;knoten=null;}const pfad=[grId];
     for(let i=0;i<8;i++){const d=komDaten(pfad[0]);if(!d||!d.eltern.length||FLKARTE.has(pfad[0]))break;pfad.unshift(d.eltern[0]);}
     KOM={pfad,reiter:"komposition",wahl:knoten?{art:"knoten",name:knoten}:null};komZeige();}
   // Von innen öffnen: ein Graph seine Komposition, ein Aggregat sich selbst, Projektion und Reader ihren Store (mit ihnen gewählt).
-  function flInnen(fk){if(fk.art==="graph"){komOeffne(fk.id);return;}const pid=flPanelId(fk);if(pid)komKarte(pid);}
+  function flInnen(fk){if(fk.art==="graph"){komOeffne(fk.id);return;}if(fk.art==="uebersetzung"){ueOeffne(fk);return;}const pid=flPanelId(fk);if(pid)komKarte(pid);}
+  // ══ ÜBERSETZUNG auf der Fläche (Konzept §4): eine Karte in der Spalte Übersetzungen, zwischen dem Output eines Graphen und dem Command eines
+  //   Aggregats. Im Code ist sie ein Knoten Uebersetze<TEin, TAus> des Ablaufs der Domäne (fk.karte); ihre Feldzuordnung öffnet ein kleines Modal
+  //   (Pfad „ue:<Ablauf>|<Knoten>“), die ↦-Karte von links Felder von TEin, rechts Parameter von TAus.
+  const ueTeile=id=>{const i=id.indexOf("|");return {gid:id.slice(3,i),knoten:id.slice(i+1)};};
+  function ueOeffne(fk){const id="ue:"+fk.karte+"|"+fk.name;if(KOM)KOM.pfad.push(id);else KOM={pfad:[id],reiter:"komposition",wahl:null};KOM.port=null;KOM.feld=null;komZeige();}
+  function ueZeige(de,id){const {gid,knoten}=ueTeile(id),d=komDaten(gid),k=d&&d.knoten.find(x=>x.name===knoten);if(!k||!k.uebersetzung){KOM.pfad.pop();if(!KOM.pfad.length)KOM=null;return;}
+    const m=komRahmen("Feld für Feld, ohne Logik: „=“ nach Namen, „⇐“ ausdrücklich ([Feld]), „∅“ Standardwert, „⚠“ offen — ＋ an einem offenen Ziel hebt passende Felder hervor");
+    m.append(h("div",{class:"kom-leib form"},h("div",{class:"ue-modal"},h("div",{class:"ue-modal-k"},"↦ "+knoten+" im Ablauf ⬡ "+d.name),komUebersetzungEl(gid,k),
+      h("div",{class:"kom-akte"},h("button",{class:"kom-akt gm-gefahr",title:"Die Übersetzung aus dem Ablauf nehmen — der Output ist danach wieder offen",
+        onclick:()=>{komKnotenEntfernen(gid,knoten);KOM.pfad.pop();if(!KOM.pfad.length)komSchliesse();else komZeige();}},"✕ Übersetzung entfernen")))));
+    de.append(m);}
   function komSchliesse(){KOM=null;const m=document.querySelector("#de .kom");if(m)m.remove();}
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&KOM){e.stopImmediatePropagation();if(KOM.port||KOM.feld){KOM.port=null;KOM.feld=null;komZeige();}else komSchliesse();}},true);
   // Woher ein Kopf kommt und wohin ein Ausgang geht: die Kanten der obersten Graph-Karte auf der Fläche.
@@ -2300,7 +2325,7 @@
     if(gr==="konfig"||gr==="nachrichten"){komKarte("rec:"+(x.name||x.typ),true,true);return;}
     deFlash("ℹ "+x.name+" (Katalog) meldet "+(x.meldet||[]).join(", ")+" — ziehen Sie sie auf die Leinwand",true);}
   // Brotkrumen über alle Ansichten des Pfads: Graph, Aggregat, Store, Formular einer Karte.
-  function komKrumenText(g){if(g.startsWith("kat:"))return "📚 "+(g.slice(4).replace(/\.Katalog$/,"")||"Kataloge");if(g.startsWith("form:")){const n=NODEBY.get(g.slice(5));return "✎ "+(n?(NODELABEL[n.kind]||n.kind)+" "+(n.name||""):g.slice(5));}
+  function komKrumenText(g){if(g.startsWith("ue:"))return "↦ "+ueTeile(g).knoten;if(g.startsWith("kat:"))return "📚 "+(g.slice(4).replace(/\.Katalog$/,"")||"Kataloge");if(g.startsWith("form:")){const n=NODEBY.get(g.slice(5));return "✎ "+(n?(NODELABEL[n.kind]||n.kind)+" "+(n.name||""):g.slice(5));}
     if(g.startsWith("gr:"))return "⬡ "+((komDaten(g)||{}).name||g);const n=NODEBY.get(g);
     if(g.startsWith("fb:"))return "ƒ "+(n?n.name:g);return (g.startsWith("agg:")?"▣ ":"🗄 ")+(n?n.name:g);}
   function komKrumen(){return h("div",{class:"kom-krumen"},...KOM.pfad.flatMap((g,i)=>{const b=h("button",{class:"kom-krume"+(i===KOM.pfad.length-1?" an":""),
@@ -2324,8 +2349,9 @@
   function komZeige(){const de=document.getElementById("de");let m=de.querySelector(".kom");
     const scroll=m&&m.querySelector(".kom-panel")?m.querySelector(".kom-panel").scrollTop:0,alt=m&&m.querySelector(".kom-lw");
     const lauf=alt?{id:m.dataset.ansicht,x:alt.scrollLeft,y:alt.scrollTop}:null;if(m)m.remove();if(!KOM)return;
-    const id=KOM.pfad[KOM.pfad.length-1];
-    if(id.startsWith("form:"))formZeige(de,id.slice(5));else if(id.startsWith("kat:"))katZeige(de,id.slice(4));else if(id.startsWith("fb:"))funZeige(de,id);else if(!id.startsWith("gr:"))blockZeige(de,id);else grZeige(de,id);
+    let id=KOM.pfad[KOM.pfad.length-1];
+    if(id.startsWith("gr:")){const ab=ablaufVon(id);if(ab){id=ab.schachtel.karte;KOM.pfad[KOM.pfad.length-1]=id;}}
+    if(id.startsWith("form:"))formZeige(de,id.slice(5));else if(id.startsWith("ue:"))ueZeige(de,id);else if(id.startsWith("kat:"))katZeige(de,id.slice(4));else if(id.startsWith("fb:"))funZeige(de,id);else if(!id.startsWith("gr:"))blockZeige(de,id);else grZeige(de,id);
     const neu=de.querySelector(".kom .kom-panel");if(neu&&scroll)neu.scrollTop=scroll;komZoomAnwenden();
     const km=de.querySelector(".kom");if(km)km.dataset.ansicht=id;
     const lw=km&&km.querySelector(".kom-lw");if(lw&&lauf&&lauf.id===id){lw.scrollLeft=lauf.x;lw.scrollTop=lauf.y;}}
@@ -2333,7 +2359,7 @@
     ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     m.append(h("div",{class:"kom-kopf"},komKrumen(),h("div",{class:"kom-u"},unter),
       h("div",{class:"kom-reiter"},komZoomLeiste(),h("button",{class:"kom-x",title:"Schließen (Esc)",onclick:komSchliesse},"✕"))));return m;}
-  function grZeige(de,id){const d=komDaten(id);if(!d){KOM=null;return;}
+  function grZeige(de,id){const d=komFlach(id);if(!d){KOM=null;return;}
     const m=h("div",{class:"kom"});
     ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     const krumen=komKrumen();
@@ -2356,7 +2382,7 @@
       h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(FL_SORTE[sorte]||"")+(anzeige||typ)));r.dataset.port=ri+"|"+typ;return r;}
   const komTypKlick=t=>()=>{if(NODEBY.has("rec:"+komBasis(t)))komKarte("rec:"+komBasis(t),true,true);};
   // Kann Knoten m an den Eingang t von Ziel z anschließen ([Von])? Gleicher Typ, eine generische Ausgabe mit dem Typargument von m.
-  function komPasst(m,z,t){if(m.name===z.name||(z.von||[]).some(v=>v.knoten===m.name))return null;
+  function komPasst(m,z,t){if(m.name===z.name||(m.graph||"")!==(z.graph||"")||(z.von||[]).some(v=>v.knoten===(m.lokal||m.name)))return null;
     const args=x=>{const i=String(x).indexOf("<");return i>0&&String(x).endsWith(">")?String(x).slice(i+1,-1):"";};
     return m.aus.find(a=>a===t||(komBasis(a)===komBasis(t)&&args(a)&&args(t)===args(m.typ)))||null;}
   // Nimmt Knoten z, was Knoten q als t ausgibt? (der Eingang von z, an dem es ankäme)
@@ -2372,25 +2398,25 @@
     return g;}
   function komKnotenEl(id,k){
     const gewaehlt=KOM.wahl&&KOM.wahl.art==="knoten"&&KOM.wahl.name===k.name,P=KOM.port;
-    const d=komDaten(id),bezug=P&&d?d.knoten.find(x=>x.name===P.knoten):null;
+    const d=komFlach(id),bezug=P&&d?d.knoten.find(x=>x.name===P.knoten):null,O=komOrt(id,k),B=komOrt(id,bezug);
     const passt=!bezug?null:P.art==="von"?komPasst(k,bezug,P.typ):komNimmt(bezug,k,P.typ);
     const el=h("div",{class:"gnode2 fk kom-k n-"+(k.art==="graph"?"graph":k.art==="uebersetzung"?"uebersetzung":k.art==="katalog"||k.quelle?"funktion":"bausteinfunktion")+(gewaehlt?" sel":"")+(passt?" kand":"")+(P&&!passt&&k.name!==P.knoten?" leise":""),
       title:passt?(P.art==="von"?"Klick: "+P.knoten+" bekommt von "+k.name+" ("+passt+")":"Klick: "+k.name+" bekommt "+P.typ+" von "+P.knoten)
         :"Klick: Kanten hervorheben · Doppelklick: "+(k.art==="graph"?"eine Ebene tiefer":k.karte?"von innen":"—")+" · Rechtsklick: Menü",
-      onclick:()=>{if(passt){KOM.port=null;if(P.art==="von")komVerbinde(id,k.name,P.knoten);else komVerbinde(id,P.knoten,k.name);return;}
+      onclick:()=>{if(passt){KOM.port=null;if(P.art==="von")komVerbinde(O.id,O.name,B.name);else komVerbinde(O.id,B.name,O.name);return;}
         if(P){KOM.port=null;komZeige();return;}komWaehle(gewaehlt?null:{art:"knoten",name:k.name});},
       ondblclick:()=>{if(!P)komKnotenOeffnen(k);},
-      oncontextmenu:e=>{e.preventDefault();komKnotenMenue(id,k,e);}});
+      oncontextmenu:e=>{e.preventDefault();komKnotenMenue(O.id,{...k,name:O.name},e);}});
     el.dataset.knoten=k.name;
     el.append(h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:k.typ},h("span",{class:"gk"},(KOM_SYM[k.art]||"")+" "+k.name+" "),h("span",{class:"gn"},k.typ)),
       k.kopf?h("span",{class:"kom-mark",title:"[Kopf] — nimmt von außen"},"Kopf"):null,k.quelle?h("span",{class:"kom-mark",title:"Quelle — lauscht"},"Quelle"):null,
-      h("span",{class:"gx",title:"Löschen: aus dem Graphen bzw. samt Funktion",onclick:e=>{e.stopPropagation();komKnotenLoeschen(id,k,e);}},"✕")));
+      h("span",{class:"gx",title:"Löschen: aus dem Graphen bzw. samt Funktion",onclick:e=>{e.stopPropagation();komKnotenLoeschen(O.id,{...k,name:O.name},e);}},"✕")));
     const chips=(k.konstruktor||[]).filter(c=>c.art!=="logger");
     const funktion=k.art==="funktion"&&k.karte;
     if(chips.length||(k.liest||[]).length||funktion)el.append(h("div",{class:"fk-chips"},
       ...chips.map(c=>h("span",{class:"fk-chip kc-"+c.art,title:c.art+(c.umsetzungen?" · Umsetzungen: "+c.umsetzungen.join(", "):"")},(c.art==="technik"?"⚙ ":c.art==="konfig"?"▤ ":"◉ ")+c.typ)),
       ...(k.liest||[]).map(t=>h("span",{class:"fk-chip kc-liest",title:"Lese-Fähigkeit"},"⌕ "+t)),
-      funktion?h("button",{class:"fk-chip ag-plus",title:"Technik oder Konfig in den Konstruktor nehmen",onclick:e=>{e.stopPropagation();komKonstruktorPlus(id,k,e);}},"＋ Technik/Konfig"):null));
+      funktion?h("button",{class:"fk-chip ag-plus",title:"Technik oder Konfig in den Konstruktor nehmen",onclick:e=>{e.stopPropagation();komKonstruktorPlus(O.id,{...k,name:O.name},e);}},"＋ Technik/Konfig"):null));
     const ports=h("div",{class:"fk-ports"});
     const plus=(art,t,titel)=>{const aktiv=P&&P.art===art&&P.knoten===k.name&&P.typ===t;
       return h("button",{class:"ag-plus kom-einplus"+(aktiv?" aktiv":""),title:titel,onclick:e=>{e.stopPropagation();KOM.port=aktiv?null:{art,knoten:k.name,typ:t,karte:id};komZeige();}},"＋");};
@@ -2428,8 +2454,9 @@
   function komFeldLoese(id,knoten,ziel){const g=komModell(id),k=g&&(g.knoten||[]).find(x=>x.name===knoten);if(!k)return;
     k.felder=(k.felder||[]).filter(f=>f.ziel!==ziel);gTitel(g.name+": "+knoten+" ["+ziel+"] gelöst");render();}
   // Gestrichelt beim Anschließen: was neu entstehen kann — eine Funktion davor (gibt den Typ aus) bzw. dahinter (nimmt ihn).
-  function komGeister(id,d){const P=KOM.port;if(!P)return [];const q=d.knoten.find(x=>x.name===P.knoten);if(!q)return [];
-    const g=komModell(id),gk=g&&funKatalog(g);
+  function komGeister(id0,d){const P=KOM.port;if(!P)return [];const q0=d.knoten.find(x=>x.name===P.knoten);if(!q0)return [];
+    // Am Graphen, dem der Knoten gehört (ein aufgefalteter Teilgraph schreibt in seinen eigenen Record), mit dem lokalen Namen.
+    const o=komOrt(id0,q0),id=o.id,q={...q0,name:o.name},g=komModell(id),gk=g&&funKatalog(g);
     if(gk){const kand=katKandidaten(g,P).slice(0,12).map(f=>({tiefe:P.art==="von"?Math.max(0,q.tiefe-1):q.tiefe+1,t:"ƒ "+f.name+" einsetzen",
         u:(P.art==="von"?"gibt ":"nimmt ")+P.typ+" — 📚 "+funKatalog(f).replace(/\.Katalog$/,"")+(funKatalog(f)!==gk?" (setzt die Referenz)":""),
         fn:()=>katEinsetzen(id,f.name,q.name,P.art==="von"?"davor":"dahinter")}));
@@ -2477,7 +2504,7 @@
     const P=KOM.port&&KOM.port.art==="von"?KOM.port:null,zk=P?d.knoten.find(x=>x.name===P.knoten):null,kopfMoeglich=!!zk&&!zk.kopf;
     const g=komModell(id),hatQuelle=d.knoten.some(k=>k.quelle);
     const links=h("div",{class:"gnode2 fk kom-rand links"+(kopfMoeglich?" kand":"")+(KOM.port&&!kopfMoeglich?" leise":""),title:kopfMoeglich?"Klick: "+P.knoten+" nimmt "+P.typ+" von außen ([Kopf])":"",
-      onclick:()=>{if(kopfMoeglich){KOM.port=null;komVerbinde(id,null,P.knoten);}}},h("div",{class:"ghead"},h("span",{class:"gtitle"},"◀ von außen")));
+      onclick:()=>{if(kopfMoeglich){KOM.port=null;const o=komOrt(id,zk);komVerbinde(o.id,null,o.name);}}},h("div",{class:"ghead"},h("span",{class:"gtitle"},"◀ von außen")));
     const lp=h("div",{class:"fk-ports"});
     d.koepfe.forEach(k=>{const her=komHerkunft(id,k.typ),pe=komPort("aus",k.typ,komSorte(k.typ),"Kopf "+k.typ+(her.length?" — von "+her.join(", "):""),komTypKlick(k.typ));
       lp.append(pe);
@@ -2514,7 +2541,8 @@
     const GX=110,GY=26,X0=40,Y0=30;let x=X0;
     links.style.left=x+"px";links.style.top=Y0+"px";x+=links.offsetWidth+GX;
     const tiefen=[...new Set(d.knoten.map(k=>k.tiefe).concat(geister.map(e=>+e.dataset.tiefe)))].sort((a,b)=>a-b);let yMax=Y0+links.offsetHeight;
-    tiefen.forEach(t=>{const ks=d.knoten.filter(k=>k.tiefe===t).map(k=>el(k.name)).filter(Boolean).concat(geister.filter(e=>+e.dataset.tiefe===t));let y=Y0,w=0;
+    // Je Tiefe die Knoten eines Teilgraphen beieinander (so umschließt sein Rahmen nur sie).
+    tiefen.forEach(t=>{const ks=d.knoten.filter(k=>k.tiefe===t).sort((a,b)=>String(a.rahmen||"").localeCompare(String(b.rahmen||""))).map(k=>el(k.name)).filter(Boolean).concat(geister.filter(e=>+e.dataset.tiefe===t));let y=Y0,w=0;
       ks.forEach(e=>{e.style.left=x+"px";e.style.top=y+"px";y+=e.offsetHeight+GY;w=Math.max(w,e.offsetWidth);});yMax=Math.max(yMax,y);x+=w+GX;});
     rechts.style.left=x+"px";rechts.style.top=Y0+"px";x+=rechts.offsetWidth+X0;yMax=Math.max(yMax,Y0+rechts.offsetHeight)+Y0;
     welt.style.width=x+"px";welt.style.height=yMax+"px";svgK.setAttribute("width",x);svgK.setAttribute("height",yMax);
@@ -2525,9 +2553,16 @@
       const p=document.createElementNS(SVGNS,"path");p.setAttribute("d",d2);p.setAttribute("fill","none");
       p.setAttribute("stroke",sorte==="hinweis"?"#cf6f68":sorte==="event"?"#57b673":"#8fa6c8");p.setAttribute("stroke-width",hell?"3.2":"1.8");if((wahl&&!hell)||KOM.port)p.setAttribute("opacity",".35");if(verl)p.setAttribute("stroke-dasharray","6 4");svgK.append(p);
       if(klick){const hit=document.createElementNS(SVGNS,"path");hit.setAttribute("d",d2);hit.setAttribute("fill","none");hit.setAttribute("class","kom-hit");hit.addEventListener("click",klick);svgK.append(hit);}};
-    d.koepfe.forEach(k=>k.knoten.forEach(n=>linie(punkt(links,"aus",k.typ),punkt(el(n),"ein",k.typ),false,komSorte(k.typ),e=>komKanteMenue(id,"kopf",null,n,e),[n])));
+    d.koepfe.forEach(k=>k.knoten.forEach(n=>{const o=komOrt(id,d.knoten.find(x=>x.name===n));
+      linie(punkt(links,"aus",k.typ),punkt(el(n),"ein",k.typ),false,komSorte(k.typ),e=>komKanteMenue(o.id,"kopf",null,o.name,e),[n]);}));
     d.kanten.forEach(k=>{const a=el(k.von),b=el(k.nach),A=a&&punkt(a,"aus",(d.knoten.find(x=>x.name===k.von)||{aus:[]}).aus.find(t=>komBasis(t)===komBasis(k.typ))||k.typ);
-      linie(A,punkt(b,"ein",k.typ),k.verlierbar,komSorte(k.typ),e=>komKanteMenue(id,"von",k.von,k.nach,e),[k.von,k.nach]);});
+      linie(A,punkt(b,"ein",k.typ),k.verlierbar,komSorte(k.typ),e=>komKanteMenue(k.graph||id,"von",k.vonLokal||k.von,k.nachLokal||k.nach,e),[k.von,k.nach]);});
+    // Je Teilgraph ein Rahmen um seine Knoten — alles liegt auf einer Ebene, der Rahmen zeigt, woher sie kommen (Doppelklick: der Teilgraph für sich).
+    (d.rahmen||[]).forEach(r=>{const els=d.knoten.filter(k=>k.rahmen===r.pfad||String(k.rahmen||"").startsWith(r.pfad+".")).map(k=>el(k.name)).filter(Boolean);if(!els.length)return;
+      const x1=Math.min(...els.map(e=>e.offsetLeft))-14,y1=Math.min(...els.map(e=>e.offsetTop))-30,x2=Math.max(...els.map(e=>e.offsetLeft+e.offsetWidth))+14,y2=Math.max(...els.map(e=>e.offsetTop+e.offsetHeight))+14;
+      const fr=h("div",{class:"kom-rahmen",title:"Teilgraph "+r.graph+" — Doppelklick: für sich öffnen",ondblclick:e=>{e.stopPropagation();KOM.pfad.push(r.karte);KOM.wahl=null;KOM.port=null;komZeige();}},
+        h("span",{class:"kom-rahmen-t"},"⬡ "+r.name+" : "+r.graph));
+      Object.assign(fr.style,{left:x1+"px",top:y1+"px",width:(x2-x1)+"px",height:(y2-y1)+"px"});welt.prepend(fr);});
     d.ausgaenge.forEach(a=>a.knoten.forEach(n=>{const k=d.knoten.find(x=>x.name===n)||{aus:[]};
       linie(punkt(el(n),"aus",k.aus.find(t=>komBasis(t)===komBasis(a.typ))||a.typ),punkt(rechts,"ein",a.typ),false,a.sorte,null,[n]);}));}
   // „＋ Quelle“: eine Quelle aus dem Katalog des Frameworks (Dateiwächter, Taktgeber, Webhook) oder eine eigene Funktion, die lauscht.
@@ -3849,7 +3884,7 @@
       {t:vl?"gesichert machen (der Absender wartet auf „fertig“)":"⇢ verlierbar machen (einmal, ohne Antwort)",fn:()=>{k.verlierbar=vl?ohneX(k.verlierbar,von):[...(k.verlierbar||[]),von];gTitel(g.name+": "+von+" → "+nach+(vl?" gesichert":" verlierbar"));render();}},
       {t:"✕ [Von("+von+")] lösen",gefahr:1,fn:()=>{k.von=ohneX(k.von,von);k.verlierbar=ohneX(k.verlierbar,von);gTitel(g.name+": "+nach+" nicht mehr von "+von);render();}}]);}
   function komKnotenEntfernen(id,name){const g=komModell(id);if(!g)return;g.knoten=(g.knoten||[]).filter(x=>x.name!==name);
-    g.knoten.forEach(x=>{x.von=ohneX(x.von,name);x.verlierbar=ohneX(x.verlierbar,name);});gTitel(g.name+": Knoten "+name+" entfernt");KOM.wahl=null;render();}
+    g.knoten.forEach(x=>{x.von=ohneX(x.von,name);x.verlierbar=ohneX(x.verlierbar,name);});gTitel(g.name+": Knoten "+name+" entfernt");if(KOM)KOM.wahl=null;render();}
   // ══ EINGÄNGE UND ÜBERSETZUNGEN (docs/plan-katalog-und-graphen.md, Schritt 5): nur Clients und Quellen stoßen Funktionen an. Eine Übersetzung
   //   (Uebersetze<TEin, TAus>) verbindet die Nachricht eines Clients mit dem Eingang eines Katalogs und die Ausgabe einer Funktion mit einem Command
   //   an ein Aggregat — Feld für Feld; was nicht nach Namen passt, nennt die ↦-Karte ausdrücklich ([Feld]). ══
@@ -4028,10 +4063,11 @@
     if(!katGraphen.length){menueFix(ev.clientX,ev.clientY,"＋ Graph an "+name,[{hinweis:"Noch kein Graph in einem Katalog — erst dort anlegen: Funktionen verketten im Graph-Modal."},
       {t:"📚 Kataloge öffnen",fn:()=>katOeffne(null,null)}]);return;}
     const binden=g=>setTimeout(()=>frageFix(ev.clientX,ev.clientY,"⬡ "+g.name+" an "+name,uniq(kurz+g.name.replace(/(Kette|Graph)$/,"")),
-      "Der Ablauf in "+ns+" — danach: Eingang links, Übersetzung jedes Outputs in einen Command eines Aggregats von "+name,n=>{const fe=nameFehler(n);if(fe)return fe;
+      "Der Ablauf in "+ns+" — er erscheint im Band; danach Eingang und „＋ ↦“ an jedem Output (die Übersetzungen stehen in ihrer Spalte)",n=>{const fe=nameFehler(n);if(fe)return fe;
         if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
         (MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,knoten:[{typ:g.name,name:komKnotenName({knoten:[]},g.name),kopf:true,von:[],verlierbar:[]}]});
-        KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+": "+g.name+" an "+name);render();}),0);
+        // Kein Modal: der Ablauf erscheint auf der Fläche in seinem Band — Eingang, Outputs und Übersetzungen werden dort verdrahtet.
+        gTitel("⬡ "+n+": "+g.name+" an "+name);render();}),0);
     menueFix(ev.clientX,ev.clientY,"＋ Graph an "+name+" — welcher Graph?",[
       ...katGraphen.map(g=>{const l=laeuft(g.name);return {t:"⬡ "+g.name+" · 📚 "+funKatalog(g).replace(/\.Katalog$/,"")+(l.length?" — läuft schon in "+l.join(", ")+" (ein zweiter Lauf)":""),fn:()=>binden(g)};}),
       {trenn:1},{t:"📚 Kataloge öffnen (einen neuen Graphen anlegen)",fn:()=>katOeffne(null,null)}]);}

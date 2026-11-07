@@ -43,8 +43,95 @@ public sealed partial class Sicht
         return o;
     }
 
-    /// <summary>Die Komposition eines Graphen (<c>board.sicht.komposition[gr:…]</c>).</summary>
+    /// <summary>
+    /// Die Komposition eines Graphen (<c>board.sicht.komposition[gr:…]</c>), dazu <c>flach</c>: alle Teilgraphen aufgefaltet auf eine Ebene, damit man
+    /// den ganzen Graphen auf einmal sieht (docs/konzept-funktionen-im-editor.md §3).
+    /// </summary>
     public JsonObject Komposition(JsonObject g)
+    {
+        var k = KompositionEbene(g);
+        k["flach"] = Flach(g);
+        return k;
+    }
+
+    /// <summary>
+    /// Die flache Komposition: jeder Teilgraph (ein Knoten, der ein Graph ist) wird durch seine Knoten ersetzt — mit Pfad (<c>Aufbereitung.Kontrast</c>),
+    /// ihrem lokalen Namen und dem Graphen, dem sie gehören (eine Geste trifft dessen Record). Kanten an einer Schachtel enden an ihren Köpfen bzw.
+    /// beginnen an den Knoten, die ihre Ausgänge geben; <c>rahmen</c> nennt je Teilgraph seinen Pfad, so zeichnet der Editor ihn als Rahmen. Die Tiefe
+    /// folgt aus den flachen Kanten.
+    /// </summary>
+    private JsonObject Flach(JsonObject g)
+    {
+        var f = FlachEbene(g, "", new HashSet<string>(StringComparer.Ordinal) { S(g, "_id") });
+        var knoten = Alle(f["knoten"]).ToList();
+        var kanten = Alle(f["kanten"]).ToList();
+        var tiefe = new Dictionary<string, int>(StringComparer.Ordinal);
+        int Tiefe(string n, int rest)
+        {
+            if (tiefe.TryGetValue(n, out var t)) return t;
+            var von = kanten.Where(e => S(e, "nach") == n).Select(e => S(e, "von")).Where(v => v != n).Distinct().ToList();
+            t = von.Count == 0 || rest == 0 ? 0 : von.Max(v => Tiefe(v, rest - 1)) + 1;
+            return tiefe[n] = t;
+        }
+        foreach (var kn in knoten) kn["tiefe"] = Tiefe(S(kn, "name"), knoten.Count);
+        return f;
+    }
+
+    private JsonObject FlachEbene(JsonObject g, string pfad, HashSet<string> offen)
+    {
+        var gid = "gr:" + S(g, "_id");
+        var k = KompositionEbene(g);
+        var knoten = new JsonArray();
+        var kanten = new JsonArray();
+        var rahmen = new JsonArray();
+        var innen = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+        foreach (var kn in Alle(k["knoten"]))
+        {
+            var n = S(kn, "name");
+            if (S(kn, "art") == "graph" && GraphNamens(Basis(S(kn, "typ"))) is { } ig && offen.Add(S(ig, "_id")))
+            {
+                var f = FlachEbene(ig, pfad + n + ".", offen);
+                offen.Remove(S(ig, "_id"));
+                innen[n] = f;
+                rahmen.Add(new JsonObject { ["pfad"] = pfad + n, ["name"] = n, ["graph"] = S(ig, "name"), ["karte"] = "gr:" + S(ig, "_id"), ["in"] = gid });
+                foreach (var x in Alle(f["rahmen"])) rahmen.Add(x.DeepClone());
+                foreach (var x in Alle(f["knoten"])) knoten.Add(x.DeepClone());
+                foreach (var x in Alle(f["kanten"])) kanten.Add(x.DeepClone());
+                continue;
+            }
+            var o = (JsonObject)kn.DeepClone();
+            o["name"] = pfad + n;
+            o["lokal"] = n;
+            o["graph"] = gid;
+            o["rahmen"] = pfad.TrimEnd('.');
+            knoten.Add(o);
+        }
+        // Wo eine Kante an einer Schachtel tatsächlich beginnt bzw. endet: an den Knoten ihrer Ausgänge bzw. Köpfe für diesen Typ.
+        IEnumerable<string> Quellen(string n, string typ) => innen.TryGetValue(n, out var f)
+            ? Alle(f["ausgaenge"]).Where(a => Basis(S(a, "typ")) == Basis(typ)).SelectMany(a => L(a, "knoten")).Distinct() : [pfad + n];
+        IEnumerable<string> Ziele(string n, string typ) => innen.TryGetValue(n, out var f)
+            ? Alle(f["koepfe"]).Where(a => Basis(S(a, "typ")) == Basis(typ)).SelectMany(a => L(a, "knoten")).Distinct() : [pfad + n];
+        foreach (var e in Alle(k["kanten"]))
+            foreach (var v in Quellen(S(e, "von"), S(e, "typ")))
+                foreach (var z in Ziele(S(e, "nach"), S(e, "typ")))
+                    kanten.Add(new JsonObject
+                    {
+                        ["von"] = v, ["nach"] = z, ["typ"] = S(e, "typ"), ["verlierbar"] = B(e, "verlierbar"),
+                        ["graph"] = gid, ["vonLokal"] = S(e, "von"), ["nachLokal"] = S(e, "nach"),
+                    });
+        var koepfe = new JsonArray(Alle(k["koepfe"]).Select(x => (JsonNode)new JsonObject
+        {
+            ["typ"] = S(x, "typ"), ["knoten"] = Arr(L(x, "knoten").SelectMany(n => Ziele(n, S(x, "typ"))).Distinct()),
+        }).ToArray());
+        var ausgaenge = new JsonArray(Alle(k["ausgaenge"]).Select(x => (JsonNode)new JsonObject
+        {
+            ["typ"] = S(x, "typ"), ["sorte"] = S(x, "sorte"), ["knoten"] = Arr(L(x, "knoten").SelectMany(n => Quellen(n, S(x, "typ"))).Distinct()),
+        }).ToArray());
+        return new JsonObject { ["knoten"] = knoten, ["kanten"] = kanten, ["koepfe"] = koepfe, ["ausgaenge"] = ausgaenge, ["rahmen"] = rahmen };
+    }
+
+    /// <summary>Die Komposition einer Ebene: die Knoten des Graphen, wie sie im Record stehen (ein Teilgraph als ein Knoten).</summary>
+    private JsonObject KompositionEbene(JsonObject g)
     {
         var gid = "gr:" + S(g, "_id");
         var knoten = Alle(g["knoten"]).ToList();

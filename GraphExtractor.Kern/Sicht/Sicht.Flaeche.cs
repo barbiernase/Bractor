@@ -8,7 +8,7 @@ namespace GraphExtractor;
 public sealed partial class Sicht
 {
     /// <summary>Die Spalten der Fläche von links nach rechts.</summary>
-    public static readonly string[] Spalten = ["ausgang", "quellen", "graphen", "aggregate", "projektionen", "eingang"];
+    public static readonly string[] Spalten = ["ausgang", "quellen", "graphen", "uebersetzungen", "aggregate", "projektionen", "eingang"];
 
     /// <summary>
     /// Ein Port: Typ der Nachricht, Richtung (<c>ein</c>/<c>aus</c>), Sorte (<c>command</c>, <c>event</c>, <c>hinweis</c>, <c>query</c>,
@@ -175,7 +175,30 @@ public sealed partial class Sicht
                     kanten.Add(new(qid, gid, t, "quelle"));
                 }
             }
-            foreach (var t in L(g, "ausgaenge")) Port(t, "aus");
+            // Ein Ablauf (ein Graph der Anwendung um einen Graphen aus einem Katalog, docs/konzept-funktionen-im-editor.md §4): seine Ausgänge sind die des
+            //   Katalog-Graphen; die Übersetzungen dahinter stehen als eigene Karten in der Spalte Übersetzungen, von dort zum Aggregat.
+            var schachtel = Alle(g["knoten"]).FirstOrDefault(k => GraphNamens(Basis(S(k, "typ"))) is { } x
+                && Abstractions.Projektstruktur.KatalogVon(S(x, "namespace")) != null);
+            var hinaus = Alle(g["uebersetzungen"]).Where(u => schachtel != null
+                && Alle(g["knoten"]).Any(k => S(k, "name") == S(u, "knoten") && L(k, "von").Contains(S(schachtel, "name")))).ToList();
+            if (schachtel != null && hinaus.Count > 0)
+            {
+                // Was übersetzt wird, verlässt die Karte als Output des Katalog-Graphen (TEin) — der Command dahinter (TAus) gehört der Übersetzung.
+                var nachUebersetzung = hinaus.Select(u => S(u, "aus")).ToHashSet(StringComparer.Ordinal);
+                foreach (var t in L(g, "ausgaenge").Where(t => !nachUebersetzung.Contains(t))) Port(t, "aus");
+                foreach (var t in hinaus.Select(u => S(u, "ein")).Distinct()) Port(t, "aus");
+                foreach (var u in hinaus)
+                {
+                    var uid = "ue:" + S(g, "_id") + ":" + S(u, "knoten");
+                    var ein = S(u, "ein");
+                    karten.Add(new(uid, gid, "uebersetzung", S(u, "knoten"), "uebersetzungen", band, null,
+                        [new FlaechenPort(ein, "ein", Sorte(ein), false), new FlaechenPort(S(u, "aus"), "aus", Sorte(S(u, "aus")), false)]));
+                    ausdruecklich.Add((uid, ein));
+                    ausdruecklich.Add((gid, ein));
+                    kanten.Add(new(gid, uid, ein, "schreiben"));
+                }
+            }
+            else foreach (var t in L(g, "ausgaenge")) Port(t, "aus");
             karten.Add(new(gid, gid, "graph", S(g, "name"), "graphen", band, null, ports));
             flaecheVon[gid] = gid;
         }
@@ -370,7 +393,7 @@ public sealed partial class Sicht
             if (eigen.Count > 1) yield return ("error", $"Fläche: {g.Key} wird an {eigen.Count} Ports deklariert ({string.Join(", ", eigen)})");
             else if (eigen.Count == 0) yield return ("info", $"Fläche: {g.Key} hat keinen deklarierenden Port auf der Fläche");
         }
-        foreach (var k in f.Karten.Where(k => k.Spalte is "quellen" or "graphen" or "aggregate" or "projektionen" && k.Band == null))
+        foreach (var k in f.Karten.Where(k => k.Spalte is "quellen" or "graphen" or "uebersetzungen" or "aggregate" or "projektionen" && k.Band == null))
             yield return ("warning", $"Fläche: {k.Name} ({k.Art}) steht in keinem Band");
     }
 }
