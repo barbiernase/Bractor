@@ -74,8 +74,9 @@ public sealed record Inspekteur     : IAkteur, IDarf<LabelBildPaar>, IDarf<Marki
 | Modellfreigeber | `SetzeModellAktiv`, `ArchiviereModell`, `HoleModelle`, `HoleAktivesModell` | – | `ModellRegistriert`, `ModellAktiviert`, `ModellArchiviert` |
 | Disponent | `StarteSammelvorgang`, `StarteTeilauftrag`, `SchließeTeilauftragAb` | – | – |
 
-Die Prüfdomäne hat einen Akteur (`Pruefdomaene.Akteure`): den `Rechnungspruefer`, der Rechnungen über 10 000 von Hand prüft (Arbeit
-`RechnungZuPruefen`, antwortet `GibRechnungFrei` oder `SperreRechnung`).
+Die Prüfdomäne (`Pruefdomaene.Akteure`): der `Rechnungspruefer` prüft Rechnungen über 10 000 von Hand (er hört `RechnungZurPruefungVorgelegt`,
+gibt `GibRechnungFrei` oder `SperreRechnung`), der `Messwart` fordert Hochrechnungen an, die `Sachbearbeitung` gibt auf die Fakten der Abläufe
+die Commands an die Köpfe ihrer Graphen — verkörpert vom Client `ReaktionsWorker` (`Pruefdomaene.Client.Worker`).
 
 ### 2.3 Von welchem Akteur kommt ein Command?
 
@@ -103,8 +104,8 @@ den Graphen, `DomainEditor/AkteurAnteile.cs`, §8), zur Laufzeit genau einen (§
 ## 3. Arbeit
 
 Hört ein Akteur einen Command ohne Ziel, ist das seine **Arbeit**: der Command hat ihn als einzigen Empfänger, gleich, ob ein Decide ihn ausgibt
-oder ein Graph (`RechnungZuPruefen` aus dem Freigabeautomaten der Prüfdomäne). In der Beispieldomäne gibt es keine Arbeit mehr (Schritt 6): ein
-Decide gibt nur Fakten aus, die Worker reagieren darauf (§5.5). Die Antwort sind Commands aus dem `IDarf` des Akteurs — ein gewöhnlicher Command, der wieder einen Empfänger hat.
+oder ein Graph. Im Bestand gibt es keine Arbeit mehr (Schritt 6): ein Decide gibt nur Fakten aus, die Worker reagieren darauf (§5.5); der
+Mechanismus fällt im Abbau weg. Die Antwort sind Commands aus dem `IDarf` des Akteurs — ein gewöhnlicher Command, der wieder einen Empfänger hat.
 
 - Die Laufzeit legt je Akteur mit Arbeit eine **Instanz** unter seinem Namen an: ein Graph mit einem Knoten draußen, Köpfe = die gehörten Commands,
   Ausgänge = die Commands seines `IDarf` (`Infrastructure/Funktionen/Arbeit.cs`). Damit hat die Arbeit, was jeder Kopf hat: einen offenen Eingang

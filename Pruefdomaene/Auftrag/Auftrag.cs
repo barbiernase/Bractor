@@ -17,6 +17,9 @@ public partial class Auftrag : IState
     public bool Belegt { get; set; }
     public bool Bestaetigt { get; set; }
     public bool Gescheitert { get; set; }
+    /// <summary>Die Gegenzüge sind angefordert (Reservierung bzw. Belegung zurück).</summary>
+    public bool ReservierungZurueck { get; set; }
+    public bool BelegungZurueck { get; set; }
 
     public bool Existiert => Version > 0;
 }

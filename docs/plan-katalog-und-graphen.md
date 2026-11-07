@@ -240,8 +240,11 @@ bis zum Host. Nicht im Editor durchgespielt (lokal kein Postgres); „genau einm
 (`Bildvorschau.Katalog`), der Linienimport übersetzt sein Ergebnis (`BildGedeutet` ↦ `NimmBildAuf`). Auf die Fakten reagieren Clients: der
 `ReaktionsWorker` (.NET, `Domain.Client.Worker`: Range, Einfrieren, Teilmeldung) und die Python-Worker (Klassifizieren auf `ImagePairKomplett`,
 Training auf `TrainingAngefordert`, Abbruch über den Stand des Laufs). Dazu: die Command-Hülle trägt die Ursache (die Spur bleibt über eine
-Reaktion lückenlos, ein Vorgang folgt ihr), die Log-Seite den Horizont (ein Client liest nach einer neuen Datenbank von vorn). Offen: die
-Prüfdomäne (ihre Aufträge an Graph-Köpfe und die Arbeit des Rechnungsprüfers) und der Abbau mit der Build-Regel.
+Reaktion lückenlos, ein Vorgang folgt ihr), die Log-Seite den Horizont (ein Client liest nach einer neuen Datenbank von vorn). Die Prüfdomäne
+ebenso: sie hat eine Leitung, ihr `ReaktionsWorker` (Akteur `Sachbearbeitung`) gibt auf jedes Fakt den Command an den Kopf seines Graphen, der
+Eingang trägt das Fakt als Herkunft (wie früher die Folge eines Decide); eine große Rechnung legt der Freigabeautomat dem Rechnungsprüfer vor.
+Prüfstände lassen den Worker neben dem Host laufen. Offen: der Abbau (Arbeit, Werkstatt, Hand, „Aufträge“, Eingänge aus dem Decide) mit der
+Build-Regel.
 
 - Jeder Auftrag aus einem `Decide` wird ein Event, auf das ein Client reagiert: `PaarZuBeurteilen`, `TrainingZuRechnen`, `RangeAufzuloesen`,
   `EinfrierenAbzuschliessen`, `TeilFertig`, `AuftragAbzuwickeln` samt Gegenzügen, `Zubuchen` (Beispiel- und Prüfdomäne, Sonde).

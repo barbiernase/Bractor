@@ -113,26 +113,23 @@ public class FunktionsBausteinE2ETests
     }
 
     [Fact]
-    public async Task Eine_grosse_Rechnung_ist_Arbeit_des_Rechnungspruefers_von_Hand_die_erste_Antwort_gewinnt()
+    public async Task Eine_grosse_Rechnung_legt_die_Freigabe_dem_Rechnungspruefer_vor_er_entscheidet()
     {
-        using var host = Cluster("pruef-arbeit-hand", dienste: s => s.AddHandAusfuehrer("Rechnungspruefer"));
+        using var host = Cluster("pruef-vorlage");
         await host.StartAsync();
         try
         {
             var rechnung = Id<Rechnung>.Neu();
             (await FrageAsync(host, new StelleRechnung(rechnung, Id<Kundenkonto>.Neu(), 20_000m), Guid.NewGuid()))!.Success.Should().BeTrue();
-            var hand = host.Services.GetRequiredService<HandAusfuehrer>();
-            HandEingang? offen = null;
-            await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == rechnung.Wert)) is not null),
-                Frist, "die Arbeit wartet nicht von Hand");
-            offen!.Eingang.Should().BeOfType<Pipeline.Abrechnung.RechnungZuPruefen>().Which.Betrag.Should().Be(20_000m);
+            await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Vorgelegt, Frist, "die Rechnung liegt nicht vor");
+            (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Freigegeben.Should().BeFalse("über der Grenze gibt der Automat nicht frei");
 
-            hand.Antworte(offen.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "von Hand") }, null)
-                .Should().Be(Werkstattausgang.Angenommen);
-            hand.Antworte(offen.Vorgang, new IAusgabe[] { new GibRechnungFrei(rechnung) }, null)
-                .Should().Be(Werkstattausgang.Unbekannt, "beantwortet ist er nicht mehr offen");
-            await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Gesperrt, Frist, "die Antwort von Hand wirkt nicht");
-            (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Freigegeben.Should().BeFalse();
+            // Der Rechnungsprüfer reagiert auf das Fakt (hier der Test an seiner Stelle): er sperrt; eine spätere Freigabe ändert nichts mehr.
+            (await FrageAsync(host, new SperreRechnung(rechnung, "von Hand"), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new GibRechnungFrei(rechnung), Guid.NewGuid()))!.Success.Should().BeTrue();
+            var r = await Zustand<Rechnung>(host.Services, rechnung.Wert);
+            r.Gesperrt.Should().BeTrue();
+            r.Freigegeben.Should().BeFalse();
         }
         finally { await host.StopAsync(); }
     }

@@ -28,6 +28,9 @@ public sealed class Testumgebung
     public const string TokenDisponent = "verhalten-disponent";
     public const string TokenReaktionsWorker = "verhalten-reaktionsworker";
 
+    /// <summary>Der Stand des ReaktionsWorkers in dieser Umgebung (eine frische Datenbank) — über alle Hosts, auch nach einem Neustart.</summary>
+    public global::Client.Infrastructure.Reaktionen.ReaktionsStandImSpeicher Reaktionsstand { get; } = new();
+
     private Testumgebung(Anwendung anwendung, string name)
     {
         Anwendung = anwendung;

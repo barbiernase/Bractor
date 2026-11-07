@@ -15,7 +15,7 @@ public partial class ProtoMessageMapper
     /// Die Hülle eines Commands ohne Ziel vom Client (an den Kopf eines Graphen): die Command-Id ist die Kennung des offenen Eingangs — wer
     /// wiederholt, schickt dieselbe; ohne Aggregat und ohne erwartete Version.
     /// </summary>
-    public CommandEnvelopeDto NachrichtAlsDto(ICommand nachricht, Guid commandId, string korrelation, string? sitzung) => new()
+    public CommandEnvelopeDto NachrichtAlsDto(ICommand nachricht, Guid commandId, string korrelation, string? sitzung, string? ursache = null) => new()
     {
         CommandId = commandId.ToString(),
         AggregateId = Guid.Empty.ToString(),
@@ -24,6 +24,7 @@ public partial class ProtoMessageMapper
         CreatedAtUtc = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         CorrelationId = korrelation,
         OriginSessionId = sitzung ?? string.Empty,
+        Ursache = ursache ?? string.Empty,
         Payload = _tabelle.PackeNachricht(nachricht),
     };
 

@@ -26,6 +26,7 @@
     <ProjectReference Include="..\Domain.Client.Modules.Blazor\Domain.Client.Modules.Blazor.csproj" />
     <ProjectReference Include="..\Domain.Leitung\Domain.Leitung.csproj" />
     <ProjectReference Include="..\Domain.Client.Worker\Domain.Client.Worker.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Client.Worker\Pruefdomaene.Client.Worker.csproj" />
   </ItemGroup>
 
 </Project>

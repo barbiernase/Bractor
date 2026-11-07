@@ -164,12 +164,12 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
         Console.WriteLine($"[GrpcProxy] Sent command: {envelope.Payload.GetType().Name}, CorrelationId: {envelope.CorrelationId}");
     }
 
-    public async Task SendeNachrichtAsync(ICommand nachricht, Guid commandId, string correlationId, CancellationToken ct = default)
+    public async Task SendeNachrichtAsync(ICommand nachricht, Guid commandId, string correlationId, CancellationToken ct = default, string? ursache = null)
     {
         EnsureConnected();
         await SchreibeAsync(new ClientMessage
         {
-            Command = new CommandRequest { Envelope = _mapper.NachrichtAlsDto(nachricht, commandId, correlationId, SessionId) },
+            Command = new CommandRequest { Envelope = _mapper.NachrichtAlsDto(nachricht, commandId, correlationId, SessionId, ursache) },
         }, ct);
     }
 

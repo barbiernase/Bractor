@@ -1,12 +1,21 @@
 using Abstractions;
 using Infrastructure.Aggregate;
 using Infrastructure.Extensions;
+using Infrastructure.GrpcClient;
 using Infrastructure.Persistence;
 using Infrastructure.Projections;
 using Infrastructure.Projections.Generated;
+using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
+using Client.Infrastructure.Reaktionen;
 using Marten;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Npgsql;
 
 namespace Pruefdomaene.Integration.Tests;
 
@@ -19,19 +28,25 @@ internal static class Pruefstand
     public const string Verbindung = "Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres";
 
     /// <summary>
-    /// Ein In-Process-Host mit der Verdrahtung von Host.Grpc (ohne gRPC): Framework, Pull-Pfade, Prozesse. <paramref name="inboxCache"/> ist
+    /// Ein In-Process-Host mit der Verdrahtung von Host.Grpc: Framework, Pull-Pfade, Graphen, die Leitung (gRPC auf einem freien Port) und — wie im
+    /// Betrieb neben dem Host — der Client, der auf die Fakten reagiert (<see cref="Pruefdomaene.Client.Worker.Reaktionslauf"/>, Schritt 6: ein
+    /// Decide gibt nur Fakten aus, die Köpfe der Graphen speist er). <paramref name="mitReaktionen"/> = false lässt ihn weg. <paramref name="inboxCache"/> ist
     /// der Inbox-Cache des Actors (klein = der Weg über den Schlüssel der Inbox-Tabelle); <paramref name="dienste"/> greift nach der Verdrahtung ein (Störungs-Seams der Garantie-Tests).
     /// <paramref name="takt"/>: der Takt je Partition — kurz (<see cref="KurzerTakt"/>), damit Tests, die auf ihn warten (Nachholen, Position über
     /// fremde Events), nicht 30 s stehen; ein Latenz-Test des Weckers verlangt den Standard (<see cref="Konsum.StandardTakt"/>), sonst bestünde er
     /// auch ohne Wecker.
     /// </summary>
     public static IHost Cluster(string name, int snapshotSchwelle = 200, int inboxCache = SnapshotOptions.StandardInboxCache, Action<IServiceCollection>? dienste = null,
-        string schema = "pruef_e2e", TimeSpan? takt = null, string? rechner = null, string? clusterName = null)
+        string schema = "pruef_e2e", TimeSpan? takt = null, string? rechner = null, string? clusterName = null, bool mitReaktionen = true,
+        int? port = null)
     {
-        var builder = Host.CreateApplicationBuilder();
+        var builder = WebApplication.CreateBuilder();
+        port ??= FreierPort();
+        builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, port.Value, l => l.Protocols = HttpProtocols.Http2));
+        builder.Services.AddGrpc();
         builder.Services.AddCqrsFramework(opts =>
         {
-            opts.EnableGrpc = false;
+            opts.EnableGrpc = true;
             opts.ClusterName = clusterName ?? name + "-" + Guid.NewGuid().ToString("N")[..8];
             opts.Rechner = rechner;
             opts.EventStoreConnectionString = Verbindung;
@@ -44,8 +59,65 @@ internal static class Pruefstand
         // Je Graph eine Instanz, die Technik wie im Host ohne Wahl: je eine die eine Umsetzung (Tests ersetzen sie über dienste).
         global::Infrastructure.Funktionen.TechnikExtensions.BindeTechnik(builder.Services,
             global::Infrastructure.Funktionen.GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen));
+        if (mitReaktionen)
+        {
+            var stand = Reaktionsstand(schema);
+            builder.Services.AddHostedService(sp => new Reaktionsdienst(sp.GetRequiredService<IHostApplicationLifetime>(), $"http://127.0.0.1:{port}", stand));
+        }
         dienste?.Invoke(builder.Services);
-        return builder.Build();
+        var app = builder.Build();
+        app.MapCqrsGrpcService();
+        return app;
+    }
+
+    private static readonly ConcurrentDictionary<string, ReaktionsStandImSpeicher> Staende = new();
+
+    /// <summary>Ein eigener Stand der Reaktionen am Ende des Logs von <paramref name="schema"/> — für einen Client, den ein Test selbst laufen lässt.</summary>
+    public static ReaktionsStandImSpeicher NeuerReaktionsstand(string schema) => AmEnde(schema);
+
+    /// <summary>
+    /// Der Stand der Reaktionen je Schema über alle Hosts dieses Prozesses — ein Host nach einem Absturz macht weiter, wo der vorige stand, wie ein
+    /// Worker, der weiterläuft. Beim ersten Host eines Schemas beginnt er am Ende des Logs: was frühere Läufe dort schrieben, ist erledigt.
+    /// </summary>
+    private static ReaktionsStandImSpeicher Reaktionsstand(string schema) => Staende.GetOrAdd(schema, AmEnde);
+
+    private static ReaktionsStandImSpeicher AmEnde(string schema)
+    {
+        var stand = new ReaktionsStandImSpeicher();
+        using var conn = new NpgsqlConnection(Verbindung);
+        conn.Open();
+        using var cmd = new NpgsqlCommand($"select coalesce(max(seq_id), 0) from \"{schema}\".mt_events", conn);
+        long ende;
+        try { ende = Convert.ToInt64(cmd.ExecuteScalar()); }
+        catch (PostgresException e) when (e.SqlState == "42P01") { ende = 0; }   // das Schema entsteht erst
+        stand.SichereAsync(Reaktionsname, ende, default).GetAwaiter().GetResult();
+        return stand;
+    }
+
+    public const string Reaktionsname = "pruefstand";
+
+    /// <summary>Der reagierende Client neben dem Host: verbindet sich, sobald der Host läuft, und endet mit ihm.</summary>
+    private sealed class Reaktionsdienst(IHostApplicationLifetime leben, string adresse, IReaktionsStand stand) : BackgroundService
+    {
+        protected override async Task ExecuteAsync(CancellationToken ct)
+        {
+            var gestartet = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (leben.ApplicationStarted.Register(() => gestartet.TrySetResult()))
+            using (ct.Register(() => gestartet.TrySetCanceled()))
+            {
+                try { await gestartet.Task; } catch (OperationCanceledException) { return; }
+            }
+            await Pruefdomaene.Client.Worker.Reaktionslauf.LaufeAsync(adresse, null, stand, Reaktionsname, ct, TimeSpan.FromMilliseconds(200));
+        }
+    }
+
+    public static int FreierPort()
+    {
+        var l = new TcpListener(IPAddress.Loopback, 0);
+        l.Start();
+        var port = ((IPEndPoint)l.LocalEndpoint).Port;
+        l.Stop();
+        return port;
     }
 
     /// <summary>Der Takt der Prüfdomänen-Tests, wenn ein Test nichts anderes verlangt.</summary>

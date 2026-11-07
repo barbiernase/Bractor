@@ -56,7 +56,7 @@ public class ReaktionenTests
             return Gesendet_(envelope.CommandId, envelope.Payload, envelope.CorrelationId);
         }
 
-        public Task SendeNachrichtAsync(ICommand nachricht, Guid commandId, string correlationId, CancellationToken ct = default) =>
+        public Task SendeNachrichtAsync(ICommand nachricht, Guid commandId, string correlationId, CancellationToken ct = default, string? ursache = null) =>
             Gesendet_(commandId, nachricht, correlationId);
 
         private Task Gesendet_(Guid id, ICommand command, string korrelation)

@@ -3,7 +3,13 @@ using Pruefdomaene.Abrechnung;
 
 namespace Pruefdomaene.Pipeline.Abrechnung;
 
-// COMMANDS, die Knoten abgeben (docs/04 §4.4): Commands ohne Ziel, nie im Log.
+// COMMANDS ohne Ziel an den Köpfen des Abrechnungsablaufs (docs/04 §4.4): nie im Log. Ein Client, der auf das Fakt reagiert, gibt ihn hinein (Schritt 6: ein Decide gibt nur Fakten aus).
 
-/// <summary>Eine große Rechnung ist von Hand zu prüfen — Arbeit des Rechnungsprüfers (ein Akteur, der ihn hört).</summary>
-public record RechnungZuPruefen(Id<Rechnung> Rechnung, decimal Betrag) : ICommand;
+/// <summary>Die Rechnung ist gestellt (<see cref="RechnungGestellt"/>): freigeben oder dem Rechnungsprüfer vorlegen entscheidet die Freigabe.</summary>
+public record Freizugeben(Id<Rechnung> Rechnung, decimal Betrag) : ICommand;
+
+/// <summary>Die Rechnung ist bezahlt (<see cref="RechnungBezahlt"/>): der Betrag geht dem Konto gut.</summary>
+public record Gutschreibung(Id<Kundenkonto> Konto, Id<Rechnung> Rechnung, decimal Betrag) : ICommand;
+
+/// <summary>Die Zahlung ist überfällig (<see cref="ZahlungUeberfaellig"/>): die nächste Mahnstufe ist zu versenden.</summary>
+public record Mahnfall(Id<Rechnung> Rechnung, Id<Kundenkonto> Konto, decimal Betrag, int Mahnstufe) : ICommand;

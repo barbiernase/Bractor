@@ -3,8 +3,8 @@ using Abstractions;
 namespace Pruefdomaene.Abrechnung;
 
 /// <summary>
-/// Aggregat <see cref="Rechnung"/>: gestellt, freigegeben oder gesperrt, bezahlt; eine fällige Prüfung der
-/// Zahlung meldet sie überfällig. Prüfling der Funktionen in Baustein-Form (Gutschrift gleichbleibend, Mahnwesen ruft den Mahnversand, Freigabe draußen).
+/// Aggregat <see cref="Rechnung"/>: gestellt, freigegeben oder gesperrt (eine große dem Rechnungsprüfer vorgelegt), bezahlt; eine fällige Prüfung
+/// der Zahlung meldet sie überfällig. Was danach geschieht (Freigabe, Gutschrift, Mahnung), stößt ein Client an, der auf die Fakten reagiert.
 /// </summary>
 public partial class Rechnung : IState
 {
@@ -13,6 +13,7 @@ public partial class Rechnung : IState
     public bool Bezahlt { get; set; }
     public bool Freigegeben { get; set; }
     public bool Gesperrt { get; set; }
+    public bool Vorgelegt { get; set; }
     public int Mahnstufe { get; set; }
 
     public bool Existiert => Version > 0;

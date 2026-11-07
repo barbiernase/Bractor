@@ -11,5 +11,3 @@ public record VermerkeSchaetzung(Id<Messstelle> AggregateId, double Erwartet, in
 /// <summary>Ein Messwert über der Schwelle (die Prüfung rechnet im Host oder draußen).</summary>
 public record MeldeAusreisser(Id<Messstelle> AggregateId, double Wert) : ICommand<Messstelle>;
 
-/// <summary>Ein Command ohne Ziel aus dem Decide (docs/03 §3.2): ein Messwert ist erfasst — die Merkmalsbildung macht daraus ein Merkmal.</summary>
-public record NeuerWert(Id<Messstelle> Stelle, double Wert) : ICommand;

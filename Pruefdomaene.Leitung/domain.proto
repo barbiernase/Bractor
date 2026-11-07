@@ -1,0 +1,585 @@
+syntax = "proto3";
+
+option csharp_namespace = "Pruefdomaene.Leitung";
+
+package pruefdomaene.leitung;
+
+// ============================================================================
+// DIE DOMÄNEN-NACHRICHTEN DER ANWENDUNG (generiert von Cqrs.Codegen — nicht editieren)
+//
+// Je Command, Event, Query, Antwort und Wertobjekt eine {Typ}Dto-Message. Auf der Leitung
+// (Cqrs.Leitung/cqrs.proto) reisen sie als Nutzlast { typ = "{Typ}", daten = {Typ}Dto als Bytes }.
+// ============================================================================
+
+// ============================================================================
+// VALUE OBJECTS
+// ============================================================================
+message BelegDto {
+    int32 art = 1;
+    string nummer = 2;
+}
+
+message AufrufDto {
+    string kennung = 1;
+    string inhalt = 2;
+}
+
+message DateiGefundenDto {
+    string name = 1;
+    string pfad = 2;
+    string relativer_pfad = 3;
+    int64 groesse = 4;
+    int64 geaendert_am = 5;
+    int64 erkannt_am = 6;
+}
+
+message TaktDto {
+    int64 zeitpunkt = 1;
+}
+
+message FreizugebenDto {
+    string rechnung = 1;
+    string betrag = 2;
+}
+
+message GutschreibungDto {
+    string konto = 1;
+    string rechnung = 2;
+    string betrag = 3;
+}
+
+message MahnfallDto {
+    string rechnung = 1;
+    string konto = 2;
+    string betrag = 3;
+    int32 mahnstufe = 4;
+}
+
+message AuftragAbzuwickelnDto {
+    string auftrag_id = 1;
+    string posten_id = 2;
+    string kontingent_id = 3;
+    int32 menge = 4;
+}
+
+message KontingentZuEntlastenDto {
+    string auftrag_id = 1;
+    string kontingent_id = 2;
+    int32 menge = 3;
+}
+
+message PostenFreizugebenDto {
+    string auftrag_id = 1;
+    string posten_id = 2;
+    int32 menge = 3;
+}
+
+message ImportAngefordertDto {
+    int32 zeilen = 1;
+}
+
+message ImportZuLaufenDto {
+    string import = 1;
+    int32 zeilen = 2;
+}
+
+message MerkmalDto {
+    string stelle = 1;
+    double wert = 2;
+}
+
+message NeuerWertDto {
+    string stelle = 1;
+    double wert = 2;
+}
+
+message UnterschrittenDto {
+    string posten = 1;
+    int32 fehlmenge = 2;
+}
+
+message HochrechnungAngefordertDto {
+    string stelle = 1;
+    double wert = 2;
+}
+
+message VerteilungAbzuwickelnDto {
+    string verteilung_id = 1;
+    string quelle_id = 2;
+    repeated string ziele = 3;
+    int32 menge_je_ziel = 4;
+}
+
+message ZielZubuchenDto {
+    string verteilung_id = 1;
+    string ziel = 2;
+    int32 menge = 3;
+}
+
+message ZubuchenDto {
+    string verteilung_id = 1;
+    repeated string ziele = 2;
+    int32 menge_je_ziel = 3;
+}
+
+message SkalierenDto {
+    string bezug = 1;
+    double wert = 2;
+    double faktor = 3;
+}
+
+message SkaliertDto {
+    string bezug = 1;
+    double wert = 2;
+}
+
+// ============================================================================
+// COMMAND PAYLOADS
+// ============================================================================
+message BezahleRechnungDto {
+    string aggregate_id = 1;
+}
+
+message BucheGutschriftDto {
+    string aggregate_id = 1;
+    string rechnung = 2;
+    string betrag = 3;
+}
+
+message GibRechnungFreiDto {
+    string aggregate_id = 1;
+}
+
+message LegeRechnungZurPruefungVorDto {
+    string aggregate_id = 1;
+}
+
+message PruefeZahlungDto {
+    string aggregate_id = 1;
+}
+
+message SperreRechnungDto {
+    string aggregate_id = 1;
+    string grund = 2;
+}
+
+message StelleRechnungDto {
+    string aggregate_id = 1;
+    string konto = 2;
+    string betrag = 3;
+    int32 zahlungsziel_sekunden = 4;
+}
+
+message VermerkeMahnungDto {
+    string aggregate_id = 1;
+    string rechnung = 2;
+    string versand = 3;
+    int32 stufe = 4;
+}
+
+message StarteAuftragDto {
+    string aggregate_id = 1;
+    string posten_id = 2;
+    string kontingent_id = 3;
+    int32 menge = 4;
+}
+
+message VermerkeAbsageDto {
+    string aggregate_id = 1;
+    string grund = 2;
+}
+
+message VermerkeBelegungDto {
+    string aggregate_id = 1;
+}
+
+message VermerkeReservierungDto {
+    string aggregate_id = 1;
+}
+
+message MeldeImportStandDto {
+    string aggregate_id = 1;
+    int32 zeilen = 2;
+}
+
+message StarteImportDto {
+    string aggregate_id = 1;
+    int32 zeilen = 2;
+}
+
+message BelegeKontingentDto {
+    string aggregate_id = 1;
+    int32 plaetze = 2;
+    BelegDto beleg = 3;
+}
+
+message EntlasteKontingentDto {
+    string aggregate_id = 1;
+    int32 plaetze = 2;
+    BelegDto beleg = 3;
+}
+
+message RichteKontingentEinDto {
+    string aggregate_id = 1;
+    int32 plaetze = 2;
+}
+
+message ErfasseMesswertDto {
+    string aggregate_id = 1;
+    double wert = 2;
+}
+
+message MeldeAusreisserDto {
+    string aggregate_id = 1;
+    double wert = 2;
+}
+
+message VermerkeSchaetzungDto {
+    string aggregate_id = 1;
+    double erwartet = 2;
+    int32 anzahl = 3;
+}
+
+message BuchePostenZuDto {
+    string aggregate_id = 1;
+    int32 menge = 2;
+    BelegDto beleg = 3;
+}
+
+message EroeffnePostenDto {
+    string aggregate_id = 1;
+    int32 bestand = 2;
+    int32 mindestbestand = 3;
+}
+
+message GibPostenFreiDto {
+    string aggregate_id = 1;
+    int32 menge = 2;
+    BelegDto beleg = 3;
+}
+
+message ReservierePostenDto {
+    string aggregate_id = 1;
+    int32 menge = 2;
+    BelegDto beleg = 3;
+}
+
+message StarteVerteilungDto {
+    string aggregate_id = 1;
+    string quelle_id = 2;
+    repeated string ziele = 3;
+    int32 menge_je_ziel = 4;
+}
+
+message VermerkeQuellabsageDto {
+    string aggregate_id = 1;
+    int32 verfuegbar = 2;
+}
+
+message VermerkeQuellreservierungDto {
+    string aggregate_id = 1;
+}
+
+message VermerkeZubuchungDto {
+    string aggregate_id = 1;
+    int32 menge = 2;
+}
+
+// ============================================================================
+// EVENT PAYLOADS
+// ============================================================================
+message CommandFailedDto {
+    string command_type = 1;
+    string reason = 2;
+    string aggregate_id = 3;
+}
+
+message CommandQuittungDto {
+    string command_type = 1;
+    string stream = 2;
+    int32 version = 3;
+    bool geschrieben = 4;
+    bool abgelehnt = 5;
+}
+
+message LaufGescheitertDto {
+    string instanz = 1;
+    string lauf = 2;
+    string knoten = 3;
+    string grund = 4;
+}
+
+message GutschriftGebuchtDto {
+    string rechnung = 1;
+    string betrag = 2;
+}
+
+message MahnungUnnoetigDto {
+    string rechnung = 1;
+}
+
+message MahnungVermerktDto {
+    string rechnung = 1;
+    string versand = 2;
+    int32 stufe = 3;
+}
+
+message RechnungBezahltDto {
+    string rechnung = 1;
+    string konto = 2;
+    string betrag = 3;
+}
+
+message RechnungExistiertDto {
+    string rechnung_id = 1;
+}
+
+message RechnungFreigegebenDto {
+    // Keine Parameter
+}
+
+message RechnungGesperrtDto {
+    string grund = 1;
+}
+
+message RechnungGestelltDto {
+    string rechnung = 1;
+    string konto = 2;
+    string betrag = 3;
+}
+
+message RechnungUnbekanntDto {
+    string rechnung_id = 1;
+}
+
+message RechnungZurPruefungVorgelegtDto {
+    string rechnung = 1;
+    string betrag = 2;
+}
+
+message ZahlungUeberfaelligDto {
+    string rechnung = 1;
+    string konto = 2;
+    string betrag = 3;
+    int32 mahnstufe = 4;
+}
+
+message AuftragBestaetigtDto {
+    // Keine Parameter
+}
+
+message AuftragExistiertBereitsDto {
+    string auftrag_id = 1;
+}
+
+message AuftragGescheitertDto {
+    string grund = 1;
+}
+
+message AuftragGestartetDto {
+    string auftrag_id = 1;
+    string posten_id = 2;
+    string kontingent_id = 3;
+    int32 menge = 4;
+}
+
+message AuftragNichtGefundenDto {
+    string auftrag_id = 1;
+}
+
+message BelegungVermerktDto {
+    // Keine Parameter
+}
+
+message KontingententlastungAngefordertDto {
+    string kontingent_id = 1;
+    int32 menge = 2;
+}
+
+message PostenfreigabeAngefordertDto {
+    string posten_id = 1;
+    int32 menge = 2;
+}
+
+message ReservierungVermerktDto {
+    // Keine Parameter
+}
+
+message ImportExistiertDto {
+    string import_id = 1;
+}
+
+message ImportGestartetDto {
+    int32 zeilen = 1;
+}
+
+message ImportStandGemeldetDto {
+    int32 zeilen = 1;
+}
+
+message BelegungAbgelehntDto {
+    int32 frei = 1;
+    int32 angefordert = 2;
+    BelegDto beleg = 3;
+}
+
+message KontingentBelegtDto {
+    int32 plaetze = 1;
+    BelegDto beleg = 2;
+}
+
+message KontingentEingerichtetDto {
+    int32 plaetze = 1;
+}
+
+message KontingentEntlastetDto {
+    int32 plaetze = 1;
+    BelegDto beleg = 2;
+}
+
+message KontingentExistiertBereitsDto {
+    string kontingent_id = 1;
+}
+
+message KontingentNichtGefundenDto {
+    string kontingent_id = 1;
+}
+
+message AusreisserGemeldetDto {
+    double wert = 1;
+}
+
+message MesswertErfasstDto {
+    double wert = 1;
+}
+
+message SchaetzungVermerktDto {
+    double erwartet = 1;
+    int32 anzahl = 2;
+}
+
+message PostenEroeffnetDto {
+    int32 anfangs_bestand = 1;
+    int32 mindestbestand = 2;
+}
+
+message PostenExistiertBereitsDto {
+    string posten_id = 1;
+}
+
+message PostenFreigegebenDto {
+    int32 menge = 1;
+    BelegDto beleg = 2;
+}
+
+message PostenNichtGefundenDto {
+    string posten_id = 1;
+}
+
+message PostenReserviertDto {
+    int32 menge = 1;
+    int32 fehlmenge = 2;
+    BelegDto beleg = 3;
+}
+
+message PostenZugebuchtDto {
+    int32 menge = 1;
+    BelegDto beleg = 2;
+}
+
+message ReservierungAbgelehntDto {
+    int32 verfuegbar = 1;
+    int32 angefordert = 2;
+    BelegDto beleg = 3;
+}
+
+message QuelleReserviertDto {
+    repeated string ziele = 1;
+    int32 menge_je_ziel = 2;
+}
+
+message VerteilungAbgeschlossenDto {
+    int32 zugebucht = 1;
+}
+
+message VerteilungExistiertBereitsDto {
+    string verteilung_id = 1;
+}
+
+message VerteilungGescheitertDto {
+    int32 verfuegbar = 1;
+}
+
+message VerteilungGestartetDto {
+    string verteilung_id = 1;
+    string quelle_id = 2;
+    repeated string ziele = 3;
+    int32 menge_je_ziel = 4;
+}
+
+message VerteilungNichtGefundenDto {
+    string verteilung_id = 1;
+}
+
+message ZielZugebuchtDto {
+    int32 menge = 1;
+}
+
+// ============================================================================
+// QUERY PAYLOADS
+// ============================================================================
+message HoleKontingentDto {
+    string kontingent = 1;
+}
+
+message HoleLageDto {
+    // Keine Parameter
+}
+
+message HoleRechnungsbildDto {
+    string rechnung = 1;
+}
+
+message HoleMessreiheDto {
+    string stelle = 1;
+}
+
+message HoleMesszaehlerDto {
+    string stelle = 1;
+}
+
+// ============================================================================
+// QUERY RESPONSE PAYLOADS
+// ============================================================================
+message KontingentStandDto {
+    string kontingent = 1;
+    int32 frei = 2;
+}
+
+message KontingentUnbekanntDto {
+    string kontingent = 1;
+}
+
+message LagebildDto {
+    string sperrgrund = 1;
+    optional double ausreisser = 2;
+}
+
+message RechnungsbildDto {
+    string rechnung = 1;
+    optional string freigegeben = 2;
+    optional string gestellt = 3;
+    optional string gutgeschrieben = 4;
+}
+
+message MessreiheDto {
+    string stelle = 1;
+    repeated double werte = 2;
+    optional double letzter = 3;
+}
+
+message MesszaehlerDto {
+    string stelle = 1;
+    int32 anzahl = 2;
+}
+

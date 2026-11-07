@@ -6,10 +6,9 @@ public partial class Messstelle
 {
     public partial class Decider : IDecider<Messstelle>
     {
-        public IEnumerable<OneOf<MesswertErfasst, NeuerWert>> Decide(ErfasseMesswert cmd)
+        public IEnumerable<OneOf<MesswertErfasst>> Decide(ErfasseMesswert cmd)
         {
             yield return new MesswertErfasst(cmd.Wert);
-            yield return new NeuerWert(cmd.AggregateId, cmd.Wert);
         }
 
         public IEnumerable<OneOf<SchaetzungVermerkt>> Decide(VermerkeSchaetzung cmd)

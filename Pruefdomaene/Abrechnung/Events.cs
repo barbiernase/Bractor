@@ -5,6 +5,8 @@ namespace Pruefdomaene.Abrechnung;
 public record RechnungGestellt(Id<Rechnung> Rechnung, Id<Kundenkonto> Konto, decimal Betrag) : IEvent;
 public record RechnungFreigegeben() : IEvent;
 public record RechnungGesperrt(string Grund) : IEvent;
+/// <summary>Die Rechnung liegt dem Rechnungsprüfer vor: er gibt sie frei oder sperrt sie.</summary>
+public record RechnungZurPruefungVorgelegt(Id<Rechnung> Rechnung, decimal Betrag) : IEvent;
 public record RechnungBezahlt(Id<Rechnung> Rechnung, Id<Kundenkonto> Konto, decimal Betrag) : IEvent;
 public record ZahlungUeberfaellig(Id<Rechnung> Rechnung, Id<Kundenkonto> Konto, decimal Betrag, int Mahnstufe) : IEvent;
 

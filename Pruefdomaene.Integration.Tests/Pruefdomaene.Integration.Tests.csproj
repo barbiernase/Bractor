@@ -35,6 +35,7 @@
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Laufzeit\Pruefdomaene.Laufzeit.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Client.Worker\Pruefdomaene.Client.Worker.csproj" />
   </ItemGroup>
 
 </Project>

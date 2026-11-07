@@ -366,20 +366,23 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
         var kennung = Guid.TryParse(dto.CommandId, out var id) ? id : Guid.NewGuid();
         var wer = akteur?.AkteurFuer(typ) ?? AkteurHerkunft.EindeutigerHalter(typ);
         var korrelation = string.IsNullOrEmpty(dto.CorrelationId) ? kennung.ToString() : dto.CorrelationId;
-        var eingaenge = Infrastructure.Eingaenge.Folgenbeilagen.VonAkteur(command, koepfe, kennung, wer, korrelation);
+        // Reagiert der Client auf ein Fakt (die Hülle nennt es als Ursache), ist es die Herkunft des Eingangs — wie bei einer Folge aus einem
+        //   Decide: die Kette und ihre Commands tragen das Fakt als Ursache. Sonst ist die Kennung der Stream, ohne Vorgänger im Log.
+        var (stream, version) = Spur.ZerlegeUrsache(dto.Ursache, out var s, out var v) ? (s, (int)v) : (kennung, 0);
+        var eingaenge = Infrastructure.Eingaenge.Folgenbeilagen.VonAkteur(command, koepfe, kennung, wer, korrelation, version);
         if (eingaenge.Count == 0)
         {
             await FehlerAsync("KEIN_EMPFAENGER", $"{typ.Name}: kein Graph nimmt ihn am Kopf, kein Akteur hört ihn (fehlt eine Instanz?)", korrelation);
             return;
         }
-        Neben(context, ct => offene.LegeAsync(eingaenge.Select(e => e.Eingang).ToList(), kennung, ct), async t =>
+        Neben(context, ct => offene.LegeAsync(eingaenge.Select(e => e.Eingang).ToList(), stream, ct), async t =>
         {
             if (t.IsFaulted)
             {
                 await FehlerAsync("EINGANG_NICHT_GELEGT", t.Exception?.GetBaseException().Message ?? "", korrelation);
                 return;
             }
-            if (_d.Wege is { } wege) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(eingaenge, wege, kennung);
+            if (_d.Wege is { } wege) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(eingaenge, wege, stream);
             // Gelegt heißt angenommen: von jetzt an bringt der Zusteller ihn hin. Die Quittung mit seiner Korrelation sagt es dem Client — wer
             //   ohne sie wiederholt (dieselbe Command-Id), legt keinen zweiten.
             await SchreibeAsync(new Leitung.ServerMessage { Event = new Leitung.EventNotification { Envelope = _d.Mapper.MapToDto(new EventEnvelope

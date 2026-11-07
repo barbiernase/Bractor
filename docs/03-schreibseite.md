@@ -182,8 +182,7 @@ Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hä
 (CQRS114): Aggregate reden nur über Graphen oder Akteure miteinander. Beispiel aus der Prüfdomäne:
 `IEnumerable<OneOf<PostenReserviert, Unterschritten, ReservierungAbgelehnt, PostenNichtGefunden>> Decide(ReservierePosten c)` mit
 `record Unterschritten(Id<Posten> Posten, int Fehlmenge) : ICommand` in `Commands.cs` der Schreibseite. Den Empfänger nennt der Command nicht: es
-ist der Kopf genau eines Graphen, der ihn nimmt (hier der Nachschub), oder ein Akteur, der ihn als Arbeit hört (`RechnungZuPruefen` → Rechnungspruefer,
-CQRS116). Er geht nicht ins Log und zählt nicht in der Version; je Empfänger — die Instanz, deren Graph ihn am Kopf nimmt, bzw. die Instanz der
+ist der Kopf genau eines Graphen, der ihn nimmt (hier der Nachschub), oder ein Akteur, der ihn als Arbeit hört (CQRS116; im Bestand hat kein Akteur mehr Arbeit, Schritt 6). Er geht nicht ins Log und zählt nicht in der Version; je Empfänger — die Instanz, deren Graph ihn am Kopf nimmt, bzw. die Instanz der
 Arbeit des Akteurs — legt die Entscheidung in derselben Transaktion einen **offenen Eingang** (Beilage `EingangOffen`, Tabelle `cqrs_eingaenge`,
 §3.3), auch bei einer Entscheidung ohne Events (dann mit der Quittung und der Kopf-Prüfung). Die Kennung ist abgeleitet aus Command-Id, Stelle
 unter den Ausgaben und Instanz (`Eingangsvertrag`, `Folgenbeilagen`): ein wiederholter Command legt keinen zweiten Eingang. Seine Herkunft ist der

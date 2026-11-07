@@ -6,19 +6,17 @@ public partial class Verteilung
 {
     public partial class Decider : IDecider<Verteilung>
     {
-        public IEnumerable<OneOf<VerteilungGestartet, VerteilungAbzuwickeln, VerteilungExistiertBereits>> Decide(StarteVerteilung cmd)
+        public IEnumerable<OneOf<VerteilungGestartet, VerteilungExistiertBereits>> Decide(StarteVerteilung cmd)
         {
             if (this.State.Existiert) { yield return new VerteilungExistiertBereits(cmd.AggregateId); yield break; }
             yield return new VerteilungGestartet(cmd.AggregateId, cmd.QuelleId, cmd.Ziele, cmd.MengeJeZiel);
-            yield return new VerteilungAbzuwickeln(cmd.AggregateId, cmd.QuelleId, cmd.Ziele, cmd.MengeJeZiel);
         }
 
-        public IEnumerable<OneOf<QuelleReserviert, Zubuchen, VerteilungNichtGefunden>> Decide(VermerkeQuellreservierung cmd)
+        public IEnumerable<OneOf<QuelleReserviert, VerteilungNichtGefunden>> Decide(VermerkeQuellreservierung cmd)
         {
             if (!this.State.Existiert) { yield return new VerteilungNichtGefunden(cmd.AggregateId); yield break; }
             if (this.State.QuelleReserviert || this.State.Gescheitert) yield break;
-            yield return new QuelleReserviert();
-            yield return new Zubuchen(cmd.AggregateId, this.State.Ziele, this.State.MengeJeZiel);
+            yield return new QuelleReserviert(this.State.Ziele, this.State.MengeJeZiel);
         }
 
         public IEnumerable<OneOf<VerteilungGescheitert, VerteilungNichtGefunden>> Decide(VermerkeQuellabsage cmd)

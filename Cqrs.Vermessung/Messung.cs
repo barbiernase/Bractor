@@ -46,7 +46,7 @@ internal static class Messung
             if (o.Szenarien.Overlaps(["S1", "S3", "S4", "S6"]))
             {
                 await using (var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-w{w}", zuruecksetzen: true))
-                await using (new Reaktionsworker(k.Beispiel.GrpcPort))
+                await using (Reaktionsworker.Beispiel(k.Beispiel.GrpcPort))
                 {
                     if (o.Diagnose) await Zeitreihe.LaufeAsync(k, lauf, "L1-leer", o.ZeitreiheLeer, o.ZeitreiheTakt);
                     if (o.Szenarien.Contains("S1") || o.Szenarien.Contains("S4")) Merke("S1", await StossAsync(k, lauf, "S1", 2030, w, o.StossS1));
@@ -86,6 +86,7 @@ internal static class Messung
             {
                 await using var lauf = await Anwendungslauf.StarteAsync(k, k.Pruef, "Host.Pruefdomaene", "host", $"pruefdomaene-w{w}", zuruecksetzen: true,
                     mitDaten: ["posten_reserviert"]);
+                await using var reaktionen = Reaktionsworker.Pruefdomaene(k.Pruef.GrpcPort);
                 var pd = new Pruefdomaene(lauf.Eingang, lauf.Log, lauf.Uhrversatz);
                 await pd.EinrichtenAsync();
                 await AufwaermenAsync(pd);

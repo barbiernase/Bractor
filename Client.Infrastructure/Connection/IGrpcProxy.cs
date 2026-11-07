@@ -49,7 +49,7 @@ public interface IGrpcProxy
     /// derselben wiederholt, legt keinen zweiten. Der Server quittiert den gelegten Eingang (<see cref="CommandQuittung"/> mit dieser Korrelation)
     /// oder meldet einen Fehler.
     /// </summary>
-    Task SendeNachrichtAsync(ICommand nachricht, Guid commandId, string correlationId, CancellationToken ct = default);
+    Task SendeNachrichtAsync(ICommand nachricht, Guid commandId, string correlationId, CancellationToken ct = default, string? ursache = null);
 
     /// <summary>
     /// Sendet eine Query und wartet auf die Antwort. <paramref name="mindestens"/>: „mindestens S auf v“ je Stream, den der Client zuletzt

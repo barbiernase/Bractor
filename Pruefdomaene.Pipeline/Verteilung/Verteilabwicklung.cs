@@ -5,9 +5,9 @@ using Pruefdomaene.Verteilung;
 namespace Pruefdomaene.Pipeline.Verteilung;
 
 /// <summary>
-/// Der Anfang der Verteilung: die Quelle reserviert die Gesamtmenge; ihr Eingang ist der Command <see cref="VerteilungAbzuwickeln"/> aus dem Decide,
-/// die Events hört sie als Antwort auf ihren eigenen Command. Gelingt es, gibt die Verteilung <see cref="Zubuchen"/> aus — den Kopf eines neuen Laufs
-/// (<see cref="Zielaufteilung"/>).
+/// Der Anfang der Verteilung: die Quelle reserviert die Gesamtmenge; ihr Eingang ist der Command <see cref="VerteilungAbzuwickeln"/> (ein Client
+/// reagiert damit auf <c>VerteilungGestartet</c>), die Events hört sie als Antwort auf ihren eigenen Command. Gelingt es, steht <c>QuelleReserviert</c>
+/// im Log, und der Client gibt <see cref="Zubuchen"/> an den Kopf eines neuen Laufs (<see cref="Zielaufteilung"/>).
 /// </summary>
 public sealed class Verteilabwicklung : IFunktion
 {

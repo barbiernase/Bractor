@@ -401,7 +401,7 @@ liest die fälligen Zeilen und bringt jede über die Wege hin: „fertig“ trä
 Zwischen Knoten desselben Graphen reist nichts als Eingang — das tragen die Aufrufe der Kette.
 
 **Arbeit für Akteure** (`Arbeit.cs`, `Werkstatt.cs`, [konzept-akteure.md](konzept-akteure.md) §5). Hört ein Akteur einen Command ohne Ziel
-(`IHoert<RechnungZuPruefen>` am Rechnungspruefer der Prüfdomäne), ist das seine Arbeit: die Laufzeit legt eine Instanz unter seinem Namen an — ein Graph mit einem
+(im Bestand keiner mehr, Schritt 6), ist das seine Arbeit: die Laufzeit legt eine Instanz unter seinem Namen an — ein Graph mit einem
 Knoten **draußen**, Köpfe = die gehörten Commands, Ausgänge = die Commands seines `IDarf`. So hat die Arbeit, was jeder Kopf hat: offene Eingänge
 aus einem Decide, den Weg aus einem Graphen, Orte, Wiederholung. Das Kind dieses Knotens hat keine Aktivierung: es gibt den Auftrag der
 **Werkstatt** seines Cluster-Knotens, die ihn einem **Arbeiter** mit freiem Platz gibt — einer Sitzung, deren Client den Akteur verkörpert und deren
@@ -423,13 +423,15 @@ mit) → `Dateinamendeutung` → `BildGedeutet`, im Ablauf übersetzt ↦ `NimmB
 `ReaktionsWorker` hört als `Datensatzpfleger` `RangeAngefordert` bzw. `EinfrierenAngefordert`, liest per Query und gibt `NimmRangeAuf` bzw.
 `SchliesseEinfrierenAb`, als `Teilmelder` `TeilauftragAbgeschlossen` und gibt `MeldeTeilFertig` an den Sammelvorgang, den das Event nennt);
 ebenso reagieren die Python-Worker: der `Klassifizierer` auf `ImagePairKomplett` mit seinem Urteil, das `TrainingsSystem` auf
-`TrainingAngefordert` in Stücken (Arbeit hat in der Beispieldomäne kein Akteur mehr). Prüfdomäne: der
-**Abrechnungsablauf** (`Freigabeautomat` gibt eine Rechnung bis 10 000 frei, darüber `RechnungZuPruefen` — Arbeit des `Rechnungspruefer`;
+`TrainingAngefordert` in Stücken (Arbeit hat kein Akteur mehr). Prüfdomäne — die Köpfe ihrer Graphen speist ihr `ReaktionsWorker`
+(`Pruefdomaene.Client.Worker`, Akteur `Sachbearbeitung`): auf jedes Fakt, das einen Ablauf beginnt oder fortsetzt, gibt er dessen Command hinein
+(`RechnungGestellt` ↦ `Freizugeben`, `AuftragGestartet` ↦ `AuftragAbzuwickeln`, `PostenReserviert` mit Fehlmenge ↦ `Unterschritten` …), mit dem
+Fakt als Ursache, also als Herkunft des Eingangs. Der **Abrechnungsablauf** (`Freigabeautomat` gibt eine Rechnung bis 10 000 frei, darüber
+legt er sie dem Rechnungsprüfer vor — `LegeRechnungZurPruefungVor`, auf das Fakt reagiert der `Rechnungspruefer`;
 `Gutschrift`, `Mahnwesen` mit Technik `IMahnversand`), der **Auftragsablauf** (§4.5), der **Importablauf** (`Importannahme` mit Kopf
 `ImportAngefordert` von einem Akteur, `Importlauf` als Strom), die **Merkmalbildung** (`Merkmalsbildung` → `Merkmal` gabelt zu `Ausreisserpruefung`
 und `Schaetzer`, der Zustand hat), der **Nachschubablauf** (`Nachschub`, Kopf `Unterschritten`), der **Verteilungsablauf** und die **Zubuchung**
-(Je und Sammeln, §4.5). Das Event neben einem Command ohne Ziel (`RangeAngefordert`, `ImagePairKomplett`, `TrainingAngefordert` …) bleibt ein
-Fakt im Log für Projektionen und Clients.
+(Je und Sammeln, §4.5). Kein `Decide` gibt einen Command ohne Ziel aus; was danach geschieht, stößt ein Client an.
 
 ## 4.5 Abläufe: Aggregat, Graph und Frist
 

@@ -9,3 +9,6 @@ namespace Pruefdomaene.Pipeline.Import;
 /// Wiederholen wieder mit: derselbe offene Eingang, derselbe Lauf.
 /// </summary>
 public sealed record ImportAngefordert(int Zeilen) : ICommand;
+
+/// <summary>Der Import ist gestartet (<c>ImportGestartet</c>): seine Zeilen sind zu lesen und als Posten anzulegen. Ein Client, der auf das Fakt reagiert, gibt ihn hinein.</summary>
+public record ImportZuLaufen(Id<global::Pruefdomaene.Import.Importauftrag> Import, int Zeilen) : ICommand;

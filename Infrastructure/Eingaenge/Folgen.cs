@@ -47,12 +47,12 @@ public static class Folgenbeilagen
     /// Command-Id und der Instanz — derselbe Command (dieselbe Id) legt keine zweite Zeile, genau einmal am Kopf.
     /// </summary>
     public static IReadOnlyList<(EingangOffen Eingang, object Folge)> VonAkteur(ICommand command, Infrastructure.Funktionen.Verkettung plan, Guid commandId,
-        string? akteur, string? korrelation)
+        string? akteur, string? korrelation, int version = 0)
     {
         var hoerer = plan.Hoerer(command.GetType());
         if (hoerer.Count == 0) return Array.Empty<(EingangOffen, object)>();
         var (typ, daten) = Nachrichtenform.Schreibe(command);
-        return hoerer.Select(f => (new EingangOffen(Eingangsvertrag.Eingang(commandId, f), f, typ, daten, 0, ImAuftrag.IstAkteur(akteur) ? akteur : null,
+        return hoerer.Select(f => (new EingangOffen(Eingangsvertrag.Eingang(commandId, f), f, typ, daten, version, ImAuftrag.IstAkteur(akteur) ? akteur : null,
             korrelation), (object)command)).ToList();
     }
 

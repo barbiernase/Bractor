@@ -171,8 +171,9 @@ public sealed class Reaktionen(IGrpcProxy proxy, IReaktionsStand stand, string n
 
     /// <summary>
     /// Sendet einen Command mit seiner abgeleiteten Id und wartet auf seine Antwort (Quittung, Event, Ablehnung oder Fehler mit dieser Korrelation);
-    /// bleibt sie aus, geht er mit derselben Id noch einmal — die Inbox des Ziels bzw. der offene Eingang verwirft das Zweite. Ein Command an ein
-    /// Aggregat trägt das Event, auf das reagiert wird, als <paramref name="ursache"/> (Spur): der Server stempelt es an seine Events.
+    /// bleibt sie aus, geht er mit derselben Id noch einmal — die Inbox des Ziels bzw. der offene Eingang verwirft das Zweite. Jeder Command trägt
+    /// das Event, auf das reagiert wird, als <paramref name="ursache"/> (Spur): an ein Aggregat stempelt der Server es an dessen Events, an den Kopf
+    /// eines Graphen ist es die Herkunft des Eingangs.
     /// </summary>
     private async Task SendeAsync(ICommand command, Guid id, string ursache, CancellationToken ct)
     {
@@ -191,7 +192,7 @@ public sealed class Reaktionen(IGrpcProxy proxy, IReaktionsStand stand, string n
                         Ursache = ursache,
                     }, ct);
                 else
-                    await proxy.SendeNachrichtAsync(command, id, korrelation, ct);
+                    await proxy.SendeNachrichtAsync(command, id, korrelation, ct, ursache);
                 if (await Task.WhenAny(antwort.Task, Task.Delay(_antwortfrist, ct)) == antwort.Task)
                 {
                     if (antwort.Task.Result.Payload is CommandFailed f)

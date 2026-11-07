@@ -27,6 +27,7 @@
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
 | `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Laufzeit` | die Komposition: alle Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs` der Hosts, die STJ-Kontexte — nichts Handgeschriebenes | alle Rollen-Projekte + Infrastructure |
+| `Domain.Client.Worker` | der .NET-Client, der auf die Fakten der Anwendung reagiert (der `ReaktionsWorker`, ein eigener Prozess) | Domain, Domain.Projections, Domain.Akteure, Domain.Leitung |
 | `Domain.Client.Worker.Python.*` | Python-Clients: Implementierungen der generierten Client-Basen (`domain_client/`), Generate unter `domain_client/generated/` | — |
 | `Domain.Client.Modules.*` | GUI-Clients (außerhalb des Editors, W12) | Client.Infrastructure |
 | `<Name>.Katalog` | ein **Funktionskatalog** (keine Rolle *einer* Anwendung, eigene Wurzel): Funktionen, ihre Nachrichten (Commands ohne Ziel, Hinweise), Konfig-Records, Technik, Graphen, Wertobjekte, Enums — domänenneutral; die Werkbank legt ihn an („＋ 📚 Katalog“) | Abstractions, Core, andere Kataloge |
@@ -104,8 +105,10 @@ Analyzer und `--check`.
 - Die Wurzel der Werkzeuge (Werkbank, Scaffolder, `--check`) ist `Projektstruktur.StandardWurzel`; Generatoren leiten sie aus dem Projektnamen
   ab, der Codegen aus dem Projekt, das ihn auslöst (`--projekt`). Die zweite Anwendung der Solution ist die Prüfdomäne (`Pruefdomaene`,
   `Pruefdomaene.Pipeline` mit ihren Graphen — Abrechnung, Auftrag, Import, Merkmalbildung, Nachschub, Verteilung, Zubuchung —,
-  `Pruefdomaene.Akteure` mit dem `Rechnungspruefer`, Komposition `Pruefdomaene.Laufzeit`, Host `Host.Pruefdomaene` für die E2E-Messung, Tests in
-  `Pruefdomaene.Integration.Tests`); damit das Werkzeug ihre DLLs hat, referenziert `Cqrs.Codegen` auch sie. Sie hat keine Leitung — eine Anwendung
-  ohne Leitung startet keinen gRPC-Dienst (`IAnwendung.Nutzlast` ist dann `null`); hinein geht es über den JSON-Eingang.
+  `Pruefdomaene.Akteure` mit `Rechnungspruefer`, `Messwart`, `Sachbearbeitung` und dem Client `ReaktionsWorker`, Leitung `Pruefdomaene.Leitung`,
+  Komposition `Pruefdomaene.Laufzeit`, der Worker `Pruefdomaene.Client.Worker`, Host `Host.Pruefdomaene` für die E2E-Messung, Tests in
+  `Pruefdomaene.Integration.Tests`); damit das Werkzeug ihre DLLs hat, referenziert `Cqrs.Codegen` auch sie. Mit ihrer Leitung startet sie den
+  gRPC-Dienst: ihr Worker reagiert auf die Fakten über die Leitung wie jeder Client; eine Anwendung ohne Leitung (`IAnwendung.Nutzlast` ist dann
+  `null`) nimmt nur den JSON-Eingang.
 - Fremde Namespaces (außerhalb der Rollen-Projekte der Wurzel) platziert der Scaffolder wie bisher nach Namespace → Verzeichnis; die Lage-Prüfung
   meldet sie.

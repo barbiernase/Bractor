@@ -4,7 +4,8 @@ using Pruefdomaene.Abrechnung;
 namespace Pruefdomaene.Pipeline.Abrechnung;
 
 /// <summary>
-/// Eine Funktion, die eine andere ruft (der Mahnversand ist Außenwelt), vor dem Aggregat: sie hört die Folge <see cref="Mahnfall"/>. Nichts wird
+/// Eine Funktion, die eine andere ruft (der Mahnversand ist Außenwelt), vor dem Aggregat: sie nimmt <see cref="Mahnfall"/> am Kopf (ein Client
+/// reagiert damit auf <c>ZahlungUeberfaellig</c>). Nichts wird
 /// festgehalten — rechnet sie einen Eingang nach einem Absturz erneut, kann der Versand eine zweite Nummer liefern; wirksam wird nur der erste
 /// Vermerk (dieselbe Command-Id aus Eingang und Stelle, die Inbox verwirft den zweiten). Der Versand selbst ist mindestens einmal.
 /// </summary>

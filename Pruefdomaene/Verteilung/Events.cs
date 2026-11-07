@@ -6,7 +6,7 @@ namespace Pruefdomaene.Verteilung;
 public record VerteilungGestartet(Id<Verteilung> VerteilungId, Id<Posten.Posten> QuelleId, IReadOnlyList<Id<Posten.Posten>> Ziele, int MengeJeZiel) : IEvent;
 
 /// <summary>Die Quelle ist reserviert: die Verteilung bucht ihre Ziele zu (der Command <see cref="Zubuchen"/> geht an die Verteilabwicklung).</summary>
-public record QuelleReserviert() : IEvent;
+public record QuelleReserviert(IReadOnlyList<Id<Posten.Posten>> Ziele, int MengeJeZiel) : IEvent;
 
 /// <summary>Ein Ziel ist gebucht — mit seiner Menge (die Verteilung zählt mit).</summary>
 public record ZielZugebucht(int Menge) : IEvent;

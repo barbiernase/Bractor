@@ -1,9 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- Die KOMPOSITION der Prüfdomäne (docs/07, Rolle Komposition): Framework + ihre Rollen-Projekte (Schreibseite, Leseseite, Speicher, Abläufe mit den Funktionen). Hier laufen
-       die Laufzeit-Generatoren (Infrastructure.SourceGeneration) — ohne Akteure und Leitung emittieren diese Teile leer,
-       aber kompilierbar. Die STJ-Kontexte (Serialization/*.g.cs) schreibt der Codegen-Prepass hierher; ohne Leitungs-Projekt hängt der
-       Prepass an der Komposition. -->
+       die Laufzeit-Generatoren (Infrastructure.SourceGeneration); die Nutzlast der Leitung kommt aus Pruefdomaene.Leitung (ihr Prepass schreibt
+       auch die STJ-Kontexte Serialization/*.g.cs hierher). -->
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -18,9 +17,8 @@
     <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Akteure\Pruefdomaene.Akteure.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Infrastructure\Pruefdomaene.Infrastructure.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Leitung\Pruefdomaene.Leitung.csproj" />
     <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
-
-  <Import Project="..\Cqrs.Codegen\CqrsCodegen.targets" />
 
 </Project>
