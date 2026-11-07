@@ -367,6 +367,10 @@ public sealed record Rahmen
     public IReadOnlyDictionary<string, string> Verzeichnisse { get; init; } = new Dictionary<string, string>();
     /// <summary>Das Suffix der Abläufe zur Wurzel (Projektstruktur, docs/07): dort liegen Graphen, Funktionen der Anwendung und Client-Nachrichten.</summary>
     public string AblaeufeSuffix { get; init; } = Abstractions.Projektstruktur.Von(Abstractions.Projektstruktur.Rolle.Ablaeufe).Suffix;
+    /// <summary>Der allgemeine Katalog (Projektstruktur): die Commands, die alle Kataloge teilen dürfen; die Werkbank legt ihn beim ersten Gebrauch an.</summary>
+    public string AllgemeinerKatalog { get; init; } = Abstractions.Projektstruktur.AllgemeinerKatalog;
+    /// <summary>Je Katalog die Kataloge, die er referenziert (aus seiner Projektdatei) — wer einen Command eines anderen nimmt, braucht die Referenz.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> KatalogNutzt { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
     /// <summary>
     /// Das Python-Paket der Clients (relativ zur Solution, z. B. <c>Domain.Client.Worker.Python.ML/domain_client</c>) — Code-Fakt: dort liegt
     /// die generierte <c>generated/vertraege.py</c>. Hier legt „C# schreiben" eine neue Client-Implementierung an. Null = keins.

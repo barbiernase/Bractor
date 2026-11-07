@@ -108,6 +108,7 @@ public static class ModellMapper
             DecideMethode = dom.DecideMethode ?? standard.DecideMethode,
             ApplyMethode = dom.ApplyMethode ?? standard.ApplyMethode,
             Verzeichnisse = verzeichnisse,
+            KatalogNutzt = KatalogReferenzen(dom.ProjektWurzeln),
             PythonPaket = PythonClients.Paket(dom.Wurzel),
             Kennung = Kennung(dom.Wurzel),
             Skalare = WireSkalare(),
@@ -258,6 +259,12 @@ public static class ModellMapper
         OhneParameterliste = meta.OhneParameterliste,
         Basen = meta.Basen, Attribute = meta.Attribute,
     };
+
+    /// <summary>Je Katalog (Projekt-Wurzel <c>&lt;Name&gt;.Katalog</c>) die Kataloge, die seine Projektdatei referenziert.</summary>
+    private static Dictionary<string, IReadOnlyList<string>> KatalogReferenzen(IReadOnlyDictionary<string, string> wurzeln) =>
+        wurzeln.Where(w => Abstractions.Projektstruktur.IstKatalog(w.Key) && File.Exists(Path.Combine(w.Value, w.Key + ".csproj")))
+            .ToDictionary(w => w.Key, w => (IReadOnlyList<string>)Abstractions.Projektstruktur.KatalogeIn(File.ReadAllText(Path.Combine(w.Value, w.Key + ".csproj"))).ToList(),
+                StringComparer.Ordinal);
 
     /// <summary>Pfad relativ zur Solution, „/"-getrennt (für den Editor/die Werkbank); null, wenn außerhalb oder unbekannt.</summary>
     private static string? Relativ(string wurzel, string? abs)

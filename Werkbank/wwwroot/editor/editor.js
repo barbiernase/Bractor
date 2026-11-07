@@ -2244,7 +2244,7 @@
     if(gr==="konfig"||gr==="nachrichten"){komKarte("rec:"+(x.name||x.typ),true,true);return;}
     deFlash("ℹ "+x.name+" (Katalog) meldet "+(x.meldet||[]).join(", ")+" — ziehen Sie sie auf die Leinwand",true);}
   // Brotkrumen über alle Ansichten des Pfads: Graph, Aggregat, Store, Formular einer Karte.
-  function komKrumenText(g){if(g.startsWith("form:")){const n=NODEBY.get(g.slice(5));return "✎ "+(n?(NODELABEL[n.kind]||n.kind)+" "+(n.name||""):g.slice(5));}
+  function komKrumenText(g){if(g.startsWith("kat:"))return "📚 "+(g.slice(4).replace(/\.Katalog$/,"")||"Kataloge");if(g.startsWith("form:")){const n=NODEBY.get(g.slice(5));return "✎ "+(n?(NODELABEL[n.kind]||n.kind)+" "+(n.name||""):g.slice(5));}
     if(g.startsWith("gr:"))return "⬡ "+((komDaten(g)||{}).name||g);const n=NODEBY.get(g);
     if(g.startsWith("fb:"))return "ƒ "+(n?n.name:g);return (g.startsWith("agg:")?"▣ ":"🗄 ")+(n?n.name:g);}
   function komKrumen(){return h("div",{class:"kom-krumen"},...KOM.pfad.flatMap((g,i)=>{const b=h("button",{class:"kom-krume"+(i===KOM.pfad.length-1?" an":""),
@@ -2269,7 +2269,7 @@
     const scroll=m&&m.querySelector(".kom-panel")?m.querySelector(".kom-panel").scrollTop:0,alt=m&&m.querySelector(".kom-lw");
     const lauf=alt?{id:m.dataset.ansicht,x:alt.scrollLeft,y:alt.scrollTop}:null;if(m)m.remove();if(!KOM)return;
     const id=KOM.pfad[KOM.pfad.length-1];
-    if(id.startsWith("form:"))formZeige(de,id.slice(5));else if(id.startsWith("fb:"))funZeige(de,id);else if(!id.startsWith("gr:"))blockZeige(de,id);else grZeige(de,id);
+    if(id.startsWith("form:"))formZeige(de,id.slice(5));else if(id.startsWith("kat:"))katZeige(de,id.slice(4));else if(id.startsWith("fb:"))funZeige(de,id);else if(!id.startsWith("gr:"))blockZeige(de,id);else grZeige(de,id);
     const neu=de.querySelector(".kom .kom-panel");if(neu&&scroll)neu.scrollTop=scroll;komZoomAnwenden();
     const km=de.querySelector(".kom");if(km)km.dataset.ansicht=id;
     const lw=km&&km.querySelector(".kom-lw");if(lw&&lauf&&lauf.id===id){lw.scrollLeft=lauf.x;lw.scrollTop=lauf.y;}}
@@ -2505,7 +2505,7 @@
           onclick:()=>komBausteinOeffnen(gr,x)},sym+" "+name(x),hier(x)?h("span",{class:"kom-hier"}," · hier"):null);
         box.append(einsetzbar&&g?h("div",{class:"kom-bz"},b,h("button",{class:"ag-plus",title:"Als Knoten in "+g.name+" einsetzen",onclick:e=>{e.stopPropagation();einsetzen(gr,x,e);}},"＋")):b);});};
     box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Einen Funktionskatalog anlegen: ein eigenes Projekt <Name>.Katalog, domänenneutral",
-      onclick:e=>katalogNeu(e)},"＋ 📚 Katalog")));
+      onclick:e=>katalogNeu(e)},"＋ 📚 Katalog"),h("button",{class:"kom-akt",title:"Die Kataloge: Funktionen mit Input und Outputs, Command-Listen",onclick:()=>katOeffne(null,null)},"📚 Kataloge")));
     const fname=x=>x.name+((x.typargumente||[]).length?"‹…›":"");
     gruppe("Funktionen der Anwendung",bk.funktionen.filter(x=>!x.katalog),fname,x=>hierFb.has(x.karte),"ƒ","funktionen",true);
     (bk.kataloge||[]).forEach(k=>{gruppe("📚 "+k,bk.funktionen.filter(x=>x.katalog===k),fname,x=>hierFb.has(x.karte),"ƒ","funktionen",true);
@@ -3361,6 +3361,165 @@
     items.push({trenn:1},NODEBY.has("rec:"+komBasis(k.typ))?{t:"◎ "+k.typ+" im Panel",fn:()=>waehle("rec:"+komBasis(k.typ))}:null);
     menueFix(ev.clientX,ev.clientY,k.typ+" · "+k.art+" · "+V.name+" → "+N.name,items);}
 
+  // ══ KATALOG-MODAL (docs/konzept-funktionen-im-editor.md, Stufe 1): die Funktionswelt ohne Domäne. Links die Kataloge mit ihren Funktionen und
+  //   Graphen, in der Mitte die gewählte Funktion als Reihe — Input-Command ─▶ ƒ ─▶ Output-Commands (mehrere = ein OneOf, je Fall ein Port), je
+  //   Input ein Auf —, rechts die Command-Liste des Katalogs und die des allgemeinen Katalogs (Commands, die alle Kataloge teilen). Input und Output
+  //   sind ein neuer Command oder einer aus diesen Listen; was neu entsteht, landet in der Liste. Ein Command aus dem allgemeinen Katalog setzt die
+  //   Projektreferenz (der Katalog entsteht beim ersten Gebrauch). Pfad-Element „kat:<Katalog>“, die gewählte Funktion in KOM.katFn (Name).
+  const katAllg=()=>(MODEL.rahmen||{}).allgemeinerKatalog||null;
+  const katListe=()=>[...new Set([...(komBaukasten().kataloge||[]),...MODEL.bausteinFunktionen.map(funKatalog).filter(Boolean)])].sort();
+  const katFunktionen=kat=>MODEL.bausteinFunktionen.filter(f=>!istGerufen(f)&&funKatalog(f)===kat).sort((a,b)=>a.name.localeCompare(b.name));
+  const katCommands=kat=>MODEL.records.filter(r=>["command","rejection"].includes(r.kind)&&funKatalog(r)===kat).sort((a,b)=>a.name.localeCompare(b.name));
+  // Die Commands, die die Quellen des Framework-Katalogs melden (DateiGefunden, Takt, Aufruf) — nur lesend, als Input wählbar.
+  const katFramework=()=>[...new Set(komBaukasten().katalog.flatMap(k=>k.meldet||[]))].sort();
+  const katBereich=(f,kat)=>{const ns=String(f&&f.namespace||"");return ns.startsWith(kat+".")?ns.slice(kat.length+1).split(".")[0]:null;};
+  function katOeffne(kat,fn){const id="kat:"+(kat||katListe()[0]||"");
+    if(KOM){if(KOM.pfad[KOM.pfad.length-1]!==id)KOM.pfad.push(id);}else KOM={pfad:[id],reiter:"katalog",wahl:null};
+    KOM.katFn=fn||null;KOM.port=null;komZeige();}
+  window.deKataloge=()=>katOeffne(null,null);
+  // Wer einen Command nimmt bzw. gibt (über alle Funktionen) — für die Liste.
+  function katNutzung(nm){let nimmt=0,gibt=0;MODEL.bausteinFunktionen.forEach(f=>{(f.eingaenge||[]).forEach(e=>{if(e.eingang===nm)nimmt++;if((e.ausgaben||[]).includes(nm))gibt++;});
+    if((f.lauscht||[]).includes(nm))gibt++;});return {nimmt,gibt};}
+  // Erst die Referenz auf den allgemeinen Katalog (Geste am Server, lädt kalt neu), dann die Änderung am frischen Modell: dran(f) bekommt die
+  //   Funktion aus dem neuen Board. Liegt die Funktion im allgemeinen Katalog oder nutzt ihr Katalog ihn schon, sofort.
+  async function katMitAllgemein(fname,kat,dran){const allg=katAllg(),frisch=()=>MODEL.bausteinFunktionen.find(x=>x.name===fname)||null;
+    if(!allg)return;const nutzt=((MODEL.rahmen||{}).katalogNutzt||{})[kat]||[];
+    if(kat===allg||(katListe().includes(allg)&&nutzt.includes(allg))){dran(frisch());return;}
+    if(await gKatalog({name:allg,nutzer:kat},kat+" nutzt "+allg))dran(frisch());}
+  // Der allgemeine Katalog für sich (ohne Nutzer): anlegen, wenn es ihn noch nicht gibt.
+  async function katAllgemeinDa(){const allg=katAllg();if(!allg)return false;if(katListe().includes(allg))return true;return await gKatalog({name:allg},"Katalog "+allg);}
+  function katRecordNeu(ns,n,kind,amFunktion){MODEL.records.push({name:n,kind,namespace:ns,felder:[],istErzeugung:false,...(amFunktion?{amFunktion}:{})});aggStempel(n);}
+  // ＋ Input bzw. ＋ Output: ein neuer Command (hier oder im allgemeinen Katalog) oder einer aus den Listen; ein Output auch ein Hinweis.
+  function katWahl(f,kat,ev,art,e){const t="ƒ "+f.name,allg=katAllg(),stamm=f.name.replace(/^I(?=[A-ZÄÖÜ])/,""),fname=f.name;
+    const schon=nm=>art==="input"?(f.eingaenge||[]).some(x=>x.eingang===nm):(e.ausgaben||[]).includes(nm);
+    const setze=(fx,nm)=>{if(!fx)return;if(art==="input"){(fx.eingaenge=fx.eingaenge||[]).push({eingang:nm,ausgaben:[]});gTitel(t+": Auf("+nm+")");}
+      else{const ex=(fx.eingaenge||[]).find(x=>x.eingang===e.eingang);if(!ex)return;ex.ausgaben=[...(ex.ausgaben||[]),nm];gTitel(t+": Auf("+e.eingang+") gibt "+nm+" aus");}
+      render();};
+    const neu=(titel,vorschlag,kind,allgemein)=>({t:titel,fn:()=>setTimeout(()=>frageFix(ev.clientX,ev.clientY,titel.replace(/ …$/,""),vorschlag,
+      allgemein?"Landet in "+allg+" — jeder Katalog darf ihn nutzen":"Landet in der Command-Liste von "+kat,n=>{const fe=nameFehler(n);if(fe)return fe;
+        if(!allgemein){katRecordNeu(f.namespace,n,kind,f.name);setze(f,n);return;}
+        const bereich=katBereich(f,kat)||"Gemeinsam";
+        setTimeout(()=>katMitAllgemein(fname,kat,fx=>{katRecordNeu(allg+"."+bereich,n,kind);setze(fx,n);}),0);}),0)});
+    const vorhanden=(liste,allgemein)=>liste.filter(r=>!schon(r.name)&&(art==="output"||r.kind==="command")).map(r=>({t:(r.kind==="rejection"?"✉ ":"▶ ")+r.name,
+      fn:()=>allgemein?katMitAllgemein(fname,kat,fx=>setze(fx,r.name)):setze(f,r.name)}));
+    const hier=vorhanden(katCommands(kat),false),dort=allg&&allg!==kat?vorhanden(katCommands(allg),true):[];
+    const fw=art==="input"?katFramework().filter(nm=>!schon(nm)).map(nm=>({t:"⚡ "+nm,fn:()=>setze(f,nm)})):[];
+    menueFix(ev.clientX,ev.clientY,(art==="input"?"Input von ":"Output von ")+f.name+(art==="output"?".Auf("+e.eingang+")":""),[
+      neu("＋ neuer Command …",stamm+(art==="input"?"Auftrag":"Ergebnis"),"command",false),
+      ...(art==="output"?[neu("＋ neuer Hinweis …",stamm+"Unmoeglich","rejection",false)]:[]),
+      ...(allg&&allg!==kat?[neu("＋ neuer Command im allgemeinen Katalog …",stamm+(art==="input"?"Auftrag":"Ergebnis"),"command",true)]:[]),
+      ...(hier.length?[{trenn:1},{kopf:"aus "+kat},...hier.slice(0,40)]:[]),
+      ...(dort.length?[{trenn:1},{kopf:"aus dem allgemeinen Katalog"},...dort.slice(0,40)]:[]),
+      ...(fw.length?[{trenn:1},{kopf:"vom Framework (Quellen)"},...fw]:[])]);}
+  // Umbenennen: ein geschriebener Command über den Renamer (alle Verweise im Code), ein neuer im Modell.
+  function katUmbenennen(r,neu){const fe=nameFehler(neu);if(neu===r.name)return;if(fe){deFlash("⚠ "+fe,false);render();return;}
+    aggStempelUmbenennen(r.name,neu);if(r._ort)gUmbenennen(r,neu,r.name);else funRecUmbenennen(r,neu);}
+  // Eine Command-Karte: Name, Felder; ✎ öffnet Name, Felder und Command ⇄ Hinweis; ✕ (loese) nimmt sie aus der Funktion bzw. löscht sie.
+  function katCmdKarte(nm,kat,opt){const r=recByName(nm),key="kc:"+(opt.ort||"")+nm,offen=!!r&&KOM.edit.has(key),allg=katAllg(),rk=r?funKatalog(r):null;
+    const herkunft=!r?"Framework":rk&&rk!==kat?(rk===allg?"allgemein":rk):"";
+    const el=h("div",{class:"kat-cmd"+(r&&r.kind==="rejection"?" hinweis":"")+(offen?" offen":"")+(opt.leise?" leise":"")},
+      h("div",{class:"kat-cmd-k"},h("span",{class:"kat-cmd-n",title:r?(r.kind==="rejection"?"Hinweis (flüchtig, an Akteure)":"Command ohne Ziel")+" · "+r.namespace:"vom Framework"},
+          (r&&r.kind==="rejection"?"✉ ":"")+nm),
+        herkunft?h("span",{class:"kat-herk"},herkunft):null,opt.mult?h("span",{class:"kat-mult",title:"Vielfachheit: 1 genau eins · 0..1 einer der Fälle · 0..n Strom"},opt.mult):null,
+        opt.zusatz||null,
+        r?h("button",{class:"ag-stift"+(offen?" an":""),title:offen?"Bearbeiten schließen":"Name und Felder bearbeiten",
+          onclick:ev=>{ev.stopPropagation();if(offen)KOM.edit.delete(key);else KOM.edit.add(key);komZeige();}},offen?"▾":"✎"):null,
+        opt.loese?h("button",{class:"ag-loesch",title:opt.loeseText||"Lösen",onclick:ev=>{ev.stopPropagation();opt.loese(ev);}},"✕"):null));
+    if(r&&!offen&&(r.felder||[]).length)el.append(h("div",{class:"kat-felder"},r.felder.map(fe=>fe.name+" : "+fe.typ).join(" · ")));
+    if(offen){const box=h("div",{class:"ag-edit"});["click","dblclick"].forEach(x=>box.addEventListener(x,e=>e.stopPropagation()));
+      box.append(h("div",{class:"ag-feld"},h("input",{value:r.name,spellcheck:"false",title:"Name",onchange:e=>katUmbenennen(r,e.target.value.trim())})));
+      box.append(aggFelder(r.felder=r.felder||[],null,"📚 "+r.name));
+      box.append(h("button",{class:"ag-plus",title:"Command ohne Ziel (ein Knoten nimmt ihn) oder Hinweis (flüchtig, an Akteure)",
+        onclick:()=>{r.kind=r.kind==="command"?"rejection":"command";gTitel("📚 "+r.name+(r.kind==="command"?" ist ein Command":" ist ein Hinweis"));render();}},
+        r.kind==="command"?"⇄ zum Hinweis machen":"⇄ zum Command machen"));
+      el.append(box);}
+    return el;}
+  // Die gewählte Funktion als Reihe: je Auf eine Zeile Input ─▶ │ƒ│ ─▶ Outputs; die Funktionskarte steht einmal über alle Zeilen.
+  function katFunktionEl(f,kat){const t="ƒ "+f.name,aufs=f.eingaenge||[],zeilen=Math.max(1,aufs.length)+((f.lauscht||[]).length?1:0);
+    const g=h("div",{class:"kat-reihe"});g.style.gridTemplateRows="repeat("+(zeilen+1)+",auto)";
+    const ctor=ctorVon(f,null)||[],chip=p=>{const typ=String(p.typ||"").trim(),sym=gerufenByName(typ)?"⚙ ":/^IZustand</.test(typ)?"◫ ":/^ILogger</.test(typ)?"✎ ":recByName(komBasis(typ))?"▤ ":"";
+      return h("span",{class:"kat-chip",title:"Konstruktor: "+typ},sym+typ);};
+    const verwendet=(MODEL.graphen||[]).filter(x=>(x.knoten||[]).some(k=>komBasis(k.typ)===f.name));
+    const fk=h("div",{class:"kat-fn"},h("div",{class:"kat-fn-n"},"ƒ "+f.name),h("div",{class:"kat-fn-u"},f.namespace),
+      h("div",{class:"kat-chips"},...ctor.map(chip)),
+      h("div",{class:"kat-fn-u"},verwendet.length?"in "+verwendet.map(x=>"⬡ "+x.name).join(", "):"in keinem Graphen"),
+      h("div",{class:"kat-akte"},h("button",{class:"ag-plus",title:"Konfig, Technik, Logger im Konstruktor",onclick:ev=>menueFix(ev.clientX,ev.clientY,"Rahmen von "+f.name,funRahmenItems(f))},"＋ Rahmen ▾"),
+        h("button",{class:"ag-plus",title:"Das ausführliche Funktions-Modal: Strom, asynchron, Herkunft, Rümpfe, Rahmen",onclick:()=>komKarte("fb:"+f._id,true)},"⤢ ausführlich")));
+    fk.style.gridRow="1 / span "+zeilen;fk.style.gridColumn="3";g.append(fk);
+    const zelle=(el,zeile,spalte)=>{el.style.gridRow=String(zeile);el.style.gridColumn=String(spalte);g.append(el);};
+    aufs.forEach((e,i)=>{const z=i+1;
+      zelle(katCmdKarte(e.eingang,kat,{ort:"i:",loeseText:"Diesen Input (sein Auf) aus "+f.name+" nehmen — der Command bleibt in der Liste",
+        loese:()=>{f.eingaenge=(f.eingaenge||[]).filter(x=>x!==e);gTitel(t+": ohne Auf("+e.eingang+")");render();}}),z,1);
+      zelle(h("div",{class:"kat-pfeil"},"─▶"),z,2);zelle(h("div",{class:"kat-pfeil"},"─▶"),z,4);
+      const aus=h("div",{class:"kat-aus"}),m=funMult(e);
+      (e.ausgaben||[]).forEach(o=>aus.append(katCmdKarte(o,kat,{ort:"o:"+e.eingang+":",mult:m,loeseText:"Diesen Output aus Auf("+e.eingang+") nehmen — der Command bleibt in der Liste",
+        loese:()=>{e.ausgaben=ohneX(e.ausgaben,o);gTitel(t+": Auf("+e.eingang+") gibt "+o+" nicht mehr aus");render();}})));
+      aus.append(h("button",{class:"kat-neu",title:"Ein Output: neuer Command oder Hinweis, oder einer aus den Listen — mehrere sind ein OneOf",
+        onclick:ev=>katWahl(f,kat,ev,"output",e)},"＋ Output"));
+      const schalter=(text,an,titel,setze)=>{const c=h("input",{type:"checkbox",onchange:ev=>{setze(ev.target.checked);render();}});c.checked=!!an;return h("label",{class:"ag-flag",title:titel},c," "+text);};
+      aus.append(h("div",{class:"kat-form"},schalter("Strom (0..n)",e.strom,"Keine bis viele je Aufruf (IEnumerable) — sonst genau einer bzw. bei mehreren einer der Fälle (OneOf)",
+          v=>{e.strom=v;gTitel(t+": Auf("+e.eingang+")"+(v?" als Strom":" ohne Strom"));}),
+        schalter("asynchron",e.asynchron,"Task bzw. IAsyncEnumerable",v=>{e.asynchron=v;gTitel(t+": Auf("+e.eingang+")"+(v?" asynchron":" synchron"));})));
+      zelle(aus,z,5);});
+    if(!aufs.length){zelle(h("button",{class:"kat-neu gross",title:"Der Input der Funktion: ein neuer Command oder einer aus den Listen",onclick:ev=>katWahl(f,kat,ev,"input")},"＋ Input"),1,1);
+      zelle(h("div",{class:"kat-pfeil"},"─▶"),1,2);zelle(h("div",{class:"kat-pfeil leise"},"─▶"),1,4);
+      zelle(h("div",{class:"kat-aus"},h("div",{class:"kom-wo"},"Outputs folgen, sobald es einen Input gibt.")),1,5);}
+    if((f.lauscht||[]).length){const z=Math.max(1,aufs.length)+1;zelle(h("div",{class:"kat-cmd leise"},h("div",{class:"kat-cmd-k"},"lauscht (Quelle)")),z,1);
+      zelle(h("div",{class:"kat-pfeil"},"─▶"),z,4);zelle(h("div",{class:"kat-aus"},...f.lauscht.map(o=>katCmdKarte(o,kat,{ort:"l:",mult:"0..n"}))),z,5);}
+    if(aufs.length)zelle(h("button",{class:"kat-neu",title:"Ein weiterer Input — ein eigenes Auf mit eigenen Outputs",onclick:ev=>katWahl(f,kat,ev,"input")},"＋ Input"),zeilen+1,1);
+    return g;}
+  // Die Command-Liste eines Katalogs: Nutzung je Command, ✎ zum Bearbeiten, ✕ mit Löschplan, ＋ Command.
+  function katListeEl(titel,kat,f,allgemein){const box=h("div",{});box.append(h("div",{class:"kom-sec"},titel));const liste=kat?katCommands(kat):[];
+    if(!liste.length)box.append(h("div",{class:"kom-wo"},allgemein&&!katListe().includes(kat)?"Entsteht beim ersten Gebrauch.":"Noch keine Commands."));
+    liste.forEach(r=>{const n=katNutzung(r.name);
+      box.append(katCmdKarte(r.name,kat,{ort:"l:",zusatz:h("span",{class:"kat-nutz",title:"nimmt: so viele Auf nehmen ihn · gibt: so viele geben ihn aus"},
+          (n.nimmt?"nimmt "+n.nimmt:"")+(n.nimmt&&n.gibt?" · ":"")+(n.gibt?"gibt "+n.gibt:"")+(!n.nimmt&&!n.gibt?"unverbunden":"")),
+        loeseText:"Den Command löschen (nur, wenn ihn keine Funktion mehr nimmt oder gibt)",
+        loese:ev=>{const plan=loeschPlanRecord(r.name,(r.kind==="rejection"?"Hinweis ":"Command ")+r.name,()=>false,()=>recordWeg(r.name));
+          if(plan.grund){menueFix(ev.clientX,ev.clientY,"✕ "+plan.was,[{hinweis:"Nicht löschbar — "+plan.grund}]);return;}
+          menueFix(ev.clientX,ev.clientY,"✕ "+plan.was+" löschen?",[...plan.folgen.map(x=>({hinweis:"dazu: "+x})),{t:"✕ löschen",gefahr:1,fn:()=>{gTitel("✕ "+plan.was);plan.tu();render();}}]);}}));});
+    // ＋ Command: in den Bereich der gewählten Funktion; ohne sie fragt der Bereich zuerst.
+    box.append(h("button",{class:"kat-neu",title:"Ein neuer Command in "+kat+" — er landet in dieser Liste",onclick:ev=>{
+      const anlegen=bereich=>setTimeout(()=>frageFix(ev.clientX,ev.clientY,"＋ Command in "+kat+"."+bereich,"","Ein Command ohne Ziel (Felder danach mit ✎)",n=>{
+        const fe=nameFehler(n);if(fe)return fe;const tu=()=>{katRecordNeu(kat+"."+bereich,n,"command");gTitel("📚 ＋ "+n+" in "+kat);render();};
+        if(allgemein)setTimeout(async()=>{if(await katAllgemeinDa())tu();},0);else tu();}),0);
+      const b=katBereich(f,funKatalog(f||{})||"")||(liste[0]&&katBereich(liste[0],kat));
+      if(b){anlegen(b);return;}
+      frageFix(ev.clientX,ev.clientY,"＋ Command in "+kat+" — Bereich","Gemeinsam","Der Ordner im Katalog ("+kat+".<Bereich>)",x=>{
+        if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(x))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";anlegen(x);});}},"＋ Command"));
+    return box;}
+  function katZeige(de,kat){KOM.edit=KOM.edit||new Set();KOM.zu=KOM.zu||new Set();const alle=katListe(),allg=katAllg();
+    if(kat&&!alle.includes(kat)&&kat!==allg)kat=alle[0]||"";
+    const fns=kat?katFunktionen(kat):[],f=fns.find(x=>x.name===KOM.katFn)||null;
+    const m=komRahmen(kat?"Funktionen anlegen: Input ─▶ ƒ ─▶ Outputs · jeder neue Command landet rechts in der Liste · ✎ bearbeiten · ✕ lösen bzw. löschen"
+      :"Noch kein Katalog — ＋ 📚 Katalog legt einen an (ein eigenes Projekt, ohne Domäne)");
+    // Links: Kataloge, Funktionen und Graphen des gewählten.
+    const links=h("div",{class:"kom-bk"},h("div",{class:"kom-sec"},"Kataloge"));
+    alle.forEach(k=>links.append(h("button",{class:"kom-b"+(k===kat?" on":""),title:k===allg?"Der allgemeine Katalog: Commands, die alle Kataloge teilen":k,
+      onclick:()=>{KOM.pfad[KOM.pfad.length-1]="kat:"+k;KOM.katFn=null;komZeige();}},"📚 "+k.replace(/\.Katalog$/,"")+(k===allg?" · allgemein":""))));
+    links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Ein neuer Katalog: ein eigenes Projekt <Name>.Katalog, ohne Domäne",onclick:e=>katalogNeu(e)},"＋ 📚 Katalog")));
+    if(kat){links.append(h("div",{class:"kom-sec"},"Funktionen"));
+      if(!fns.length)links.append(h("div",{class:"kom-wo"},"Noch keine."));
+      fns.forEach(x=>{const ein=(x.eingaenge||[]).map(e=>e.eingang),aus=[...new Set((x.eingaenge||[]).flatMap(e=>e.ausgaben||[]))];
+        links.append(h("button",{class:"kom-b"+(x===f?" on":""),title:(ein.join(", ")||"kein Input")+" → "+(aus.join(" | ")||"kein Output"),
+          onclick:()=>{KOM.katFn=x.name;komZeige();}},"ƒ "+x.name));});
+      links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Eine neue Funktion in "+kat+" (Bereich und Name)",
+        onclick:e=>katalogFunktion(kat,e,fb=>{KOM.katFn=fb.name;komZeige();})},"＋ ƒ Funktion")));
+      const grs=(komBaukasten().graphen||[]).filter(x=>{const g=(MODEL.graphen||[]).find(y=>"gr:"+y._id===x.karte);return g&&funKatalog(g)===kat;});
+      links.append(h("div",{class:"kom-sec"},"Graphen"));
+      if(!grs.length)links.append(h("div",{class:"kom-wo"},"Noch keine."));
+      grs.forEach(x=>links.append(h("button",{class:"kom-b",title:"Den Graphen öffnen",onclick:()=>{KOM.pfad.push(x.karte);KOM.wahl=null;komZeige();}},"⬡ "+x.name)));}
+    // Mitte: die gewählte Funktion.
+    const mitte=h("div",{class:"kat-mitte"});
+    if(f)mitte.append(katFunktionEl(f,kat));
+    else if(kat)mitte.append(h("div",{class:"kat-leer"},fns.length?"Links eine Funktion wählen — oder eine neue anlegen.":"Dieser Katalog hat noch keine Funktion.",
+      h("div",{class:"kom-akte"},h("button",{class:"ag-plus",onclick:e=>katalogFunktion(kat,e,fb=>{KOM.katFn=fb.name;komZeige();})},"＋ ƒ Funktion"))));
+    // Rechts: die Command-Liste des Katalogs und die des allgemeinen.
+    const rechts=h("div",{class:"kom-bk kat-rechts"});
+    if(kat){rechts.append(katListeEl("Commands · "+kat.replace(/\.Katalog$/,""),kat,f,kat===allg));
+      if(allg&&allg!==kat)rechts.append(katListeEl("Allgemein · geteilt",allg,null,true));
+      const fw=katFramework();if(fw.length){rechts.append(h("div",{class:"kom-sec"},"Framework · Quellen"));fw.forEach(nm=>rechts.append(katCmdKarte(nm,kat,{ort:"fw:"})));}}
+    m.append(h("div",{class:"kom-leib kat"},links,mitte,rechts));de.append(m);}
   // ══ FUNKTION VON INNEN (docs/plan-katalog-und-graphen.md, Schritt 3): der Vertrag einer Funktion — Eingänge · Auf · Ausgänge · Rahmen — mit
   //   derselben Mechanik wie Aggregat und Store (innenZeige: Detailstufen, ✎, ＋ am Port, gestrichelte Karten, ✕ mit Löschplan). Eingang ↔ Auf ist 1:1
   //   (je Eingangstyp ein Auf, R2), Auf → Ausgänge frei; der Rahmen ist der Konstruktor (Konfig, Technik, Zustand, Logger). Die Form der Ausgabe folgt
@@ -3469,17 +3628,20 @@
     const antworten=kat?[]:[...new Set((f.eingaenge||[]).flatMap(e=>e.ausgaben||[]).filter(o=>(recByName(o)||{}).aggregat)
       .flatMap(o=>MODEL.decider.filter(d=>d.command===o).flatMap(d=>(d.ergibt||[]).map(x=>x.event))).filter(ev=>(recByName(ev)||{}).kind==="event"&&!hat(ev)))]
       .map(ev=>({t:"◀ "+ev,title:"Antwort auf einen eigenen Command an ein Aggregat",fn:()=>{f.eingaenge.push({eingang:ev,ausgaben:[]});gTitel(t+": Auf("+ev+") — Antwort");render();}}));
-    const ctor=ctorVon(f,null),hatTyp=x=>ctor.some(p=>komBasis(String(p.typ).trim())===x);
-    const technik=MODEL.bausteinFunktionen.filter(g=>istGerufen(g)&&!hatTyp(g.name)).map(g=>({t:"⚙ "+g.name,fn:()=>{nimmGerufene(ctor,g,f);gTitel(t+" nimmt "+g.name);render();}}));
-    const konfigs=MODEL.records.filter(r=>r.kind==="konfig"&&!hatTyp(r.name)).map(r=>({t:"▤ "+r.name,fn:()=>{ctor.push({typ:r.name,name:paramName(r.name,ctor.map(p=>p.name))});gTitel(t+" nimmt "+r.name);render();}}));
-    const logger=ctor.some(p=>/^ILogger</.test(String(p.typ)));
     return [
       ["Eingänge",menue("Eingang von "+f.name,[{t:"＋ neue Nachricht mit Auf …",fn:neuerEingang},
         ...(vorhanden.length?[{trenn:1},{kopf:"vorhandene Nachricht"},...vorhanden.slice(0,30)]:[]),
         ...(antworten.length?[{trenn:1},{kopf:"Antwort auf einen eigenen Command"},...antworten]:[])]),"＋ ▾","eingang"],
       ["Auf",null,"je Eingang eines"],
       ["Ausgänge",null,"＋ am Port eines Auf","ausgang"],
-      ["Rahmen",menue("Konstruktor von "+f.name,[
+      ["Rahmen",menue("Konstruktor von "+f.name,funRahmenItems(f)),"＋ ▾"]];}
+  // Der Rahmen einer Funktion (Konstruktor): neue oder vorhandene Konfig, neue oder vorhandene Technik, der Logger — im Funktions- und im Katalog-Modal.
+  function funRahmenItems(f){const t="ƒ "+f.name;
+    const ctor=ctorVon(f,null),hatTyp=x=>ctor.some(p=>komBasis(String(p.typ).trim())===x);
+    const technik=MODEL.bausteinFunktionen.filter(g=>istGerufen(g)&&!hatTyp(g.name)).map(g=>({t:"⚙ "+g.name,fn:()=>{nimmGerufene(ctor,g,f);gTitel(t+" nimmt "+g.name);render();}}));
+    const konfigs=MODEL.records.filter(r=>r.kind==="konfig"&&!hatTyp(r.name)).map(r=>({t:"▤ "+r.name,fn:()=>{ctor.push({typ:r.name,name:paramName(r.name,ctor.map(p=>p.name))});gTitel(t+" nimmt "+r.name);render();}}));
+    const logger=ctor.some(p=>/^ILogger</.test(String(p.typ)));
+    return [
         {t:"＋ neue Konfig …",fn:ev=>frageFix(ev.clientX,ev.clientY,"＋ Konfig von "+f.name,f.name.replace(/^I(?=[A-ZÄÖÜ])/,"")+"Konfig","Ein Record — seine Werte stehen am Knoten der Instanz",n=>{
           const fe=nameFehler(n);if(fe)return fe;MODEL.records.push({name:n,kind:"konfig",namespace:f.namespace,felder:[{_id:"f"+(NID++),name:"Wert",typ:"string"}],istErzeugung:false});
           aggStempel(n);ctor.push({typ:n,name:paramName(n,ctor.map(p=>p.name))});gTitel(t+" nimmt "+n);render();})},
@@ -3490,7 +3652,7 @@
         ...(technik.length?[{trenn:1},{kopf:"vorhandene Technik"},...technik.slice(0,20)]:[]),
         {trenn:1},{t:(logger?"✓ ":"   ")+"Logger (ILogger<"+f.name+">)",fn:()=>{if(logger)f.konstruktor=ctor.filter(p=>!/^ILogger</.test(String(p.typ)));
           else ctor.push({typ:"ILogger<"+f.name+">",name:"logger"});gTitel(t+(logger?" ohne":" mit")+" Logger");render();}},
-        {hinweis:"Zustand (IZustand<T>): im Formular — die Zustandsklasse legt das Modal noch nicht an."}]),"＋ ▾"]];}
+        {hinweis:"Zustand (IZustand<T>): im Formular — die Zustandsklasse legt das Modal noch nicht an."}];}
   function funKurz(f,n,x){const box=h("div",{class:"ag-kurz"});
     if(n.kind==="auf"){const e=n.ref,tags=[funMult(e)==="0..n"?"Strom":(e.ausgaben||[]).length>1?"Wahl":"Folge"];
       if(e.asynchron)tags.push("asynchron");if(e.herkunft)tags.push("Herkunft");(e.faehigkeiten||[]).forEach(p=>tags.push("⌕ "+p.typ));

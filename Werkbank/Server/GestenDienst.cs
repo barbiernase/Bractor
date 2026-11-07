@@ -125,14 +125,28 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
 
     /// <summary>
     /// Einen Funktionskatalog anlegen (docs/plan-katalog-und-graphen.md, Schritt 2): Projektdatei, Eintrag in der Solution, Referenz der Abläufe —
-    /// danach lädt der Arbeitsbereich kalt neu (neue Projekte kennt nur das kalte Laden).
+    /// danach lädt der Arbeitsbereich kalt neu (neue Projekte kennt nur das kalte Laden). Mit <paramref name="nutzer"/> nutzt dieser Katalog den
+    /// genannten (Referenz in seiner Projektdatei); gibt es den genannten noch nicht, entsteht er zuerst — so legt der erste Gebrauch den allgemeinen
+    /// Katalog an.
     /// </summary>
-    public Task<GestenAntwort> KatalogAsync(string name, CancellationToken ct) => AusfuehrenAsync("katalog", "📚 Katalog " + name, () =>
+    public Task<GestenAntwort> KatalogAsync(string name, string? nutzer, CancellationToken ct) =>
+        AusfuehrenAsync("katalog", "📚 Katalog " + name + (nutzer != null ? " für " + nutzer : ""), () =>
     {
         var puffer = new Dateipuffer(slnRoot);
-        var projekt = Kataloge.Neu(puffer, name);
+        var projekt = Kataloge.Projektname(name);
+        var meldungen = new List<string>();
+        if (nutzer == null || puffer.Lies($"{projekt}/{projekt}.csproj") == null)
+        {
+            Kataloge.Neu(puffer, name);
+            meldungen.Add($"{projekt} angelegt und von den Abläufen genutzt");
+        }
+        if (nutzer != null)
+        {
+            Kataloge.KatalogNutzt(puffer, nutzer, projekt);
+            meldungen.Add($"{nutzer} nutzt {projekt}");
+        }
         puffer.Speichern();
-        return Task.FromResult((puffer.Patch(), new List<string> { $"{projekt} angelegt und von den Abläufen genutzt" }));
+        return Task.FromResult((puffer.Patch(), meldungen));
     }, ct);
 
     /// <summary>Die Abläufe der Anwendung nutzen einen vorhandenen Katalog bzw. nicht mehr (Referenz in ihrer Projektdatei).</summary>

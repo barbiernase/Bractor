@@ -93,11 +93,12 @@ app.MapPost("/api/werkbank/rumpf", async (System.Text.Json.Nodes.JsonObject b, C
         (int?)o?["ende"] ?? -1), text, alt, ct));
 });
 app.MapPost("/api/werkbank/rueckgaengig", async (CancellationToken ct) => GestenErgebnis(await werkbank.Gesten.RueckgaengigAsync(ct)));
-// Kataloge (docs/plan-katalog-und-graphen.md, Schritt 2): anlegen (Projekt, Solution, Referenz der Abläufe) und nutzen bzw. nicht mehr nutzen.
+// Kataloge (docs/plan-katalog-und-graphen.md, Schritt 2): anlegen (Projekt, Solution, Referenz der Abläufe) und nutzen bzw. nicht mehr nutzen;
+//   mit „nutzer“ nutzt ein Katalog den genannten (der allgemeine Katalog entsteht dabei, wenn es ihn noch nicht gibt).
 app.MapPost("/api/werkbank/katalog", async (System.Text.Json.Nodes.JsonObject b, CancellationToken ct) =>
     GestenErgebnis((string?)b["katalog"] is { } katalog
         ? await werkbank.Gesten.KatalogNutzenAsync(katalog, (bool?)b["nutzen"] ?? true, ct)
-        : await werkbank.Gesten.KatalogAsync((string?)b["name"] ?? "", ct)));
+        : await werkbank.Gesten.KatalogAsync((string?)b["name"] ?? "", (string?)b["nutzer"], ct)));
 // ── ABLEITUNGEN (Werkbank P7.3): was das Board nicht schon trägt (board.sicht), fragt der Editor hier — gerechnet nur auf dem Server.
 // ⊕: welche Kandidaten-Ports zu einem Port passen (Anschluss-Regel + DomainEditor.Grammatik); Ports sind gezeichnete Anschlüsse, darum schickt
 //   der Editor Port und Kandidaten (Schlüssel + Beschreibung), der Server urteilt.

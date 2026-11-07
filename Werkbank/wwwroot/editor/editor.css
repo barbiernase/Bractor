@@ -818,3 +818,32 @@
 #de .kom-ue-f.r-offen .kom-ue-r{color:#f08a5d}
 #de .kom-ue-pfeil{align-self:center;color:#8fc9c1;font-size:14px}
 #de .kom-ue-fehler{padding:0 6px 6px;font-size:10px;color:#f08a5d;white-space:normal;max-width:360px}
+/* Katalog-Modal (docs/konzept-funktionen-im-editor.md, Stufe 1): Kataloge · Funktion als Reihe · Command-Listen */
+#de .kom-leib.kat{grid-template-columns:minmax(170px,230px) 1fr minmax(220px,290px)}
+#de .kat-rechts{border-right:none;border-left:1px solid #232a38;display:flex;flex-direction:column;gap:4px}
+#de .kat-mitte{overflow:auto;padding:22px 26px}
+#de .kat-leer{color:#7f8aa0;font-size:13px;padding:30px}
+#de .kat-reihe{display:grid;grid-template-columns:minmax(200px,250px) 34px minmax(170px,220px) 34px minmax(190px,280px);gap:12px 0;align-items:start}
+#de .kat-pfeil{color:#6f7d96;font:13px ui-monospace,monospace;text-align:center;padding-top:9px}
+#de .kat-pfeil.leise{opacity:.35}
+#de .kat-fn{align-self:stretch;background:#1d1830;border:1px solid #7a63c8;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+#de .kat-fn-n{font:700 14px ui-monospace,monospace;color:#e6defc}
+#de .kat-fn-u{font-size:11px;color:#9a8fc0}
+#de .kat-chips{display:flex;flex-wrap:wrap;gap:4px}
+#de .kat-chip{font:11px ui-monospace,monospace;color:#d6cdf5;background:#2a2346;border:1px solid #4b3f7a;border-radius:5px;padding:1px 6px}
+#de .kat-akte{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+#de .kat-aus{display:flex;flex-direction:column;gap:6px}
+#de .kat-cmd{background:#13203a;border:1px solid #35507a;border-radius:8px;padding:6px 8px;font-size:12px;color:#d5e2f7}
+#de .kat-cmd.hinweis{background:#22192a;border-color:#7a4f8a}
+#de .kat-cmd.offen{outline:1px solid #a8843a}
+#de .kat-cmd.leise{opacity:.6}
+#de .kat-cmd-k{display:flex;align-items:center;gap:6px}
+#de .kat-cmd-n{font:12px ui-monospace,monospace;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#de .kat-herk,#de .kat-mult,#de .kat-nutz{font-size:10px;color:#8f9bb0;white-space:nowrap}
+#de .kat-mult{color:#ffd27a}
+#de .kat-felder{font:11px ui-monospace,monospace;color:#8fa3c4;margin-top:3px}
+#de .kat-cmd .ag-edit{margin-top:6px;display:flex;flex-direction:column;gap:5px}
+#de .kat-neu{background:transparent;border:1.5px dashed #a8843a;color:#ffd27a;border-radius:8px;padding:4px 8px;font-size:12px;cursor:pointer;text-align:left}
+#de .kat-neu:hover{border-color:#ffd27a}
+#de .kat-neu.gross{padding:12px 10px}
+#de .kat-form{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:#8f9bb0}

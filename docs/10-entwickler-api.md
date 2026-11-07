@@ -502,6 +502,17 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Readers, der zu einem anderen Store gehört, steht leise mit „gehört zu …“. Ein neuer Store wählt seine Klasse; die Umsetzung erbt die Basis
   aus `Storeklassen` (`MartenStore`, `DateiZiel`, `DateiSink`), bei Klasse 3 trägt die Projektion `[MindestensEinmal]`. Entfernen: ✕ Auf bzw.
   Frage an seiner Methode (die letzte nimmt die Klasse mit), ✕ Fähigkeit samt Schnittstelle, Umsetzung und Platz im Bündel, wenn sie niemand nimmt.
+- **Kataloge** (docs/konzept-funktionen-im-editor.md, Stufe 1): „📚 Kataloge“ in der Kopfleiste (und im Baukasten) öffnet das Katalog-Modal. Links
+  die Kataloge, darunter Funktionen und Graphen des gewählten; in der Mitte die gewählte Funktion als Reihe Input ─▶ ƒ ─▶ Outputs — je Input ein
+  `Auf`, mehrere Outputs sind ein `OneOf` (Vielfachheit 1 · 0..1 · 0..n, „Strom“ und „asynchron“ je Zeile), die Funktionskarte trägt den Konstruktor
+  („＋ Rahmen“) und „⤢ ausführlich“ (das Funktions-Modal unten); rechts die Command-Liste des Katalogs mit „nimmt n · gibt m“ bzw. „unverbunden“,
+  die des allgemeinen Katalogs (`Projektstruktur.AllgemeinerKatalog`, Commands, die alle Kataloge teilen) und die Commands der Quellen des Frameworks
+  (nur als Input). „＋ Input“ und „＋ Output“ bieten einen neuen Command (bzw. Hinweis), einen neuen im allgemeinen Katalog oder einen aus den
+  Listen; was neu entsteht, landet in der Liste, und wer einen Command aus der Liste als Input wählt, wird im Graphen zum Nachfolger jeder
+  Funktion, die ihn ausgibt. Ein Command aus dem allgemeinen Katalog setzt die Projektreferenz des Katalogs (Geste `/api/werkbank/katalog` mit
+  `nutzer`; der allgemeine Katalog entsteht beim ersten Gebrauch, `Kataloge.KatalogNutzt`, kein Kreis). ✎ an einem Command: Name, Felder,
+  Command ⇄ Hinweis; ✕ an Input bzw. Output löst ihn aus der Funktion (der Command bleibt in der Liste), ✕ in der Liste löscht ihn, solange ihn
+  keine Funktion mehr nimmt oder gibt. Welche Kataloge ein Katalog nutzt, steht im Rahmen (`Rahmen.KatalogNutzt`, aus seiner Projektdatei).
 - **Funktion von innen** (docs/plan-katalog-und-graphen.md, Schritt 3): dieselbe Mechanik in vier Spalten — Eingänge · Auf · Ausgänge · Rahmen
   (Konstruktor). Eingang ↔ Auf ist 1:1 (R2), Auf → Ausgänge frei; jeder Ausgang trägt seine Vielfachheit (1 Folge, 0..1 Wahl, 0..n Strom), im ✎ des
   Auf stehen Strom, asynchron (`Task`/`IAsyncEnumerable`), Herkunft und — nur in der Anwendung — die Lese-Fähigkeiten, dazu der Rumpf. „＋ Ausgang“

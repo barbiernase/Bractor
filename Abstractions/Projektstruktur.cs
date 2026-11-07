@@ -158,6 +158,12 @@ static class Projektstruktur
     /// mit den Quellen des Framework-Katalogs).</summary>
     public static readonly IReadOnlyList<string> KatalogDarfReferenzieren = new[] { "Abstractions", "Core" };
 
+    /// <summary>
+    /// Der allgemeine Katalog (docs/konzept-funktionen-im-editor.md §2): ein Katalog wie jeder andere, der die Commands hält, die mehrere Kataloge
+    /// teilen; jeder Katalog darf ihn nutzen. Die Werkbank legt ihn beim ersten Gebrauch an.
+    /// </summary>
+    public const string AllgemeinerKatalog = "Allgemein.Katalog";
+
     /// <summary>Die Rollen einer Anwendung, die Kataloge nutzen dürfen (alle über den Abläufen); Schreib- und Leseseite kennen keine Funktionsnachricht.</summary>
     public static readonly IReadOnlyList<Rolle> NutzenKataloge = new[] { Rolle.Ablaeufe, Rolle.Akteure, Rolle.Leitung, Rolle.Komposition };
 

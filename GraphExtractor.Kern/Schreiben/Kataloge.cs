@@ -34,10 +34,28 @@ public static class Kataloge
     /// <summary>Die Abläufe der Anwendung nutzen den Katalog (Referenz setzen) bzw. nicht mehr (Referenz entfernen).</summary>
     public static void Nutzen(Dateipuffer puffer, string katalog, bool nutzen, string wurzel = P.StandardWurzel)
     {
-        if (!P.IstKatalog(katalog)) throw new ArgumentException($"{katalog} ist kein Katalog (<Name>{P.Katalog.Suffix}).");
         var ablaeufe = P.Projekt(wurzel, P.Rolle.Ablaeufe);
-        var datei = $"{ablaeufe}/{ablaeufe}.csproj";
-        var text = puffer.Lies(datei) ?? throw new InvalidOperationException($"{datei} fehlt — die Anwendung {wurzel} hat keine Abläufe.");
+        Referenz(puffer, ablaeufe, katalog, nutzen, $"die Anwendung {wurzel} hat keine Abläufe");
+    }
+
+    /// <summary>
+    /// Der Katalog <paramref name="nutzer"/> nutzt den Katalog <paramref name="katalog"/> (Referenz in seiner Projektdatei) — etwa den allgemeinen,
+    /// dessen Commands er als Input oder Output nimmt. Kreise sind verboten.
+    /// </summary>
+    public static void KatalogNutzt(Dateipuffer puffer, string nutzer, string katalog)
+    {
+        if (!P.IstKatalog(nutzer)) throw new ArgumentException($"{nutzer} ist kein Katalog (<Name>{P.Katalog.Suffix}).");
+        if (nutzer == katalog) return;
+        if (P.KatalogeIn(puffer.Lies($"{katalog}/{katalog}.csproj") ?? "").Contains(nutzer, StringComparer.Ordinal))
+            throw new InvalidOperationException($"{katalog} nutzt schon {nutzer} — umgekehrt wäre es ein Kreis.");
+        Referenz(puffer, nutzer, katalog, true, $"den Katalog {nutzer} gibt es nicht");
+    }
+
+    private static void Referenz(Dateipuffer puffer, string projekt, string katalog, bool nutzen, string fehlt)
+    {
+        if (!P.IstKatalog(katalog)) throw new ArgumentException($"{katalog} ist kein Katalog (<Name>{P.Katalog.Suffix}).");
+        var datei = $"{projekt}/{projekt}.csproj";
+        var text = puffer.Lies(datei) ?? throw new InvalidOperationException($"{datei} fehlt — {fehlt}.");
         var hat = P.KatalogeIn(text).Contains(katalog, StringComparer.Ordinal);
         if (nutzen == hat) return;
         var zeile = $"<ProjectReference Include=\"..\\{katalog}\\{katalog}.csproj\" />";
