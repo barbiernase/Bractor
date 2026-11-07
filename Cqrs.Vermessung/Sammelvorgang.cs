@@ -5,7 +5,7 @@ namespace Cqrs.Vermessung;
 
 /// <summary>
 /// S3 Sammelvorgang (Beispieldomäne). Ein Vorgang ist ein Teil: als Disponent <c>StarteTeilauftrag</c> und <c>SchließeTeilauftragAb</c>;
-/// die Funktion <c>TeilFertigMeldung</c> meldet das Teil am Sammelvorgang (ein langlebiger, heißer Stream), nach N Teilen ist die Barriere
+/// der <see cref="Reaktionsworker"/> (als Teilmelder) meldet das Teil am Sammelvorgang (ein langlebiger, heißer Stream), nach N Teilen ist die Barriere
 /// erreicht. Es gibt keine Query auf den Sammelvorgang — sichtbar ist ein Teil, wenn sein <c>TeilVerbucht</c> im Log steht (Log-Zeit, mit dem
 /// Uhr-Versatz auf die Treiber-Uhr umgerechnet); welches Teil es verbucht, sagt die Ursache (das <c>TeilauftragAbgeschlossen</c> im Teil-Stream).
 /// Den Sammelvorgang legt die Last selbst an (<c>StarteSammelvorgang(N)</c>, bevor sein erstes Teil startet); in der Messung bekommt jeder Block einen eigenen, so groß, dass die Barriere nicht erreicht wird.

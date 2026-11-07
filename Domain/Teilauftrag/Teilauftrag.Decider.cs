@@ -18,7 +18,7 @@ public partial class Teilauftrag
             yield return new TeilauftragGestartet(cmd.SammelvorgangId);
         }
 
-        public IEnumerable<OneOf<TeilauftragAbgeschlossen, TeilauftragNichtGefunden, TeilauftragBereitsFertig, TeilFertig>> Decide(
+        public IEnumerable<OneOf<TeilauftragAbgeschlossen, TeilauftragNichtGefunden, TeilauftragBereitsFertig>> Decide(
             SchließeTeilauftragAb cmd)
         {
             if (!this.State.Existiert)
@@ -33,8 +33,8 @@ public partial class Teilauftrag
                 yield break;
             }
 
+            // Ein Fakt, kein Auftrag: an der Barriere meldet ihn der Teilmelder (ein Client, der TeilauftragAbgeschlossen hört).
             yield return new TeilauftragAbgeschlossen(this.State.SammelvorgangId);
-            yield return new TeilFertig(this.State.SammelvorgangId);
         }
     }
 }

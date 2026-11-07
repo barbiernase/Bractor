@@ -15,7 +15,7 @@ public sealed class BeispielAblaufHost : IAsyncLifetime
     public Log Log { get; private set; } = null!;
     public Bildpaare Bilder { get; private set; } = null!;
 
-    // Der DatensatzWorker läuft neben dem Host wie in Betrieb (Schritt 6): er reagiert auf RangeAngefordert und EinfrierenAngefordert.
+    // Der ReaktionsWorker läuft neben dem Host wie in Betrieb (Schritt 6): er reagiert auf RangeAngefordert, EinfrierenAngefordert und TeilauftragAbgeschlossen.
     private readonly CancellationTokenSource _ende = new();
     private Task? _worker;
 
@@ -26,7 +26,7 @@ public sealed class BeispielAblaufHost : IAsyncLifetime
         Eingang = new JsonEingang(Host);
         Log = new Log(Umgebung);
         Bilder = new Bildpaare(Umgebung);
-        _worker = Domain.Client.Worker.DatensatzReaktionen.LaufeAsync(Host.GrpcAdresse, Testumgebung.TokenDatensatzpfleger,
+        _worker = Domain.Client.Worker.Reaktionslauf.LaufeAsync(Host.GrpcAdresse, Testumgebung.TokenReaktionsWorker,
             new global::Client.Infrastructure.Reaktionen.ReaktionsStandImSpeicher(), "verhalten-datensatzworker", _ende.Token, TimeSpan.FromMilliseconds(200));
     }
 

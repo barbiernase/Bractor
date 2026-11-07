@@ -6,7 +6,7 @@ namespace Domain.Teilauftrag;
 /// Aggregat <see cref="Teilauftrag"/> — EIN aufgefächertes Teil (Worker) eines Sammelvorgangs.
 ///
 /// Es kennt seine <see cref="SammelvorgangId"/> (die Korrelation zurück zur Barriere). Wird es fertig,
-/// mappt ein Prozess sein Fertig-Event auf <c>MeldeTeilFertig</c> an der Barriere (Fan-in).
+/// meldet der Teilmelder (ein Client, der das Fertig-Event hört) <c>MeldeTeilFertig</c> an der Barriere (Fan-in).
 /// Einzelner Datenpunkt, keine Collection. Id/Version generiert.
 /// </summary>
 public partial class Teilauftrag : IState

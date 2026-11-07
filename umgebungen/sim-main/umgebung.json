@@ -21,7 +21,7 @@
   },
   "Identitaeten": {
     "Tokens": {
-      "sim-datensatzpfleger": "Datensatzpfleger",
+      "sim-reaktionsworker": "Datensatzpfleger,Teilmelder",
       "sim-disponent": "Disponent",
       "sim-inspekteur": "Inspekteur",
       "sim-kioperator": "KIOperator",
@@ -48,8 +48,8 @@
         "Skript": "Domain.Client.Worker.Python.ML/run_stub.py"
       }
     },
-    "DatensatzWorker": {
-      "Token": "sim-datensatzpfleger",
+    "ReaktionsWorker": {
+      "Token": "sim-reaktionsworker",
       "Worker": {
         "Projekt": "Domain.Client.Worker"
       }

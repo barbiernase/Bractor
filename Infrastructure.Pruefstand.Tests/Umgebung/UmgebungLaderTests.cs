@@ -153,9 +153,9 @@ public class UmgebungLaderTests
     {
         FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
-                ["a"] = new() { Graph = "Teilmeldung" }, ["b"] = new() { Graph = "Teilmeldung" },
+                ["a"] = new() { Graph = "Bildaufnahme" }, ["b"] = new() { Graph = "Bildaufnahme" },
             }, Graphen))
-            .Should().Throw<BootFehler>().WithMessage("*Teilmeldung hat einen Command-Kopf*genau einmal*a, b*");
+            .Should().Throw<BootFehler>().WithMessage("*Bildaufnahme hat einen Command-Kopf*genau einmal*a, b*");
         GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
                 ["linie1"] = new() { Graph = "Linienimport" }, ["linie2"] = new() { Graph = "Linienimport" },
@@ -182,7 +182,7 @@ public class UmgebungLaderTests
         s.BindeGraphen(new UmgebungKonfig
         {
             Umgebung = { Hand = ["Klassifizierer", "TrainingsSystem"] },
-            Graphen = { ["teile"] = new() { Graph = "Teilmeldung" } },
+            Graphen = { ["teile"] = new() { Graph = "Bildaufnahme" } },
         });
         s.Count(d => d.ServiceType == typeof(HandAusfuehrer)).Should().Be(1);
         s.Single(d => d.ServiceType == typeof(HandAkteure)).ImplementationInstance.Should().BeOfType<HandAkteure>()
@@ -230,7 +230,7 @@ public class UmgebungLaderTests
         var u = UmgebungLader.Lade(new ConfigurationManager(), name, [], branch: "main");
         u.Umgebung.Name.Should().Be(name);
         GraphInstanzen.Aus(u.Graphen, Graphen, Infrastructure.Komposition.Anwendung.Akteure.Rechte).Alle.Select(i => i.Graph.Name)
-            .Should().BeEquivalentTo(["Linienimport", "Teilmeldung", "Klassifizierer", "TrainingsSystem"],
+            .Should().BeEquivalentTo(["Linienimport", "Klassifizierer", "TrainingsSystem"],
                 "je Graph eine Instanz, dazu je Akteur mit Arbeit eine");
         if (name == "sim-main")
         {

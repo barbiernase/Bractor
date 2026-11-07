@@ -17,8 +17,11 @@ public sealed record KlassifikationsWorker : IClient, IVerkoerpert<Klassifiziere
 /// </summary>
 public sealed record TrainingsWorker : IClient, IVerkoerpert<TrainingsSystem>;
 
-/// <summary>Der Worker der Reaktionen auf Datensätze (Domain.Client.Worker): er verkörpert den Datensatzpfleger.</summary>
-public sealed record DatensatzWorker : IClient, IVerkoerpert<Datensatzpfleger>;
+/// <summary>
+/// Der Worker der Reaktionen der Domäne (Domain.Client.Worker): ein Decide gibt nur Fakten aus, was danach geschieht, stößt er an — als
+/// Datensatzpfleger (Range auflösen, Einfrieren abschließen) und als Teilmelder (ein fertiges Teil an seiner Barriere melden).
+/// </summary>
+public sealed record ReaktionsWorker : IClient, IVerkoerpert<Datensatzpfleger>, IVerkoerpert<Teilmelder>;
 
 /// <summary>
 /// Blazor-Arbeitsplatz (<c>Host.Blazor</c> + <c>Domain.Client.Modules.Blazor</c>, <c>[assembly: IstClient&lt;Arbeitsplatz&gt;]</c>): ein Client, vier

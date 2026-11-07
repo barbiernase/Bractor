@@ -272,6 +272,7 @@ public partial class ProtoMessageMapper
         CorrelationId = dto.CorrelationId,
         UserId = dto.UserId,
         OriginSessionId = string.IsNullOrEmpty(dto.OriginSessionId) ? null : dto.OriginSessionId,
+        Ursache = string.IsNullOrEmpty(dto.Ursache) ? null : dto.Ursache,
         Payload = payload,
     };
 
@@ -286,6 +287,7 @@ public partial class ProtoMessageMapper
         CorrelationId = envelope.CorrelationId,
         UserId = envelope.UserId,
         OriginSessionId = envelope.OriginSessionId ?? string.Empty,
+        Ursache = envelope.Ursache ?? string.Empty,
         Payload = _tabelle.PackeCommand(envelope.Payload),
     };
 

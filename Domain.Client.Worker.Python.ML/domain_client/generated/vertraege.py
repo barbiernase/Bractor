@@ -56,6 +56,7 @@ from . import (
     LabelPhysischesProduktDto,
     MarkiereAlsInspiziertDto,
     MeldeFortschrittDto,
+    MeldeTeilFertigDto,
     MeldeTrainingAbgeschlossenDto,
     MeldeTrainingBegonnenDto,
     MeldeTrainingGescheitertDto,
@@ -77,6 +78,7 @@ from . import (
     SplitGesetztDto,
     StarteTrainingDto,
     SucheImagePairsDto,
+    TeilauftragAbgeschlossenDto,
     TrainingAbgebrochenDto,
     TrainingAbgeschlossenDto,
     TrainingAngefordertDto,
@@ -253,31 +255,6 @@ class ArbeitsplatzBasis(ClientVertragBasis[S]):
         ...
 
 
-class DatensatzWorkerBasis(ClientVertragBasis[S]):
-    """Client Domain.Akteure.DatensatzWorker — verkörpert Datensatzpfleger."""
-
-    CLIENT: ClassVar[str] = "DatensatzWorker"
-    AKTEURE: ClassVar[tuple] = ("Datensatzpfleger",)
-    VERTRAG_HASH: ClassVar[str] = "3ea75bd61cbb3886"
-    ARBEIT: ClassVar[dict] = {}
-    HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Kenntnis, verlierbar
-        EinfrierenAngefordertDto: "auf_einfrieren_angefordert",
-        RangeAngefordertDto: "auf_range_angefordert",
-    }
-    SPONTAN: ClassVar[tuple] = (NimmRangeAufDto, SchliesseEinfrierenAbDto,)   # IDarf der Akteure: Commands und Hinweise
-    FRAGT: ClassVar[tuple] = (SucheImagePairsDto, GetImagePairDto,)   # IDarf der Akteure: ihre Queries
-
-    @abstractmethod
-    async def auf_einfrieren_angefordert(self, e: EinfrierenAngefordertDto, ctx: MessageContext, state: S) -> None:
-        """IHoert<EinfrierenAngefordert> — nur zur Kenntnis"""
-        ...
-
-    @abstractmethod
-    async def auf_range_angefordert(self, e: RangeAngefordertDto, ctx: MessageContext, state: S) -> None:
-        """IHoert<RangeAngefordert> — nur zur Kenntnis"""
-        ...
-
-
 class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
     """Client Domain.Akteure.KlassifikationsWorker — verkörpert Klassifizierer."""
 
@@ -312,6 +289,37 @@ class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
         ...
 
 
+class ReaktionsWorkerBasis(ClientVertragBasis[S]):
+    """Client Domain.Akteure.ReaktionsWorker — verkörpert Datensatzpfleger, Teilmelder."""
+
+    CLIENT: ClassVar[str] = "ReaktionsWorker"
+    AKTEURE: ClassVar[tuple] = ("Datensatzpfleger", "Teilmelder")
+    VERTRAG_HASH: ClassVar[str] = "23f2d1708aa2efd3"
+    ARBEIT: ClassVar[dict] = {}
+    HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Kenntnis, verlierbar
+        EinfrierenAngefordertDto: "auf_einfrieren_angefordert",
+        RangeAngefordertDto: "auf_range_angefordert",
+        TeilauftragAbgeschlossenDto: "auf_teilauftrag_abgeschlossen",
+    }
+    SPONTAN: ClassVar[tuple] = (NimmRangeAufDto, SchliesseEinfrierenAbDto, MeldeTeilFertigDto,)   # IDarf der Akteure: Commands und Hinweise
+    FRAGT: ClassVar[tuple] = (SucheImagePairsDto, GetImagePairDto,)   # IDarf der Akteure: ihre Queries
+
+    @abstractmethod
+    async def auf_einfrieren_angefordert(self, e: EinfrierenAngefordertDto, ctx: MessageContext, state: S) -> None:
+        """IHoert<EinfrierenAngefordert> — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_range_angefordert(self, e: RangeAngefordertDto, ctx: MessageContext, state: S) -> None:
+        """IHoert<RangeAngefordert> — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_teilauftrag_abgeschlossen(self, e: TeilauftragAbgeschlossenDto, ctx: MessageContext, state: S) -> None:
+        """IHoert<TeilauftragAbgeschlossen> — nur zur Kenntnis"""
+        ...
+
+
 class TrainingsWorkerBasis(ClientVertragBasis[S]):
     """Client Domain.Akteure.TrainingsWorker — verkörpert TrainingsSystem."""
 
@@ -342,7 +350,7 @@ class TrainingsWorkerBasis(ClientVertragBasis[S]):
 
 __all__ = [
     "ArbeitsplatzBasis",
-    "DatensatzWorkerBasis",
     "KlassifikationsWorkerBasis",
+    "ReaktionsWorkerBasis",
     "TrainingsWorkerBasis",
 ]

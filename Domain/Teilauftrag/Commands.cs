@@ -12,6 +12,3 @@ public record StarteTeilauftrag(
 public record SchließeTeilauftragAb(
     Id<Teilauftrag> AggregateId
 ) : ICommand<Teilauftrag>;
-
-/// <summary>Das Teil ist fertig: es meldet sich an seiner Barriere.</summary>
-public record TeilFertig(Id<Sammelvorgang.Sammelvorgang> Sammelvorgang) : ICommand;

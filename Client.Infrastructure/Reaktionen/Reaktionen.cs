@@ -138,7 +138,8 @@ public sealed class Reaktionen(IGrpcProxy proxy, IReaktionsStand stand, string n
                     var kontext = new ReaktionsKontext(proxy, e.Position, e.Event);
                     await reaktion(e.Event.Payload, kontext);
                     for (var stelle = 0; stelle < kontext.Commands.Count; stelle++)
-                        await SendeAsync(kontext.Commands[stelle], CommandId(name, e.Position, nummer, stelle), ct);
+                        await SendeAsync(kontext.Commands[stelle], CommandId(name, e.Position, nummer, stelle),
+                            Spur.Ursache(e.Event.AggregateId, e.Event.AggregateVersion), ct);
                 }
                 if (seite.Bis > ab)
                 {
@@ -162,9 +163,10 @@ public sealed class Reaktionen(IGrpcProxy proxy, IReaktionsStand stand, string n
 
     /// <summary>
     /// Sendet einen Command mit seiner abgeleiteten Id und wartet auf seine Antwort (Quittung, Event, Ablehnung oder Fehler mit dieser Korrelation);
-    /// bleibt sie aus, geht er mit derselben Id noch einmal — die Inbox des Ziels bzw. der offene Eingang verwirft das Zweite.
+    /// bleibt sie aus, geht er mit derselben Id noch einmal — die Inbox des Ziels bzw. der offene Eingang verwirft das Zweite. Ein Command an ein
+    /// Aggregat trägt das Event, auf das reagiert wird, als <paramref name="ursache"/> (Spur): der Server stempelt es an seine Events.
     /// </summary>
-    private async Task SendeAsync(ICommand command, Guid id, CancellationToken ct)
+    private async Task SendeAsync(ICommand command, Guid id, string ursache, CancellationToken ct)
     {
         var korrelation = id.ToString();
         var antwort = new TaskCompletionSource<EventEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -178,6 +180,7 @@ public sealed class Reaktionen(IGrpcProxy proxy, IReaktionsStand stand, string n
                     await proxy.SendCommandAsync(new CommandEnvelope
                     {
                         CommandId = id, Payload = an, Modus = new CommandModus.Client(-1), CorrelationId = korrelation, OriginSessionId = proxy.SessionId,
+                        Ursache = ursache,
                     }, ct);
                 else
                     await proxy.SendeNachrichtAsync(command, id, korrelation, ct);

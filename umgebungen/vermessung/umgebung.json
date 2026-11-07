@@ -24,7 +24,7 @@
   },
   "Identitaeten": {
     "Tokens": {
-      "vermessung-datensatzpfleger": "Datensatzpfleger",
+      "vermessung-reaktionsworker": "Datensatzpfleger,Teilmelder",
       "vermessung-kamerasystem": "KameraSystem",
       "vermessung-disponent": "Disponent",
       "vermessung-kioperator": "KIOperator",

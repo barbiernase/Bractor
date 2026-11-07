@@ -2,7 +2,6 @@ using System;
 using Abstractions;
 using Cqrs.Testing;
 using FluentAssertions;
-using Domain.Pipeline.Sammelvorgang;
 using Domain.Sammelvorgang;
 using Domain.Teilauftrag;
 using Domain.Trainingslauf;
@@ -15,7 +14,8 @@ namespace Infrastructure.Pruefstand.Aggregate;
 ///
 /// So SETZT man die Barriere ein:
 ///   1. Fan-out (Client): <c>StarteSammelvorgang(N)</c> + N × <c>StarteTeilauftrag(…, sammelvorgang)</c>.
-///   2. Jeder Teil wird fertig → die Funktion <see cref="TeilFertigMeldung"/> macht daraus <c>MeldeTeilFertig</c>.
+///   2. Jeder Teil wird fertig (<c>TeilauftragAbgeschlossen</c>, ein Fakt) → der Teilmelder, ein Client, meldet <c>MeldeTeilFertig</c> an der
+///      Barriere, die das Event nennt (hier als Kante der Welt — seine Reaktion ist dieselbe Abbildung).
 ///   3. Das Zähl-Aggregat schließt erst beim N-ten Teil ab (N = Laufzeitwert).
 /// Dazu der Trainings-Wächter als Frist des Aggregats: der Beginn setzt sie, die Uhr feuert sie, ein Ende davor macht sie wirkungslos.
 /// </summary>
@@ -25,7 +25,7 @@ public class SammelvorgangKaskadeTests
 
     private static AblaufBauer Welt() => Ablauf.Mit(Fabrik)
         .Aggregat<Sammelvorgang>().Aggregat<Teilauftrag>()
-        .Funktion<TeilFertig>(nameof(TeilFertigMeldung), (f, h) => new TeilFertigMeldung().Auf(f));
+        .Funktion<TeilauftragAbgeschlossen>("Teilmelder", (e, h) => new MeldeTeilFertig(e.SammelvorgangId));
 
     [Fact]
     public void Fanout_dann_Fanin_Barriere_feuert_erst_beim_letzten_Teil()
@@ -42,7 +42,7 @@ public class SammelvorgangKaskadeTests
         welt.Wenn(new StarteTeilauftrag(new(w2), new(sammel)));
         welt.Wenn(new StarteTeilauftrag(new(w3), new(sammel)));
 
-        // 2) Zwei Teile fertig → die Funktion meldet je MeldeTeilFertig; Barriere noch NICHT erreicht.
+        // 2) Zwei Teile fertig → der Teilmelder meldet je MeldeTeilFertig; Barriere noch NICHT erreicht.
         welt.Wenn(new SchließeTeilauftragAb(new(w1)))
             .Feuert<MeldeTeilFertig>(1).AllesGeroutet()
             .EndzustandVon<Sammelvorgang>(sammel, s => !s.Abgeschlossen && s.Fertig == 1, "1 von 3");

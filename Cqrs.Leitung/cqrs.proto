@@ -218,6 +218,9 @@ message CommandEnvelopeDto {
     string correlation_id = 6;
     string user_id = 7;
     string origin_session_id = 8;
+    // Spur (docs/04 §4.9): der Log-Eintrag, auf den der Client reagiert (Stream:Version) — der Server stempelt ihn als Ursache an die Events des
+    // Commands, so bleibt die Ursache-Kette über eine Reaktion hinweg lückenlos. Leer = spontan, ohne Vorgänger im Log.
+    string ursache = 9;
 
     // Die Domänen-Nachricht: Typname + Bytes (Proto der Anwendung, docs/06).
     Nutzlast payload = 20;

@@ -26,7 +26,7 @@ public sealed class Testumgebung
     public const string TokenKlassifizierer = "verhalten-klassifizierer";
     public const string TokenTrainingssystem = "verhalten-trainingssystem";
     public const string TokenDisponent = "verhalten-disponent";
-    public const string TokenDatensatzpfleger = "verhalten-datensatzpfleger";
+    public const string TokenReaktionsWorker = "verhalten-reaktionsworker";
 
     private Testumgebung(Anwendung anwendung, string name)
     {
@@ -94,7 +94,7 @@ public sealed class Testumgebung
                 [TokenKlassifizierer] = "Klassifizierer",
                 [TokenTrainingssystem] = "TrainingsSystem",
                 [TokenDisponent] = "Disponent",
-                [TokenDatensatzpfleger] = "Datensatzpfleger",
+                [TokenReaktionsWorker] = "Datensatzpfleger,Teilmelder",
             },
         };
         return json;
@@ -129,8 +129,6 @@ public sealed class Testumgebung
             },
             ["Aufbereitung.Einlesen"] = ImHost(), ["Aufbereitung.Verkleinern"] = ImHost(mitPfad: true), ["Aufbereitung.Kontrast"] = ImHost(mitPfad: true),
         });
-        foreach (var g in new[] { "Teilmeldung" })
-            yield return (g.ToLowerInvariant(), new JsonObject { ["Graph"] = g });
     }
 
     public static int FreierPort()

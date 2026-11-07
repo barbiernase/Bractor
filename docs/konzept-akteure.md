@@ -273,8 +273,10 @@ Auftrag — doppelt geantwortet, von einem zweiten Arbeiter oder nach dem Neuver
   gesicherten Stand (`LiesLog`; ein Push weckt ihn nur), leitet jede Command-Id aus Reaktion, Position und Stelle ab (in C# und Python dieselbe
   Formel) und sichert den Stand erst, wenn jeder Command der Seite beantwortet ist. Nach einem Neustart rechnet er dieselben Ids; die Inbox des
   Ziels bzw. der offene Eingang am Kopf verwirft die Wiederholung. Den gelegten Eingang eines Commands ohne Ziel quittiert der Server
-  (`CommandQuittung` mit seiner Korrelation). Ein Client, der reagiert, ist ein eigener Client (ein Worker), keine Oberfläche. In der Beispieldomäne
-  pflegt so der `DatensatzWorker` (`Domain.Client.Worker`, Akteur `Datensatzpfleger`) Datensätze: Range auflösen und Einfrieren abschließen. Die
+  (`CommandQuittung` mit seiner Korrelation). Ein Command an ein Aggregat trägt das Event, auf das reagiert wird, als Ursache (`ursache` der
+  Hülle, Spur): der Server stempelt es an die Events, die Ursache-Kette bleibt über die Reaktion hinweg lückenlos. Ein Client, der reagiert, ist
+  ein eigener Client (ein Worker), keine Oberfläche. In der Beispieldomäne ist das der `ReaktionsWorker` (`Domain.Client.Worker`): als
+  `Datensatzpfleger` löst er Ranges auf und schließt das Einfrieren ab, als `Teilmelder` meldet er jedes fertige Teil am Sammelvorgang. Die
   Werkbank startet einen .NET-Worker über `Clients:<Name>:Worker:Projekt` (`dotnet run --project`), Prüfstände lassen ihn im Test laufen.
 - **Keine Queries an einen Client:** ein Client fragt, er beantwortet nie — eine Query hat genau ein Ziel, einen Reader oder ein Aggregat (R4).
 

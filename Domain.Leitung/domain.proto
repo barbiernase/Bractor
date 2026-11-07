@@ -226,10 +226,6 @@ message PaarZuBeurteilenDto {
     string paar = 1;
 }
 
-message TeilFertigDto {
-    string sammelvorgang = 1;
-}
-
 message TrainingZuRechnenDto {
     string lauf = 1;
     string datensatz_id = 2;

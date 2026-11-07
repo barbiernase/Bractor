@@ -227,7 +227,7 @@ public class AblaufE2ETests
     }
 
     /// <summary>
-    /// Die Range als Reaktion eines Clients (Schritt 6): FuegeRangeHinzu → RangeAngefordert (ein Fakt, kein Auftrag) → der DatensatzWorker hört es
+    /// Die Range als Reaktion eines Clients (Schritt 6): FuegeRangeHinzu → RangeAngefordert (ein Fakt, kein Auftrag) → der ReaktionsWorker hört es
     /// über gRPC, sucht die Paare über die echte Query (SucheImagePairs gegen das Read-Model) → NimmRangeAuf an DENSELBEN Datensatz (der Stream des
     /// Events).
     /// </summary>
@@ -247,7 +247,7 @@ public class AblaufE2ETests
         Task? reaktionen = null;
         try
         {
-            reaktionen = Domain.Client.Worker.DatensatzReaktionen.LaufeAsync($"http://127.0.0.1:{port}", null,
+            reaktionen = Domain.Client.Worker.Reaktionslauf.LaufeAsync($"http://127.0.0.1:{port}", null,
                 new global::Client.Infrastructure.Reaktionen.ReaktionsStandImSpeicher(), "ablauf-ds", ende.Token, takt: TimeSpan.FromMilliseconds(200));
             var es = host.Services.GetRequiredService<IEventStoreRepository>();
             var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
@@ -269,7 +269,7 @@ public class AblaufE2ETests
             Sende("Datensatz", new Domain.Datensatz.FuegeRangeHinzu(new(ds), new Domain.Datensatz.RangeKriterien()));
 
             await Warte(async () => (await es.ReadStreamAsync(ds, 0, default)).Any(e => e.Payload is Domain.Datensatz.PaareAufgenommen),
-                TimeSpan.FromSeconds(60), "Die Range wurde nicht aufgelöst (Reaktion des DatensatzWorkers)" + (reaktionen.IsFaulted ? ": " + reaktionen.Exception : "."));
+                TimeSpan.FromSeconds(60), "Die Range wurde nicht aufgelöst (Reaktion des ReaktionsWorkers)" + (reaktionen.IsFaulted ? ": " + reaktionen.Exception : "."));
             var aufgenommen = (await es.ReadStreamAsync(ds, 0, default)).Select(e => e.Payload).OfType<Domain.Datensatz.PaareAufgenommen>().Single();
             aufgenommen.ImagePairIds.Should().Contain(new Id<Domain.ImagePair.ImagePair>(paar), "die Suche lief gegen das echte Read-Model");
         }

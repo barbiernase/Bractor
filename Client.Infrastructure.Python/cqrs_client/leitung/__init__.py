@@ -264,6 +264,12 @@ class CommandEnvelopeDto(betterproto.Message):
     correlation_id: str = betterproto.string_field(6)
     user_id: str = betterproto.string_field(7)
     origin_session_id: str = betterproto.string_field(8)
+    ursache: str = betterproto.string_field(9)
+    """
+    Spur (docs/04 §4.9): der Log-Eintrag, auf den der Client reagiert (Stream:Version) — der Server stempelt ihn als Ursache an die Events des
+     Commands, so bleibt die Ursache-Kette über eine Reaktion hinweg lückenlos. Leer = spontan, ohne Vorgänger im Log.
+    """
+
     payload: "Nutzlast" = betterproto.message_field(20)
     """
     Die Domänen-Nachricht: Typname + Bytes (Proto der Anwendung, docs/06).

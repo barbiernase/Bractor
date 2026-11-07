@@ -419,8 +419,9 @@ von dort an die Sitzungen der Akteure, die ihn hören — ohne Log, höchstens e
 **Bestand.** Beispieldomäne: der **Linienimport** bei ImagePair (`Dateiwaechter` → **Bildaufbereitung** aus `Bildvorschau.Katalog`:
 `Bildeinlesen` → `BildEingelesen` → `Bildverkleinerung` → `BildVerkleinert` → `Kontrastausgleich` → `VorschauErstellt` (trägt die Datei der Quelle
 mit) → `Dateinamendeutung` → `BildGedeutet`, im Ablauf übersetzt ↦ `NimmBildAuf` (flache Felder, das Decide baut `BildMeta` und `BildVersion`);
-`BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise des Katalogs; die **Bildaufnahme** ist dasselbe ohne Dateiwächter, Kopf `DateiGefunden`), die Pflege eines Datensatzes als **Reaktion eines Clients** (Schritt 6: der `DatensatzWorker`, Akteur `Datensatzpfleger`, hört
-`RangeAngefordert` bzw. `EinfrierenAngefordert`, liest per Query und gibt `NimmRangeAuf` bzw. `SchliesseEinfrierenAb`; kein Graph mehr) und die **Teilmeldung** (`TeilFertigMeldung`, Kopf `TeilFertig`);
+`BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise des Katalogs; die **Bildaufnahme** ist dasselbe ohne Dateiwächter, Kopf `DateiGefunden`), die Pflege eines Datensatzes und die Meldung eines fertigen Teils als **Reaktionen eines Clients** (Schritt 6, kein Graph mehr: der
+`ReaktionsWorker` hört als `Datensatzpfleger` `RangeAngefordert` bzw. `EinfrierenAngefordert`, liest per Query und gibt `NimmRangeAuf` bzw.
+`SchliesseEinfrierenAb`, als `Teilmelder` `TeilauftragAbgeschlossen` und gibt `MeldeTeilFertig` an den Sammelvorgang, den das Event nennt);
 Arbeit haben der `Klassifizierer` (`PaarZuBeurteilen`) und das `TrainingsSystem` (`TrainingZuRechnen`, die Antwort in Stücken). Prüfdomäne: der
 **Abrechnungsablauf** (`Freigabeautomat` gibt eine Rechnung bis 10 000 frei, darüber `RechnungZuPruefen` — Arbeit des `Rechnungspruefer`;
 `Gutschrift`, `Mahnwesen` mit Technik `IMahnversand`), der **Auftragsablauf** (§4.5), der **Importablauf** (`Importannahme` mit Kopf
@@ -544,7 +545,8 @@ und Wirker in den Command-Envelope, das Ziel-Aggregat schreibt mit `wirker = dec
   reist mit. Was zwischen Knoten fließt, steht nie im Log.
 - **Quelle:** eine Quell-Kette hat keinen Log-Eintrag als Wurzel; seine Ursache ist der abgeleitete Stream der Instanz an der laufenden Nummer.
 - **Uhr:** Ursache = das Frist-Event, Wirker `uhr` (ohne Karte).
-- **Akteur:** ein Command von draußen trägt `ueber = akteur:<Akteur>`.
+- **Akteur:** ein Command von draußen trägt `ueber = akteur:<Akteur>`; reagiert ein Client auf ein Event, nennt die Hülle es als `ursache`
+  (`Stream:Version`, der Läufer setzt sie), sonst ist die Ursache leer.
 - **Projektion** schreibt nie ins Log; `projektion:<Typ>` ist nur Karten-Id.
 
 Das Format steht an einer Stelle (`Abstractions/Spur/WirkerId.cs`), den Weg eines Eintrags über die Karten rechnet `SpurWeg`.

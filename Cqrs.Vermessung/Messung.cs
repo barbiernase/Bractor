@@ -46,6 +46,7 @@ internal static class Messung
             if (o.Szenarien.Overlaps(["S1", "S3", "S4", "S6"]))
             {
                 await using (var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-w{w}", zuruecksetzen: true))
+                await using (new Reaktionsworker(k.Beispiel.GrpcPort))
                 {
                     if (o.Diagnose) await Zeitreihe.LaufeAsync(k, lauf, "L1-leer", o.ZeitreiheLeer, o.ZeitreiheTakt);
                     if (o.Szenarien.Contains("S1") || o.Szenarien.Contains("S4")) Merke("S1", await StossAsync(k, lauf, "S1", 2030, w, o.StossS1));
@@ -225,8 +226,8 @@ internal static class Messung
         var paare = (int)await lauf.Db.ZahlAsync($"select count(*) from {lauf.Db.Schema}.mt_events where type = 'image_pair_erstellt'");
         // Aufwärmen (nicht gewertet, PF-19): ein eigener Datensatz läuft einmal ganz durch — die erste Nutzung der Datensatz-Typen (Marten erzeugt
         //   ihren Code zur Laufzeit), JIT; sonst misst S4 den Kaltstart. Fenster, Kennzahlen und Prüfungen gelten nur dem zweiten.
-        await new Datensatz(lauf.Eingang, k.Beispiel.GrpcPort).LaufeAsync(paare, TimeSpan.FromMinutes(5));
-        var ds = new Datensatz(lauf.Eingang, k.Beispiel.GrpcPort);
+        await new Datensatz(lauf.Eingang).LaufeAsync(paare, TimeSpan.FromMinutes(5));
+        var ds = new Datensatz(lauf.Eingang);
         var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle, lauf);
         await fenster.StarteAsync();
         var z = await ds.LaufeAsync(paare, TimeSpan.FromMinutes(5));

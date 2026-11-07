@@ -93,3 +93,10 @@ public sealed record Modellfreigeber : IAkteur,
 /// <summary>Beispiel-Domäne Sammelvorgang: startet Sammelvorgänge und ihre Teilaufträge und schließt Teilaufträge ab.</summary>
 public sealed record Disponent : IAkteur,
     IDarf<StarteSammelvorgang>, IDarf<StarteTeilauftrag>, IDarf<SchließeTeilauftragAb>;
+
+/// <summary>
+/// Meldet jedes fertige Teil an seiner Barriere (Fan-in, Schritt 6): hört <see cref="TeilauftragAbgeschlossen"/> und gibt <see cref="MeldeTeilFertig"/>
+/// an den Sammelvorgang, den das Event nennt — die Zugehörigkeit ist das fachliche Feld (A2), Zähler und Barriere liegen im Aggregat.
+/// </summary>
+public sealed record Teilmelder : IAkteur,
+    IHoert<TeilauftragAbgeschlossen>, IDarf<MeldeTeilFertig>;

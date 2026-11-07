@@ -174,7 +174,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.Sammelvorgang.TeilVerbucht))]
 [JsonSerializable(typeof(global::Domain.Teilauftrag.SchließeTeilauftragAb))]
 [JsonSerializable(typeof(global::Domain.Teilauftrag.StarteTeilauftrag))]
-[JsonSerializable(typeof(global::Domain.Teilauftrag.TeilFertig))]
 [JsonSerializable(typeof(global::Domain.Teilauftrag.TeilauftragAbgeschlossen))]
 [JsonSerializable(typeof(global::Domain.Teilauftrag.TeilauftragBereitsFertig))]
 [JsonSerializable(typeof(global::Domain.Teilauftrag.TeilauftragExistiertBereits))]

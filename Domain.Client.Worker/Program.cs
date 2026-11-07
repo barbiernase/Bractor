@@ -8,5 +8,5 @@ var port = Environment.GetEnvironmentVariable("CQRS_GRPC_PORT") ?? "5100";
 var stand = new DateiReaktionsStand(Environment.GetEnvironmentVariable("CQRS_REAKTION_STAND") ?? Path.Combine(AppContext.BaseDirectory, "reaktionen"));
 using var ende = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; ende.Cancel(); };
-await DatensatzReaktionen.LaufeAsync($"http://{host}:{port}", Environment.GetEnvironmentVariable("CQRS_AKTEUR_TOKEN"), stand, "datensatzworker", ende.Token,
-    melde: m => Console.WriteLine("[DatensatzWorker] " + m));
+await Reaktionslauf.LaufeAsync($"http://{host}:{port}", Environment.GetEnvironmentVariable("CQRS_AKTEUR_TOKEN"), stand, "reaktionsworker", ende.Token,
+    melde: m => Console.WriteLine("[ReaktionsWorker] " + m));
