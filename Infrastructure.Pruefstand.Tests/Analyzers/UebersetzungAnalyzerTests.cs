@@ -72,13 +72,37 @@ public class UebersetzungAnalyzerTests
             """)).Should().BeEmpty("Gerechnet läuft in der Kette weiter (zu Z) und wird zugleich übersetzt; Weiter ist ihr Ausgang");
 
     [Fact]
-    public async Task Ein_Zwischenstand_von_zwei_inneren_Knoten_ist_mehrdeutig()
+    public async Task Ein_Zwischenstand_von_zwei_inneren_Knoten_braucht_Innen()
     {
-        var befunde = await Befunde(Kette.Replace("[Von(nameof(R))] Zweiter Z", "[Von(nameof(R))] Nochmal N, [Von(nameof(N))] Zweiter Z") + """
+        var befunde = await Befunde(KetteDoppelt + """
             public sealed record Ablauf([Kopf] Kette K,
                 [Von(nameof(K)), Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] Uebersetze<Gerechnet, Buche> Mitte) : IGraph;
             """);
-        befunde.Should().Contain(b => b.Id == "CQRS115" && b.Text.Contains("greift Gerechnet aus 'K' ab") && b.Text.Contains("2 Knoten"));
+        befunde.Should().Contain(b => b.Id == "CQRS115" && b.Text.Contains("greift Gerechnet aus 'K' ab") && b.Text.Contains("2 Knoten")
+            && b.Text.Contains("Innen = nameof"), "ohne Innen ist unklar, welche Nachricht gemeint ist — der Fehler nennt den Ausweg");
+    }
+
+    // Mit Innen = nameof(…) ist genau die Nachricht dieses Knotens gemeint — auch wenn ein anderer Knoten denselben Typ ausgibt.
+    private static readonly string KetteDoppelt = Kette.Replace("[Von(nameof(R))] Zweiter Z", "[Von(nameof(R))] Nochmal N, [Von(nameof(N))] Zweiter Z");
+
+    [Fact]
+    public async Task Mit_Innen_greift_eine_Uebersetzung_genau_die_Nachricht_eines_Knotens_ab()
+        => (await Befunde(KetteDoppelt + """
+            public sealed record Ablauf([Kopf] Kette K,
+                [Von(nameof(K), Innen = nameof(Kette.R)), Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] Uebersetze<Gerechnet, Buche> NachR,
+                [Von(nameof(K), Innen = nameof(Kette.N)), Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] Uebersetze<Gerechnet, Buche> NachN) : IGraph;
+            """)).Should().BeEmpty("R und N geben beide Gerechnet aus — Innen nennt je Übersetzung den einen Knoten");
+
+    [Fact]
+    public async Task Innen_nennt_einen_Knoten_des_Graphen_und_zwar_mit_nameof()
+    {
+        var befunde = await Befunde(Kette + """
+            public sealed record Ablauf([Kopf] Kette K,
+                [Von(nameof(K), Innen = nameof(Ablauf.K)), Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] Uebersetze<Gerechnet, Buche> Falsch,
+                [Von(nameof(K), Innen = "R"), Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] Uebersetze<Gerechnet, Buche> Text) : IGraph;
+            """);
+        befunde.Should().Contain(b => b.Id == "CQRS115" && b.Text.Contains("Innen = 'K'") && b.Text.Contains("gibt es diesen Knoten nicht"));
+        befunde.Should().Contain(b => b.Id == "CQRS115" && b.Text.Contains("nie als String-Literal"));
     }
 
     [Fact]

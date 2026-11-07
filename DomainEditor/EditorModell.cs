@@ -681,6 +681,11 @@ public sealed record GraphKnoten
     public IReadOnlyList<string> Von { get; init; } = [];
     /// <summary>Die Namen aus <see cref="Von"/>, deren Kanten verlierbar sind.</summary>
     public IReadOnlyList<string> Verlierbar { get; init; } = [];
+    /// <summary>
+    /// An einer Übersetzung, die einen Graphen im Graphen nennt: der Knoten darin, aus dem sie abgreift (<c>[Von(nameof(A), Innen = nameof(T.X))]</c>),
+    /// als Pfad mit „.“ (<c>Verkleinern</c>, tiefer <c>Teil.Verkleinern</c>); sonst <c>null</c>.
+    /// </summary>
+    public string? Innen { get; init; }
     /// <summary>An einer Übersetzung: die Abweichungen der Feldzuordnung (<c>[Feld(nameof(TAus.Ziel), nameof(TEin.Quelle))]</c>).</summary>
     public IReadOnlyList<GraphFeld> Felder { get; init; } = [];
 }

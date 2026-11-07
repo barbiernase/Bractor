@@ -359,7 +359,8 @@ public static class Sonde
         string Knoten(JsonNode k) => $"{S(k, "name")}:{S(k, "typ")}{(k["kopf"]?.GetValue<bool>() == true ? " [Kopf]" : "")}"
             + (A(k, "von").Any() ? $" [Von {string.Join("+", A(k, "von").Select(v => (string?)v))}]" : "")
             + (A(k, "verlierbar").Any() ? $" [Verlierbar {string.Join("+", A(k, "verlierbar").Select(v => (string?)v))}]" : "")
-            + (A(k, "felder").Any() ? $" [Feld {string.Join("+", A(k, "felder").Select(f => S(f, "ziel") + "=" + S(f, "quelle")))}]" : "");
+            + (A(k, "felder").Any() ? $" [Feld {string.Join("+", A(k, "felder").Select(f => S(f, "ziel") + "=" + S(f, "quelle")))}]" : "")
+            + (S(k, "innen").Length > 0 ? $" [Innen {S(k, "innen")}]" : "");
         foreach (var g in A(b, "graphen").Where(Sonde))
         {
             z.Add($"graph {S(g, "namespace")}.{S(g, "name")} | knoten {string.Join(", ", A(g, "knoten").Select(Knoten))}"

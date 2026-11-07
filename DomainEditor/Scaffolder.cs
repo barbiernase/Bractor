@@ -279,9 +279,9 @@ public static class Scaffolder
     /// Ein Graph: <c>public sealed record X([Kopf] T1 A, [Von(nameof(A))] T2 B) : IGraph;</c> — die Knoten als Parameter, jede Kante als <c>Von</c> am
     /// nehmenden Knoten. Passt er nicht in eine Zeile, steht je Knoten eine.
     /// </summary>
-    public static string GraphRecord(Graph g)
+    public static string GraphRecord(Graph g, Func<string, Graph?>? graphNamens = null)
     {
-        var knoten = OhneLoseKanten(g).Knoten.Select(GraphKnotenText).ToList();
+        var knoten = OhneLoseKanten(g).Knoten.Select(k => GraphKnotenText(k, g, graphNamens)).ToList();
         var zeile = $"public sealed record {g.Name}({string.Join(", ", knoten)}) : {IGraph};";
         return zeile.Length <= 150 ? zeile : $"public sealed record {g.Name}(\n    {string.Join(",\n    ", knoten)}) : {IGraph};";
     }
@@ -300,10 +300,11 @@ public static class Scaffolder
     /// Ein Knoten als Parameter: <c>[Kopf] [Von(nameof(A), nameof(B))] [Von(nameof(C), Verlierbar = true)] Typ Name</c> — gesicherte Quellen in einem
     /// <c>[Von]</c>, verlierbare in einem eigenen.
     /// </summary>
-    public static string GraphKnotenText(GraphKnoten k)
+    public static string GraphKnotenText(GraphKnoten k, Graph? g = null, Func<string, Graph?>? graphNamens = null)
     {
+        var innen = InnenAusdruck(k, g, graphNamens);
         string Von(IEnumerable<string> namen, bool verlierbar) =>
-            $"[{VonAttribut}({string.Join(", ", namen.Select(v => $"nameof({v})"))}{(verlierbar ? ", Verlierbar = true" : "")})] ";
+            $"[{VonAttribut}({string.Join(", ", namen.Select(v => $"nameof({v})"))}{(verlierbar ? ", Verlierbar = true" : "")}{innen})] ";
         var gesichert = k.Von.Where(v => !k.Verlierbar.Contains(v)).ToList();
         var verlierbar = k.Von.Where(v => k.Verlierbar.Contains(v)).ToList();
         var u = UebersetzungTypen(k.Typ);
@@ -311,6 +312,23 @@ public static class Scaffolder
             ? $"[{FeldAttribut}(nameof({aus}.{f.Ziel}), nameof({ein}.{f.Quelle}))] " : $"[{FeldAttribut}(\"{f.Ziel}\", \"{f.Quelle}\")] "));
         return (k.Kopf ? $"[{KopfAttribut}] " : "") + (gesichert.Count > 0 ? Von(gesichert, false) : "") + (verlierbar.Count > 0 ? Von(verlierbar, true) : "")
             + felder + $"{k.Typ} {k.Name}";
+    }
+
+    /// <summary>
+    /// Der Abgriff eines Knotens als <c>, Innen = nameof(T.X)</c> (tiefer <c>nameof(T.A) + "." + nameof(TA.X)</c>): je Glied des Pfads der Typ, in dem
+    /// es steht — der Typ der genannten Quelle, dann der Typ des Knotens darin. Ohne Abgriff (oder ohne eindeutige Quelle) leer.
+    /// </summary>
+    private static string InnenAusdruck(GraphKnoten k, Graph? g, Func<string, Graph?>? graphNamens)
+    {
+        if (string.IsNullOrEmpty(k.Innen) || k.Von.Count != 1 || g?.Knoten.FirstOrDefault(x => x.Name == k.Von[0]) is not { } quelle) return "";
+        var teile = new List<string>();
+        var typ = quelle.Typ;
+        foreach (var glied in k.Innen.Split('.'))
+        {
+            teile.Add($"nameof({typ}.{glied})");
+            typ = graphNamens?.Invoke(typ)?.Knoten.FirstOrDefault(x => x.Name == glied)?.Typ ?? typ;
+        }
+        return ", Innen = " + string.Join(" + \".\" + ", teile);
     }
 
     /// <summary>Die Typargumente einer Übersetzung, wie geschrieben (<c>Uebersetze&lt;A, B&gt;</c> → (A, B)); sonst null.</summary>
@@ -344,7 +362,7 @@ public static class Scaffolder
         for (var i = 0; i < graphen.Count; i++)
         {
             Doku(b, graphen[i].Doku, "");
-            b.AppendLine(GraphRecord(graphen[i]));
+            b.AppendLine(GraphRecord(graphen[i], n => modell.Graphen.FirstOrDefault(x => x.Name == n)));
             if (i < graphen.Count - 1) b.AppendLine();
         }
         return b.ToString();

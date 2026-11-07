@@ -137,7 +137,9 @@ public static class Grammatik
             + "Aggregat) — Feld für Feld, ohne Logik. Je Parameter von TAus eine Quelle: [Feld(nameof(Ziel), nameof(Quelle))] am Knoten (ausdrücklich auch "
             + "Guid ⇄ Id<T>), sonst ein Feld von TEin mit gleichem Namen und implizit zuweisbarem Typ, sonst der Standardwert. Sie läuft inline (hinter einer "
             + "Funktion in deren Kind, am Kopf beim Annehmen), nie zwei hintereinander; am Kopf gibt sie an Knoten des Graphen oder an ein Aggregat. Kein "
-            + "Command eines Katalogs verlässt einen Graphen der Anwendung (docs/04 §4.4).", "error",
+            + "Command eines Katalogs verlässt einen Graphen der Anwendung (docs/04 §4.4). Nennt sie einen Graphen im Graphen, greift sie jede seiner "
+            + "Nachrichten ab, auch einen Zwischenstand: [Von(nameof(A), Innen = nameof(T.X))] genau die Nachricht des Knotens X; ohne Innen einen "
+            + "Ausgang bzw. den einen inneren Knoten, der TEin ausgibt (mehrere: nenne den Knoten).", "error",
             [An("CQRS119", "Domain.SourceGeneration/GraphAnalyzer.cs (Zuordnung unvollständig, Typ nicht zuweisbar, [Feld] ohne Ziel bzw. Quelle; Lesart Uebersetzungsform)"),
              An("CQRS120", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Katalog-Command verlässt einen Graphen der Anwendung)"),
              An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TEin kein Command ohne Ziel, TAus kein Command)"),

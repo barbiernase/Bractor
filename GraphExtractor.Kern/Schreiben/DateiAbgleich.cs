@@ -634,10 +634,12 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         {
             if (p.Identifier.Text != k.Name || N(p.Type?.ToString()) != N(k.Typ)) return false;
             var (kopf, von, verlierbar) = KopfUndVon(p);
-            return kopf == k.Kopf && von.SequenceEqual(k.Von) && verlierbar.ToHashSet().SetEquals(k.Verlierbar) && Felder(p).SequenceEqual(k.Felder);
+            return kopf == k.Kopf && von.SequenceEqual(k.Von) && verlierbar.ToHashSet().SetEquals(k.Verlierbar) && Felder(p).SequenceEqual(k.Felder)
+                && Innen(p) == (string.IsNullOrEmpty(k.Innen) ? null : k.Innen);
         }
         if (ist.Count == g.Knoten.Count && ist.Zip(g.Knoten).All(z => Gleich(z.First, z.Second))) return null;
-        var teile = g.Knoten.Select(k => ist.FirstOrDefault(p => Gleich(p, k))?.ToString() ?? Scaffolder.GraphKnotenText(k)).ToList();
+        var teile = g.Knoten.Select(k => ist.FirstOrDefault(p => Gleich(p, k))?.ToString()
+            ?? Scaffolder.GraphKnotenText(k, g, n => modell.Graphen.FirstOrDefault(x => x.Name == n))).ToList();
         var neu = decl.ParameterList is { } pl
             ? Anwenden(text, [(pl.SpanStart, pl.Span.End, Liste(pl, teile))])
             : Anwenden(text, [(decl.Identifier.Span.End, decl.Identifier.Span.End, "(" + string.Join(", ", teile) + ")")]);
@@ -664,6 +666,21 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             .Any(x => x.NameEquals?.Name.Identifier.ValueText == "Verlierbar" && x.Expression.ToString() == "true");
         var vons = attribute.Where(a => Name(a) == Scaffolder.VonAttribut).ToList();
         return (attribute.Any(a => Name(a) == Scaffolder.KopfAttribut), vons.SelectMany(Namen).ToList(), vons.Where(Verlierbar).SelectMany(Namen).ToList());
+    }
+
+    /// <summary>
+    /// Der Abgriff eines Parameters (<c>[Von(…, Innen = nameof(T.A) + "." + nameof(TA.B))]</c>) wie im Quelltext: je <c>nameof</c> der letzte Name, mit
+    /// „.“ verbunden; sonst <c>null</c>.
+    /// </summary>
+    internal static string? Innen(ParameterSyntax p)
+    {
+        var arg = p.AttributeLists.SelectMany(l => l.Attributes).SelectMany(a => a.ArgumentList?.Arguments ?? default)
+            .FirstOrDefault(x => x.NameEquals?.Name.Identifier.ValueText == "Innen");
+        if (arg == null) return null;
+        var namen = arg.Expression.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>()
+            .Where(i => i.Expression is IdentifierNameSyntax { Identifier.ValueText: "nameof" } && i.ArgumentList.Arguments.Count == 1)
+            .Select(i => i.ArgumentList.Arguments[0].Expression.ToString().Split('.')[^1]).ToList();
+        return namen.Count > 0 ? string.Join(".", namen) : arg.Expression.ToString().Trim('"');
     }
 
     /// <summary>

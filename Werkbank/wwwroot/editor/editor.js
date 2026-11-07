@@ -2109,7 +2109,9 @@
               const ziel=(recByName(komBasis(typ))||{}).aggregat;
               const pa=h("div",{class:"fl-g-port s-"+sorte},h("span",{class:"fl-g-pl"},(FL_SORTE[sorte]||"")+typ),x.mult?h("span",{class:"fl-g-m"},x.mult):null,
                 sorte==="command"&&!ziel?h("button",{class:"fl-ab-plus"+(n?"":" frei"),title:"Diese Nachricht in einen Command eines Aggregats dieser Domäne übersetzen — auch ein Zwischenschritt; die Übersetzung steht in der Spalte Übersetzungen",
-                  onclick:e=>{e.stopPropagation();komCommandAn(fk.id,o.id===fk.id?{...k,name:o.name}:schachtel,typ,e);}},n?"↦ "+n+" ＋":"＋ ↦"):null);
+                  onclick:e=>{e.stopPropagation();if(o.id===fk.id)komCommandAn(fk.id,{...k,name:o.name},typ,e);
+                    // Im Katalog-Graphen: genau diese Nachricht dieses Knotens — der Pfad im Graphen ohne den Namen der Schachtel.
+                    else komCommandAn(fk.id,schachtel,typ,e,k.name.startsWith(schachtel.name+".")?k.name.slice(schachtel.name.length+1):k.name);}},n?"↦ "+n+" ＋":"＋ ↦"):null);
               pa.dataset.gport="aus|"+k.name+"|"+komBasis(typ);pa.dataset.port="aus|"+typ;kb.append(pa);});});
           sp.append(kb);});
         gr.append(sp);});
@@ -3953,7 +3955,8 @@
         MODEL.akteure.push({_id:"ak"+(NID++),name:n,namespace:haeufigsterNs(MODEL.akteure)||defaultNsGlobal(),darf:[m],hoert:[]});gTitel("👤 "+n+" darf "+m);render();})},
       {hinweis:"Ohne Akteur gibt niemand "+m+" hinein — der Rand zeigt es an."}]);}
   // „↦ ▣ Command an …“ am Ausgang eines Knotens: ein vorhandener Command an ein Aggregat oder ein neuer samt Decide; dazwischen die Übersetzung.
-  function komCommandAn(id,q,typ,ev){if(KOM)KOM.port=null;
+  // innen: an einem Abgriff der Knoten im Katalog-Graphen, aus dem übersetzt wird (genau diese Nachricht dieses Knotens, [Von(…, Innen = nameof(…))]).
+  function komCommandAn(id,q,typ,ev,innen){if(KOM)KOM.port=null;
     // Ein Ablauf im Bereich einer Domäne übersetzt nur in Commands ihrer Aggregate (die Zuordnung bleibt eindeutig, Konzept §7.5).
     const g0=komModell(id),dom=g0&&ablaufDomaene(g0.namespace),eigene=MODEL.aggregate.filter(A=>!dom||A.namespace===dom),aggs=eigene.length?eigene:MODEL.aggregate;
     const cmds=MODEL.records.filter(r=>r.kind==="command"&&r.aggregat&&aggs.some(A=>A.name===r.aggregat)).sort((a,b)=>(a.aggregat+a.name).localeCompare(b.aggregat+b.name));
@@ -3966,16 +3969,16 @@
           const ohne=x=>/^(System\.)?Guid$/.test(x.typ)||x.name===aggIdFeld();
           aggRecordNeu(A,e,"event");recNamens(e).felder=komFelderVon(typ,ohne);aggCommandAnlegen(A,n,[{event:e}]);aggApplySichern(A,e);
           const r=recNamens(n);r.felder=[...r.felder,...komFelderVon(typ,ohne)];
-          komUebersetzungAn(id,q,typ,n);})})))},
-      ...(cmds.length?[{kopf:"vorhanden"}]:[]),...cmds.map(r=>({t:"▣ "+r.aggregat+" · "+r.name,fn:()=>komUebersetzungAn(id,q,typ,r.name)}))]);}
+          komUebersetzungAn(id,q,typ,n,innen);})})))},
+      ...(cmds.length?[{kopf:"vorhanden"}]:[]),...cmds.map(r=>({t:"▣ "+r.aggregat+" · "+r.name,fn:()=>komUebersetzungAn(id,q,typ,r.name,innen)}))]);}
   // Die Übersetzung typ ↦ cmd hinter dem Knoten q; die Id des Ziels nennt sie ausdrücklich, wenn genau ein Feld dafür in Frage kommt
   //   (eine Id dieses Aggregats, sonst ein Guid) — sonst bleibt sie offen, die ↦-Karte zeigt es.
-  function komUebersetzungAn(id,q,typ,cmd){const g=komModell(id),r=recNamens(cmd);if(!g||!r)return;
+  function komUebersetzungAn(id,q,typ,cmd,innen){const g=komModell(id),r=recNamens(cmd);if(!g||!r)return;
     const idFeld=aggIdFeld(),quelle=(recByName(komBasis(typ))||{}).felder||[],felder=[];
     if(!quelle.some(f=>f.name===idFeld)){const ids=quelle.filter(f=>f.typ==="Id<"+r.aggregat+">"),guids=quelle.filter(f=>/^(System\.)?Guid$/.test(f.typ));
       const w=ids.length===1?ids[0]:!ids.length&&guids.length===1?guids[0]:null;if(w)felder.push({ziel:idFeld,quelle:w.name});}
     const un=komKnotenName(g,"Zu"+r.aggregat);
-    g.knoten.push({typ:komUeTyp(komBasis(typ),cmd),name:un,kopf:false,von:[q.name],verlierbar:[],felder});
+    g.knoten.push({typ:komUeTyp(komBasis(typ),cmd),name:un,kopf:false,von:[q.name],verlierbar:[],felder,...(innen?{innen}:{})});
     gTitel(g.name+": "+q.name+" ↦ "+cmd);render();}
   // Aggregat von innen, „＋ wer schickt ihn“ (Konzept §4): ein offener Output eines Ablaufs dieser Domäne wird in den Command übersetzt — oder ein
   //   Graph aus einem Katalog wird an die Domäne gebunden (wie „＋ Graph“ am Band der Fläche).

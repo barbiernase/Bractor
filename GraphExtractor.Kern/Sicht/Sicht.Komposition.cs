@@ -117,7 +117,7 @@ public sealed partial class Sicht
         IEnumerable<string> Ziele(string n, string typ) => innen.TryGetValue(n, out var f)
             ? Alle(f["koepfe"]).Where(a => Basis(S(a, "typ")) == Basis(typ)).SelectMany(a => L(a, "knoten")).Distinct() : [pfad + n];
         foreach (var e in Alle(k["kanten"]))
-            foreach (var v in Quellen(S(e, "von"), S(e, "typ")))
+            foreach (var v in S(e, "innen").Length > 0 && innen.ContainsKey(S(e, "von")) ? [pfad + S(e, "von") + "." + S(e, "innen")] : Quellen(S(e, "von"), S(e, "typ")))
                 foreach (var z in Ziele(S(e, "nach"), S(e, "typ")))
                     kanten.Add(new JsonObject
                     {
@@ -173,7 +173,10 @@ public sealed partial class Sicht
                     foreach (var t in ports[n].Ein.Where(e => e == a || (Basis(e) == Basis(a) && Args(a).Length > 0 && Args(e) == Args(typVon[v]))))
                     {
                         innen.Add(v + "|" + Basis(t));
-                        kanten.Add(new JsonObject { ["von"] = v, ["nach"] = n, ["typ"] = t, ["verlierbar"] = L(kn, "verlierbar").Contains(v) });
+                        var e = new JsonObject { ["von"] = v, ["nach"] = n, ["typ"] = t, ["verlierbar"] = L(kn, "verlierbar").Contains(v) };
+                        // Ein Abgriff mit Innen = nameof(…): die Kante kommt genau von diesem Knoten im Graphen (die flache Ansicht löst den Pfad auf).
+                        if (abgriff && S(kn, "innen").Length > 0) e["innen"] = S(kn, "innen");
+                        kanten.Add(e);
                     }
         }
         var koepfe = new JsonArray();

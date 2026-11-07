@@ -16,6 +16,10 @@ public interface IGraph { }
 /// Eine Kante ist GESICHERT: der Absender wartet auf das „fertig“ des Empfängers, und erst wenn die ganze Kette fertig ist, ist der Kopf erledigt.
 /// <c>[Von(nameof(A), Verlierbar = true)]</c> macht die Kanten dieses Attributs VERLIERBAR: einmal geschickt, ohne Antwort, sie halten den Kopf nicht
 /// auf. Verschiedene Zustellungen an einem Knoten stehen in eigenen <c>[Von]</c>.
+/// <para>An einer Übersetzung, die einen Graphen im Graphen nennt, wählt <c>Innen</c> genau den Knoten darin, dessen Nachricht sie übersetzt (ein
+/// ABGRIFF, auch ein Zwischenstand, der im Graphen weiterläuft): <c>[Von(nameof(Aufbereitung), Innen = nameof(Bildaufbereitung.Verkleinern))]</c>,
+/// tiefer verschachtelt <c>nameof(A.B) + "." + nameof(B.C)</c> — jeder Name ein <c>nameof</c>, der Compiler prüft und benennt mit um. Ohne
+/// <c>Innen</c> nimmt sie einen Ausgang des Graphen bzw. den einen inneren Knoten, der ihren Typ ausgibt.</para>
 /// </summary>
 [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = true)]
 public sealed class VonAttribute(params string[] knoten) : Attribute
@@ -25,6 +29,9 @@ public sealed class VonAttribute(params string[] knoten) : Attribute
 
     /// <summary>Darf eine Nachricht auf diesen Kanten verloren gehen (einmal geschickt, ohne „fertig“)? Ohne Angabe: gesichert.</summary>
     public bool Verlierbar { get; set; }
+
+    /// <summary>Der Knoten im genannten Graphen, aus dem eine Übersetzung abgreift (Pfad aus <c>nameof</c>, mit „.“ verbunden); sonst <c>null</c>.</summary>
+    public string? Innen { get; set; }
 }
 
 /// <summary>

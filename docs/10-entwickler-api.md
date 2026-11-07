@@ -535,8 +535,10 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   je Knoten und Auf der Eingang und **jeder Fall seines Outputs als Port** (mit Vielfachheit), die Kanten dazwischen. An **jedem** Command-Port —
   auch an einem Zwischenschritt, der im Graphen weiterläuft — dockt „＋ ↦“ eine Übersetzung an (orange, solange ein Ausgang offen ist und der
   Ablauf deshalb nicht baut): ein Command eines Aggregats dieser Domäne oder ein neuer samt Decide, Event und Apply; „↦ n“ zählt, was schon
-  andockt. Im Code ist das ein **Abgriff**: die Übersetzung nennt die Schachtel in `[Von]` und nimmt ihren Typ von dem einen inneren Knoten, der
-  ihn ausgibt (Graphform; mehrere sind ein Fehler). **Übersetzungen stehen in ihrer eigenen Spalte** zwischen Graphen und Aggregaten (Funktionsgraph und Domäne bleiben getrennt):
+  andockt. Im Code ist das ein **Abgriff**: die Übersetzung nennt die Schachtel in `[Von]` und den Knoten darin, dessen Nachricht sie übersetzt —
+  `[Von(nameof(Aufbereitung), Innen = nameof(Bildaufbereitung.Verkleinern))]`, tiefer `nameof(A.B) + "." + nameof(B.C)`; so ist jede einzelne
+  Nachricht gemeint, auch wenn zwei Knoten denselben Typ ausgeben. Der Editor schreibt `Innen` beim Andocken immer; ohne `Innen` nimmt die Graphform
+  einen Ausgang der Schachtel bzw. den einen inneren Knoten, der den Typ ausgibt (bei mehreren: „nenne den Knoten“). **Übersetzungen stehen in ihrer eigenen Spalte** zwischen Graphen und Aggregaten (Funktionsgraph und Domäne bleiben getrennt):
   je Übersetzung eine Karte `↦ <Knoten>`, TEin links (Kante vom Output des Graphen), TAus rechts (Kante zum Command), dazu „✓ alle Felder
   zugeordnet“ bzw. „⚠ n offen“; Doppelklick öffnet die Feldzuordnung als kleines Modal (die ↦-Karte, „✕ Übersetzung entfernen“), ✕ an der Karte
   entfernt sie. Im Code bleibt sie ein Knoten `Uebersetze<TEin, TAus>` des Ablaufs. Nach „＋ Graph“ bleibt man auf der Fläche; ein Ablauf öffnet im

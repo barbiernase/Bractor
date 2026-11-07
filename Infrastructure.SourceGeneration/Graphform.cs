@@ -94,6 +94,8 @@ namespace Infrastructure.SourceGeneration
             public List<string> Von = new List<string>();
             /// <summary>Die Namen aus <c>[Von]</c>, deren Kanten verlierbar sind (<c>Verlierbar = true</c>).</summary>
             public HashSet<string> Verlierbar = new HashSet<string>();
+            /// <summary>Je Name aus <c>[Von]</c> der Knoten darin, aus dem abgegriffen wird (<c>Innen = nameof(…)</c>, Pfad mit „.“).</summary>
+            public Dictionary<string, string> Abgriff = new Dictionary<string, string>();
             public Location Ort = Location.None;
             public Knoten? Knoten;
             public Schachtel? Innen;
@@ -279,11 +281,20 @@ namespace Infrastructure.SourceGeneration
                 if (n != Von) continue;
                 var werte = Werte(a);
                 var verlierbar = IstVerlierbar(a);
+                var innen = InnenVon(a);
                 var syntax = a.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
                 var aOrt = syntax?.GetLocation() ?? glied.Ort;
                 if (syntax?.ArgumentList != null)
                     foreach (var arg in syntax.ArgumentList.Arguments)
                         if (arg.NameEquals?.Name.Identifier.ValueText == "Verlierbar") continue;
+                        else if (arg.NameEquals?.Name.Identifier.ValueText == "Innen")
+                        {
+                            if (!NurNameof(arg.Expression))
+                                g.Fehler.Add(($"[Von(…, Innen = …)] an '{p.Name}' nennt {arg.Expression} — der Knoten im Graphen steht als nameof "
+                                    + "(nameof(Bildaufbereitung.Verkleinern), tiefer nameof(A.B) + \".\" + nameof(B.C)), nie als String-Literal", arg.GetLocation()));
+                            if (werte.Count != 1)
+                                g.Fehler.Add(($"[Von(…, Innen = …)] an '{p.Name}' nennt {werte.Count} Quellen — Innen gilt für genau einen Graphen im Graphen", arg.GetLocation()));
+                        }
                         else if (!(arg.NameEquals == null && arg.NameColon == null
                               && arg.Expression is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } inv
                               && inv.ArgumentList.Arguments.Count == 1 && inv.ArgumentList.Arguments[0].Expression is IdentifierNameSyntax))
@@ -304,6 +315,7 @@ namespace Infrastructure.SourceGeneration
                     {
                         glied.Von.Add(w);
                         if (verlierbar) glied.Verlierbar.Add(w);
+                        if (innen != null && werte.Count == 1) glied.Abgriff[w] = innen;
                     }
                 }
             }
@@ -311,6 +323,20 @@ namespace Infrastructure.SourceGeneration
 
         private static bool IstVerlierbar(AttributeData a) =>
             a.NamedArguments.Any(x => x.Key == "Verlierbar" && x.Value.Value is true);
+
+        /// <summary>Der Pfad aus <c>Innen = nameof(…)</c> (der konstante Wert, „.“-verbunden), sonst <c>null</c>.</summary>
+        private static string? InnenVon(AttributeData a) =>
+            a.NamedArguments.Where(x => x.Key == "Innen").Select(x => x.Value.Value as string).FirstOrDefault(v => !string.IsNullOrEmpty(v));
+
+        /// <summary>Besteht der Ausdruck nur aus <c>nameof(…)</c>, verbunden mit „.“-Literalen?</summary>
+        private static bool NurNameof(ExpressionSyntax e) => e switch
+        {
+            InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } => true,
+            BinaryExpressionSyntax b when b.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.AddExpression) => NurNameof(b.Left) && NurNameof(b.Right),
+            LiteralExpressionSyntax l => l.Token.ValueText == ".",
+            ParenthesizedExpressionSyntax pe => NurNameof(pe.Expression),
+            _ => false,
+        };
 
         private static List<string?> Werte(AttributeData a) =>
             a.ConstructorArguments.Length == 1 && a.ConstructorArguments[0].Kind == TypedConstantKind.Array
@@ -323,9 +349,17 @@ namespace Infrastructure.SourceGeneration
         /// </summary>
         public static (bool Kopf, List<string> Von, List<string> Verlierbar) KopfUndVon(IParameterSymbol p)
         {
+            var (kopf, von, verlierbar, _) = KopfVonInnen(p);
+            return (kopf, von, verlierbar);
+        }
+
+        /// <summary>Wie <see cref="KopfUndVon"/>, dazu der Abgriff (<c>Innen = nameof(…)</c>, Pfad) — für Werkzeuge, die jeden Knoten zeigen.</summary>
+        public static (bool Kopf, List<string> Von, List<string> Verlierbar, string? Innen) KopfVonInnen(IParameterSymbol p)
+        {
             var kopf = false;
             var von = new List<string>();
             var verlierbar = new List<string>();
+            string? innen = null;
             foreach (var a in p.GetAttributes())
             {
                 var n = a.AttributeClass == null ? "" : Funktionsform.Name(a.AttributeClass);
@@ -335,9 +369,10 @@ namespace Infrastructure.SourceGeneration
                     var werte = Werte(a).OfType<string>().ToList();
                     von.AddRange(werte);
                     if (IstVerlierbar(a)) verlierbar.AddRange(werte);
+                    innen ??= InnenVon(a);
                 }
             }
-            return (kopf, von, verlierbar);
+            return (kopf, von, verlierbar, innen);
         }
 
         /// <summary>
@@ -372,8 +407,18 @@ namespace Infrastructure.SourceGeneration
                     if (quelle == null) continue;   // kein Knoten (gemeldet) oder einer mit Formfehler
                     var aus = Ausgaenge(quelle);
                     // ABGRIFF (docs/konzept-funktionen-im-editor.md §4.2): eine Übersetzung, die eine Schachtel nennt, nimmt ihren Typ auch als
-                    //   Zwischenstand — von dem einen inneren Knoten, der ihn ausgibt, wenn er kein Ausgang der Schachtel ist. Den Port wählt der Typ.
-                    if (glied.Knoten?.Uebersetzung != null && quelle.Innen != null)
+                    //   Zwischenstand. Mit Innen = nameof(…) genau von diesem Knoten darin; sonst von einem Ausgang der Schachtel bzw. dem einen inneren
+                    //   Knoten, der ihn ausgibt.
+                    if (glied.Abgriff.TryGetValue(name, out var pfad))
+                    {
+                        var genau = quelle.Innen == null ? null : KnotenImPfad(quelle.Innen, pfad.Split('.'));
+                        if (genau == null)
+                            g.Fehler.Add(($"'{glied.Name}' greift mit Innen = '{pfad}' in '{name}' ab, aber dort gibt es diesen Knoten nicht"
+                                + (quelle.Innen == null ? $" ({name} ist kein Graph)" : ""), glied.Ort));
+                        aus = genau == null ? new List<(Knoten, Operation, INamedTypeSymbol)>()
+                            : genau.Operationen.SelectMany(o => o.Ausgaben.Where(Funktionsform.IstCommandOhneZiel).Select(x => (genau, o, x))).ToList();
+                    }
+                    else if (glied.Knoten?.Uebersetzung != null && quelle.Innen != null)
                         foreach (var (pk, pop, port) in ports)
                         {
                             if (aus.Any(a => port.Typen.Any(y => V(y) == V(a.Typ)))) continue;
@@ -381,8 +426,7 @@ namespace Infrastructure.SourceGeneration
                             var erzeuger = innen.Select(a => a.Knoten).Distinct().ToList();
                             if (erzeuger.Count > 1)
                                 g.Fehler.Add(($"'{glied.Name}' greift {Liste(port.Typen)} aus '{name}' ab, aber {erzeuger.Count} Knoten darin geben ihn aus "
-                                    + $"({string.Join(", ", erzeuger.Select(k => k.Name))}) — ein Zwischenstand wird über seinen Typ gewählt: gleiche Bedeutung heißt "
-                                    + "gleicher Typ, verschiedene Bedeutung verschiedene Typen", glied.Ort));
+                                    + $"({string.Join(", ", erzeuger.Select(k => k.Name))}) — nenne den Knoten: [Von(nameof({name}), Innen = nameof(…))]", glied.Ort));
                             else aus = aus.Concat(innen).ToList();
                         }
                     var speist = false;
@@ -433,6 +477,15 @@ namespace Infrastructure.SourceGeneration
         private static List<(Knoten Knoten, Operation Op, Funktionsform.Port Port)> Eingaenge(Glied glied) =>
             glied.Innen != null ? glied.Innen.Offen
                 : glied.Knoten!.Operationen.SelectMany(o => o.Auf.Ports.Select(p => (glied.Knoten, o, p))).ToList();
+
+        /// <summary>Der Knoten einer Schachtel unter einem Pfad (<c>Verkleinern</c>, tiefer <c>Teil.Verkleinern</c>), sonst <c>null</c>.</summary>
+        private static Knoten? KnotenImPfad(Schachtel s, string[] pfad)
+        {
+            var glied = s.Glieder.FirstOrDefault(x => x.Name == pfad[0]);
+            if (glied == null) return null;
+            if (pfad.Length == 1) return glied.Innen == null ? glied.Knoten : null;
+            return glied.Innen == null ? null : KnotenImPfad(glied.Innen, pfad.Skip(1).ToArray());
+        }
 
         /// <summary>Was alle Knoten einer Schachtel (auch tief darin) an Commands ohne Ziel ausgeben — Ausgänge wie Zwischenstände (Abgriff).</summary>
         private static List<(Knoten Knoten, Operation Op, INamedTypeSymbol Typ)> AlleAusgaben(Schachtel s) =>
