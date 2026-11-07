@@ -44,9 +44,9 @@ public class AkteurRechteTests
     }
 
     [Fact]
-    public void Ketten_Commands_darf_niemand_direkt()
-        => GeneratedAkteurRechte.Alle.Values.Should().NotContain(a => a.DarfHinein(typeof(Domain.Datensatz.NimmRangeAuf)),
-            "„nie von der GUI“: der Resolver erzeugt ihn in der Kette");
+    public void Reaktions_Commands_darf_nur_der_reagierende_Akteur()
+        => GeneratedAkteurRechte.Alle.Where(kv => kv.Value.DarfHinein(typeof(Domain.Datensatz.NimmRangeAuf))).Select(kv => kv.Key).Should()
+            .Equal(new[] { "Datensatzpfleger" }, "„nie von der GUI“: nur der Datensatzpfleger gibt ihn, als Reaktion auf RangeAngefordert");
 
     [Fact]
     public void IDarf_wird_nach_Art_sortiert()
