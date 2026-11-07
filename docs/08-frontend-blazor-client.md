@@ -1,6 +1,6 @@
 # 08 — Frontend: C#-Client-Framework und Blazor-Beispiel
 
-Stand 2026-11-02, gegen den Code geprüft.
+Stand 2026-11-07, gegen den Code geprüft.
 
 ## 8.1 Charakterisierung
 
@@ -45,8 +45,7 @@ public sealed record Inspekteur : IAkteur, IDarf<LabelBildPaar>, …, IHoert<Ima
   beendet die Sitzung (`VERTRAG_ABGELEHNT`); ein abweichender Hash ist eine Warnung, im strengen Modus (`AkteurOptionen.VertragStreng`) eine
   Ablehnung. Der Client prüft die Antwort: nennt sie nicht seinen Namen, bricht `ConnectionModule.ConnectAsync`
   ab; weicht nur der Hash ab, meldet er es auf `stderr` (Client gegen anderen Stand gebaut).
-- **Build-Regeln** (`Client.SourceGeneration/ClientVertrag.cs`): CQRS093 (Client-Assembly nennt ihren Client nicht) und CQRS094 (der Client
-  verkörpert einen Akteur mit Arbeit — ein C#-Client nimmt keine Arbeit an, das kann heute nur das Python-SDK) meldet der `WiringGenerator`; der
+- **Build-Regeln** (`Client.SourceGeneration/ClientVertrag.cs`): CQRS093 (Client-Assembly nennt ihren Client nicht) meldet der `WiringGenerator`; der
   `ClientVertragAnalyzer` meldet CQRS095 (erzeugter Command, den kein verkörperter Akteur darf), CQRS096 (gestellte Query, die kein verkörperter
   Akteur darf), CQRS097 (`Handle(E, MessageContext)` auf ein Server-Event, das keiner von ihnen hört).
   Gelesen werden Code-Fakten (Objekterzeugung, Signatur), keine Namen.
@@ -64,9 +63,9 @@ public sealed record Inspekteur : IAkteur, IDarf<LabelBildPaar>, …, IHoert<Ima
 | | `LiesLog` (ab Position, höchstens n) | `GrpcProxy.LiesLogAsync` |
 | Server → Client | `CapabilitiesResponse`, `EventNotification` (Push, gezielte Antwort), `QueryResponse` (`deps` = Stand je gezeigter Id, `noch_nicht`), `Aktualisiert` (Queries), `LogSeite`, `ErrorResponse` | `GrpcProxy.HandleServerMessageAsync` |
 
-Hinweise (`TransientEventRequest`) und die Arbeit der Akteure (`ArbeitAnnehmen`, `ArbeitsAuftrag`, `ArbeitsErgebnis`, `ArbeitLebtMeldung`) nutzt nur
-das Python-SDK ([09](09-python-sdk.md)); der C#-Client sendet von den Befugnissen seiner Akteure nur Commands an Aggregate (`ConnectionModule`
-abonniert alle `CommandTypes`).
+Hinweise (`TransientEventRequest`) nutzt nur das Python-SDK ([09](09-python-sdk.md)); der C#-Client sendet von den Befugnissen seiner Akteure
+Commands — an Aggregate und ohne Ziel an den Kopf eines Graphen — und Queries (`ConnectionModule` abonniert alle `CommandTypes`). Reagiert ein
+C#-Client auf Fakten, liest der Läufer `Client.Infrastructure/Reaktionen` das Log über `LiesLog` (docs/konzept-akteure.md §5).
 
 **Am Server** ([06](06-transport-multinode-betrieb.md) für den Transport):
 - **`CqrsClientServiceImpl`** (`Infrastructure/GrpcClient/CqrsClientService.cs`) prüft je Verbindung das Akteur-Token (Header `akteur-token`,
@@ -238,7 +237,7 @@ statt Handverdrahtung; Befugnis der Akteure statt Selbstauskunft.
 
 ## 8.8 Offen
 
-Offene Punkte stehen nur in `docs/13` §13.0: `als` im Envelope, Arbeit über einen C#-Client annehmen, Anmeldung je Person (AK-1); kein TLS
+Offene Punkte stehen nur in `docs/13` §13.0: `als` im Envelope, Anmeldung je Person (AK-1); kein TLS
 (P1-2); Client-Framework hängt am Server-Framework (`ProtoMessageMapper`, W2-1); Lesen nach Schreiben einmal verfehlt (G-16); Rückstau an der
 Sitzung nur als Log-Warnung (FB-15); Aggregat-Antworten ohne `Aktualisiert` (FB-19); `GrpcProxy` loggt per `Console.WriteLine` (P2-10); toter
 Code `IViewModel`/`ViewModelGenerator`, nicht gemappte Proto-Endpunkte (P3-2); `ActivatorUtilities` im generierten Wiring für ViewModels

@@ -1,7 +1,7 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-11-02, nach dem Umbau „Commands und Funktionsgraphen“ (die Grammatik steht in
+hierher. Stand: 2026-11-07, nach Schritt 6 des Plans „Katalog und Graphen“ (die Grammatik steht in
 [10](10-entwickler-api.md), die Garantien in [11](11-garantien.md)). Maßstab sind die sechs Invarianten und die Werkbank-Leitsätze W1–W12
 (`CLAUDE.md`). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
@@ -10,8 +10,10 @@ hierher. Stand: 2026-11-02, nach dem Umbau „Commands und Funktionsgraphen“ (
 **Umbau „Commands und Funktionsgraphen“ (2026-11-02, Branch `funktionsgraphen`):** es gibt drei Arten von Nachrichten — Command (mit Ziel an ein
 Aggregat, ohne Ziel an genau einen Empfänger), Event, Hinweis. Gerechnet wird in Graphen (Funktionen als Klassen mit typisierten Ports, Kanten aus
 den Typen, Instanzen mit eigener Konfig in `umgebungen/<name>/graphen/`), Quellen sind Katalogfunktionen mit gesichertem Zustand statt
-Quell-Nachrichten im Log, Hinweise gehen nur an Akteure, ein Akteur hört (`IHoert`: Arbeit oder Kenntnis), ein Client ist ein Record, der Akteure
-verkörpert ([04](04-konsum-und-prozess-maschine.md) §4.4, §4.7, [10](10-entwickler-api.md)). Damit erledigt: FV-1, FV-2, FB-6, FB-8, FB-21, PF-7
+Quell-Nachrichten im Log, Hinweise gehen nur an Akteure, ein Akteur hört Events und Hinweise (`IHoert`), ein Client ist ein Record, der Akteure
+verkörpert ([04](04-konsum-und-prozess-maschine.md) §4.4, §4.7, [10](10-entwickler-api.md)). Seit Schritt 6 des Plans (2026-11-07,
+docs/plan-katalog-und-graphen.md) gibt ein Decide nur Events, Hinweise und Fristen aus; was nach einem Fakt geschieht, stößt ein Client an, der es
+hört (Reaktion, docs/konzept-akteure.md §3). Damit erledigt: FV-1, FV-2, FB-6, FB-8, FB-21, PF-7
 (§13.6); offen: GF-2, GF-3, GF-6. Der Editor (Fläche in sechs Spalten, docs/10 §10.9): ED-1, ED-2, ED-3.
 
 **Frühere Umbauten:** Pub/Sub-Neustrukturierung (2026-10-26 bis 2026-10-29) und „Funktionen vor dem Aggregat“ (2026-11-01); was sie erledigt
@@ -24,9 +26,9 @@ haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS1
 | ED-1 | Editor-Fläche: Karten lassen sich in ihrer Zelle nicht von Hand senkrecht umordnen (die Reihenfolge rechnet der Editor); eine neue, leere Domäne erscheint nicht als Band | P3 |
 | ED-3 | Werkbank-Abnahme rot im Worker-Schritt (2026-11-04, Server): zwei Bilddateien in der Quelle `linienimport` ergeben in 120 s kein `ImagePairErstellt`; ⟳, Akteur, Fläche und Gesten davor sind grün. Ungeklärt, ob Dateiwächter, Instanz (Rechner) oder Kette; der Test war seit E4 aus | P1 |
 | ED-2 | Gesten-Schreiber: schreibt er die Basisliste eines Akteurs neu (`IDarf`/`IHoert`), geht ein Kommentar in der Liste verloren | P2 |
-| GF-6 | Kein Messblock für Arbeit draußen (S2 ist entfallen) und keiner für einen Graphen unter Last außer der Zubuchung in S5 | P3 |
-| FV-3 | Arbeit von Hand mitten in einer Kette: gibt ein Knoten Arbeit an einen Akteur, den die Werkbank von Hand verkörpert (`Umgebung:Hand`), wartet sein Kind auf das Ende jenes Laufs (acht Mal 60 s, dann scheitert der Aufruf und wird wiederholt); ein Mensch, der länger überlegt, lässt den Lauf davor mehrfach neu rechnen (die Inbox verwirft die Commands, die Außenwelt dahinter ist mindestens einmal) | P3 |
-| FV-4 | Hält kein Cluster-Knoten eine Instanz (Arbeit ohne Arbeiter, Rechner einer festgelegten Instanz fort), bringt der Zusteller ihre offenen Eingänge alle 2 s erneut („später“) — sichtbar im Einblick (`/einblick/auftraege`), aber ohne eigene Meldung und ohne Rückstand in `/health` | P3 |
+| GF-6 | Kein Messblock für einen Client, der draußen rechnet (Klassifikation, Training; S2 ist entfallen), und keiner für einen Graphen unter Last außer der Zubuchung in S5 | P3 |
+| VM-2 | S3 und S5 brauchen eine neue Baseline: seit Schritt 6 (2026-11-07) liegt in der Kette ein Client — der `Reaktionsworker` des Treibers (`Cqrs.Vermessung/Reaktionsworker.cs`) meldet in S3 jedes Teil am Sammelvorgang, löst in S4 die Range auf und gibt in S5 Aufträge, Verteilungen und unterschrittene Posten an die Köpfe der Graphen (Log lesen, Command, Quittung). Messwerte davor sind mit denen danach nicht vergleichbar | P2 |
+| FV-4 | Hält kein Cluster-Knoten eine Instanz (Rechner einer festgelegten Instanz fort), bringt der Zusteller ihre offenen Eingänge alle 2 s erneut („später“) — sichtbar im Einblick (`/einblick/auftraege`), aber ohne eigene Meldung und ohne Rückstand in `/health` | P3 |
 | FV-5 | Alte Logs mit Typen, die es nicht mehr gibt (`BefehlFestgehalten`, `AusgabeFestgehalten`, Quell-Nachrichten wie `DateiErkannt` samt ihrer Quell-Vorgänge): Projektionen lesen sie nicht (Typ-Filter), ob Einblick und Spur über unbekannte Event-Typen stolpern, ist ungeprüft — Sim-Datenbanken neu anlegen | P3 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
@@ -41,7 +43,7 @@ haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS1
 | PJ-2 | Editor: ⊕ und Passt kennen das Bündel nicht (Events kommen nur über den Kopf der Spalte Eingänge und „＋ Event“ an der Bündel-Karte hinein); der Schlüssel erscheint erst nach dem Schreiben | P3 |
 | FB-11 | Ein Commit, dessen Ausgang mehrdeutig blieb (G-3: die Events stehen im Log, das `SaveChanges` meldete trotzdem einen Fehler), weckt niemanden — der Wecker hängt am erfolgreichen Commit; die Konsumenten holt erst der Takt (bis 30 s). Selten, folgenlos für Exactly-once | P3 |
 | FB-5 | Kreise Funktion ↔ Aggregat: keine Build-Prüfung (R6 des Plans). Ein Kreis ist der Normalfall eines Ablaufs (Vorgang → Funktion → Vorgang); ob und wie ein Kreis ohne fortschreitenden Zustand erkannt werden soll, ist offen | P3 |
-| FB-14 | Das Python-SDK kennt weder Lesen ab Position noch Ausgangskorb noch neu Fragen (`aktualisiert` nur geloggt) — die stehen nur im C#-Client (`GrpcProxy.LiesLogAsync`, `IAusgangskorb`); Command-Ids aus Python-Handlern sind gewürfelt (`uuid4`), ein Client hat keinen Aufruf, um einen Command seiner Akteure von sich aus zu senden (`SPONTAN` geht nur in den Handshake), und ein Hinweis aus Python trägt keine Kennung (der Server würfelt sie) | P3 |
+| FB-14 | Das Python-SDK kennt weder Ausgangskorb noch neu Fragen (`aktualisiert` nur geloggt) — die stehen nur im C#-Client (`IAusgangskorb`); ab Position liest nur der Reaktions-Läufer (`reaktionen.py`), ohne Reaktions-Stand sind Command-Ids aus Python-Handlern gewürfelt (`uuid4`), ein Client hat keinen Aufruf, um einen Command seiner Akteure von sich aus zu senden (`SPONTAN` geht nur in den Handshake), und ein Hinweis aus Python trägt keine Kennung (der Server würfelt sie) | P3 |
 | FB-15 | Überlast an einer Sitzung: über 1000 offenen Zustellungen verwirft der Verteiler (`Rueckstau`) und schreibt nur eine Warnung ins Log, keinen Spur-Hinweis; die Nachrichten des Clients selbst (Commands, Queries) laufen ohne Grenze in die Mailbox der Sitzung | P3 |
 | FB-16 | Neuaufbau ohne Schutz vor altem Code: eine Generation trennt nur, was eine alte Aktivierung NACH dem Zurücksetzen noch mit ihrem alten Fortschritt schreibt; ein Knoten mit altem Projektions-Code, der danach den neuen Fortschritt lädt, schreibt mit altem Code in die neue Generation (die Generation trägt keinen Code-Stand). Dazu schaltet nur der `ProjectionRebuilder` erst nach dem Aufbau um; der Sim-Start (`ProjektionsStandDienst`) schaltet sofort um (leere Sicht während des Aufbaus), einen Neuaufbau in Prod löst nichts aus | P3 |
 | FB-17 | Marten kann `Id<T>` nicht als Dokument-Identität (sein Codegen bricht an generischen Ids, Probe 2026-10-28): ein Read-Model mit typisierter Id bekommt eine generierte Speicher-Identität `Schluessel` (die UUID steht damit zweimal im JSON) und muss `partial` sein (CQRS111); LINQ über `Id<T>`-Felder geht über `RegisterValueType` je verwendetem `Id<X>` | P3 |
@@ -52,7 +54,6 @@ haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS1
 | FB-25 | CQRS020/021 (ein Emit-Weg, Command-Send mit Frist) laufen nur in den Kompositionen und der Leitung (`CommandEmitAnalyzer` in `Infrastructure.SourceGeneration`), nicht in `Infrastructure` selbst — gerade dort liegen die beiden erlaubten Sender; ein roher Send im Framework fiele nur in Actors und dem, was sie besitzen, auf (CQRS112). Nachweis heute nur über `CommandEmitAnalyzerTests` | P3 |
 | PF-39 | Der Stand je gezeigter Id (read-your-writes, `ProjektionsStaende.StaendeAsync`) kostet je Query eine eigene Abfrage: in der ersten Gesamtprüfung S1 +15 % Queries je Vorgang gegen Phase 6 (19 % der Datenbank-Zeit), unter S6 (Clients über gRPC, jede Frage mit „mindestens S auf v“) 40 % der Datenbank-Zeit bei 0,12–0,26 ms je Aufruf; Lesen und Stand in einer Abfrage ungemessen | P3 |
 | PF-37 | „P hat S weiterverarbeitet“ geht nach JEDEM Commit einer Projektion, der Events anwandte, als Nachricht an den Verteiler jedes Knotens — auch wenn keine Sitzung beobachtet; nicht gemessen (Zusammenfassungs-Takt 200 ms und Grenze der Abhängigkeitsmengen 1000 Ids sind gesetzt, nicht vermessen) | P3 |
-| FB-7 | Arbeit ohne verbundenen Arbeiter staut ihre Aufträge als offene Eingänge (FV-4), ohne eigene Meldung „kein Arbeiter“ | P3 |
 | FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; der Zustandstyp einer Funktion (`IZustand<T>`) ist eine Code-Karte im geteilten Block statt an seiner Funktion; Editor-Oberfläche zurückgestellt (docs/10 E4); die Oberfläche nennt noch den entfallenen Umgebungs-Abschnitt `VersionIndex` und einen Schalter „TrackDeps (Redis-Deps)“ | P3 |
 | PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll | P3 |
 | PF-32 | Wachstum ohne Laufzeit-Risiko: Guards je Stream nie gelöscht, DLQ ohne Aufräumen und Index, Einblick-Scans, Kopfzeilen 140 Byte je Event | P3 |
@@ -70,7 +71,7 @@ haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS1
 | WB-4 | Die Werkbank kennt genau eine Anwendung (`StandardWurzel`, `ServerHost`); eine Anwendung anlegen ist nicht beschrieben — Entscheidung offen | P2 |
 | WB-5 | Der Einblick der Werkbank kennt keinen fachlichen Zustand „fertig“ mehr (früher `ProzessBeendet`) und seit Phase 5 auch kein „gescheitert“ (eine Ablehnung steht nicht im Log, sie kommt nur als verlierbarer Spur-Hinweis): ein Vorgang läuft oder ruht | P3 |
 | WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Clients/Technik | P2 |
-| AK-1 | Akteure/Clients: `als` im Envelope, Arbeit über einen C#-Client annehmen (CQRS094), Anmeldung je Person | P2 |
+| AK-1 | Akteure/Clients: `als` im Envelope, Anmeldung je Person | P2 |
 | P2-6 | Schreibpfad: paralleler Drain skaliert sublinear | P2 |
 | P2-8 | Hartkodierte Test-Verbindungsdaten und übrige Intervalle (der Takt je Partition ist seit 2026-10-28 einstellbar: Umgebung `Konsum.TaktSekunden`) | P2 |
 | P2-9 | Toter Lesepfad `LoadStateAsync`, Identitäts-Vertrag nur per Kommentar | P2 |
@@ -202,22 +203,19 @@ eine Umgebung als Heredoc neben `umgebungen/*.json`. *Empfehlung:* Deploy auf `u
 
 ### P2
 
-**FB-4 … FB-7 · Funktionen und Uhr, bewusst offen nach Umbau-Phase 4** (2026-10-26). Was erst spätere Phasen tragen, ist mit Absicht nicht
+**FB-4 … FB-6 · Funktionen und Uhr, bewusst offen nach Umbau-Phase 4** (2026-10-26). Was erst spätere Phasen tragen, ist mit Absicht nicht
 vorgezogen, weil jede Vorab-Lösung ein zweiter Weg wäre, der wieder verschwände. (FB-1, Hinweise als Eingang, ist mit Phase 4b erledigt, §13.6.) **FB-4:** reine Darstellungs-Lücken
 der Werkzeuge; die Garantien hängen nicht daran. **FB-5:** R6 des Plans wollte Kreise im Signatur-Graph als Warnung; aber jeder Ablauf mit
 Vorgangs-Aggregat ist ein Kreis (Auftrag → `Auftragsabwicklung` → Posten → `Auftragsabwicklung` → Auftrag), und der Build soll nicht vor
 Design-Entscheidungen warnen. Mit dem Dirigenten sind GR-ZYKLUS (CQRS088) und GR-GARANTIE (CQRS082) entfallen; eine Erkennung „Kreis ohne
 fortschreitenden Zustand“ bräuchte mehr als Signaturen. **FB-6:** die Quell-Nachricht vom Client hatte über gRPC das Trigger-Protokoll; es ist mit
-der Handle-Welt entfernt, der neue Weg kommt mit der Leitung aus Phase 7. **FB-7:** eine getragene Funktion ohne verbundenen Client arbeitet nichts
-ab; der Rückstand steht in `/health`, eine eigene Meldung fehlt. Nimmt ein Träger Eingänge an und antwortet nicht, wartet die Partition (bei einem Slot)
-bis zum Ablauf der Lease; gesehen im Verhaltens-Netz, dort trägt die Umgebung deshalb acht Slots. In der Messung hält dieselbe Lage die
-Position der Funktion `IBildpaarBeurteilung` fest (kein Klassifizierer gestartet): L1 wird nie still.
+der Handle-Welt entfernt, der neue Weg kommt mit der Leitung aus Phase 7.
 
 **G-15, FB-8, FB-9, PF-34, PF-35 · Funktionen als Actors** (Umbau-Phase 4b, 2026-10-28). **G-15:** `Bote.Melde` stellt jede Meldung als eigene
 Anfrage zu; zwei Hinweise desselben Absenders an dieselbe Adresse können sich überholen — der Plan versprach die Reihenfolge zwischen zwei Actors.
 Fachlich hängt nichts daran (Hinweise sind höchstens einmal, was zählt, geht als Command ins Aggregat), aber die Zusage stimmt nicht; ein Weg wäre
 ein Absender-Actor je Ziel oder `Send` an eine zwischengespeicherte PID. Einen Test, der die Überholung sicher herbeiführt, gibt es nicht. **FB-8:**
-die Beispieldomäne hat keinen Hinweis, den eine Funktion draußen fachlich hören müsste; die Prüfdomäne hat keine Leitung. Kandidat ist das Beispiel
+die Beispieldomäne hat keinen Hinweis, den eine Funktion draußen fachlich hören müsste. Kandidat ist das Beispiel
 aus docs/04 §4.4 (Vorverarbeitung → Merkmale → Klassifikator mit Zustand) — es änderte den Bildeingang und S1, daher nicht ungefragt. **FB-9:** der
 Verweis im Zustands-Dokument zeigt in die Ablage, mit der gesichert wurde; die Prüfdomäne zeigt es (der Absturz-Test sichert deshalb in einem eigenen
 Schema und setzt dessen Zustand zu Beginn zurück). **PF-34:** Folge der Garantie „ein Schreiber, gesichert im Ruhepunkt mit der Position“ (Risiko 9
@@ -240,12 +238,12 @@ beschreibt das Zielbild nicht. *Entscheidung offen:* „eine Werkbank = eine Anw
 
 **WZ-1 · Prüf-Lücken der Werkzeuge.** Das Grammatik-Gate in `--check` sucht die IDs als Text in der Solution und findet sie auch in `Grammatik.cs`
 selbst; die Ortsangaben prüft es nicht (CQRS056 steht dort falsch als Analyzer in Domain.SourceGeneration). 18 Diagnose-IDs haben keine
-Grammatik-Regel. Funktion und Technik werden im Inventar nur nach Namen verglichen. Die Sonde deckt seit Schritt 7 des Umbaus die Graph-Muster, Arbeit,
+Grammatik-Regel. Funktion und Technik werden im Inventar nur nach Namen verglichen. Die Sonde deckt die Graph-Muster, Reaktionen,
 Kenntnis, Clients und eine Quellfunktion ab; Count-Join und Kompensation im Vorgangs-Aggregat noch nicht.
 
-**AK-1 · Akteure und Clients** (`konzept-akteure.md` §9): `als` im Envelope bei mehreren verkörperten Akteuren, Funktionen über C#-Clients tragen
-(CQRS094), Anmeldung je Person; kein Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert. (Die durable Zustellung an Clients
-ist mit Phase 4 erledigt: was ein Client rechnet, ist eine getragene Funktion mit Lease und festgehaltener Antwort.)
+**AK-1 · Akteure und Clients** (`konzept-akteure.md` §9): `als` im Envelope bei mehreren verkörperten Akteuren, Anmeldung je Person; kein
+Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert. (Was ein Client auf ein Fakt hin tut, wirkt genau einmal über seine
+Reaktionen: die Position hält der Client, die Command-Ids sind abgeleitet, `konzept-akteure.md` §5.5.)
 
 **PF-31 · Volles Falten nach Schema-Wechsel, neue Funktion ab 0.** Passt die Schema-Version eines Snapshots nicht, faltet die erste Aktivierung den
 ganzen Stream (bei einem heißen Aggregat Millionen Events, Minuten); eine neu hinzugefügte Funktion liest das Log ab 0 und wirkt auf jedes alte
@@ -340,10 +338,14 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **Schritt 6 des Plans „Katalog und Graphen“ (2026-11-07):** ein Decide gibt nur Events, Hinweise und Fristen aus (CQRS114), einen Command hört
+  kein Akteur (CQRS058); was nach einem Fakt geschieht, stößt ein Client an, der es hört. Damit erledigt: **FV-3** (Arbeit von Hand mitten in einer
+  Kette) und **FB-7** (Arbeit ohne verbundenen Arbeiter) — Arbeit, Werkstatt und `Umgebung:Hand` gibt es nicht mehr; aus **AK-1** entfällt
+  „Arbeit über einen C#-Client annehmen“ (CQRS094). Neu offen: VM-2 (neue Baseline für S3 und S5).
 - **Umbau „Commands und Funktionsgraphen“ (2026-11-02):** **FV-1** (keine Client-Nachricht als Eingang einer Funktion) — ein Akteur gibt einen
   Command ohne Ziel an den Kopf eines Graphen (über den JSON-Eingang und über gRPC). **FV-2** (Werkzeuge kannten Folge und Zwischenergebnis nur
   halb) — beide gibt es nicht mehr, zwischen Funktionen fließen Commands. **FB-6** (Quell-Nachricht vom Client nur über JSON) — Quell-Nachrichten
-  gibt es nicht mehr. **FB-8** (Python-Funktion mit Hinweis-Eingang) — Funktionen hören keine Hinweise, draußen gibt es nur Arbeit. **FB-21**
+  gibt es nicht mehr. **FB-8** (Python-Funktion mit Hinweis-Eingang) — Funktionen hören keine Hinweise. **FB-21**
   (`funktions_tabelle.py`, `funktions_worker.py`) — beide entfallen, ein Python-Client erbt eine Basis je Client. **PF-7** (ein Stream je
   Quell-Nachricht) — eine Quelle schreibt nicht ins Log.
 

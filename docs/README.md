@@ -1,6 +1,6 @@
 # Dokumentation — CQRS/Event-Sourcing-Framework
 
-Stand 2026-11-03. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fakten gilt der Code. Grammatik, Regeln und Entscheidungen stehen in
+Stand 2026-11-07. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fakten gilt der Code. Grammatik, Regeln und Entscheidungen stehen in
 [10](10-entwickler-api.md), Offenes in [13](13-reifegrad-schulden-bewertung.md) §13.0, Zahlen in [12](12-tests-und-vermessung.md).
 
 ## Lesepfad
@@ -16,17 +16,17 @@ Stand 2026-11-03. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fa
 | Datei | Inhalt |
 |---|---|
 | [03-schreibseite.md](03-schreibseite.md) | Command → Decide → Event → Log: Aggregat-Actor, Bündel, Group-Commit, Inbox, Horizont, was ein Decide ausgibt |
-| [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | Batch-Leser der Projektionen, Store-Klassen, Funktionen und Graphen (Instanz, Kette, Rechner, Zustand, Arbeit), Abläufe, Emit, Uhr, Quellen, Spur |
+| [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | Batch-Leser der Projektionen, Store-Klassen, Funktionen und Graphen (Instanz, Kette, Rechner, Zustand, Eingang am Kopf), Abläufe, Emit, Uhr, Quellen, Spur |
 | [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generatoren, Analyzer, Boot-Guards, Codegen im Build |
 | [06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md) | Wire-Serializer, Cluster, Multi-Node, Umgebung als Ordner, Einblick und JSON-Eingang |
 | [07-projektstruktur.md](07-projektstruktur.md) | feste Projekt- und Ordnerstruktur (eine Quelle mit `Abstractions/Projektstruktur.cs`) |
 | [08-frontend-blazor-client.md](08-frontend-blazor-client.md) | Blazor-Client: Transport, Bus, Store, Versionen, Client und seine Akteure |
-| [09-python-sdk.md](09-python-sdk.md) | Python-SDK: Client-Basen, Arbeit, Kenntnis, Fragen |
+| [09-python-sdk.md](09-python-sdk.md) | Python-SDK: Client-Basen, Reaktionen genau einmal, Kenntnis, Fragen |
 | [10-entwickler-api.md](10-entwickler-api.md) | Grammatik, Regeln R1–R20, Entscheidungen E1–E16 und Annahmen A1–A8 |
 | [11-garantien.md](11-garantien.md) | Garantien je Weg mit Nachweis-Tests |
 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Messverfahren, Messwerte (Tabellen schreibt `scripts/vermessung-tabelle.sh`) |
 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | offene Befunde (§13.0), Erledigtes; die eine Quelle für „offen“ |
-| [konzept-akteure.md](konzept-akteure.md) | Akteure (`IDarf`, `IHoert`), Clients, Arbeit, Sitzung, Werkstatt, Verteiler |
+| [konzept-akteure.md](konzept-akteure.md) | Akteure (`IDarf`, `IHoert`), Clients, Reaktionen, Sitzung, Verteiler |
 | [praesentation/](praesentation/) | Präsentation des Zielbilds als Geschichte (reveal.js; Leertaste weiter, ↓ genauer hinsehen, Esc Übersicht): kurz [zielbild.html](praesentation/zielbild.html) aus `geschichte.html`, vollständig [zielbild_full.html](praesentation/zielbild_full.html) aus `geschichte_full.html` (dazu Konsistenz und Garantien, Arbeitsplatz, Werkbank, LLM). Karten, Graphen, Diagramme aus `zielbild-seite.html`; `baue_deck.py` setzt zusammen — nach Änderungen `python3 docs/praesentation/baue_deck.py` bzw. mit `VORLAGE=geschichte_full.html … zielbild_full.html` |
 | [../vermessung/README.md](../vermessung/README.md) | Ablage der Messläufe |
 

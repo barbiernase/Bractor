@@ -119,7 +119,7 @@ Fläche.
   jede Übersetzung hinaus zielt auf einen Command eines Aggregats der eigenen Domäne (die Domäne folgt aus dem Namespace des Ablaufs).
 - **Form eines Katalog-Graphen** (neue Regel): keine Quelle, keine Übersetzung.
 - **Weg fällt**, was nur Anwendungsfunktionen brauchten: Aggregat-Commands aus Funktionen, die Antwort an die Funktion (CQRS108), Lese-Fähigkeiten
-  in Funktionen. Zusammen mit dem Abbau aus dem alten Schritt 6 (Arbeit für Akteure, Aufträge aus dem Decide).
+  in Funktionen. Der Abbau aus Schritt 6 (Arbeit für Akteure, Aufträge aus dem Decide) ist erledigt.
 - Grammatik, Sonde (`soll.txt`, Gesten-Skript) und `--check` ziehen mit.
 
 Der Server rechnet, was passt (W3): zu einem Output die Funktionen mit diesem Input, zu einem Output die Commands eines Aggregats samt Grad der

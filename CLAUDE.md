@@ -47,12 +47,11 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 ## Das tragende Bild
 
 - **Drei Arten von Nachrichten:** ein **Command** ist eine Absicht an genau einen Empfänger — mit Ziel im Typ (`ICommand<TAggregat>`) an das
-  Aggregat, ohne Ziel (`ICommand`) im Graphen an die Knoten, die seinen Erzeuger in `[Von]` nennen, sonst an den Kopf genau eines Graphen oder
-  einen Akteur, der ihn hört (CQRS116); ein **Event** ist ein Fakt im Log, nur aus einem Decide; ein **Hinweis** (`ITransientEvent`) ist flüchtig und geht nur an Akteure
-  draußen. Dazu Query und `Frist<TCmd>`.
-- **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>, Command ohne Ziel>`,
-  nie ein Command an ein Aggregat, CQRS114; ein Command ohne Ziel steht nicht im Log: je Empfänger — Instanz am Graph-Kopf oder Arbeit eines
-  Akteurs — ein offener Eingang `cqrs_eingaenge` im selben Commit, der Zusteller bringt ihn hin) → Events → Group-Commit → **Wecker** am Commit
+  Aggregat, ohne Ziel (`ICommand`) im Graphen an die Knoten, die seinen Erzeuger in `[Von]` nennen, sonst an den Kopf genau eines Graphen
+  (CQRS116; senden dürfen ihn Knoten eines Graphen und Akteure über `IDarf`, nie ein Decide); ein **Event** ist ein Fakt im Log, nur aus einem
+  Decide; ein **Hinweis** (`ITransientEvent`) ist flüchtig und geht nur an Akteure draußen. Dazu Query und `Frist<TCmd>`.
+- **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>>`, nie ein Command,
+  CQRS114) → Events → Group-Commit → **Wecker** am Commit
   (generierter Weckplan: Projektionen und Uhr) + Push an Clients (`Commitmeldung` → `Verteilung`: je Commit eine Nachricht an den Verteiler jedes
   Knotens). **Keine Marken im Log**:
   Noop und Ablehnung schreiben nur ihre Quittung in die Inbox, mit Kopf-Prüfung des Streams in derselben Transaktion
@@ -85,10 +84,13 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **Quellen** sind Katalogfunktionen mit `Lausche(CancellationToken)` am Kopf eines Graphen (`Dateiwaechter` → `DateiGefunden`, `Taktgeber` →
   `Takt`, `Webhook` → `Aufruf`; Commands in `Abstractions/Katalog.cs`); je Element eine Kette, nichts im Log; eine Quellinstanz läuft genau einmal
   im Cluster. **Zustand** `IZustand<T>` ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach beendeten Aufrufen mit deren Kennungen (nach einem Absturz zählt nichts doppelt).
-- **Arbeit für Akteure** (docs/konzept-akteure.md §5): hört ein Akteur einen Command ohne Ziel (`IHoert<RechnungZuPruefen>`), ist das seine Arbeit —
-  eine eigene Instanz unter seinem Namen mit einem Knoten draußen; die `Werkstatt` des Knotens gibt den Auftrag einer Sitzung mit „verkörpert ∩
-  Token“ und stellt ihn erneut zu, bis eine Antwort kommt (die erste gewinnt); die Antwort sind Commands seines `IDarf`, Ids aus dem Auftrag. Von
-  Hand antwortet die Werkbank (`Umgebung:Hand`).
+- **Eingang am Kopf:** ein Command ohne Ziel eines Clients steht nicht im Log; je Instanz, deren Graph ihn am Kopf nimmt, ein offener Eingang
+  `cqrs_eingaenge` (`SitzungsActor.AnKopfAsync`), der Zusteller bringt ihn hin. Nennt der Command ein Fakt als `ursache` (`Stream:Version`), ist
+  es die Herkunft des Eingangs: die Kette und ihre Commands tragen das Fakt als Ursache.
+- **Reaktionen von Clients** (docs/konzept-akteure.md §5): was nach einem Fakt weitergeht, stößt ein Client an — hört sein Akteur das Event
+  (`IHoert<Event>`), gibt er Commands seines `IDarf` hinein. Genau einmal über den Läufer (`Client.Infrastructure/Reaktionen`,
+  `cqrs_client/reaktionen.py`): Log ab der gesicherten Position (`LiesLog`), Command-Ids aus Reaktion, Position, Nummer und Stelle, Position
+  gesichert nach den Antworten, Ursache = das Event; liegt der Horizont unter der eigenen Position (neue DB), liest er von vorn.
 - **Reader** (`IReader`, `Frage(Query, Lese-Fähigkeiten)`): die gezeigten Ids findet der Generator in den `Id<T>`-Feldern von Antwort
   und Query, die Projektionen dahinter aus den Lese-Fähigkeiten (`GeneratedQueryDienst`); Stand je gezeigter Id = Guard der Projektionen, dahinter
   das Log (`ProjektionsStaende`); Read-your-writes „mindestens S auf v“ wartet begrenzt darauf, sonst `noch_nicht`.
@@ -110,12 +112,12 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   `IZustand<T>` (CQRS105), eine Instanz mit Zustand oder Quelle läuft im Cluster auf ihrem **Rechner** (`Rechner` in der Instanz-Datei = `Cluster:Rechner` des Hosts;
   Pflicht, keine Sperre, kein Umzug bei Ausfall; doppelte Rechnernamen erkennt der Gossip).
 - **Abläufe** sind Graphen (eine Rechnung je Auslöser: Folge, Gabel, Wahl, Je) plus ein Vorgangs-Aggregat für alles, was zusammengeführt oder
-  abgewartet wird (Zählung, Kompensation, Frist im Decide); die Zugehörigkeit ist ein fachliches Feld (A2). Aggregate reden nur über Graphen oder
-  Akteure miteinander. Kein Dirigent, keine Saga, kein Builder.
+  abgewartet wird (Zählung, Kompensation, Frist im Decide); die Zugehörigkeit ist ein fachliches Feld (A2). Aggregate reden nur über Graphen und
+  Clients, die auf ihre Fakten reagieren, miteinander. Kein Dirigent, keine Saga, kein Builder.
 - **Uhr:** `Frist<TCmd>` aus dem Decide → `FristGesetzt` (`IRahmenEvent`) + Beilage `cqrs_fristen` → die Uhr sendet fällig mit Id aus dem Frist-Event.
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.
 - **Akteure und Clients:** ein Akteur (`record X : IAkteur`) sagt, was er hineingibt (`IDarf<T>`: Commands, Queries, Hinweise) und was zu ihm
-  kommt (`IHoert<T>`: ein Command ohne Ziel ist Arbeit, ein Event oder Hinweis Kenntnis); alles, was hineinkommt, kommt von einem Akteur. Ein Client
+  kommt (`IHoert<T>`: nur Events und Hinweise, einen Command hört kein Akteur, CQRS058); alles, was hineinkommt, kommt von einem Akteur. Ein Client
   ist ein Record `X : IClient, IVerkoerpert<A>…` und nennt nur, wen er verkörpert; wirksam = verkörperte Akteure ∩ Token, für beide Richtungen.
 
 ## Wo was liegt
@@ -123,7 +125,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Bereich | Ort |
 |---|---|
 | Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteur.cs`, `Funktion.cs`, `Graph.cs`, `Katalog.cs`, `Zustand.cs`, `Funktionsvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
-| Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Verteilen, Funktionen — Graph-Actor, Parent, Kette, Werkstatt, Arbeit —, Eingaenge, Uhr, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
+| Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Verteilen, Funktionen — Graph-Actor, Parent, Kette —, Eingaenge, Uhr, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
 | Katalog der Quellfunktionen, Store-Treiber | `Core/Katalog/` (`Dateiwaechter`, `Taktgeber`, `Webhook`), `Core/` (`MartenStore`, `DateiZiel`) |
 | Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
 | Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |
@@ -146,8 +148,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Die Sonde muss alle allgemeinen Primitive abdecken, nicht nur die der Beispieldomäne.
 - **Neue Dispatch-Logik = Generator erweitern**, nie Handschalter, nie Reflection.
 - **Typisierte Ids:** ein Command an ein Aggregat ist `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (das Ziel steht im Typ;
-  Framework-Sicht `IAggregatCommand.Ziel`, CQRS013/CQRS010), ein Command ohne Ziel `record … : ICommand` (Empfänger aus dem Graphen bzw. dem
-  `IHoert` eines Akteurs, CQRS116); Command-Ids leitet das Framework ab, nie der Entwickler; Verweise auf Aggregate in Events, Queries, Antworten sind `Id<T>` (UUID auf Leitung, Log, Wire; Namensregel
+  Framework-Sicht `IAggregatCommand.Ziel`, CQRS013/CQRS010), ein Command ohne Ziel `record … : ICommand` (Empfänger: ein Knoten desselben
+  Graphen über `[Von]`, sonst der Kopf genau eines Graphen, CQRS116); Command-Ids leitet das Framework ab, nie der Entwickler; Verweise auf Aggregate in Events, Queries, Antworten sind `Id<T>` (UUID auf Leitung, Log, Wire; Namensregel
   `Abstractions/Idvertrag.cs`), auch in Read-Models und Store-Fähigkeiten (ein Read-Model mit `Id<T> Id` ist `partial`, der Generator ergänzt
   die Speicher-Identität `Schluessel`, CQRS111).
 - **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide, Auf und Frage geben einen konkreten Typ oder `OneOf<…>` konkreter Typen zurück.
@@ -156,7 +158,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   CQRS051; Bündel `: IStore`). Nie Store/`IFristplan` in Ctor/Feld (CQRS054), nie `new …Store()` (CQRS055).
 - **Grammatik = eine Quelle** (`DomainEditor/Grammatik.cs`): neue Regel ⇒ Analyzer + Test + Gegenstück in der Grammatik.
 - **Akteur und Client** nicht vermischen (`docs/konzept-akteure.md`): Akteur = `IDarf` für das, was er selbst hineingibt, und `IHoert` für das,
-  was zu ihm kommt (Arbeit oder Kenntnis), in `Akteure.cs`; Client = Record in `Clients.cs`, der nur nennt, wen er verkörpert (`IVerkoerpert<A>`) —
+  was zu ihm kommt (Events und Hinweise), in `Akteure.cs`; Client = Record in `Clients.cs`, der nur nennt, wen er verkörpert (`IVerkoerpert<A>`) —
   über seine Leitung gehen genau `IDarf` und `IHoert` seiner Akteure, kein eigenes Wort dafür; wirksam = verkörperte Akteure ∩ Token, C#-Client
   per `[assembly: IstClient<Arbeitsplatz>]`.
 - **Graph statt Klebecode:** die Kanten stehen als `[Von(nameof(…))]` am nehmenden Knoten (kein Builder, keine Liste, keine Generics als
@@ -219,7 +221,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Wie schreibe ich X? Grammatik, Regeln, Entscheidungen | `docs/10-entwickler-api.md` |
 | Was ist heute garantiert (Wirkung, Ordnung, Zustellung)? | `docs/11-garantien.md` |
 | Wie funktioniert es heute? | `docs/03` (Schreibseite), `docs/04` (Konsum, Funktionen und Graphen, Quellen, Uhr), `docs/05` (Generatoren), `docs/06` (Transport) |
-| Akteure, Clients, Arbeit | `docs/konzept-akteure.md`, `docs/08` (Blazor), `docs/09` (Python) |
+| Akteure, Clients, Reaktionen | `docs/konzept-akteure.md`, `docs/08` (Blazor), `docs/09` (Python) |
 | Offen, Schulden | `docs/13-reifegrad-schulden-bewertung.md` §13.0 |
 | Tests, Zahlen, Messwerte | `docs/12-tests-und-vermessung.md` |
 

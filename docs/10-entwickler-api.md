@@ -1,6 +1,6 @@
 # 10 — Entwickler-API: Wie schreibe ich X?
 
-Stand 2026-11-02, gegen den Code geprüft. Dieses Kapitel ist die **eine Quelle für die Grammatik**: welche Bausteine es gibt, wie man sie
+Stand 2026-11-07, gegen den Code geprüft. Dieses Kapitel ist die **eine Quelle für die Grammatik**: welche Bausteine es gibt, wie man sie
 schreibt, wer was hört und erzeugt, welche Regel der Build prüft und welche Entscheidungen dahinter stehen. Wie es zur Laufzeit läuft, steht in
 [03](03-schreibseite.md) (Schreibseite), [04](04-konsum-und-prozess-maschine.md) (Konsum, Graphen, Uhr) und
 [06](06-transport-multinode-betrieb.md) (Transport, Clients); was garantiert ist, in [11](11-garantien.md); wo etwas liegt, in
@@ -14,8 +14,8 @@ Das **Log in Postgres ist die einzige Wahrheit.** Geschrieben wird es nur von **
 **Graphen**: eine **Funktion** ist eine Klasse mit typisierten Ports, ein Graph nennt Funktionen als Knoten, jede Kante steht als
 `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; ein Graph läuft als **Instanz** mit eigener Konfig, jede Kopf-Nachricht startet eine **Kette**. Eine **Quelle** ist eine Funktion am Kopf eines Graphen,
 die lauscht. Zwischen allen fließen **Commands**; was einen Graphen verlässt, wirkt genau einmal über die Inbox seines Ziels. **Akteure** stehen
-draußen: sie geben hinein, was sie dürfen, und bekommen, was sie hören — Arbeit oder Kenntnis; ein **Client** ist die Software, die Akteure
-verkörpert.
+draußen: sie geben hinein, was sie dürfen, und bekommen, was sie hören (Events und Hinweise); ein **Client** ist die Software, die Akteure
+verkörpert — was nach einem Fakt weitergeht, stößt ein Client an, der es hört (Reaktion).
 
 Der Entwickler schreibt nur, *was* fachlich passiert — in der **Signatur** einer Methode und in der Basisliste eines Records. `Auf(VorschauErstellt
 vorschau)` heißt „dieser Knoten rechnet, sobald eine Vorschau ankommt“, der Rückgabetyp sagt, was herauskommt; `record
@@ -26,14 +26,14 @@ Exactly-once, Partition, offene Eingänge, Ketten, Orte), wählt der Generator a
 
 | Baustein | tut | Laufzeit |
 |---|---|---|
-| **Aggregat** | entscheidet: Command rein, Events, Hinweise, Fristen und Commands ohne Ziel raus; einziger Schreiber seines Streams; darf direkt gefragt werden | virtueller Actor je `Id<T>` (Bündel, Inbox-Tabelle, Passivierung, Snapshot) — [03](03-schreibseite.md) |
+| **Aggregat** | entscheidet: Command rein, Events, Hinweise und Fristen raus, nie ein Command; einziger Schreiber seines Streams; darf direkt gefragt werden | virtueller Actor je `Id<T>` (Bündel, Inbox-Tabelle, Passivierung, Snapshot) — [03](03-schreibseite.md) |
 | **Projektion** | hört Events, schreibt ihren Store über Fähigkeiten, gibt nichts aus | `BatchLeser` je (Projektion, Partition) — [04](04-konsum-und-prozess-maschine.md) §4.1, §4.3 |
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
 | **Funktion** | ein Knoten: je `Auf` eine Nachricht rein, gerechnet je Ankunft (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
 | **Graph** | nennt Knoten (Funktionen, Graphen, eine Funktion auch mehrfach); jede Kante als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; läuft als Instanz, je Kopf-Nachricht eine Kette; jede Kante gesichert oder verlierbar | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
 | **Quelle** | eine Funktion mit `Lausche` am Kopf eines Graphen (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | eine Quellinstanz genau einmal im Cluster, auf ihrem Rechner — §4.7 |
 | Store, Technik | Speicher hinter Projektion/Reader bzw. Technik im Konstruktor einer Funktion | – |
-| **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Werkstatt und Verteiler je Knoten — [konzept-akteure.md](konzept-akteure.md) |
+| **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Verteiler je Knoten; Reaktionen über den Läufer im Client — [konzept-akteure.md](konzept-akteure.md) |
 | *eingebaut:* Uhr, Verteiler | macht aus fälligen Fristen Commands; stellt Pushes und Hinweise an Clients zu | – |
 
 **Warten und Zusammenführen** sind Zustand, keine Form der Eingänge: ein `Auf` nimmt eine Nachricht und rechnet, sobald sie ankommt. Die eine
@@ -47,7 +47,7 @@ Attribute an seinen Knoten (§10.3.4, §10.3.7).
 | Nachricht | Bedeutung | Garantie | Code |
 |---|---|---|---|
 | **Command an ein Aggregat** | Absicht an genau ein Aggregat | wirkt genau einmal (Command-Id, Inbox) | `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId`; ein anlegender Command zusätzlich `ICreationCommand` |
-| **Command ohne Ziel** | Absicht an genau einen Empfänger, den der Absender nicht nennt: im Graphen die Knoten, die seinen Erzeuger in `[Von]` nennen, sonst den Kopf genau eines Graphen oder einen Akteur, der ihn hört (Arbeit) | am Kopf und als Arbeit durabel bis zum „fertig“ der Kette bzw. bis zur Antwort; zwischen Knoten als Aufruf von Parent zu Parent; nie im Log | `record … : ICommand` |
+| **Command ohne Ziel** | Absicht an genau einen Empfänger, den der Absender nicht nennt: im Graphen die Knoten, die seinen Erzeuger in `[Von]` nennen, sonst den Kopf genau eines Graphen; gesendet von Knoten eines Graphen und von Akteuren (`IDarf`), nie aus einem Decide | am Kopf durabel bis zum „fertig“ der Kette (offener Eingang); zwischen Knoten als Aufruf von Parent zu Parent; nie im Log | `record … : ICommand` |
 | **Event** | Fakt im Log, nur aus einem Decide | durabel; wirkt bei jedem Hörer genau einmal | `record … : IEvent` |
 | **Hinweis** | flüchtig: Ablehnung, Fortschritt, „nicht lesbar“, Live-Anzeige — nur an Akteure draußen | höchstens einmal, nie im Log | `record … : ITransientEvent` |
 | **Query** | Frage, wirkt nicht | synchron | `record … : IQuery` |
@@ -73,7 +73,6 @@ Dateien stehen (`partial`).
 public record MeldeSchaden(Id<Schadensfall> AggregateId, Guid LeserId) : ICommand<Schadensfall>, ICreationCommand;
 public record SchadenGemeldet(Guid LeserId) : IEvent;
 public record SchadenExistiert(Id<Schadensfall> Id) : ITransientEvent;                // Hinweis: flüchtige Ablehnung
-public record SchaetzeSchaden(Id<Schadensfall> Fall, Guid LeserId) : ICommand;           // ohne Ziel: an den Kopf eines Graphen
 
 public partial class Schadensfall : IState
 {
@@ -81,11 +80,10 @@ public partial class Schadensfall : IState
 
     public partial class Decider : IDecider<Schadensfall>
     {
-        public IEnumerable<OneOf<SchadenGemeldet, SchaetzeSchaden, SchadenExistiert>> Decide(MeldeSchaden c)
+        public IEnumerable<OneOf<SchadenGemeldet, SchadenExistiert>> Decide(MeldeSchaden c)
         {
             if (this.State.Gemeldet) { yield return new SchadenExistiert(c.AggregateId); yield break; }
             yield return new SchadenGemeldet(c.LeserId);
-            yield return new SchaetzeSchaden(c.AggregateId, c.LeserId);
         }
     }
 
@@ -96,11 +94,11 @@ public partial class Schadensfall : IState
 }
 ```
 
-- Je Command ein `Decide`; jedes entschiedene Event hat ein `Apply`, jedes `Apply` ein entscheidendes Decide (R3). Ein Hinweis, eine Frist und ein
-  Command haben kein `Apply`.
-- **Command ohne Ziel:** ein Decide gibt nie einen Command an ein Aggregat aus (CQRS114) — Aggregate reden nur über Graphen oder Akteure miteinander.
-  Sein Empfänger ist der Kopf genau eines Graphen oder ein Akteur, der ihn hört (CQRS116); er geht nicht ins Log und zählt nicht in der Version, je
-  Empfänger entsteht im selben Commit ein offener Eingang ([03](03-schreibseite.md) §3.2). Nie zusammen mit einer Ablehnung.
+- Je Command ein `Decide`; jedes entschiedene Event hat ein `Apply`, jedes `Apply` ein entscheidendes Decide (R3). Ein Hinweis und eine Frist
+  haben kein `Apply`.
+- **Kein Command:** ein Decide gibt nur Events, Hinweise und Fristen aus — keinen Command, weder an ein Aggregat noch ohne Ziel (CQRS114). Was nach
+  dem Fakt weitergeht, stößt ein Client an, dessen Akteur es hört: in der Sonde reagiert die Gutachterin auf `SchadenGemeldet` mit `SchaetzeSchaden`
+  an den Kopf der Schadensbewertung (§10.3.6). Eine Ablehnung bleibt die einzige Ausgabe.
 - **Frist:** `yield return new Frist<BrichPruefungAb>(new BrichPruefungAb(c.AggregateId), TimeSpan.FromSeconds(30));` — die Uhr schickt den
   Command zur Zeit an **dasselbe** Aggregat; ist der Vorgang dann fertig, ist er ein Noop (§10.3.7).
 - **Direkte Abfrage:** `public OneOf<Leihstand, NichtVerliehen> Frage(HoleLeihstand q) => …` im Decider, synchron, nur lesend. Die Query nennt
@@ -272,14 +270,17 @@ Was eine Quelle meldet, steht nicht im Log; Doppeltes vermeiden und nach einem N
 // Sonde Lesen.cs.txt
 public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>, IDarf<RueckgabeGescannt>,
     IHoert<NichtAusgeliehen>, IHoert<NichtSchaetzbar>, IHoert<LaufGescheitert>;              // Kenntnis: Hinweise
-public sealed record Archiv : IAkteur, IHoert<BegutachteVorOrt>, IDarf<EroeffneMahnung>, IHoert<Ausgeliehen>;   // Arbeit + Antwort + Kenntnis
+public sealed record Gutachterin : IAkteur, IDarf<EroeffneMahnung>, IHoert<MahnungEroeffnet>,
+    IHoert<SchadenGemeldet>, IDarf<SchaetzeSchaden>;                                        // Reaktion: auf das Fakt den Kopf eines Graphen
 
 public sealed record Lesesaal : IClient, IVerkoerpert<Theke>, IVerkoerpert<Archiv>;
 ```
 
 Alles, was hineinkommt, kommt von einem Akteur, der es darf (`IDarf<T>`: Command, Query, Hinweis; R16). Was zu ihm kommt, hört er (`IHoert<T>`):
-ein Command ohne Ziel ist **Arbeit** — die Werkstatt gibt ihn einer Sitzung, die den Akteur verkörpert, bis eine Antwort kommt (die erste gewinnt;
-die Antwort sind Commands seines `IDarf`) —, ein Event oder Hinweis ist **Kenntnis** (verlierbar, ohne Ausgabe). Ein **Client** ist ein Record, der
+nur Events und Hinweise — einen Command hört kein Akteur (CQRS058). Auf ein Event kann ein Client **reagieren**: mit Commands aus dem `IDarf`
+seiner Akteure, an ein Aggregat oder ohne Ziel an den Kopf eines Graphen; genau einmal über den Läufer im Client (Log ab der gesicherten Position,
+Command-Ids aus Reaktion und Position, Ursache = das Event; [konzept-akteure.md](konzept-akteure.md) §5). Ohne Ausgabe ist ein Event oder Hinweis
+**Kenntnis** (verlierbar). Ein **Client** ist ein Record, der
 nur nennt, wen er verkörpert; über seine Leitung gehen genau `IDarf` und `IHoert` dieser Akteure. Wirksam ist „verkörpert ∩ Token“, für beide
 Richtungen (R17); ein C#-Client erklärt sich mit `[assembly: IstClient<X>]`. Ausführlich: [konzept-akteure.md](konzept-akteure.md).
 
@@ -289,8 +290,9 @@ Ein Ablauf über mehrere Aggregate ist ein **Vorgangs-Aggregat** plus **Graphen*
 ohne Ziel an den Kopf des Graphen (`RueckgabeGescannt`); der Start legt den Vorgang an (`StartePruefung` mit `h.NeueId<Seitenpruefung>()`) und hört
 dessen Event als Antwort auf seinen Command; die Antwort gibt als Strom je Seite eine Nachricht (Je), der Prüfer meldet jede Seite dem Vorgang
 (`VermerkeSeite`), der mitzählt und nach der letzten abschließt; eine Frist desselben Aggregats bricht nach Zeit ab. Was zusammengeführt, gezählt
-oder zurückgenommen wird (fremde Rückmeldungen, Zählung, Kompensation), entscheidet das Aggregat — es gibt dazu Commands ohne Ziel an Graphen aus. Die Zugehörigkeit fremder Events zum Vorgang ist ein
-**fachliches Feld** im Event (A2). Kompensation ist ein Decide, das den Gegenzug als Command ohne Ziel ausgibt.
+oder zurückgenommen wird (fremde Rückmeldungen, Zählung, Kompensation), entscheidet das Aggregat; was danach ein Graph rechnen soll, gibt ein Client,
+der auf das Fakt reagiert, an dessen Kopf. Die Zugehörigkeit fremder Events zum Vorgang ist ein **fachliches Feld** im Event (A2). Kompensation ist
+ein Decide, das den Gegenzug als Fakt anfordert (Prüfdomäne: `PostenfreigabeAngefordert`); der Client macht daraus den Command an den Graphen.
 
 ## 10.4 Typisierte Ids und Herkunft
 
@@ -311,8 +313,8 @@ Die Tabellen folgen der Grammatik (`DomainEditor/Grammatik.cs`, `Konsume` und `E
 | Nachricht | darf in | Anzahl |
 |---|---|---|
 | Command an ein Aggregat | das Aggregat in seinem Typ | genau eins |
-| Command ohne Ziel | die Knoten desselben Graphen, die ihn nehmen; sonst den Kopf genau eines Graphen oder einen Akteur (`IHoert`, Arbeit) | genau ein Empfänger |
-| Event | Projektion; Akteur (`IHoert`, Kenntnis); eine Funktion nur als Antwort auf ihren eigenen Command | beliebig viele |
+| Command ohne Ziel | die Knoten desselben Graphen, die ihn nehmen; sonst den Kopf genau eines Graphen | genau ein Empfänger |
+| Event | Projektion; Akteur (`IHoert`: Reaktion oder Kenntnis); eine Funktion nur als Antwort auf ihren eigenen Command | beliebig viele |
 | Event, vom Aggregat entschieden | sein `Apply` | genau das entscheidende Aggregat |
 | Hinweis | Akteur draußen (`IHoert`, über den Verteiler an seine Sitzungen) | beliebig viele; nie Funktion, Projektion, Aggregat |
 | Query | Reader **oder** Aggregat | genau eins |
@@ -323,11 +325,11 @@ Die Tabellen folgen der Grammatik (`DomainEditor/Grammatik.cs`, `Konsume` und `E
 
 | Baustein | erzeugt | sonst nichts |
 |---|---|---|
-| Aggregat | Events, Hinweise, Fristen, Commands ohne Ziel; Antworten auf direkte Queries | keine Commands an Aggregate |
+| Aggregat | Events, Hinweise, Fristen; Antworten auf direkte Queries | keine Commands |
 | Projektion | Wirkungen in ihrem Store (nur Schreib-Fähigkeiten) | keine Nachricht |
 | Reader | Antworten (nur Lese-Fähigkeiten) | – |
 | Funktion | Commands (an Aggregate oder ohne Ziel), Hinweise; nach außen nur über Technik | keine Events |
-| Akteur, Client | was die Akteure dürfen (`IDarf`): Commands, Queries, Hinweise; auf Arbeit Commands | – |
+| Akteur, Client | was die Akteure dürfen (`IDarf`): Commands, Queries, Hinweise; als Reaktion auf ein gehörtes Event Commands | – |
 | Uhr | Commands aus fälligen Fristen | – |
 
 ## 10.6 Regeln und ihr Gegenstück im Build
@@ -340,10 +342,10 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 |---|---|---|
 | R1 | Der Ausgang steht in der Signatur (`Decide`, `Auf`, `Lausche`, `Frage`), die Knoten eines Graphen mit `[Kopf]` und `[Von]` in seinem Record; der Graph entsteht nur daraus, nie aus Rümpfen | CQRS050, CQRS100, CQRS057, CQRS115 |
 | R2 | Je Baustein und Eingangstyp höchstens ein `Auf` bzw. eine `Frage` | CQRS101 |
-| R3 | Ein Command an ein Aggregat gehört genau einem Aggregat (`ICommand<TAggregat>`); jedes entschiedene Event hat ein `Apply` im selben Aggregat und umgekehrt; ein Decide gibt keinen Command an ein Aggregat aus | Compiler, CQRS010/011, CQRS079/080, CQRS114 |
+| R3 | Ein Command an ein Aggregat gehört genau einem Aggregat (`ICommand<TAggregat>`); jedes entschiedene Event hat ein `Apply` im selben Aggregat und umgekehrt; ein Decide gibt nur Events, Hinweise und Fristen aus, keinen Command | Compiler, CQRS010/011, CQRS079/080, CQRS114 |
 | R4 | Eine Query hat genau ein Ziel (Reader oder Aggregat) | CQRS084/086, CQRS057 |
 | R5 | Eine Frist steht nur in einem Decide und zielt auf einen Command des eigenen Aggregats | Generator (`Frist<TCmd>`), Prüfung beim Schreiben im Actor |
-| R6 | Ein Kreis Graph → Command → Aggregat → Command ohne Ziel → derselbe Graph endet nur, wenn das Decide fortschreitenden Zustand trägt | **nicht im Build** (aus Signaturen nicht von einem Ablauf zu unterscheiden, GR-KREIS, docs/13 FB-5); der Test-Ablauf bricht einen Kreis ab (`Cqrs.Testing/Ablauf.cs`) |
+| R6 | Ein Kreis Graph → Command → Aggregat → Event → Reaktion eines Clients → derselbe Graph endet nur, wenn das Decide fortschreitenden Zustand trägt | **nicht im Build** (aus Signaturen nicht von einem Ablauf zu unterscheiden, GR-KREIS, docs/13 FB-5); der Test-Ablauf bricht einen Kreis ab (`Cqrs.Testing/Ablauf.cs`) |
 | R7 | Ids sind typisiert; Command-Ziele sind `Id<T>` | Compiler, CQRS013 |
 | R8 | Fähigkeiten nur als Parameter (eine Funktion je Fähigkeit, ein Store bündelt), nie in Konstruktor, Feld oder `new` | CQRS051, CQRS054, CQRS055 |
 | R9 | Eine Projektion schreibt in genau einen Store | CQRS052 |
@@ -354,10 +356,10 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R14 | Jeder Store implementiert genau eine Store-Klasse; Klasse 3 nur mit `[MindestensEinmal]`; Schreib-Fähigkeiten eines Klasse-2-Stores nehmen die `Herkunft` | CQRS109, CQRS110, Start-Prüfung; Einhaltung: allgemeiner Store-Test |
 | R15 | Die Garantie folgt dem Eingang: Event → genau einmal, Hinweis → höchstens einmal, Query → keine Wirkung | folgt aus den Typen |
 | R16 | Alles von draußen kommt von einem Akteur, der es darf | Generator, Start-Prüfung, Akteur-Tor |
-| R17 | Ein Client sendet, fragt, hört und nimmt Arbeit nur für die Akteure an, die er verkörpert, geschnitten mit dem Token | CQRS063/064, CQRS093–097, Handshake |
+| R17 | Ein Client sendet, fragt und hört nur für die Akteure, die er verkörpert, geschnitten mit dem Token | CQRS063/064, CQRS093, CQRS095–097, Handshake |
 | R18 | Die Hausregel für Actors: ein Weg je Absicht (nur Framework-Code) | CQRS112/113 |
 | R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor | CQRS105, CQRS100 |
-| R20 | Ein Command ohne Ziel hat genau einen Empfänger (im Graphen die Knoten, die seinen Erzeuger in `Von` nennen; sonst Graph-Kopf oder Akteur); ein Graph ist kreisfrei über seine Knoten, jeder Knoten trägt `[Kopf]` oder `[Von(nameof(…))]`, je Eingangstyp ein Kopf, ein `Auf` nimmt genau eine Nachricht (CQRS100); jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
+| R20 | Ein Command ohne Ziel hat genau einen Empfänger (im Graphen die Knoten, die seinen Erzeuger in `Von` nennen; sonst ein Graph-Kopf); ein Graph ist kreisfrei über seine Knoten, jeder Knoten trägt `[Kopf]` oder `[Von(nameof(…))]`, je Eingangstyp ein Kopf, ein `Auf` nimmt genau eine Nachricht (CQRS100); jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
 | R22 | Eine Übersetzung (`Uebersetze<TEin, TAus>`) nimmt einen Command ohne Ziel und erzeugt einen Command; jeder Parameter von `TAus` hat eine Quelle (`[Feld]`, gleicher Name mit implizit zuweisbarem Typ, Standardwert); nie zwei hintereinander, am Kopf an Knoten oder ein Aggregat; kein Katalog-Command verlässt einen Graphen der Anwendung | CQRS119, CQRS121, CQRS115, CQRS120 |
 | R21 | Ein Bündel (`Buendel<A, B, …>` als Eingang eines `Auf`) bündelt verschiedene persistente Events mit ableitbarem Schlüssel: eine gemeinsame `Id<T>`, sonst `[Ueber<T>]`; keine = global | CQRS057, CQRS118 |
 
@@ -377,10 +379,10 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E6 | Darf eine Funktion Zustand haben? | ja, gekapselt, kein Domänen-Zustand (Gewichte, ein Zähler, eine Gesehen-Liste); `IZustand<T>` im Konstruktor, gesichert je Instanz und Knoten nach fertigem Lauf; Gelerntes gehört in Projektionen |
 | E7 | Was fließt zwischen Funktionen? | ein Command ohne Ziel, als Aufruf von Schritt zu Schritt, nie im Log (Invariante 6); kein eigener Nachrichten-Marker |
 | E8 | Wie kommt er an? | im Graphen über die Kanten, die als `[Von(nameof(…))]` am nehmenden Knoten stehen; zwischen den Bausteinen über den Typ mit genau einem Empfänger (generierte Graph-Tabelle); an einen Kopf über einen offenen Eingang oder den Boten; kein Broker, keine Abos |
-| E9 | C# und Python | eine Funktion läuft im Host; was draußen gerechnet wird, ist Arbeit eines Akteurs, die ein Client annimmt; denselben Schritt je Umgebung zwischen Host und draußen umzuschalten ist bewusst aufgegeben |
+| E9 | C# und Python | eine Funktion läuft im Host; was draußen gerechnet wird, rechnet ein Client, der auf ein Fakt reagiert und Commands seines Akteurs zurückgibt; denselben Schritt je Umgebung zwischen Host und draußen umzuschalten ist bewusst aufgegeben |
 | E10 | Lebenszyklus einer Funktion | kein eigener: Technik lädt beim ersten Aufruf, Freigabe über `IAsyncDisposable` |
 | E11 | Nachrichtenarten | drei: Command (mit oder ohne Ziel), Event, Hinweis; dazu Query und Frist |
-| E12 | Empfänger eines Commands | genau einer, vom Absender aus: Ziel im Typ → Aggregat; sonst der Knoten desselben Graphen; sonst der Kopf genau eines Graphen oder ein Akteur, der ihn hört |
+| E12 | Empfänger eines Commands | genau einer, vom Absender aus: Ziel im Typ → Aggregat; sonst der Knoten desselben Graphen; sonst der Kopf genau eines Graphen |
 | E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter mit `[Kopf]` und `[Von(nameof(…))]` (ausdrückliche Kanten, eine Funktion auch mehrfach; aus Typen allein entsteht innen keine Kante), Ablaufformen als Formen der Ausgaben (Zusammenführen im Logik-Code); läuft als Instanz mit eigener Konfig, beliebig oft |
 | E14 | Quellen | Katalogfunktionen am Kopf eines Graphen, nicht im Log; durabel über den gesicherten Zustand |
 | E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json`); der Akteur einer Quellinstanz steht in ihrer Datei, geprüft gegen sein `IDarf` |
@@ -398,14 +400,14 @@ Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
 - **A6** Jeder Cluster-Knoten hat von jeder Instanz einen Graph-Actor `funktionen/<instanz>` mit je Knoten einem Parent; eine Kette bleibt auf dem Rechner, der ihren Kopf annahm; ein
   Eingang geht an den eigenen Knoten, sonst reihum (Gossip).
 - **A7** Ein Hinweis trägt eine Kennung, die der Absender vergibt.
-- **A8** Arbeit gibt die Werkstatt dem Arbeiter mit dem meisten freien Platz; einen Zustand im Worker sichert der Worker.
+- **A8** Eine Reaktion hält ihre Position im Client selbst (der Läufer sichert sie nach den Antworten); einen Zustand im Worker sichert der Worker.
 
 ## 10.8 Was bewusst nicht kommt
 
 Kein Geltungsbereich und keine Daten-Rechte je Objekt (E1); der Platz bleibt frei: die `Herkunft` trägt den Akteur, `Decide` darf ihn sehen; ein
 Bereich wäre später eine weitere Kopfzeile plus Filter in Verteiler, Reader und Lesen ab Position. Kein Löschen- und Aufbewahren-Konzept (Option:
 verschlüsselbare Felder als Typ-Fakt). Keine Schema-Evolution im Editor; `IUpcast` bleibt Backend-Primitive. Kein Dirigent, keine Saga, kein
-Builder und keine Kantenliste (die Kanten stehen als `Von` an den Knoten), keine Generics als Verdrahtung, keine Knotenarten, keine Reaktion als eigene Art, keine Schleifen im Graphen. Offenes steht in
+Builder und keine Kantenliste (die Kanten stehen als `Von` an den Knoten), keine Generics als Verdrahtung, keine Knotenarten, keine Reaktion als eigene Bausteinart (sie ist ein Client, der hört und darf), keine Schleifen im Graphen. Offenes steht in
 [13](13-reifegrad-schulden-bewertung.md) §13.0.
 
 ## 10.9 Der Editor
@@ -422,8 +424,8 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
 - **Klick und Doppelklick:** ein Klick auf eine Karte oder einen Port hebt seine Kette bzw. seine Kanten hervor; ein Doppelklick öffnet ihn im
   Modal — Graph, Aggregat und Store von innen, ein Glied (Decide, Auf, Projektion, Reader, eine Nachricht des Aggregats) in seinem Block gewählt,
   alles andere (Akteur, Client, Instanz, Umgebung, Funktion) als Formular. Ein Panel neben der Fläche gibt es nicht; Brotkrumen führen zurück.
-- **Kanten** laufen von Port zu Port und haben eine Art: schreiben, Quelle, lesen, Kenntnis, Arbeit, Rücklauf (ein Command ohne Ziel aus dem
-  Decide an einen Graph-Kopf, die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store).
+- **Kanten** laufen von Port zu Port und haben eine Art: schreiben, Quelle, lesen, Kenntnis (ein Event oder Hinweis an den Akteur, der es hört),
+  Rücklauf (die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store).
 - **Von innen** (Modal): ein Graph zeigt seine Komposition (`board.sicht.komposition`, `Sicht.Komposition.cs`: Knoten nach Tiefe, je `[Von]` eine
   Kante, Köpfe und Ausgänge, Technik und Konfig als Chips) mit dem Baukasten (`board.sicht.baukasten`) und seinen Instanzen; ein Aggregat
   Commands → Decide → Ergebnisse → Apply → Zustand; ein Store in zwei Bändern Eingang → Auf bzw. Frage → Fähigkeit → Umsetzung, dazu Read-Models
@@ -433,7 +435,7 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
 - **Gesten** sind Änderungen am Board, die der Server als Patch in den Code schreibt (↶ nimmt ihn zurück). Pfeile zieht man nie von Hand —
   überall gilt dieselbe Port-Logik: links die Eingänge, rechts die Ausgänge; „＋“ an einem Port hebt die Ports bzw. Karten hervor, die dort
   angeschlossen werden können, ein Klick verbindet, Esc bricht ab; ✕ an einem Port löst. Auf der Fläche: Akteur links „＋ darf“ (Eingänge von
-  Graphen, Aggregaten, Readern → `IDarf`), Akteur rechts „＋ hört“ (Events, Hinweise, Commands ohne Ziel → `IHoert`), Projektion „＋ Event“ (ein
+  Graphen, Aggregaten, Readern → `IDarf`), Akteur rechts „＋ hört“ (Events, Hinweise → `IHoert`), Projektion „＋ Event“ (ein
   `Auf`), „＋ Store“ im Kopf der Spalte Projektionen (Store-Klasse, Bereich, Name). In der Komposition (docs/plan-katalog-und-graphen.md, Schritt 4) stehen die Ports eines Funktionsknotens je Auf — sein Eingang, darunter seine
   Ausgänge mit Vielfachheit (1 · 0..1 · 0..n); eine Antwort vom Aggregat hat kein „＋“. „＋“ an einem Eingang hebt die Knoten hervor, die den Typ
   ausgeben (→ `[Von]`), dazu „von außen“ (→ `[Kopf]`), gestrichelt „neue Funktion davor“ (gibt den Typ aus, nimmt eine neue Nachricht von außen);
@@ -451,7 +453,7 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   bietet gestrichelt „↦ ▣ Command an …“: ein vorhandener Command oder ein neuer samt Decide, Event und Apply; die Übersetzung dazwischen nennt die Id
   des Ziels ausdrücklich, wenn genau ein Feld in Frage kommt. Im Aggregat zeigt jeder Command, wer ihn schickt (Graph, Akteur), und „＋ Graph, der
   ihn schickt“ legt einen Graphen bei den Abläufen an — Kopf ist eine Übersetzung aus einer neuen Nachricht mit den Feldern des Commands — und öffnet
-  ihn. Unter den Ergebnissen eines Decide steht kein „Command ohne Ziel“ mehr. Der Picker der Fläche legt einen Graphen nur mit erstem Knoten an
+  ihn. Unter den Ergebnissen eines Decide steht kein Command. Der Picker der Fläche legt einen Graphen nur mit erstem Knoten an
   (eine vorhandene oder neue Funktion in der Anwendung bzw. einem Katalog, eine Quelle, ein Graph); er öffnet sich danach.
 - **Zoom:** in jedem Modal mit ＋/−/0 (auch mit Strg/⌘), Strg/⌘ + Mausrad bzw. Zwei-Finger-Zoom und der Anzeige im Kopf; auf der Fläche ebenso
   mit ＋/−/0 und dem Mausrad.
@@ -473,15 +475,15 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
 - **Im Aggregat anlegen und verbinden:** jede Karte hat links ihre Eingänge und rechts ihre Ausgänge als Ports, die Kanten laufen von Port zu Port.
   Pfeile setzt man nie von Hand: „＋“ an einem Port (am Decide „＋ Ergebnis“, am Ergebnis „＋ Decide“, an der Frage „＋ Antwort“, an der Antwort
   „＋ Frage“) hebt nur die Karten hervor, die dort angeschlossen werden können; alles andere tritt zurück. Dazu stehen gestrichelt in ihrer
-  Spalte, was neu entstehen kann (Event, Hinweis, Command ohne Ziel, Frist auf einen eigenen Command, Antwort, Command mit Decide, Query) und
+  Spalte, was neu entstehen kann (Event, Hinweis, Frist auf einen eigenen Command, Antwort, Command mit Decide, Query) und
   Events bzw. Hinweise ohne Erzeuger von außerhalb des Bilds. Ein Klick verbindet bzw. legt an, Esc oder ein zweiter Klick auf „＋“ bricht ab.
   „＋ Apply“ am Event und „＋ Decide“ an einem eigenen Command ohne Decide legen direkt an; ✕ an einem Port löst. Wird ein Event Ergebnis eines
   Decides oder entsteht es frei unter „Ergebnisse“, kommt sein Apply gleich mit (CQRS079); ein Command an das Aggregat
   entsteht immer mit seinem Decide. Jedes Glied lässt sich
   über die Spaltenköpfe anlegen: Commands (Command mit Decide, Query mit Frage und Antwort),
-  Ergebnisse (Event, Hinweis, Command ohne Ziel, Antwort — sofort Code, ohne Zuordnung; angeschlossen wird später über „＋ Decide“ bzw.
+  Ergebnisse (Event, Hinweis, Antwort — sofort Code, ohne Zuordnung; angeschlossen wird später über „＋ Decide“ bzw.
   „＋ Frage“), Zustand (Feld); Decide und Apply haben keinen eigenen Knopf, sie kommen 1:1 mit Command bzw. Event. Was im Aggregat entsteht, liegt bei seiner Schreibseite (`Record.AmAggregat`,
-  `Strukturort`), auch ein Command ohne Ziel oder eine Antwort, die noch niemand nimmt — so muss beim Anschließen nichts umziehen; bis dahin meldet
+  `Strukturort`), auch eine Antwort, die noch niemand nimmt — so muss beim Anschließen nichts umziehen; bis dahin meldet
   die Lage-Prüfung sie (CQRS098, Unfertiges baut nicht). Im Modal steht eine Nachricht „unverbunden“, solange sie im Namespace des Aggregats
   liegt und weder erzeugt wird noch eine Frage beantwortet. Neues Decide und Apply bekommen einen
   Platzhalter-Rumpf, eine neue Frage ebenso; der Rückgabetyp einer Frage folgt ihren Antworten (Scaffolder bzw. Abgleich der Decider-Datei).

@@ -2030,8 +2030,8 @@
   function flSichtbar(fk){if(fk.art==="akteur"||LADEN===null)return true;const n=NODEBY.get(flPanelId(fk)||"");return !n||geladen(n);}
   function flKarten(){return FL().karten.filter(flSichtbar);}
   // ── Fläche: anschließen über „＋“ am Port (nie Pfeile von Hand). Der „＋“ hebt die Ports hervor, die passen; ein Klick verbindet, Esc bricht ab.
-  //   Akteur links „＋ darf“ → Eingänge (Command, Query) von Graphen, Aggregaten, Readern; Akteur rechts „＋ hört“ → Ausgänge (Event, Hinweis,
-  //   Command ohne Ziel); Projektion „＋ Event“ → Events der Aggregate. ✕ an einem Port löst (darf, hört, Auf der Projektion). ──
+  //   Akteur links „＋ darf“ → Eingänge (Command, Query) von Graphen, Aggregaten, Readern; Akteur rechts „＋ hört“ → Ausgänge (Event,
+  //   Hinweis); Projektion „＋ Event“ → Events der Aggregate. ✕ an einem Port löst (darf, hört, Auf der Projektion). ──
   let FLPORT=null;
   function flPassend(fk,p){if(!FLPORT)return false;const a=FLPORT;
     if(a.art==="darf")return p.richtung==="ein"&&(p.sorte==="command"||p.sorte==="query")&&["graphen","aggregate","projektionen"].includes(fk.spalte)&&!(a.akteur.darf||[]).includes(p.typ)

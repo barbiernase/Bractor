@@ -1,6 +1,6 @@
 # 05 — Generatoren, Analyzer & Codegen
 
-Stand 2026-11-02, gegen den Code geprüft.
+Stand 2026-11-07, gegen den Code geprüft.
 
 Alles Dispatchende wird zur Compile-Zeit erzeugt, ohne Runtime-Reflection (Invariante 4). Drei Bausteine tragen das, alle laufen bei jedem
 `dotnet build` mit:
@@ -86,7 +86,7 @@ melden die Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein 
 | `EventJsonGenerator` | persistierte Events (`IEvent` ohne `ITransientEvent`) | `GeneratedEventJson` | Event-JSON über `EventJsonSerializerContext.Default.{Typ}` |
 | `WireSerializerGenerator` | `IWireMessage` + Payload-Wurzeln (Command, Event, Query, Antwort) | `GeneratedWire`, `GeneratedWirePoly` | Cross-Node-Wire über `CqrsWireJsonContext.Default.{Typ}` ([06](06-transport-multinode-betrieb.md) §6.2) |
 | `TechnikGenerator` | was der Konstruktor einer Funktion nimmt und kein Konfig-Record, Logger oder Zustand ist (`Funktionsform.Techniken`), ihre Umsetzungen (`Ctorbindung`) | `GeneratedTechnik` | Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld mit Bindung aus den Werten eines Knotens |
-| `AkteurRechteGenerator` | `IAkteur` + `IDarf<T>`/`IHoert<T>`, Record mit `IClient` + `IVerkoerpert<A>` | `GeneratedAkteurRechte`, `GeneratedClientVertraege` | je Akteur Commands, Queries, Hinweise, Kenntnis und Arbeit; je Client die verkörperten Akteure und der Hash (CQRS059) |
+| `AkteurRechteGenerator` | `IAkteur` + `IDarf<T>`/`IHoert<T>`, Record mit `IClient` + `IVerkoerpert<A>` | `GeneratedAkteurRechte`, `GeneratedClientVertraege` | je Akteur Commands, Queries, Hinweise und Kenntnis (gehörte Events und Hinweise); je Client die verkörperten Akteure und der Hash (CQRS059) |
 | `EventUpcastingGenerator` | `IUpcast<…>` | `GeneratedEventUpcasting` | Backend-Primitive für Schema-Evolution in Prod, kein Editor-Konzept (CQRS040–042, CQRS044–046; 1:N bricht bewusst den Build) |
 | `DtoMapperSourceGenerator` (`DtoMapperGenerator.cs`) | Domänen-Graph (`DomainGraphAnalyzer`), ohne `IRahmenEvent`; läuft nur im Leitungs-Projekt (`<Wurzel>.Leitung`) | `GeneratedNutzlast : Cqrs.Leitung.INutzlastTabelle` (Datei `ProtoMessageMapper.Generated.cs`) | Domain ↔ `{Typ}Dto` ↔ `Nutzlast { typ, daten }` an der gRPC-Grenze (CQRS030) |
 | `TypeRegistryGenerator` | `IEvent`, `ICommand`, `IQuery`, `IQueryResponse`, `ITransientEvent` | `GeneratedTypeRegistry` | Name ↔ Typ |
@@ -102,7 +102,7 @@ melden die Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein 
 |---|---|---|
 | `HandleMethodGenerator` | `Handle(TEvent, MessageContext)` | Store-/Handler-Dispatch nach Rückgabetyp (`{Klasse}.Dispatch.g.cs`) |
 | `ModuleRegistryGenerator` | `IUiModule` | DI-Registrierung (`GeneratedModuleRegistry_{Assembly}`) |
-| `WiringGenerator` | Syntax + referenzierte Assemblies, `[assembly: IstClient<IX>]` | `GeneratedWiring_{Assembly}`: DI, Abos, Vertrag + Hash, Commands/Queries aus dem Vertrag, Ziel-Aggregat je Command aus `ICommand<TAggregat>` (CQRS093/094) |
+| `WiringGenerator` | Syntax + referenzierte Assemblies, `[assembly: IstClient<IX>]` | `GeneratedWiring_{Assembly}`: DI, Abos, Vertrag + Hash, Commands/Queries aus dem Vertrag, Ziel-Aggregat je Command aus `ICommand<TAggregat>` (CQRS093) |
 | `ViewModelGenerator` | `IViewModel` | ungenutzt (docs/13 P3-2) |
 
 ## 5.3 Die Regeln: Analyzer, Generator-Diagnosen, Boot-Guards
@@ -124,8 +124,8 @@ Alle Diagnosen sind Fehler, außer den Warnungen CQRS080, 081, 083, 085, 086, 11
 | Technik | CQRS089–092 | `TechnikAnalyzer` (nur im Konstruktor, bindbarer Konstruktor, Konfig-Feld, öffentlich) |
 | Projektstruktur | CQRS098 | `LageAnalyzer` (Ordner, Namespace, Datei prüft `--check`, docs/07) |
 | Leseseite & Store | CQRS051, 054, 055 · CQRS052, 110, 118 · CQRS053 · CQRS066/067 · CQRS109 · CQRS111 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` · `StoreKlasseAnalyzer` · `ReadModelSchluesselGenerator` |
-| Akteure, Verträge, Clients | CQRS058, 063, 064 · CQRS059 · CQRS093/094 · CQRS095–097 | `AkteurAnalyzer` · `AkteurRechteGenerator` · `WiringGenerator` · `ClientVertragAnalyzer` (`ClientVertrag.cs`) |
-| Gesamtbild | CQRS084–086, 116, 117 · CQRS114 | `GesamtbildAnalyzer` (Query mit mehreren Zielen — R4: ein Reader oder ein Aggregat —, Ausgang ohne Erzeuger, Eingang ohne Konsument, Command ohne Ziel ohne bzw. mit mehreren Empfängern, Funktion in keinem Graphen) · `AusgabeVertragAnalyzer` (Decide gibt einen Command an ein Aggregat aus) |
+| Akteure, Verträge, Clients | CQRS058, 063, 064 · CQRS059 · CQRS093 · CQRS095–097 | `AkteurAnalyzer` · `AkteurRechteGenerator` · `WiringGenerator` · `ClientVertragAnalyzer` (`ClientVertrag.cs`) |
+| Gesamtbild | CQRS084–086, 116, 117 · CQRS114 | `GesamtbildAnalyzer` (Query mit mehreren Zielen — R4: ein Reader oder ein Aggregat —, Ausgang ohne Erzeuger, Eingang ohne Konsument, Command ohne Ziel ohne bzw. mit mehreren Empfängern, Funktion in keinem Graphen) · `AusgabeVertragAnalyzer` (Decide gibt einen Command aus — an ein Aggregat oder ohne Ziel) |
 | Proto | CQRS030 | `DtoMapperSourceGenerator` (Generator-Ausnahme wird lauter Fehler) |
 | Upcasting | CQRS040–042, 044–046 | `EventUpcastingGenerator` |
 | Framework: Hausregel für Actors (R18) | CQRS112/113 | `HausregelAnalyzer` (nur in `Infrastructure`: in Actors und dem, was sie besitzen, keine eigenen Fäden, kein `lock`, kein Feuern und Vergessen, kein `ContinueWith`, kein Blockieren, keine rohe Cluster-API; Ausnahme `[HausregelAusnahme("Begründung")]`, leere Begründung = CQRS113) |
@@ -143,7 +143,7 @@ mit der Karte, an der er hängt, `Infrastructure/Umgebung/BootFehler.cs`):
 | Umgebung angegeben, Abschnitte bekannt, Datenbank gehört der Umgebung | `CqrsUmgebungExtensions`, `UmgebungLader.PruefeAbschnitte`, `UmgebungsSiegel` |
 | jeder Wire-Typ serialisierbar | `WireSerializerBootCheck` |
 | jeder Hörer aus dem Log steht mit jedem gehörten Typ im Weckplan (GR-WECKPLAN) | `Wecker.Pruefe` |
-| Instanzen: Graph bekannt, Knoten-Schlüssel, Akteur ∩ `IDarf`, Graph mit Command-Kopf einmal, Name einer Arbeit frei | `GraphInstanzen.Aus` (`Infrastructure/Funktionen/Graph.cs`) |
+| Instanzen: Graph bekannt, Knoten-Schlüssel, Akteur ∩ `IDarf`, Graph mit Command-Kopf einmal | `GraphInstanzen.Aus` (`Infrastructure/Funktionen/Graph.cs`) |
 | Technik und Konfig-Werte je Knoten (fehlend, mehrdeutig, unbekannt, Kreis) | `BindeTechnik` (`Infrastructure/Funktionen/Technik.cs`) |
 | Akteure der Konfiguration bekannt | `AkteurOptionen.Pruefe` |
 | Store einer Projektion: ein Store, genau eine Klasse, Klasse 3 nur mit Erlaubnis (R14, beim ersten Spawn) | `Projektionslauf.Ziel` (`Infrastructure/Projections/Projektionsnaht.cs`) |

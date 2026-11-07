@@ -6,7 +6,7 @@ dieser Arbeit. Antworte auf Deutsch, in Prosa, ohne Kürzel-Salat. Umgesetzt wir
 
 ## Stand
 
-Schritte 1–5 des Plans sind umgesetzt, auf dem Server geprüft (schnelle Stufe, `--check`, `--sonde` grün) und im Editor abgenommen:
+Schritte 1–6 des Plans sind umgesetzt; 1–5 sind auf dem Server geprüft (schnelle Stufe, `--check`, `--sonde` grün) und im Editor abgenommen:
 
 1. **Drift aufgeräumt** — ein `Auf` nimmt genau eine Nachricht (GR-EINGANG); `BausteinEingang.Ports` und Join-Reste sind weg.
 2. **Kataloge** — Rolle `Katalog` (`<Name>.Katalog`, referenziert nur `Abstractions`/`Core`/andere Kataloge) in `Abstractions/Projektstruktur.cs`,
@@ -22,6 +22,10 @@ Schritte 1–5 des Plans sind umgesetzt, auf dem Server geprüft (schnelle Stufe
    Graph-Actor, Wirker = Knoten); Prüfdomäne mit Katalog `Rechenwerk` und Garantie-Test; Sonde `Funkortung`; im Editor ↦-Karte, „＋ Eingang“
    (Quelle oder Client), „↦ ▣ Command an …“, im Aggregat „＋ Graph, der ihn schickt“, kein „Command ohne Ziel“ unter den Ergebnissen, Picker nur mit
    erstem Knoten. Abgenommen bis zum Bauen; durchgespielt nicht im Editor (lokal kein Postgres), „genau einmal“ belegt der Garantie-Test.
+6. **Bestand umgezogen, Abbau** (2026-11-07) — ein `Decide` gibt nur Events, Hinweise und Fristen aus (CQRS114), einen Command hört kein Akteur
+   (CQRS058); was nach einem Fakt geschieht, stößt ein Client an, der es hört (`Client.Infrastructure/Reaktionen`, `cqrs_client/reaktionen.py`;
+   Beispieldomäne: `ReaktionsWorker` und die Python-Worker, Prüfdomäne: `ReaktionsWorker` mit Akteur `Sachbearbeitung`). Arbeit, Werkstatt,
+   `Umgebung:Hand` und der Reiter „Aufträge“ sind entfernt; offene Eingänge gibt es nur für Commands ohne Ziel von Clients am Kopf eines Graphen.
 
 ## Was entschieden ist (Kurzfassung — Einzelheiten im Plan §1)
 
@@ -37,11 +41,11 @@ Schritte 1–5 des Plans sind umgesetzt, auf dem Server geprüft (schnelle Stufe
 - **Funktionen sind keine virtuellen Actors** (Ort per Konfiguration, `Rechner` in der Instanz; Kette bleibt auf dem Rechner ihres Kopfs).
 - **Alles im Editor**, bei kleiner Code-API: neu im Code sind nur `Uebersetze<TEin, TAus>` und `[Feld]`.
 
-## Nächster Schritt: Schritt 6 (Bestand umziehen und Abbau)
+## Nächster Schritt: Schritt 7 (Fläche und Abnahme)
 
-Steht im Plan: jeder Auftrag aus einem `Decide` wird ein Event, auf das ein Client reagiert; danach Abbau der Arbeit für Akteure und des offenen
-Eingangs aus dem `Decide`, eine Build-Regel „ein `Decide` gibt nur Events, Hinweise und Fristen aus“. Vorher mit Tobi klären: A4 (Anwendungsfunktionen)
-und ob `Bildeingang` Katalogfunktion plus Übersetzung wird.
+Steht im Plan: Picker der Fläche nach A7, die Fläche zeigt die obersten Graphen und ihre Verbindungen; volle Stufe mit `--check`, `--sonde`,
+`--grammatik`, Codegen-Drift und `./pruefe-checkout.sh`; Werkbank-Abnahme; Doku. Mit Tobi zu klären bleibt A4 (Anwendungsfunktionen). Die
+Messungen S3 und S5 brauchen eine neue Baseline, weil ein Client in der Kette liegt (docs/13 VM-2).
 
 ## Schritt 5 (erledigt, zur Einordnung)
 
@@ -95,7 +99,7 @@ an seinen Experimenten etwas änderst.
 - Eine Projektdatei in einer Geste lädt den Arbeitsbereich kalt neu (`Arbeitsbereich.UebernimmAsync`).
 - Ändert sich `domain.proto` (auch durch einen genutzten Katalog — der Codegen nimmt seine Nachrichten mit), müssen die Python-DTOs neu:
   `PATH=/opt/miniconda3/envs/gpu_env/bin:$PATH Domain.Client.Worker.Python.ML/build_python.sh` und `domain_client/generated/__init__.py` samt
-  `.proto_hash` committen — sonst scheitert der Python-Worker am Import (Integrationstest „Der Python-Worker hat die Arbeit … nicht angenommen“).
+  `.proto_hash` committen — sonst scheitert der Python-Worker am Import (Integrationstest „Die Reaktionen des Python-Workers laufen nicht“).
   Der Build erzeugt sie nicht von selbst.
 - Die Ports je Auf im Graph-Modal rechnet der Editor aus der Signatur im Modell (`komGruppen`); die Sicht (`Sicht.Komposition.cs`) blieb flach.
 - Offen aus Schritt 3: neue Zustandsklasse (`IZustand<T>`) im Funktions-Modal, Schalter „lauscht“, `CancellationToken` als Schalter; Technik heißt im

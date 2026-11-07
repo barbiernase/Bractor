@@ -20,9 +20,9 @@
 
 | Projekt (Rolle) | gehört hinein | referenziert |
 |---|---|---|
-| `Domain` | Aggregate (State, Decider, Applier), Commands an Aggregate und die Commands ohne Ziel, die ein Decide abgibt, Events, Hinweise (auch die aus Funktionen), Wertobjekte, Enums; Queries an ein Aggregat und ihre Antworten (`Frage` im Decider — er sieht die Leseseite nicht) | Abstractions, Core |
+| `Domain` | Aggregate (State, Decider, Applier), Commands an Aggregate, Events, Hinweise (auch die aus Funktionen), Wertobjekte, Enums; Queries an ein Aggregat und ihre Antworten (`Frage` im Decider — er sieht die Leseseite nicht) | Abstractions, Core |
 | `Domain.Projections` | ReadModels, Queries an Reader, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reader | Domain |
-| `Domain.Pipeline` | Funktionen (Klassen), Graphen, die Commands, die nur Knoten einander geben, Konfig-Records, Technik und ihre Umsetzungen, Hinweise aus Funktionen | Domain, Domain.Projections, die Kataloge, die die Anwendung nutzt |
+| `Domain.Pipeline` | Funktionen (Klassen), Graphen, die Commands ohne Ziel (Knoten untereinander und an die Köpfe der Graphen, auch die eines Clients), Konfig-Records, Technik und ihre Umsetzungen, Hinweise aus Funktionen | Domain, Domain.Projections, die Kataloge, die die Anwendung nutzt |
 | `Domain.Akteure` | Akteure, Clients | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
 | `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Pipeline |
@@ -61,7 +61,7 @@ Graph verlässt; ein Client nennt nur Akteure.
 |---|---|---|
 | `Domain/<Bereich>/` | `<Aggregat>.cs` | State |
 | | `<Aggregat>.Decider.cs`, `<Aggregat>.Applier.cs` | Decide- und Apply-Methoden |
-| | `Commands.cs`, `Events.cs` | Commands an Aggregate und die Commands ohne Ziel, die ein Decide abgibt; Events und Hinweise (auch die aus Funktionen) |
+| | `Commands.cs`, `Events.cs` | Commands an Aggregate; Events und Hinweise (auch die aus Funktionen) |
 | | `ValueObjects.cs`, `Enums.cs` | Wertobjekte, Enums |
 | | `Queries.cs`, `Responses.cs` | Queries an das Aggregat und ihre Antworten (Primitive `AggregatQuery`/`AggregatAntwort`, erkannt an der `Frage` im Decider) |
 | `Domain.Projections/<Bereich>/` | `ReadModels.cs`, `Queries.cs`, `Responses.cs` | Read-Models, Queries, Antworten |
@@ -70,7 +70,7 @@ Graph verlässt; ein Client nennt nur Akteure.
 | `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure (`record … : IAkteur`); Clients (`record … : IClient`) |
 | `Domain.Pipeline/<Bereich>/` | `<Funktion>.cs` | je Funktion eine Datei (Primitive `Funktion`, eine Klasse mit Rumpf) |
 | | `Graphen.cs` | Graphen (Primitive `Graph`, `record … : IGraph`) |
-| | `Commands.cs` | Commands ohne Ziel, die nur Knoten einander geben — kein Decide gibt sie ab (Primitive `KnotenCommand`) |
+| | `Commands.cs` | Commands ohne Ziel — an Knoten oder den Kopf eines Graphen, kein Decide gibt sie ab (Primitive `KnotenCommand`) |
 | | `Konfigs.cs` | Konfig-Records |
 | | `<Technik>.cs` | je Technik (Schnittstelle oder Klasse im Konstruktor einer Funktion) und je Umsetzung eine Datei (Primitive `Technik`) |
 | `Domain.Infrastructure/<Bereich>/` | `<Store>.cs`, `<Store>.Lesen.cs` | Store-Implementierung (Schreib- und Leseteil) |
@@ -94,8 +94,8 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 | `--check` (Bereich „Lage“) | Rollen-Projekte, Referenzrichtung, Codegen-Referenzen, je Typ Projekt, Ordner, Namespace und Datei | `GraphExtractor.Kern/Lagepruefung.cs` |
 | `--sonde` | die fremde Sonden-Domäne liegt absichtlich in einem Projekt: die Lage-Prüfung muss jeden ihrer Typen ins Projekt seiner Rolle weisen (`soll.txt`, `lage …`) | `GraphExtractor.Kern/Sonde.cs` |
 
-WAS ein Typ ist (die Primitive), bestimmt `Domain.SourceGeneration/Lageart.cs` nur aus Markern und Signaturen: ein Command ohne Ziel ist ein
-`Command` der Schreibseite, wenn ein Decide ihn in seiner Signatur abgibt, sonst ein `KnotenCommand`; eine Klasse mit `IFunktion` ist eine Funktion,
+WAS ein Typ ist (die Primitive), bestimmt `Domain.SourceGeneration/Lageart.cs` nur aus Markern und Signaturen: ein Command ohne Ziel ist immer
+ein `KnotenCommand` und liegt bei den Abläufen (ein Decide gibt keinen aus, CQRS114); eine Klasse mit `IFunktion` ist eine Funktion,
 ein Record mit `IGraph` ein Graph; Technik und Konfig-Records folgen aus den Konstruktoren der Funktionen und ihrer Umsetzungen (gelesen über
 `Infrastructure.SourceGeneration/Funktionsform.cs`, dieselbe Lesart wie Generator und Extractor), Fähigkeiten aus dem Bündel — dieselbe Lesart für
 Analyzer und `--check`.

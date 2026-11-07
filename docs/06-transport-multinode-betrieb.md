@@ -1,6 +1,6 @@
 # 06 — Transport, Multi-Node & Betrieb
 
-Stand 2026-11-02, gegen den Code geprüft.
+Stand 2026-11-07, gegen den Code geprüft.
 
 Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses Kapitel verweisen.
 
@@ -11,7 +11,7 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
 | **Host.Grpc** | der einzige Cluster-tragende Prozess: Marten + ActorSystem (Einzelknoten oder Consul) + gRPC + Einblick-Port |
 | **Host.Blazor** | Beispiel-GUI der Beispieldomäne, ein gRPC-**Client** (`Arbeitsplatz`; kein ActorSystem, kein Cluster); Verbindung aus `Clients:<Name>` der Umgebung (Kapitel [08](08-frontend-blazor-client.md)) |
 | **Werkbank** | Entwurfs-Oberfläche (`dotnet run --project Werkbank`); startet den Host als eigenen Prozess (`HostProzess`), **nur in einer Sim-Umgebung** — bei Prod endet ⟳ nach dem Lesen (CLAUDE.md W6) |
-| **Python-Clients** | ein Client, der Akteure mit Arbeit verkörpert (`KlassifikationsWorker`, `TrainingsWorker`); meldet sich wie jeder Client am gRPC-Port an (Token, das einen seiner Akteure nennt), nimmt die Arbeit seiner Akteure an (`ArbeitAnnehmen`) und wird ein Arbeiter in der Werkstatt seines Knotens. Gestartet über „▶ Worker“ der Werkbank (`Werkbank/Server/Worker.cs`, aus `Clients:<Name>:Worker`) oder von Hand (Kapitel [09](09-python-sdk.md)) |
+| **Worker-Clients** | ein Client, der auf Fakten reagiert (Python: `KlassifikationsWorker`, `TrainingsWorker`; .NET: `ReaktionsWorker`); meldet sich wie jeder Client am gRPC-Port an (Token, das einen seiner Akteure nennt), liest das Log ab seiner gesicherten Position und gibt die Commands seines `IDarf` hinein (docs/konzept-akteure.md §5). Gestartet über „▶ Worker“ der Werkbank (`Werkbank/Server/Worker.cs`, aus `Clients:<Name>:Worker`: Skript oder .NET-`Projekt`) oder als eigener Prozess (Kapitel [09](09-python-sdk.md)) |
 
 ### Host.Grpc-Bootstrap (`Host.Grpc/Program.cs`)
 
@@ -25,8 +25,7 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
   `cqrs_sim_${branch}`.
 - **`AddCqrs`** (`Infrastructure/Umgebung/CqrsUmgebungExtensions.cs`) bindet der Reihe nach: Kestrel (gRPC-Port HTTP/2; Einblick-Port
   HTTP/1.1+2, 0 = aus), Umgebungs-Siegel, `AddCqrsFramework` (Werte aus der Umgebung), `IDbClock` mit Versatz, Projektions-Stand,
-  Pull-Pfade, Monitoring, Fristen, Akteure (`Identitaeten`), die Instanzen der Graphen (`BindeGraphen`, dazu die Arbeit der Akteure und
-  `Umgebung:Hand`), Technik und Konfig-Werte je Knoten (`BindeTechnik`), Einblick.
+  Pull-Pfade, Monitoring, Fristen, Akteure (`Identitaeten`), die Instanzen der Graphen (`BindeGraphen`), Technik und Konfig-Werte je Knoten (`BindeTechnik`), Einblick.
 - **`LaufeAsync`** mappt gRPC (`CqrsClientService`, bidirektionaler Stream `Connect`), Monitoring, Einblick und den JSON-Eingang samt Webhooks
   (§6.6). Mit Rolle `Migrator` legt es nur das Schema an und endet (§6.3).
 - **Umgebungs-Siegel** (`<schema>.umgebung`): ein Host startet nur gegen eine DB mit passendem Namen, passender Art und passendem Cluster-Namen;
@@ -86,7 +85,7 @@ serialisierbar; (b) jeder Command/Event/Trigger aus `GeneratedTypeRegistry` hat 
 
 **Clients: Sitzung und Verteiler** (docs/konzept-akteure.md §5). Je gRPC-Verbindung ist die Sitzung ein Actor (`SitzungsActor`), der
 einzige Schreiber auf den Antwort-Stream; die Lese-Schleife der Verbindung reicht jede Nachricht des Clients nur weiter, was wartet (Query,
-Antwort auf Arbeit) läuft neben der Mailbox. Ihre Id nennt den Knoten
+offener Eingang am Kopf) läuft neben der Mailbox. Ihre Id nennt den Knoten
 (`<Adresse>#<Nummer>`). Nach dem Handshake meldet sie ihre wirksame Hör-Liste (was die verkörperten Akteure ∩ Token hören) beim **Verteiler** ihres Knotens an — einem lokalen
 Actor mit festem Namen `verteiler`, der Typ → Sitzungen hält und jede Sitzung beobachtet (`Watch`). Ein Commit geht als EINE Nachricht
 (`Verteile`) an den Verteiler jedes Knotens (Mitgliederliste, `Bote.MeldeAnKnoten`), nur mit Typen, die irgendein Client hören darf; gezielte
@@ -141,11 +140,11 @@ Für Nutzer ist eine Umgebung **ein Ordner**: `umgebungen/<name>/umgebung.json` 
 Abschnitte und Felder sind Typen in `Abstractions/Umgebung/UmgebungKonfig.cs` — **sie sind das Schema** (eine Quelle; die Werkbank rendert daraus
 das Formular):
 
-- **Backend:** `Umgebung` (Name, Art `Sim`/`Prod`, `Python`, `Hand` — die Akteure, deren Arbeit die Werkbank von Hand beantwortet), `EventStore`, `Cluster`
+- **Backend:** `Umgebung` (Name, Art `Sim`/`Prod`, `Python`), `EventStore`, `Cluster`
   (Art, Name, Consul, AdvertisedHost, Rolle), `Schreibpfad` (generiertes JSON, Group-Commit, Batch, Linger, Drain, Snapshot-Schwelle,
   Inbox-Grenze), `Lebenszyklus` (Leerlauf bis zur Passivierung je Actor-Art), `Konsum` (Partitionen, Seitengröße und Takt je Partition des Batch-Konsums), `Transport` (gRPC-Port, Einblick-Port, JSON-Eingang).
 - **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Clients` (je Client Token, Adresse, Urls,
-  Dateien und `Worker` — wie die Werkbank ihn als Prozess startet: Skript, Argumente, Interpreter), `Stores`, `Logging`.
+  Dateien und `Worker` — wie die Werkbank ihn als Prozess startet: Skript, Argumente, Interpreter oder ein .NET-`Projekt`), `Stores`, `Logging`.
 - **Die Instanzen** (`graphen/<instanz>.json`, `GraphInstanzKonfig`): `Graph`, bei einem Quellkopf `Akteur`, je Knoten (Pfad bei inneren Graphen,
   `Aufbereitung.Verkleinern`) `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik` (Schnittstelle → Umsetzung) und die
   Felder seiner Konfig-Records ([04](04-konsum-und-prozess-maschine.md) §4.4). Ohne Datei läuft ein Graph nicht; ein Graph mit Command-Kopf läuft
@@ -181,9 +180,9 @@ Beide Endpunkte sind ohne Port-Bindung gemappt; per HTTP/1.1 erreichbar sind sie
 **Am Einblick-Port** (nur dort, `RequireHost`):
 - **Einblick-API** `/einblick/*` (`Infrastructure/Einblick/EinblickEndpunkte.cs`): `stand`, `spur?ab=`, `vorgaenge`, `vorgang/{k}`,
   `auftraege`, `hinweise`, SSE `neu` — die Spur aus den Log-Headern (docs/04 §4.9).
-- **JSON-Eingang** `/eingang/*` (`Infrastructure/Eingang/JsonEingang.cs`): `command`, `query`, `rechte`, `auftraege`, `ergebnis`, `webhook/<Pfad>` —
+- **JSON-Eingang** `/eingang/*` (`Infrastructure/Eingang/JsonEingang.cs`): `command`, `query`, `rechte`, `webhook/<Pfad>` —
   Commands und Queries als Akteur (Header `akteur-token` → Akteur-Tor; ein Command ohne Ziel wird ein offener Eingang am Kopf der Instanz, die ihn
-  nimmt), die Arbeit der Akteure unter `Umgebung:Hand` und ihre Antworten, Aufrufe an einen `Webhook` (Postfach seines Pfads, Kopf `kennung` vom
+  nimmt), Aufrufe an einen `Webhook` (Postfach seines Pfads, Kopf `kennung` vom
   Absender, Antwort `202 {kennung}`, voll `503`; docs/04 §4.7). Nur mit `Transport:JsonEingang` (Sim an, Prod aus; CLAUDE.md W6).
 
 Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).

@@ -1,13 +1,13 @@
 # Plan: Funktionskatalog, Übersetzung und die Modale für Funktion und Graph
 
-Stand 2026-11-05, **Schritte 1–5 umgesetzt** (5 im Editor abgenommen bis zum Bauen, siehe dort), der Rest ist Plan; §1 „Wer Funktionen anstößt“ geht allem Folgenden vor. Er fasst die Diskussion vom 2026-11-04/05 zusammen. Umgesetzt wird schrittweise,
+Stand 2026-11-07, **Schritte 1–6 umgesetzt** (5 im Editor abgenommen bis zum Bauen, siehe dort), der Rest ist Plan; §1 „Wer Funktionen anstößt“ geht allem Folgenden vor. Er fasst die Diskussion vom 2026-11-04/05 zusammen. Umgesetzt wird schrittweise,
 je Schritt auf Tobis Wort (E5). Jeder Schritt baut für sich, lässt alle Suiten grün und liefert seinen Teil im Editor gleich mit (§1.1).
 
 ## 1. Was entschieden ist
 
 **Wer Funktionen anstößt (2026-11-05, nach Schritt 4 — geht allem Folgenden vor).** Nur **Clients** (ein Akteur mit `IDarf<T>`) und **Quellen**
 (Dateiwächter, Taktgeber, Webhook, eigene, die lauschen) stoßen Funktionen an. Ein `Decide` übersetzt einen Command in Events (dazu Hinweise und
-Fristen) — sonst nichts; dass seine Signatur auch einen Command ohne Ziel ausgeben könnte, bildet der Editor nicht ab. Es gibt **keine Arbeit für
+Fristen) — sonst nichts; einen Command in seiner Signatur meldet der Build (CQRS114). Es gibt **keine Arbeit für
 Akteure** aus einem `Decide`, **keine Ereignisquelle**, keinen neuen Knotentyp dafür. Wir haben Eventual Consistency: der Client sieht den Stand über
 die Projektionen (Push „aktualisiert“, er fragt neu); was nach einem Fakt weitergehen soll, stößt der Client an. Der Weg ist immer:
 
@@ -29,15 +29,14 @@ kennt keine Funktionsnachricht    Funktionen + ihre Nachrichten, kennt nur Abstr
 - Ein **Katalog** ist ein eigenes Projekt, das nur `Abstractions` referenziert und in mehreren Anwendungen verwendet wird. Es enthält
   Funktionen, ihre Nachrichten (Commands ohne Ziel, Hinweise), Konfig-Records und Technik. Den Code einer Katalogfunktion fasst eine Anwendung
   nie an. `Core/Katalog` (Dateiwächter, Taktgeber, Webhook) ist der Katalog des Frameworks.
-- Die **Domäne** spricht nur ihre eigene Sprache. Ein `Decide` gibt einen eigenen Auftrag aus (Command ohne Ziel bei der Schreibseite) und weiß
-  nicht, wer ihn bearbeitet.
+- Die **Domäne** spricht nur ihre eigene Sprache. Ein `Decide` gibt nur Fakten aus und weiß nicht, wer darauf reagiert.
 - Die **Anwendung** komponiert je Setting einen Graphen. Nur sie kennt beide Seiten, und an den Grenzen stehen Übersetzungen.
 
 **Die Übersetzung ist ein Knoten des Frameworks, kein Code des Modellierers.**
 
 ```csharp
 public sealed record Trainingslauf(
-    [Kopf] Uebersetze<TrainingZuRechnen, Vorverarbeite> Hinein,
+    [Kopf] Uebersetze<ZuTrainieren, Vorverarbeite> Hinein,                                         // Skizze: ein Client gibt es auf TrainingAngefordert
     [Von(nameof(Hinein))] Vorverarbeitung Vorverarbeiten,                                          // Katalog: OneOf<Vorverarbeitet, NichtVorverarbeitbar>
     [Von(nameof(Vorverarbeiten))] Uebersetze<Vorverarbeitet, VermerkeVorverarbeitung> Zwischenstand,
     [Von(nameof(Vorverarbeiten))] Uebersetze<NichtVorverarbeitbar, VerwirfTraining> Absage,
@@ -234,7 +233,7 @@ bis zum Host. Nicht im Editor durchgespielt (lokal kein Postgres); „genau einm
 **Fertig, wenn** im Editor ein Client-Eingang → Katalogfunktion → Ausgangs-Übersetzung → Command an ein Aggregat vollständig entsteht, baut, durchgespielt
 (Konsole „als Akteur“) genau einmal schreibt und Garantie-Suite und schnelle Stufe grün sind.
 
-### Schritt 6 — Bestand umziehen und Abbau
+### Schritt 6 — Bestand umziehen und Abbau ✓ (Stand 2026-11-07, Abbau 8aaf988a)
 
 **Stand 2026-11-07:** die Beispieldomäne ist umgezogen — kein `Decide` gibt dort einen Auftrag aus. Die Bildaufbereitung ist ein Katalog
 (`Bildvorschau.Katalog`), der Linienimport übersetzt sein Ergebnis (`BildGedeutet` ↦ `NimmBildAuf`). Auf die Fakten reagieren Clients: der
@@ -242,9 +241,10 @@ bis zum Host. Nicht im Editor durchgespielt (lokal kein Postgres); „genau einm
 Training auf `TrainingAngefordert`, Abbruch über den Stand des Laufs). Dazu: die Command-Hülle trägt die Ursache (die Spur bleibt über eine
 Reaktion lückenlos, ein Vorgang folgt ihr), die Log-Seite den Horizont (ein Client liest nach einer neuen Datenbank von vorn). Die Prüfdomäne
 ebenso: sie hat eine Leitung, ihr `ReaktionsWorker` (Akteur `Sachbearbeitung`) gibt auf jedes Fakt den Command an den Kopf seines Graphen, der
-Eingang trägt das Fakt als Herkunft (wie früher die Folge eines Decide); eine große Rechnung legt der Freigabeautomat dem Rechnungsprüfer vor.
-Prüfstände lassen den Worker neben dem Host laufen. Offen: der Abbau (Arbeit, Werkstatt, Hand, „Aufträge“, Eingänge aus dem Decide) mit der
-Build-Regel.
+Eingang trägt das Fakt als Herkunft; eine große Rechnung legt der Freigabeautomat dem Rechnungsprüfer vor.
+Prüfstände lassen den Worker neben dem Host laufen. Der Abbau ist erledigt: Arbeit für Akteure, Werkstatt, `Umgebung:Hand`, der Reiter „Aufträge“
+und der offene Eingang aus dem `Decide` sind entfernt; CQRS114 meldet jeden Command in der Signatur eines `Decide`, CQRS058 einen gehörten Command.
+Offene Eingänge (`cqrs_eingaenge`) gibt es nur noch für Commands ohne Ziel von Clients am Kopf eines Graphen.
 
 - Jeder Auftrag aus einem `Decide` wird ein Event, auf das ein Client reagiert: `PaarZuBeurteilen`, `TrainingZuRechnen`, `RangeAufzuloesen`,
   `EinfrierenAbzuschliessen`, `TeilFertig`, `AuftragAbzuwickeln` samt Gegenzügen, `Zubuchen` (Beispiel- und Prüfdomäne, Sonde).

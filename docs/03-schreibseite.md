@@ -1,6 +1,6 @@
 # 03 — Die Schreibseite (Command → Decider → Event → Store)
 
-Stand 2026-11-02, gegen den Code geprüft. Die Grammatik (wie man Aggregat, Command, Event schreibt) steht in [10](10-entwickler-api.md).
+Stand 2026-11-07, gegen den Code geprüft. Die Grammatik (wie man Aggregat, Command, Event schreibt) steht in [10](10-entwickler-api.md).
 
 Der Schreibpfad ist das dichte Zentrum des Frameworks. `AggregateActorBase`
 (`Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs`) trägt fast alle Invarianten und Audit-Fixes und ist ausführlich
@@ -30,10 +30,11 @@ kommentiert. Die Schalter des Schreibpfads stehen für Nutzer in der Umgebungs-D
   (§3.6), at-least-once auf dem Draht; Akteur der Kette und Spur (`Ursache`, `Wirker`) reisen im Envelope. Andere Wege sind per Analyzer
   verboten (CQRS020/021; CQRS020 erkennt auch `FrageAsync<CommandResult>`).
 
-Ins Log schreiben nur Aggregate. Ein Command **ohne Ziel** (`ICommand` ohne Typargument) geht nie an einen Aggregat-Actor: aus einem Decide wird
-er ein offener Eingang (§3.2), von einem Akteur nimmt ihn der JSON-Eingang an (`/eingang/command`, ein offener Eingang am Kopf der Instanz, die
-ihn nimmt, Kennung aus Command-Id und Instanz — [04](04-konsum-und-prozess-maschine.md) §4.4). Über die gRPC-Leitung gehen nur Commands an
-Aggregate (docs/13).
+Ins Log schreiben nur Aggregate. Ein Command **ohne Ziel** (`ICommand` ohne Typargument) geht nie an einen Aggregat-Actor: von einem Client nimmt
+ihn die Sitzung (`SitzungsActor.AnKopfAsync`) bzw. der JSON-Eingang (`/eingang/command`) an — je Instanz, deren Graph ihn am Kopf nimmt, ein
+**offener Eingang** (Tabelle `cqrs_eingaenge`, Kennung aus Command-Id und Instanz, `Eingangsvertrag`; wer wiederholt, schickt dieselbe Command-Id
+und legt keinen zweiten), der Zusteller bringt ihn hin ([04](04-konsum-und-prozess-maschine.md) §4.4). Nennt die Hülle ein Fakt als `ursache`
+(`Stream:Version`, eine Reaktion des Clients), ist es die Herkunft des Eingangs: die Kette und ihre Commands tragen das Fakt als Ursache.
 
 **(b) Routing — Dispatcher zu Cluster-Identität.**
 Das Ziel eines Commands steht in seinem Typ: `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (docs/10 §10.4). Die Framework-Sicht ist `IAggregatCommand.Ziel` (die Stream-Id), der `CommandEnvelope` leitet seine `AggregateId` daraus ab — keine zweite Angabe.
@@ -178,17 +179,13 @@ public partial class Leihvorgang : IState
 sowie `Id`/`Version` (`StateGenerator`) sind generiert. OCC, Weckruf, Cursor, Idempotenz und Spur erscheinen ausschließlich im Framework.
 Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hält die Inbox-Tabelle des Stores.
 
-**Was ein Decide ausgibt.** Events, eine Ablehnung (ein Hinweis), eine Frist und **Commands ohne Ziel** — nie einen Command an ein Aggregat
-(CQRS114): Aggregate reden nur über Graphen oder Akteure miteinander. Beispiel aus der Prüfdomäne:
-`IEnumerable<OneOf<PostenReserviert, Unterschritten, ReservierungAbgelehnt, PostenNichtGefunden>> Decide(ReservierePosten c)` mit
-`record Unterschritten(Id<Posten> Posten, int Fehlmenge) : ICommand` in `Commands.cs` der Schreibseite. Den Empfänger nennt der Command nicht: es
-ist der Kopf genau eines Graphen, der ihn nimmt (hier der Nachschub), oder ein Akteur, der ihn als Arbeit hört (CQRS116; im Bestand hat kein Akteur mehr Arbeit, Schritt 6). Er geht nicht ins Log und zählt nicht in der Version; je Empfänger — die Instanz, deren Graph ihn am Kopf nimmt, bzw. die Instanz der
-Arbeit des Akteurs — legt die Entscheidung in derselben Transaktion einen **offenen Eingang** (Beilage `EingangOffen`, Tabelle `cqrs_eingaenge`,
-§3.3), auch bei einer Entscheidung ohne Events (dann mit der Quittung und der Kopf-Prüfung). Die Kennung ist abgeleitet aus Command-Id, Stelle
-unter den Ausgaben und Instanz (`Eingangsvertrag`, `Folgenbeilagen`): ein wiederholter Command legt keinen zweiten Eingang. Seine Herkunft ist der
-Stand nach der Entscheidung (Stream, Version, Log-Zeit des Commits, Akteur, Korrelation). Nach dem Commit geht jeder Eingang auf dem schnellen Weg
-an seine Instanz, der Zusteller ist das Netz (docs/04 §4.4). Eine Ablehnung bleibt die einzige Ausgabe — mit einem Command zusammen ist sie ein
-Fehler. Welche Köpfe einen Typ nehmen, sagt die Tabelle der Köpfe aus den Graphen und Instanzen (`Verkettung`). Einträge des Rahmens
+**Was ein Decide ausgibt.** Nur Events, Hinweise (eine Ablehnung ist einer) und Fristen — keinen Command, weder an ein Aggregat noch ohne Ziel
+(CQRS114: „ein Decide gibt nur Events, Hinweise und Fristen aus“; zur Laufzeit wirft `Entscheidungsausgabe.NurEvents` bei allem anderen). Was nach
+einem Fakt weitergeht, stößt ein Client an, der es hört (docs/konzept-akteure.md §5): Aggregate reden nur über Graphen und solche Reaktionen
+miteinander. Beispiel aus der Prüfdomäne:
+`IEnumerable<OneOf<PostenReserviert, ReservierungAbgelehnt, PostenNichtGefunden>> Decide(ReservierePosten c)`; liegt der Bestand danach unter dem
+Mindestbestand, trägt `PostenReserviert` die Fehlmenge, und der `ReaktionsWorker` der Prüfdomäne gibt `Unterschritten` an den Kopf des
+Nachschubs. Eine Ablehnung bleibt die einzige Ausgabe. Einträge des Rahmens
 (`IRahmenEvent`, heute nur `FristGesetzt`) werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie. Command → Aggregat folgt aus
 `ICommand<TAggregat>`, nicht aus Namespaces; das Decide muss im Ziel-Aggregat stehen (CQRS010), ein Command ohne typisiertes Ziel baut nicht
 (CQRS013, `CommandAggregateMapGenerator`, `ModellAnalyzer`).
@@ -203,9 +200,8 @@ Fehler. Welche Köpfe einen Typ nehmen, sagt die Tabelle der Köpfe aus den Grap
   mit `nextval` im Insert. Der Standard (`Rich`) las vorher außerhalb der Transaktion je Stream die Version, holte die Sequenzen ab und
   hinterließ bei einem gescheiterten Commit Tombstones (G-7).
 - **Beilagen** (`Abstractions/Beilage.cs`, `BeilagenSchreiber`): Framework-Buchhaltung, die ein Append in derselben Transaktion mitschreibt —
-  `Quittung` (Inbox, unten), `FristFaellig` (Eintrag im Fälligkeits-Verzeichnis der Uhr, mit `FristGesetzt`,
-  [04 §4.7](04-konsum-und-prozess-maschine.md)), `EingangOffen` (ein offener Eingang am Kopf einer Instanz aus einem Command ohne Ziel, §3.2:
-  Zeile in `cqrs_eingaenge`, `on conflict do nothing`). Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
+  `Quittung` (Inbox, unten) und `FristFaellig` (Eintrag im Fälligkeits-Verzeichnis der Uhr, mit `FristGesetzt`,
+  [04 §4.7](04-konsum-und-prozess-maschine.md)). Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
   gehen in eine Anweisung, die Dokumente als Operationen derselben Session.
 - **Inbox** (`InboxTabelle`): Tabelle `cqrs_inbox` im Event-Schema (`command_id` Primärschlüssel, `stream_id`, `abgelehnt`, `zeit` =
   `now()` der schreibenden Transaktion, B-Baum auf `zeit`), ein von Marten verwaltetes Schema-Objekt (`Storage.ExtendedSchemaObjects`).

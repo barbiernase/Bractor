@@ -335,8 +335,8 @@ public sealed class SitzungsActor : RahmenActor
         var kennung = Guid.TryParse(dto.CommandId, out var id) ? id : Guid.NewGuid();
         var wer = akteur?.AkteurFuer(typ) ?? AkteurHerkunft.EindeutigerHalter(typ);
         var korrelation = string.IsNullOrEmpty(dto.CorrelationId) ? kennung.ToString() : dto.CorrelationId;
-        // Reagiert der Client auf ein Fakt (die Hülle nennt es als Ursache), ist es die Herkunft des Eingangs — wie bei einer Folge aus einem
-        //   Decide: die Kette und ihre Commands tragen das Fakt als Ursache. Sonst ist die Kennung der Stream, ohne Vorgänger im Log.
+        // Reagiert der Client auf ein Fakt (die Hülle nennt es als Ursache), ist es die Herkunft des Eingangs: die Kette und
+        //   ihre Commands tragen das Fakt als Ursache. Sonst ist die Kennung der Stream, ohne Vorgänger im Log.
         var (stream, version) = Spur.ZerlegeUrsache(dto.Ursache, out var s, out var v) ? (s, (int)v) : (kennung, 0);
         var eingaenge = Infrastructure.Eingaenge.Folgenbeilagen.VonAkteur(command, koepfe, kennung, wer, korrelation, version);
         if (eingaenge.Count == 0)

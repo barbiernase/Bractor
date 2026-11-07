@@ -1,6 +1,6 @@
 # 04 — Konsum, Funktionen und Uhr
 
-Stand 2026-11-02, gegen den Code geprüft. Wie man Projektion, Reader, Funktion, Graph und Quelle schreibt, steht in [10](10-entwickler-api.md).
+Stand 2026-11-07, gegen den Code geprüft. Wie man Projektion, Reader, Funktion, Graph und Quelle schreibt, steht in [10](10-entwickler-api.md).
 
 Durabler Konsument des Logs ist nur die **Projektion**: sie schreibt ein Read-Model (replaybar); der Wecker am Commit weckt schnell, der Takt je
 Partition heilt verlorene Weckrufe, gelesen wird geordnet aus dem Event-Store (Invariante 1), der Fortschritt liegt durabel im Store. Gerechnet
@@ -262,10 +262,10 @@ Funktion oder ein anderer Graph), die Reihenfolge bedeutet nichts. Dieselbe Funk
 desselben Graphen, von denen er bekommt; eine genannte Quelle speist die Ports, deren Typ sie ausgibt, und mindestens einen. Jedes Argument ist
 `nameof` eines anderen Parameters (kein String-Literal, nicht der Knoten selbst, kein Name doppelt), ein Umbenennen zieht der Compiler nach. Aus
 Typen allein entsteht innen keine Kante: ein neuer Knoten bekommt nichts, was er nicht nennt, und eine Kette gleichen Typs (`Bild → Bild → Bild`)
-ist kein Kreis. Ein **Kopf** trägt `[Kopf]` und nimmt von außen (aus einem Decide, von einem Akteur, vom Ausgang eines anderen Graphen), was keine
+ist kein Kreis. Ein **Kopf** trägt `[Kopf]` und nimmt von außen (von einem Client, vom Ausgang eines anderen Graphen), was keine
 genannte Quelle speist — je Eingangstyp genau einer; ein Knoten kann beides tragen (ein `Auf` von außen, eines von innen). Jeder Knoten trägt
 `[Kopf]`, `[Von]` oder beides; nur eine Quelle trägt keins, sie ist der einzige Kopf ihres Graphen. Was ein Knoten ausgibt und kein Knoten über `Von`
-von ihm nimmt, verlässt den Graphen — als Command an ein Aggregat, an den Kopf eines anderen Graphen oder an einen Akteur (zwischen den Bausteinen
+von ihm nimmt, verlässt den Graphen — als Command an ein Aggregat oder an den Kopf eines anderen Graphen (zwischen den Bausteinen
 bleibt es beim Typ-Routing mit genau einem Empfänger, Invariante 3), als Hinweis an die Akteure, die ihn hören. Ein Graph ist kreisfrei über seine Knoten (einen Command an den eigenen Kopf darf er geben — das ist eine
 neue Kette). Seine **Signatur** ergibt sich (Eingänge = Köpfe, Ausgänge = was ihn verlässt), deshalb ist ein Graph als Knoten in einem anderen eine
 Schachtel: `Von` an ihm speist seine Köpfe, `[Kopf]` an ihm macht seine Köpfe zu Köpfen des äußeren, `Von(nameof(Schachtel))` an einem anderen
@@ -343,8 +343,8 @@ sofort. Haltbar ist allein der Kopf: fehlt sein „fertig“ (Absturz, Umzug), k
 eines Aufrufs aus der Kennung seiner Nachricht, dem Ort (`instanz/knoten`) und der Operation (`Kettenvertrag.Aufruf`); die Nachricht, die er an
 Knoten desselben Graphen gibt, aus Aufruf, Ort und Stelle (`Kettenvertrag.Weiter`); die Command-Id aus Aufruf, Stelle, Typ und Ziel
 (`Kettenvertrag.Befehl`; die Stelle zählt über den ganzen Aufruf, auch Ausgaben auf Antworten). Am Kopf ist die Nachricht der Eingang, bei einer
-Quelle Instanz und laufende Nummer. Neue Aggregat-Ids leitet die Funktion über `h.NeueId<T>(zweck)` ab (R13). `Herkunft` nennt nach einem Decide
-Stream, Version und Log-Zeit, aus einer Quelle ihre Instanz, Nummer und Zeit, dazu den Akteur der Kette.
+Quelle Instanz und laufende Nummer. Neue Aggregat-Ids leitet die Funktion über `h.NeueId<T>(zweck)` ab (R13). `Herkunft` nennt bei einem Eingang
+eines Clients, der auf ein Fakt reagiert, dessen Stream und Version, aus einer Quelle ihre Instanz, Nummer und Zeit, dazu den Akteur der Kette.
 
 **Fehler und Rückstau.** Das `Zeitlimit` eines Knotens begrenzt eine Rechnung (danach gilt sie als gescheitert). Wirft ein Knoten, rechnet ihn der
 Parent bis `Wiederholungen` erneut; danach antwortet er „gescheitert“, das über die gesicherten Kanten bis zum Kopf reicht: der durable Kopf wird
@@ -356,19 +356,18 @@ seine `Warteschlange` erlaubt, antwortet er „später“; der Absender schickt 
 Actor), darunter je Instanz einen **Graph-Actor** `funktionen/<instanz>` — den Halter ihrer Schritte und ihren Kopf — und darunter je Knoten einen
 **Parent** `funktionen/<instanz>/<knoten>` mit Kindern bis `Parallel`. Die Adresse eines Schritts folgt aus Instanz, Knotenpfad und Rechner; die
 Aufrufe einer Kette bleiben auf dem Rechner, der ihren Kopf annahm (Parent an Parent, ohne Netz). Ob ein Cluster-Knoten eine Instanz **hält**
-(Eingänge an sie bekommt), meldet die Wurzel im Gossip-Zustand (`FunktionsOrte`): sofort — außer eine Funktion ihrer Knoten rechnet draußen (dann
-erst, wenn sich hier für jede ein Arbeiter gemeldet hat). Eine Instanz, die einen **Rechner** nennt, legt nur der Host mit diesem
-`Cluster:Rechner` an (`EigenerRechner`); jeder Host meldet seinen Namen im Gossip-Zustand, und tragen zwei denselben, hält nur das Mitglied mit
-der kleineren Id die festgelegten Instanzen (der andere meldet den Fehler). Die **Wege** (`FunktionsWege`) schicken einen Eingang an den eigenen
+(Eingänge an sie bekommt), meldet die Wurzel sofort im Gossip-Zustand (`FunktionsOrte`). Eine Instanz, die einen **Rechner** nennt, legt nur der Host
+mit diesem `Cluster:Rechner` an (`EigenerRechner`); jeder Host meldet seinen Namen im Gossip-Zustand, und tragen zwei denselben, hält nur das Mitglied
+mit der kleineren Id die festgelegten Instanzen (der andere meldet den Fehler). Die **Wege** (`FunktionsWege`) schicken einen Eingang an den eigenen
 Knoten, wenn er die Instanz hält, sonst reihum an einen, der sie hält (`Bote.FrageAnKnotenAsync`). Der Graph-Actor erkennt einen doppelten Kopf an der
 Kennung (in Arbeit: er hängt sich an; fertig: sofort „fertig“, Gedächtnis 10 000); sind schon so viele Ketten offen, wie die Warteschlange des Kopfs
 erlaubt, heißt die Antwort „später“. Der Parent erkennt einen doppelten Aufruf ebenso an seiner Kennung. Ein **Kind** rechnet einen Aufruf zugleich
 und bringt jede Ausgabe hinaus: einen Command an ein Aggregat der Reihe nach über den Emitter (§4.6; „unbekannt“ → derselbe Command erneut, bis acht
 Versuche) — die **Antwort** trägt die Events, die das Ziel entschied (`CommandResult.Antwort`, auch bei einer erkannten Wiederholung), und hört die
 Funktion einen dieser Typen, rechnet das Kind ihn gleich weiter (Kennung `Kettenvertrag.Antwort`); einen Command ohne Ziel an einen Knoten desselben
-Graphen im Ergebnis an seinen Parent, der ihn nach der Wegtabelle weitergibt; einen an den Kopf einer anderen Instanz (auch die Arbeit eines
-Akteurs) dorthin, und es wartet, bis deren Kette fertig ist („später“ oder 60 s ohne Antwort → erneut, mit derselben Kennung); einen Hinweis
-verlierbar an die Verteiler. Reihenfolge nur bei `Parallel` 1.
+Graphen im Ergebnis an seinen Parent, der ihn nach der Wegtabelle weitergibt; einen an den Kopf einer anderen Instanz dorthin, und es wartet, bis
+deren Kette fertig ist („später“ oder 60 s ohne Antwort → erneut, mit derselben Kennung); einen Hinweis verlierbar an die Verteiler. Reihenfolge nur
+bei `Parallel` 1.
 
 **Aktivierung** (`FunktionsAktivierung`, eine je Kind): ein eigener DI-Bereich, darin die Umsetzung über ihre generierte Fabrik und ihre Technik
 (`GeneratedTechnik`; Konfig-Records und Technik-Wahl liest der Bereich aus dem Knoten der Instanz, `KnotenBereich`). Technik lädt beim ersten Aufruf;
@@ -391,27 +390,15 @@ public sealed class Zaehlwerk(IZustand<Zaehlstand> stand) : IZaehlwerk { … }  
 ```
 Zustand in Feldern oder Eigenschaften verbietet CQRS105 (R19).
 
-**Offene Eingänge am Kopf** (`Infrastructure/Eingaenge/`). Durabel ist eine Kette nur an ihrem Kopf. Ein Command ohne Ziel aus einem Decide
-(docs/03 §3.2) oder von einem Akteur (JSON-Eingang) legt je Instanz, deren Graph ihn am Kopf nimmt, eine Zeile in `cqrs_eingaenge` (Kennung,
-Instanz, Nachricht als Diskriminator und Wire-JSON, Herkunft, Fälligkeit, Versuche, geparkt) — beim Decide in derselben Transaktion wie die
-Entscheidung. Direkt danach geht der Eingang auf dem **schnellen Weg** an die Instanz (verlierbar); die Zeile wird erst nach 5 s fällig. Der
+**Offene Eingänge am Kopf** (`Infrastructure/Eingaenge/`). Durabel ist eine Kette nur an ihrem Kopf. Ein Command ohne Ziel von einem Client (Sitzung
+`SitzungsActor.AnKopfAsync` oder JSON-Eingang, docs/03 §3.1) legt je Instanz, deren Graph ihn am Kopf nimmt, eine Zeile in `cqrs_eingaenge` (Kennung
+aus Command-Id und Instanz, Nachricht als Diskriminator und Wire-JSON, Herkunft, Fälligkeit, Versuche, geparkt); erst dann quittiert die Sitzung dem
+Client. Nennt der Command ein Fakt als `ursache`, ist dessen Stream und Version die Herkunft, sonst die Kennung selbst ohne Vorgänger im Log. Direkt
+danach geht der Eingang auf dem **schnellen Weg** an die Instanz (verlierbar); die Zeile wird erst nach 5 s fällig. Der
 **Zusteller** (`ZustellerActor`, ein virtueller Cluster-Actor, Kind `zusteller`, Takt je Knoten jede Sekunde, höchstens ein Durchlauf zugleich)
 liest die fälligen Zeilen und bringt jede über die Wege hin: „fertig“ trägt sie aus (das tut auch der Graph-Actor, wenn das „fertig“ der Kette ankommt),
 „angenommen“ macht sie nach 60 s wieder fällig, „später“ oder ein Fehler nach 2 s. Der Einblick zeigt sie je Instanz (`/einblick/auftraege`).
 Zwischen Knoten desselben Graphen reist nichts als Eingang — das tragen die Aufrufe der Kette.
-
-**Arbeit für Akteure** (`Arbeit.cs`, `Werkstatt.cs`, [konzept-akteure.md](konzept-akteure.md) §5). Hört ein Akteur einen Command ohne Ziel
-(im Bestand keiner mehr, Schritt 6), ist das seine Arbeit: die Laufzeit legt eine Instanz unter seinem Namen an — ein Graph mit einem
-Knoten **draußen**, Köpfe = die gehörten Commands, Ausgänge = die Commands seines `IDarf`. So hat die Arbeit, was jeder Kopf hat: offene Eingänge
-aus einem Decide, den Weg aus einem Graphen, Orte, Wiederholung. Das Kind dieses Knotens hat keine Aktivierung: es gibt den Auftrag der
-**Werkstatt** seines Cluster-Knotens, die ihn einem **Arbeiter** mit freiem Platz gibt — einer Sitzung, deren Client den Akteur verkörpert und deren
-Token ihn nennt (über die Leitung `ArbeitsAuftrag` mit `vorgang` = Kennung, `fuer` = Akteur), bzw. der Werkbank für die Akteure unter
-`Umgebung:Hand` (`HandAusfuehrer`, JSON-Eingang `/eingang/auftraege` und `/eingang/ergebnis`). Die Antwort kommt in Reihenfolge zurück
-(`ArbeitsErgebnis.commands`, auch in Stücken), geprüft gegen das `IDarf` des Akteurs, und wird hinausgebracht wie die Ausgabe jedes Knotens; ihre
-Ids folgen aus dem Auftrag, ihr Akteur ist der der Instanz. Der Platz wird frei, sobald die Antwort vollständig ist. Es zählt nur die Antwort des
-Arbeiters, der den Auftrag hält, und von ihm die erste; jede andere ist „unbekannt“ (`ARBEIT_UNBEKANNT`). Geht der Arbeiter, scheitern seine
-Aufträge sofort; ohne Regung (Antwort oder `ArbeitLebtMeldung`) länger als die Geduld (Worker 60 s, Hand unbegrenzt) ebenso — der Parent rechnet
-erneut, der durable Rand bringt den Eingang wieder. Kein Vermittler, keine Lease, nichts festgehalten.
 
 **Hinweise** (`Infrastructure/Funktionen/Hinweise.cs`). Ein Hinweis aus einem Knoten oder eine gescheiterte Kette geht nur an die Verteiler und
 von dort an die Sitzungen der Akteure, die ihn hören — ohne Log, höchstens einmal. Was ein Knoten braucht, ist ein Command.
@@ -423,7 +410,7 @@ mit) → `Dateinamendeutung` → `BildGedeutet`, im Ablauf übersetzt ↦ `NimmB
 `ReaktionsWorker` hört als `Datensatzpfleger` `RangeAngefordert` bzw. `EinfrierenAngefordert`, liest per Query und gibt `NimmRangeAuf` bzw.
 `SchliesseEinfrierenAb`, als `Teilmelder` `TeilauftragAbgeschlossen` und gibt `MeldeTeilFertig` an den Sammelvorgang, den das Event nennt);
 ebenso reagieren die Python-Worker: der `Klassifizierer` auf `ImagePairKomplett` mit seinem Urteil, das `TrainingsSystem` auf
-`TrainingAngefordert` in Stücken (Arbeit hat kein Akteur mehr). Prüfdomäne — die Köpfe ihrer Graphen speist ihr `ReaktionsWorker`
+`TrainingAngefordert` in Stücken. Prüfdomäne — die Köpfe ihrer Graphen speist ihr `ReaktionsWorker`
 (`Pruefdomaene.Client.Worker`, Akteur `Sachbearbeitung`): auf jedes Fakt, das einen Ablauf beginnt oder fortsetzt, gibt er dessen Command hinein
 (`RechnungGestellt` ↦ `Freizugeben`, `AuftragGestartet` ↦ `AuftragAbzuwickeln`, `PostenReserviert` mit Fehlmenge ↦ `Unterschritten` …), mit dem
 Fakt als Ursache, also als Herkunft des Eingangs. Der **Abrechnungsablauf** (`Freigabeautomat` gibt eine Rechnung bis 10 000 frei, darüber
@@ -435,28 +422,31 @@ und `Schaetzer`, der Zustand hat), der **Nachschubablauf** (`Nachschub`, Kopf `U
 
 ## 4.5 Abläufe: Aggregat, Graph und Frist
 
-Ein Ablauf über mehrere Aggregate hat zwei Teile. Was **je Auslöser** gerechnet wird — Folge, Gabel, Wahl, je Element rechnen —
-ist ein Graph. Was zusammengeführt oder abgewartet wird — fremde Rückmeldungen, alle Elemente zählen, zurücknehmen, eine Frist überwachen —, ist
-ein Aggregat: sein Decide entscheidet jeden Schritt aus seinem Zustand, sein Log ist der Ablauf. Aggregate reden nur über Graphen
-oder Akteure miteinander (CQRS114). Die Zugehörigkeit eines fremden Events zu einem Ablauf ist ein **fachliches Feld** (A2), kein Korrelations-Header.
+Ein Ablauf über mehrere Aggregate hat zwei Teile. Was **je Auslöser** gerechnet wird — Folge, Gabel, Wahl, je Element rechnen — ist ein Graph. Was
+zusammengeführt oder abgewartet wird — fremde Rückmeldungen, alle Elemente zählen, zurücknehmen, eine Frist überwachen —, ist ein Aggregat: sein
+Decide entscheidet jeden Schritt aus seinem Zustand, sein Log ist der Ablauf. Aggregate reden nur über Graphen und Clients, die auf ihre Fakten
+reagieren, miteinander (ein Decide gibt keinen Command aus, CQRS114). Die Zugehörigkeit eines fremden Events zu einem Ablauf ist ein **fachliches
+Feld** (A2), kein Korrelations-Header.
 
 **Beispiel: der Auftrag der Prüfdomäne** (`Pruefdomaene/Auftrag/`, `Pruefdomaene.Pipeline/Auftrag/`). Ein Auftrag reserviert einen Posten und belegt
 ein Kontingent (zwei unabhängige Zweige); erst wenn beide gelungen sind, ist er bestätigt; scheitert einer, wird zurückgenommen, was gelang.
-- `StarteAuftrag` → `AuftragGestartet` und der Command ohne Ziel `AuftragAbzuwickeln`. Sein Empfänger ist der Kopf des Graphen `Auftragsablauf`:
+- `StarteAuftrag` → `AuftragGestartet`; der `ReaktionsWorker` hört es und gibt den Command ohne Ziel `AuftragAbzuwickeln` an den Kopf des Graphen
+  `Auftragsablauf`:
   die Funktion `Auftragsabwicklung` gibt `ReservierePosten` und `BelegeKontingent` aus, beide mit dem **Beleg** `(Belegart.Auftrag, AuftragId)` als
   fachlichem Feld.
 - Posten und Kontingent entscheiden für sich (`PostenReserviert`, `ReservierungAbgelehnt` …) und tragen den Beleg im Event. Die Funktion hört sie
   als Antwort auf ihre Commands und gibt `VermerkeReservierung`, `VermerkeBelegung` bzw. `VermerkeAbsage` an den Auftrag.
 - Das Decide des Auftrags entscheidet **Join** und **Kompensation**: sind Reservierung und Belegung vermerkt, folgt `AuftragBestaetigt`; kommt
-  eine Absage, folgt `AuftragGescheitert` und für jeden gelungenen Zweig ein Gegenzug als Command ohne Ziel (`PostenFreizugeben`,
-  `KontingentZuEntlasten`) — genau einmal, weil der Zustand es sich merkt; eine verspätete Rückmeldung nimmt sich selbst zurück. Die
-  Auftragsabwicklung sendet den Gegenzug (`GibPostenFrei`, `EntlasteKontingent`).
+  eine Absage, folgt `AuftragGescheitert` und für jeden gelungenen Zweig ein Fakt, das den Gegenzug anfordert (`PostenfreigabeAngefordert`,
+  `KontingententlastungAngefordert`) — genau einmal, weil der Zustand es sich merkt; eine verspätete Rückmeldung nimmt sich selbst zurück. Der
+  `ReaktionsWorker` macht daraus `PostenFreizugeben` bzw. `KontingentZuEntlasten`, die Auftragsabwicklung sendet den Gegenzug (`GibPostenFrei`,
+  `EntlasteKontingent`).
 
-**Je im Graphen, Zählen im Aggregat** (`Pruefdomaene.Pipeline/Verteilung/`): ist die Quelle einer Verteilung reserviert, gibt ihr Decide
-`Zubuchen` aus. Der Graph `Zubuchung` teilt auf (`Zielaufteilung`, ein Strom: je Ziel ein `ZielZubuchen`, je Element eine Nachricht) und bucht je
-Ziel (`Zielbuchung` → `BuchePostenZu`); die Antwort `PostenZugebucht` meldet er der Verteilung (`VermerkeZubuchung`). Die Verteilung zählt mit
-(`ZielZugebucht`) und schließt nach dem letzten Ziel ab (`VerteilungAbgeschlossen` mit der Summe) — das Einsammeln steht im Aggregat, nicht im
-Graphen.
+**Je im Graphen, Zählen im Aggregat** (`Pruefdomaene.Pipeline/Verteilung/`): ist die Quelle einer Verteilung reserviert (`QuelleReserviert`), gibt der
+`ReaktionsWorker` `Zubuchen` an den Kopf der `Zubuchung`. Der Graph `Zubuchung` teilt auf (`Zielaufteilung`, ein Strom: je Ziel ein `ZielZubuchen`, je
+Element eine Nachricht) und bucht je Ziel (`Zielbuchung` → `BuchePostenZu`); die Antwort `PostenZugebucht` meldet er der Verteilung
+(`VermerkeZubuchung`). Die Verteilung zählt mit (`ZielZugebucht`) und schließt nach dem letzten Ziel ab (`VerteilungAbgeschlossen` mit der Summe) —
+das Einsammeln steht im Aggregat, nicht im Graphen.
 
 **Frist statt Zeitlimit.** Ein Decide gibt `Frist<TCmd>(Befehl, Nach)` aus; die Uhr (§4.7) sendet den Befehl fällig an dasselbe Aggregat, und
 dessen Decide entscheidet, ob er noch etwas bedeutet. Beispiel: der Trainings-Wächter der Beispieldomäne setzt beim Start eines Trainingslaufs
@@ -469,7 +459,7 @@ Kette wirken über die Inbox ihrer Ziele genau einmal, die Uhr sendet jede Frist
 
 ## 4.6 Das Emit-Primitiv und die Inbox
 
-Jeder Command an ein Aggregat, den das Framework sendet (ein Knoten eines Graphen, die Arbeit eines Akteurs, die Uhr), geht durch das **eine**
+Jeder Command an ein Aggregat, den das Framework sendet (ein Knoten eines Graphen, die Uhr), geht durch das **eine**
 Emit-Primitiv `CommandEmitter.EmitAsync` (`Infrastructure/PubSub/CommandEmitter.cs`):
 - die `CommandId` gibt der Aufrufer deterministisch vor (Knoten: aus Aufruf — Nachricht, Ort, Operation —, Stelle, Typ und Ziel; Uhr: aus Stream
   und Version des Frist-Events) → stabil über jede Wiederholung;
@@ -543,9 +533,9 @@ ist eine Funktion mit `Lausche` wie die des Katalogs.
 Jeder Log-Eintrag trägt die Header `ursache`, `wirker`, `ueber`, `stand` (`Abstractions/Spur/Spur.cs`, geschrieben in
 `Infrastructure/Persistence/SpurHeader.cs`). Die Konsumenten setzen sie per `Spur.Von(…)` um ihren Ausgang; der `CommandEmitter` legt Ursache
 und Wirker in den Command-Envelope, das Ziel-Aggregat schreibt mit `wirker = decide:<Aggregat>/<Command>` und dem Absender als `ueber`:
-- **Knoten eines Graphen:** Ursache = die Ursache seiner Kette (die Entscheidung, aus der der Kopf hervorging; bei einer Antwort das Event, das
-  das Ziel entschied), Wirker am Command = der Knoten, `knoten:<Instanz>/<Knoten>` — die Spur zeigt so den Schritt der Kette. Der Akteur der Kette
-  reist mit. Was zwischen Knoten fließt, steht nie im Log.
+- **Knoten eines Graphen:** Ursache = die Ursache seiner Kette (das Fakt, auf das der Client reagierte, der den Kopf speiste; bei einer Antwort das
+  Event, das das Ziel entschied), Wirker am Command = der Knoten, `knoten:<Instanz>/<Knoten>` — die Spur zeigt so den Schritt der Kette. Der Akteur
+  der Kette reist mit. Was zwischen Knoten fließt, steht nie im Log.
 - **Quelle:** eine Quell-Kette hat keinen Log-Eintrag als Wurzel; seine Ursache ist der abgeleitete Stream der Instanz an der laufenden Nummer.
 - **Uhr:** Ursache = das Frist-Event, Wirker `uhr` (ohne Karte).
 - **Akteur:** ein Command von draußen trägt `ueber = akteur:<Akteur>`; reagiert ein Client auf ein Event, nennt die Hülle es als `ursache`
@@ -556,6 +546,6 @@ Das Format steht an einer Stelle (`Abstractions/Spur/WirkerId.cs`), den Weg eine
 
 ## 4.10 Offen
 
-Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): der Webhook nur mit JSON-Eingang und je Prozess (GF-2), Durchsatz einer Instanz mit Zustand (PF-34), Arbeit von Hand mitten in einer
-Kette (FV-3), Instanzen ohne Ort (FV-4), Kreise Graph ↔ Aggregat (FB-5), hartkodierte Intervalle P2-8, reflektive Snapshot-Kopie W10-2,
+Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): der Webhook nur mit JSON-Eingang und je Prozess (GF-2), Durchsatz einer Instanz
+mit Zustand (PF-34), Instanzen ohne Ort (FV-4), Kreise Graph ↔ Aggregat (FB-5), hartkodierte Intervalle P2-8, reflektive Snapshot-Kopie W10-2,
 Projektlage W2-1.
