@@ -13,16 +13,15 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// CQRS119/CQRS121 (GR-UEBERSETZUNG): eine Übersetzung ist ein Record der Domäne (<c>IUebersetzung&lt;TEin, TAus&gt;</c>, docs/04 §4.4)
-/// und ordnet nach der einen Lesart (<c>Uebersetzungsform</c>) zu — <c>[Feld]</c>, gleicher Name mit implizit zuweisbarem Typ, Standardwert, sonst ein
-/// Fehler; <c>Guid</c> ⇄ <c>Id&lt;T&gt;</c> nur ausdrücklich. Sie nimmt einen Command ohne Ziel oder ein Event (eine Antwort) und erzeugt einen Command;
-/// ein Graph nennt sie nie als Knoten (CQRS115).
+/// CQRS119/CQRS121 (GR-UEBERSETZUNG): eine Übersetzung ist eine Klasse <c>{TSource}_{TTarget}_{n}(Parameter der Quelle) : ITranslate&lt;TSource, TTarget&gt;</c>
+/// (docs/04 §4.4) — ihr Konstruktor nimmt genau die Quelle, <c>Translate()</c> baut das Ziel aus ihren Feldern, der Compiler prüft die Zuordnung.
+/// Sie nimmt einen Command ohne Ziel oder ein Event (eine Antwort) und erzeugt einen Command; ein Graph nennt sie nie als Knoten (CQRS115).
 /// </summary>
 public class UebersetzungAnalyzerTests
 {
     private static async Task<(string Id, string Text)[]> Befunde(string code)
     {
-        _ = typeof(IUebersetzung<,>);
+        _ = typeof(ITranslate<,>);
         var refs = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))
@@ -49,47 +48,24 @@ public class UebersetzungAnalyzerTests
         """;
 
     [Fact]
-    public async Task Feld_Name_und_Standardwert_ergeben_eine_vollstaendige_Zuordnung_in_beide_Richtungen()
+    public async Task Konstruktor_mit_der_Quelle_und_Translate_ergeben_eine_vollstaendige_Zuordnung_in_beide_Richtungen()
         => (await Befunde("""
-            [Feld(nameof(Rechne.Bezug), nameof(Anfrage.Konto))] public sealed record Hinein : IUebersetzung<Anfrage, Rechne>;
-            [Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] public sealed record Hinaus : IUebersetzung<Gerechnet, Buche>;
-            public sealed record Antwort : IUebersetzung<Gebucht, Bestaetigt>;
-            """)).Should().BeEmpty("Bezug ⇄ Konto ausdrücklich (Id ⇄ Guid), Betrag nach Namen (int → int bzw. int → decimal erweitert), Faktor und Text aus "
-            + "dem Standard; eine Antwort-Übersetzung nimmt ein Event");
+            public sealed class Anfrage_Rechne_1(Anfrage source) : ITranslate<Anfrage, Rechne> { public Rechne Translate() => new(Bezug: source.Konto.Wert, Betrag: source.Betrag); }
+            public sealed class Gerechnet_Buche_1(Gerechnet source) : ITranslate<Gerechnet, Buche> { public Buche Translate() => new(AggregateId: new(source.Bezug), Betrag: source.Betrag); }
+            public sealed class Gebucht_Bestaetigt_1(Gebucht source) : ITranslate<Gebucht, Bestaetigt> { public Bestaetigt Translate() => new(source.Betrag); }
+            """)).Should().BeEmpty("der Konstruktor nimmt die Quelle, Translate baut das Ziel (Faktor und Text aus dem Standard); eine "
+            + "Antwort-Übersetzung nimmt ein Event");
 
     [Fact]
-    public async Task Ein_Parameter_ohne_Quelle_ist_CQRS119()
+    public async Task Ein_Konstruktor_ohne_genau_die_Quelle_ist_CQRS119()
     {
         var befunde = await Befunde("""
-            public sealed record Hinaus : IUebersetzung<Gerechnet, Buche>;
+            public sealed class Gerechnet_Buche_1(Guid Bezug, int Betrag) : ITranslate<Gerechnet, Buche> { public Buche Translate() => new(new(Bezug), Betrag); }
+            public sealed class Gebucht_Bestaetigt_1(Gerechnet source) : ITranslate<Gebucht, Bestaetigt> { public Bestaetigt Translate() => new(source.Betrag); }
             """);
-        befunde.Should().ContainSingle().Which.Id.Should().Be("CQRS119");
-        befunde[0].Text.Should().Contain("Buche.AggregateId").And.Contain("Gerechnet hat kein Feld AggregateId");
-    }
-
-    [Fact]
-    public async Task Guid_wird_nie_still_zu_einer_Id_und_ein_fremder_Typ_nie_zugeordnet()
-    {
-        var befunde = await Befunde("""
-            public record MitId(Guid AggregateId, decimal Betrag) : ICommand;
-            public record ZielText(Guid Bezug, int Betrag) : ICommand;
-            public sealed record Hinaus : IUebersetzung<MitId, Buche>;
-            public sealed record Zweite : IUebersetzung<Fremd, ZielText>;
-            """);
-        befunde.Select(b => b.Id).Should().Equal("CQRS119", "CQRS119", "CQRS119");
-        befunde.Should().Contain(b => b.Text.Contains("MitId.AggregateId (System.Guid) ist nicht implizit zuweisbar"));
-        befunde.Should().Contain(b => b.Text.Contains("Fremd.Betrag (string) ist nicht implizit zuweisbar"));
-    }
-
-    [Fact]
-    public async Task Feld_ohne_Ziel_oder_Quelle_ist_CQRS119()
-    {
-        var befunde = await Befunde("""
-            [Feld("Konto", "Bezug"), Feld("AggregateId", "Unbekannt")] public sealed record Hinaus : IUebersetzung<Gerechnet, Buche>;
-            """);
-        befunde.Should().OnlyContain(b => b.Id == "CQRS119");
-        befunde.Should().Contain(b => b.Text.Contains("nennt das Ziel 'Konto'"));
-        befunde.Should().Contain(b => b.Text.Contains("nennt die Quelle 'Unbekannt'"));
+        befunde.Select(b => b.Id).Should().Equal("CQRS119", "CQRS119");
+        befunde.Should().Contain(b => b.Text.Contains("'Gerechnet_Buche_1': der Konstruktor nimmt genau die Quelle — (Gerechnet source), nicht (System.Guid Bezug, int Betrag)"));
+        befunde.Should().Contain(b => b.Text.Contains("'Gebucht_Bestaetigt_1': der Konstruktor nimmt genau die Quelle — (Gebucht source)"));
     }
 
     [Fact]
@@ -97,9 +73,9 @@ public class UebersetzungAnalyzerTests
     {
         var befunde = await Befunde("""
             public record Notiz(int Betrag) : ITransientEvent;
-            public sealed record Hinein : IUebersetzung<Buche, Rechne>;
-            public sealed record Hinaus : IUebersetzung<Gerechnet, Notiz>;
-            public sealed record Vom : IUebersetzung<Notiz, Rechne>;
+            public sealed class Buche_Rechne_1(Buche source) : ITranslate<Buche, Rechne> { public Rechne Translate() => new(Guid.Empty, 0); }
+            public sealed class Gerechnet_Notiz_1(Gerechnet source) : ITranslate<Gerechnet, Notiz> { public Notiz Translate() => new(source.Betrag); }
+            public sealed class Notiz_Rechne_1(Notiz source) : ITranslate<Notiz, Rechne> { public Rechne Translate() => new(Guid.Empty, source.Betrag); }
             """);
         befunde.Where(b => b.Id == "CQRS121").Should().HaveCount(3, "ein Command an ein Aggregat, ein Hinweis als Ergebnis, ein Hinweis als Eingang");
     }
@@ -108,8 +84,8 @@ public class UebersetzungAnalyzerTests
     public async Task Ein_Graph_nennt_keine_Uebersetzung_als_Knoten()
     {
         var befunde = await Befunde("""
-            [Feld(nameof(Buche.AggregateId), nameof(Gerechnet.Bezug))] public sealed record Hinaus : IUebersetzung<Gerechnet, Buche>;
-            public sealed record Ablauf([Kopf] Rechner R, [Von(nameof(R))] Hinaus H) : IGraph;
+            public sealed class Gerechnet_Buche_1(Gerechnet source) : ITranslate<Gerechnet, Buche> { public Buche Translate() => new(new(source.Bezug), source.Betrag); }
+            public sealed record Ablauf([Kopf] Rechner R, [Von(nameof(R))] Gerechnet_Buche_1 H) : IGraph;
             """);
         befunde.Should().Contain(b => b.Id == GraphAnalyzer.Id && b.Text.Contains("ist eine Übersetzung") && b.Text.Contains("lebt in der Domäne"));
     }

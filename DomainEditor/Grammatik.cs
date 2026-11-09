@@ -126,22 +126,24 @@ public static class Grammatik
             + "ist ein Fehler; ein Graph mit Quelle hat sonst keinen Kopf (docs/04 §4.4).", "error",
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Köpfe je Eingangstyp, Kopf ohne Eingang von außen; Lesart Graphform)"),
              new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (der Kopf gibt den Eingang an den Knoten, der seinen Typ nimmt)")]),
-        new("GR-UEBERSETZUNG", "Übersetzung: IUebersetzung<TEin, TAus> mit [Feld]", "Graphen und Funktionen liegen in Katalogen, domänenneutral; "
-            + "domänenspezifisch macht sie eine Übersetzung der Anwendung: [Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))] public sealed record X : "
-            + "IUebersetzung<TEin, TAus>; in <Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs. Sie macht aus einem Command ohne Ziel (oder einem Event, das ein Aggregat auf ihren "
-            + "Command antwortet) genau einen Command — Feld für Feld, ohne Logik: je Parameter von TAus eine Quelle, [Feld] (ausdrücklich auch Guid ⇄ "
-            + "Id<T>), sonst ein Feld von TEin mit gleichem Namen und implizit zuweisbarem Typ, sonst der Standardwert. Wohin, entscheidet der Typ: jede "
-            + "Ausgabe eines laufenden Graphen mit Typ TEin wird im Kind übersetzt, ein Command ohne Ziel eines Clients am Kopf, eine Antwort gleich nach dem "
-            + "Senden; TAus geht an sein Aggregat bzw. an den Kopf genau eines Graphen. Ein Graph nennt sie nie als Knoten. Nur das Projekt der "
-            + "Übersetzungen referenziert Kataloge: die Domäne (Schreib- und Leseseite) bleibt rein und kennt keinen Katalog.", "error",
-            [An("CQRS119", "Domain.SourceGeneration/GraphAnalyzer.cs (Zuordnung unvollständig, Typ nicht zuweisbar, [Feld] ohne Ziel bzw. Quelle; Lesart Uebersetzungsform)"),
+        new("GR-UEBERSETZUNG", "Übersetzung: ITranslate<TSource, TTarget>", "Graphen und Funktionen liegen in Katalogen, domänenneutral; "
+            + "domänenspezifisch macht sie eine Übersetzung der Anwendung: public sealed class {TSource}_{TTarget}_{n}(TSource source) : "
+            + "ITranslate<TSource, TTarget> { public TTarget Translate() => new(Ziel: source.Feld, …); } in <Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs. "
+            + "Der Konstruktor nimmt genau die Quelle, Translate() baut das Ziel aus ihren Feldern, ohne Logik (Guid ⇄ Id<T> "
+            + "als new(…) bzw. .Wert) — der Compiler prüft, dass es vollständig ist; der Editor schreibt Translate() aus der Verdrahtung. Sie nimmt einen Command "
+            + "ohne Ziel oder ein Event (eine Antwort) und erzeugt einen Command. Wohin, entscheidet der Typ: jede Ausgabe eines laufenden Graphen mit Typ "
+            + "TSource wird im Kind übersetzt, ein Command ohne Ziel eines Clients am Kopf, eine Antwort gleich nach dem Senden; TTarget geht an sein Aggregat "
+            + "bzw. an den Kopf genau eines Graphen. Ein Graph nennt sie nie als Knoten. Nur das Projekt der Übersetzungen referenziert Kataloge: die Domäne "
+            + "(Schreib- und Leseseite) bleibt rein und kennt keinen Katalog.", "error",
+            [An("CQRS119", "Domain.SourceGeneration/GraphAnalyzer.cs (der Konstruktor nimmt nicht genau die Quelle; Lesart Uebersetzungsform)"),
              An("CQRS120", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (ein Ausgang eines laufenden Katalog-Graphen ohne Empfänger)"),
              An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TEin weder Command ohne Ziel noch Antwort-Event, TAus kein Command)"),
              An("CQRS098", "Domain.SourceGeneration/LageAnalyzer.cs (eine Übersetzung außerhalb von <Wurzel>.Uebersetzungen)"),
              new("check", null, "GraphExtractor.Kern/Lagepruefung.cs (Schreib- oder Leseseite referenziert einen Katalog)"),
              An("CQRS123", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Antwort-Übersetzung nimmt ein Event, das das Decide nicht ausgibt)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (ein Graph nennt eine Übersetzung als Knoten)"),
-             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedUebersetzungen: je Übersetzung Typen und Rechnung)"),
+             new("compiler", null, "Translate() baut das Ziel vollständig (fehlt ein Parameter, baut es nicht)"),
+             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedUebersetzungen: Konstruktor mit den Feldern der Quelle, dann Translate())"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (Ausgaben und Antworten nach Typ), Verkettung.cs (am Kopf)")]),
         new("GR-KETTE", "Eine Kette je Kopf", "Eine Nachricht am Kopf startet eine Kette: jeder Schritt rechnet je ankommender Nachricht und gibt seine "
             + "Ausgaben nach der Wegtabelle weiter; niemand führt Buch über die ganze Kette. Fertig ist der Kopf, wenn alle gesicherten Ausgaben fertig "

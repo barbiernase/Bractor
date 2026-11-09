@@ -90,10 +90,10 @@ public class LageAnalyzerTests
         Projektstruktur.Zerlege("Domain.Pipeline").Should().Be(("Domain.Pipeline", Projektstruktur.Rolle.Schreibseite), "eine Rolle Abläufe gibt es nicht mehr");
         Projektstruktur.Zerlege("Domain").Should().Be(("Domain", Projektstruktur.Rolle.Schreibseite));
         Projektstruktur.Zerlege("Pruefdomaene.Projections").Should().Be(("Pruefdomaene", Projektstruktur.Rolle.Leseseite));
-        Projektstruktur.Projekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Akteure", "Domain.Infrastructure",
-            "Domain.Leitung", "Domain.Laufzeit");
-        Projektstruktur.CodegenProjekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Akteure");
-        Projektstruktur.HandgeschriebeneProjekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Akteure",
+        Projektstruktur.Projekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Uebersetzungen", "Domain.Akteure",
+            "Domain.Infrastructure", "Domain.Leitung", "Domain.Laufzeit");
+        Projektstruktur.CodegenProjekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Uebersetzungen", "Domain.Akteure");
+        Projektstruktur.HandgeschriebeneProjekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Uebersetzungen", "Domain.Akteure",
             "Domain.Infrastructure");   // der Werkbank-Stand: ohne Leitung und Komposition (nur Generate)
         Projektstruktur.Datei(Projektstruktur.Primitive.Decider, "Konto").Should().Be("Konto.Decider.cs");
         Projektstruktur.Datei(Projektstruktur.Primitive.Funktion, "Rechnen").Should().Be("Rechnen.cs", "je Funktion eine eigene Datei");

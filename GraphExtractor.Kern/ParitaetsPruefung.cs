@@ -187,7 +187,7 @@ public static class ParitaetsPruefung
                 .ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Knoten ({k.Name})", sollKnoten.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istKnoten, befunde);
         }
-        // Übersetzungen (docs/04 §4.4): je Record Ein, Aus und seine [Feld].
+        // Übersetzungen (docs/04 §4.4): je Klasse Quelle, Ziel und die Zuordnung aus Translate().
         Vergleiche("Übersetzung", soll.Uebersetzungen, Arten("uebersetzung").Select(k => $"{Voll(k)}|{UebersetzungsSchluessel((string?)k.Ref["ein"] ?? "",
             (string?)k.Ref["aus"] ?? "", (k.Ref["felder"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
                 .Select(f => new FeldZuordnung((string?)f["ziel"] ?? "", (string?)f["quelle"] ?? "")).ToList())}").ToHashSet(StringComparer.Ordinal), befunde);
@@ -251,7 +251,7 @@ public static class ParitaetsPruefung
         public Dictionary<string, HashSet<string>> Clients = new(StringComparer.Ordinal);
         /// <summary>Graph (Record mit IGraph) → seine Knoten „Name:Typ“ (Parameter des Records, Typ wie geschrieben).</summary>
         public Dictionary<string, HashSet<string>> Graphen = new(StringComparer.Ordinal);
-        /// <summary>Die Übersetzungen: je Record <c>Namespace.Name|Ein→Aus|Feld(…)</c>.</summary>
+        /// <summary>Die Übersetzungen: je Klasse <c>Namespace.Name|Ein→Aus|Feld(…)</c>.</summary>
         public HashSet<string> Uebersetzungen = new(StringComparer.Ordinal);
         public List<string> AlleRecordNamen = new();
         /// <summary>Jede handgeschriebene Typ-Deklaration oberster Ebene (partial: je Teil) — das Soll der Vollständigkeit.</summary>
@@ -323,12 +323,14 @@ public static class ParitaetsPruefung
                                 }).ToHashSet(StringComparer.Ordinal);
                             continue;
                         }
-                        // Übersetzung (Record mit IUebersetzung<TEin, TAus>): Ein und Aus wie geschrieben, ihre [Feld].
+                        // Übersetzung (Klasse mit ITranslate<TSource, TTarget>): Quelle und Ziel wie geschrieben, die Zuordnung aus Translate().
                         if (t.ContainingType == null && Infrastructure.SourceGeneration.Uebersetzungsform.IstUebersetzung(t)
                             && Infrastructure.SourceGeneration.Uebersetzungsform.Marker(t) is { } um)
                         {
+                            var zuordnung = Infrastructure.SourceGeneration.Uebersetzungsform.Lies(t).Ziele.Where(z => z.Quelle != null)
+                                .Select(z => new FeldZuordnung(z.Name, z.Quelle!)).ToList();
                             inv.Uebersetzungen.Add($"{full}|{UebersetzungsSchluessel(Infrastructure.SourceGeneration.Funktionsform.Anzeigename(um.TypeArguments[0]),
-                                Infrastructure.SourceGeneration.Funktionsform.Anzeigename(um.TypeArguments[1]), Abgleich.Felder((MemberDeclarationSyntax)decl))}");
+                                Infrastructure.SourceGeneration.Funktionsform.Anzeigename(um.TypeArguments[1]), zuordnung)}");
                             continue;
                         }
                         if (decl is InterfaceDeclarationSyntax)

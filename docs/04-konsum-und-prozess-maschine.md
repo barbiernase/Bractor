@@ -288,18 +288,17 @@ Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.tx
 Typs, ein Knoten mit `[Kopf]` und `[Von]`, ein Graph im Graphen, dessen Ausgang ein anderer Knoten per `Von(nameof(Filter))` nimmt.
 
 **Übersetzung.** Funktionen und Graphen eines Katalogs kennen keine Domäne (ein Bezug ist ein `Guid`, keine `Id<T>`), und die Domäne kennt keinen
-Katalog. Domänenspezifisch macht sie eine **Übersetzung** der Anwendung: ein Record `: IUebersetzung<TEin, TAus>` in
-`<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` (`Abstractions/Uebersetzung.cs`; das Projekt referenziert Domäne und Kataloge, docs/07). Sie
-macht aus einer Nachricht genau einen Command, Feld für Feld und ohne Logik: je Parameter von `TAus` (sein Konstruktor) eine Quelle, in dieser
-Reihenfolge `[Feld(nameof(Ziel), nameof(Quelle))]` am Record (ausdrücklich darf ein `Guid` ein `Id<T>` füllen und umgekehrt), eine Eigenschaft von
-`TEin` mit gleichem Namen und implizit zuweisbarem Typ (gleich, Basis bzw. Schnittstelle, `T` → `T?`, erweiternde Zahlen), der Standardwert des
-Parameters — sonst CQRS119. Fremde Enums, Wertobjekte und Ids anderer Aggregate werden nie still zugeordnet. `TEin` ist ein Command ohne Ziel oder
-ein Event (eine Antwort), `TAus` ein Command (CQRS121); ein Graph nennt eine Übersetzung nie als Knoten (CQRS115). Die Lesart ist
-`Uebersetzungsform` (per Link in Generator, Analyzer und Extractor), der `GraphGenerator` erzeugt `GeneratedUebersetzungen` (je Übersetzung Typen
-und Rechnung).
+Katalog. Domänenspezifisch macht sie eine **Übersetzung** der Anwendung: eine Klasse `{TSource}_{TTarget}_{n}(TSource source) : ITranslate<TSource, TTarget>`
+in `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` (`Abstractions/Uebersetzung.cs`; das Projekt referenziert Domäne und Kataloge, docs/07).
+Ihr Konstruktor nimmt genau die Quelle (sonst CQRS119), `Translate()` baut das Ziel aus ihren Feldern, ohne Logik: `Ziel: source.Feld`, ein `Guid`
+in eine `Id<T>` als `new(source.Feld)`, eine `Id<T>` in einen `Guid` als `source.Feld.Wert`. Ob das Ziel vollständig ist, prüft der Compiler. Der
+Editor legt die Klasse an und schreibt `Translate()` aus der Verdrahtung (docs/10 §10.9). `TSource` ist ein Command ohne Ziel oder ein
+Event (eine Antwort), `TTarget` ein Command (CQRS121); ein Graph nennt eine Übersetzung nie als Knoten (CQRS115). Die Lesart ist
+`Uebersetzungsform` (per Link in Generator, Analyzer und Extractor; die Zuordnung liest der Editor aus `Translate()`), der `GraphGenerator` erzeugt
+`GeneratedUebersetzungen` (je Übersetzung ihr Aufruf: Konstruktor mit der Nachricht, dann `Translate()`, reflexionsfrei).
 
 **Wohin, sagt der Typ** (Invariante 3), für alle Instanzen gleich — wer je Instanz anderes will, braucht andere Typen:
-- **Ausgang und Zwischenstand:** jede Ausgabe eines laufenden Graphen mit Typ `TEin` übersetzt das Kind gleich nach dem Rechnen (inline, ohne
+- **Ausgang und Zwischenstand:** jede Ausgabe eines laufenden Graphen mit Typ `TSource` übersetzt das Kind gleich nach dem Rechnen (inline, ohne
   Parent, Zustand, Konfig oder Rechner) — einen Command an ein Aggregat sendet es sofort (Id aus Aufruf, Ort der Übersetzung und Stelle), einen
   Command ohne Ziel gibt es an den Kopf genau eines Graphen. Ein Ausgang eines laufenden Katalog-Graphen ohne Empfänger ist CQRS120.
 - **Antwort:** antwortet das Aggregat auf den Command einer Übersetzung mit einem Event, das eine Übersetzung nimmt, rechnet das Kind sie gleich
@@ -310,13 +309,16 @@ und Rechnung).
 Der Wirker in der Spur ist die Übersetzung (`uebersetzung:<Name>`). Ein Graph eines Katalogs **läuft** in einer Anwendung, wenn eine Übersetzung oder
 ein Akteur ihn bindet.
 ```csharp
-// Domain.Uebersetzungen/ImagePair/Uebersetzungen.cs — das gedeutete Bild jeder Instanz der Bildaufbereitung bzw. des Linienimports wird ein Paar
-[Feld(nameof(NimmBildAuf.AggregateId), nameof(BildGedeutet.Paar))]
-public sealed record BildGedeutetZuNimmBildAuf : IUebersetzung<BildGedeutet, NimmBildAuf>;   // so legt die Fläche sie an
-
 // Pruefdomaene.Uebersetzungen/Messung/Uebersetzungen.cs — Client ↦ Katalog Rechenwerk (Kopf) und dessen Ergebnis ↦ Aggregat
-[Feld(nameof(Skalieren.Bezug), nameof(HochrechnungAngefordert.Stelle))]
-public sealed record Hinein : IUebersetzung<HochrechnungAngefordert, Skalieren>;
+public sealed class HochrechnungAngefordert_Skalieren_1(Id<Messstelle> Stelle, double Wert) : ITranslate<HochrechnungAngefordert, Skalieren>
+{
+    public Skalieren Translate() => new(Bezug: Stelle.Wert, Wert: Wert);
+}
+
+public sealed class Skaliert_MeldeAusreisser_1(Guid Bezug, double Wert) : ITranslate<Skaliert, MeldeAusreisser>
+{
+    public MeldeAusreisser Translate() => new(AggregateId: new(Bezug), Wert: Wert);
+}
 ```
 
 **Instanz.** Ein Graph ist eine Blaupause und läuft erst als **Instanz**: eine Datei je Instanz, `umgebungen/<name>/graphen/<instanz>.json`, mit

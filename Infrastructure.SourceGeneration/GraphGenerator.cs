@@ -74,8 +74,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        };");
             sb.AppendLine("    }");
             sb.AppendLine();
-            // Die ÜBERSETZUNGEN der Domänen (docs/04 §4.4): je Record mit IUebersetzung<TEin, TAus> eine Rechnung, Feld für Feld nach
-            //   Uebersetzungsform. Wohin sie gehören, sagt nur der Typ, den sie nehmen.
+            // Die ÜBERSETZUNGEN der Anwendung (docs/04 §4.4): je Klasse mit ITranslate<TSource, TTarget> ihr Aufruf — der Konstruktor mit den Feldern der
+            //   Quelle (gleiche Namen, Uebersetzungsform), dann Translate(). Wohin sie gehören, sagt nur der Typ, den sie nehmen.
             var uebersetzungen = Vertragsassemblies.Typen(c).Where(Uebersetzungsform.IstUebersetzung).OrderBy(t => t.Name, System.StringComparer.Ordinal)
                 .Select(Uebersetzungsform.Lies).Where(u => u.Fehler.Count == 0).ToList();
             sb.AppendLine("    public static class GeneratedUebersetzungen");
@@ -85,9 +85,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        {");
             foreach (var u in uebersetzungen)
             {
-                var felder = u.Ziele.Where(z => z.Ausdruck.Length > 0).Select(z => $"@{z.Name}: {z.Ausdruck}");
                 sb.AppendLine($"            new UebersetzungPlan({S(u.Typ.Name)}, typeof({T(u.Ein)}), typeof({T(u.Aus)}),");
-                sb.AppendLine($"                x => {{ var e = ({T(u.Ein)})x; return new {T(u.Aus)}({string.Join(", ", felder)}); }}),");
+                sb.AppendLine($"                x => new {T(u.Typ)}(({T(u.Ein)})x).Translate()),");
             }
             sb.AppendLine("        };");
             sb.AppendLine("    }");

@@ -7,17 +7,29 @@ using Sondenkatalog.Katalog.Import;
 
 namespace Warenkatalog.Uebersetzungen;
 
-[Feld(nameof(StarteImport.AggregateId), nameof(Importieren.Import))]
-public sealed record ImportStarten : IUebersetzung<Importieren, StarteImport>;
+#pragma warning disable CS9113
 
-[Feld(nameof(KatalogBereit.Import), nameof(ImportGestartet.ImportId))]
-public sealed record ImportBereit : IUebersetzung<ImportGestartet, KatalogBereit>;
+public sealed class Importieren_StarteImport_1(Importieren source) : ITranslate<Importieren, StarteImport>
+{
+    public StarteImport Translate() => new(AggregateId: new(source.Import), Pfad: source.Pfad);
+}
 
-[Feld(nameof(MeldeImportFortschritt.AggregateId), nameof(Fortschritt.Import))]
-public sealed record FortschrittMelden : IUebersetzung<Fortschritt, MeldeImportFortschritt>;
+public sealed class ImportGestartet_KatalogBereit_1(ImportGestartet source) : ITranslate<ImportGestartet, KatalogBereit>
+{
+    public KatalogBereit Translate() => new(Import: source.ImportId.Wert, Pfad: source.Pfad);
+}
 
-[Feld(nameof(SchliesseImportAb.AggregateId), nameof(Bilanz.Import))]
-public sealed record ImportAbschliessen : IUebersetzung<Bilanz, SchliesseImportAb>;
+public sealed class Fortschritt_MeldeImportFortschritt_1(Fortschritt source) : ITranslate<Fortschritt, MeldeImportFortschritt>
+{
+    public MeldeImportFortschritt Translate() => new(AggregateId: new(source.Import), Zeilen: source.Zeilen);
+}
 
-[Feld(nameof(LegeArtikelAn.AggregateId), nameof(Artikeldaten.Artikel))]
-public sealed record ArtikelAnlegen : IUebersetzung<Artikeldaten, LegeArtikelAn>;
+public sealed class Bilanz_SchliesseImportAb_1(Bilanz source) : ITranslate<Bilanz, SchliesseImportAb>
+{
+    public SchliesseImportAb Translate() => new(AggregateId: new(source.Import), Zeilen: source.Zeilen, Fehler: source.Fehler);
+}
+
+public sealed class Artikeldaten_LegeArtikelAn_1(Artikeldaten source) : ITranslate<Artikeldaten, LegeArtikelAn>
+{
+    public LegeArtikelAn Translate() => new(AggregateId: new(source.Artikel), Nummer: source.Nummer, Bezeichnung: source.Bezeichnung, Preis: source.Preis);
+}

@@ -4,16 +4,26 @@ using Pruefdomaene.Import;
 
 namespace Pruefdomaene.Uebersetzungen.Import;
 
+#pragma warning disable CS9113
+
 // ÜBERSETZUNGEN (docs/04 §4.4): Annahme und Zeilenlauf des Katalogs Pruefwerk werden Importaufträge — der Vorgang ist der Auftrag.
 
-[Feld(nameof(Anfordern.Menge), nameof(ImportAngefordert.Zeilen))]
-public sealed record ImportAnnehmen : IUebersetzung<ImportAngefordert, Anfordern>;
+public sealed class ImportAngefordert_Anfordern_1(ImportAngefordert source) : ITranslate<ImportAngefordert, Anfordern>
+{
+    public Anfordern Translate() => new(Menge: source.Zeilen);
+}
 
-[Feld(nameof(StarteImport.AggregateId), nameof(Angenommen.Vorgang)), Feld(nameof(StarteImport.Zeilen), nameof(Angenommen.Menge))]
-public sealed record ImportStarten : IUebersetzung<Angenommen, StarteImport>;
+public sealed class Angenommen_StarteImport_1(Angenommen source) : ITranslate<Angenommen, StarteImport>
+{
+    public StarteImport Translate() => new(AggregateId: new(source.Vorgang), Zeilen: source.Menge);
+}
 
-[Feld(nameof(Laufen.Vorgang), nameof(ImportZuLaufen.Import)), Feld(nameof(Laufen.Menge), nameof(ImportZuLaufen.Zeilen))]
-public sealed record ImportLaufen : IUebersetzung<ImportZuLaufen, Laufen>;
+public sealed class ImportZuLaufen_Laufen_1(ImportZuLaufen source) : ITranslate<ImportZuLaufen, Laufen>
+{
+    public Laufen Translate() => new(Vorgang: source.Import.Wert, Menge: source.Zeilen);
+}
 
-[Feld(nameof(MeldeImportStand.AggregateId), nameof(Stand.Vorgang)), Feld(nameof(MeldeImportStand.Zeilen), nameof(Stand.Gelesen))]
-public sealed record ImportstandMelden : IUebersetzung<Stand, MeldeImportStand>;
+public sealed class Stand_MeldeImportStand_1(Stand source) : ITranslate<Stand, MeldeImportStand>
+{
+    public MeldeImportStand Translate() => new(AggregateId: new(source.Vorgang), Zeilen: source.Gelesen);
+}

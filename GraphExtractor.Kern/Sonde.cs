@@ -372,7 +372,7 @@ public static class Sonde
             foreach (var k in A(g, "kanten"))
                 z.Add($"kante {S(g, "name")} | {S(k, "von")} -{S(k, "typ")}-> {S(k, "nach")}");
         }
-        // Übersetzungen der Domäne (docs/04 §4.4): je Record seine [Feld] und je Parameter von TAus seine Quelle und Regel — was die ↦-Karte
+        // Übersetzungen (docs/04 §4.4): ihre Verdrahtung (Ziel=Feld der Quelle) und je Parameter von TAus seine Quelle und Regel — was die ↦-Karte
         //   zeigt.
         foreach (var u in A(b, "uebersetzungen").Where(Sonde))
             z.Add($"uebersetzung {S(u, "namespace")}.{S(u, "name")} | {S(u, "ein")} -> {S(u, "aus")}"

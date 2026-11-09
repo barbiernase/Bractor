@@ -313,7 +313,8 @@ public sealed class GestenTests : IDisposable
         alt.Should().Be("EroeffneMahnung");
         patch.Select(p => p.Datei).Should().Contain(["Leihwesen/Gebuehren.cs", "Leihwesen/Uebersetzungen.Leihwesen.cs", "Leihwesen/Lesen.cs"]);
         patch.Should().OnlyContain(p => !p.Nachher!.Contains("EroeffneMahnung"));
-        patch.Single(p => p.Datei == "Leihwesen/Uebersetzungen.Leihwesen.cs").Nachher.Should().Contain("IUebersetzung<Mahnbetrag, OeffneMahnung>");
+        patch.Single(p => p.Datei == "Leihwesen/Uebersetzungen.Leihwesen.cs").Nachher.Should().Contain("class Mahnbetrag_OeffneMahnung_1(").And.Contain("ITranslate<Mahnbetrag, OeffneMahnung>",
+            "der Name einer Übersetzung folgt ihren Typen");
     }
 
     // ══ Graphen (docs/04 §4.4): ein Knoten ist ein Parameter des Records — jede Kante steht als [Von(nameof(…))] am nehmenden Knoten, jeder Kopf als [Kopf] ══

@@ -210,21 +210,19 @@ public sealed record Schadensbewertung(
   Eine verlierbare Kante (`[Von(nameof(A), Verlierbar = true)]`) hält den Kopf nicht auf; was auf ihr verloren geht, kommt nicht wieder. Eine Funktion, die draußen
   etwas bewirkt (eine Datei schreibt), muss Wiederholung vertragen.
 - **Übersetzung** zwischen Katalog und Domäne (R22): Funktionen und Graphen liegen nur in Katalogen (domänenneutral, `Guid` statt `Id<T>`); eine
-  Anwendung macht sie mit Übersetzungen domänenspezifisch — eigene Records `: IUebersetzung<TEin, TAus>` in
+  Anwendung macht sie mit Übersetzungen domänenspezifisch — eigene Klassen `{TSource}_{TTarget}_{n}(TSource source) : ITranslate<TSource, TTarget>` in
   `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` (das einzige Projekt der Anwendung neben Speicher, Akteuren und Komposition, das Kataloge
-  referenziert; die Domäne bleibt rein). Feld für Feld, ohne Logik: je Parameter von `TAus` eine Quelle — `[Feld(nameof(Ziel), nameof(Quelle))]`
-  am Record (ausdrücklich auch `Guid` ⇄ `Id<T>`), sonst ein Feld von `TEin` mit gleichem Namen und implizit zuweisbarem Typ, sonst der
-  Standardwert. Wohin sie gehört, sagt nur der Typ: jede Ausgabe eines laufenden Graphen mit Typ `TEin` (Ausgang oder Zwischenstand), die Nachricht
-  eines Clients am Kopf, die Antwort eines Aggregats auf den Command einer Übersetzung (dann ist `TEin` ein Event, CQRS123). Ein Ausgang eines
-  laufenden Katalog-Graphen ohne Empfänger ist CQRS120.
+  referenziert; die Domäne bleibt rein). Der Konstruktor nimmt die Quelle, `Translate()` baut das Ziel aus ihren Feldern, ohne Logik
+  (`Guid` ⇄ `Id<T>` als `new(source.Feld)` bzw. `source.Feld.Wert`); der Compiler prüft es, der Editor schreibt `Translate()` aus der Verdrahtung. Wohin sie gehört, sagt nur der Typ: jede
+  Ausgabe eines laufenden Graphen mit Typ `TSource` (Ausgang oder Zwischenstand), die Nachricht eines Clients am Kopf, die Antwort eines Aggregats auf
+  den Command einer Übersetzung (dann ist `TSource` ein Event, CQRS123). Ein Ausgang eines laufenden Katalog-Graphen ohne Empfänger ist CQRS120.
 
   ```csharp
   // Pruefdomaene.Uebersetzungen/Messung/Uebersetzungen.cs — Client ↦ Katalog Rechenwerk (Kopf), dessen Ergebnis ↦ Aggregat
-  [Feld(nameof(Skalieren.Bezug), nameof(HochrechnungAngefordert.Stelle))]
-  public sealed record Hinein : IUebersetzung<HochrechnungAngefordert, Skalieren>;
-
-  [Feld(nameof(MeldeAusreisser.AggregateId), nameof(Skaliert.Bezug))]
-  public sealed record Melden : IUebersetzung<Skaliert, MeldeAusreisser>;
+  public sealed class HochrechnungAngefordert_Skalieren_1(Id<Messstelle> Stelle, double Wert) : ITranslate<HochrechnungAngefordert, Skalieren>
+  {
+      public Skalieren Translate() => new(Bezug: Stelle.Wert, Wert: Wert);
+  }
   ```
 - **Neue Ids** nur abgeleitet: `h.NeueId<T>()` bzw. `h.NeueId<T>(zweck)`, in einem Katalog ohne Aggregat-Typ `h.NeueId(zweck)` — ein `Guid`, den
   die Übersetzung zur `Id<T>` macht (R13).
@@ -367,7 +365,7 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R18 | Die Hausregel für Actors: ein Weg je Absicht (nur Framework-Code) | CQRS112/113 |
 | R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor | CQRS105, CQRS100 |
 | R20 | Ein Command ohne Ziel hat genau einen Empfänger (im Graphen die Knoten, die seinen Erzeuger in `Von` nennen; sonst ein Graph-Kopf); ein Graph ist kreisfrei über seine Knoten, jeder Knoten trägt `[Kopf]` oder `[Von(nameof(…))]`, je Eingangstyp ein Kopf, ein `Auf` nimmt genau eine Nachricht (CQRS100); jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
-| R22 | Eine Übersetzung (`record … : IUebersetzung<TEin, TAus>` in `<Wurzel>.Uebersetzungen`) nimmt einen Command ohne Ziel oder ein Antwort-Event und erzeugt einen Command; jeder Parameter von `TAus` hat eine Quelle (`[Feld]`, gleicher Name mit implizit zuweisbarem Typ, Standardwert); ein Graph nennt sie nie als Knoten; ein Ausgang eines laufenden Katalog-Graphen hat einen Empfänger; eine Antwort-Übersetzung nimmt ein Event, das das Decide eines übersetzten Commands ausgeben kann | CQRS119, CQRS121, CQRS115, CQRS120, CQRS123 |
+| R22 | Eine Übersetzung (`class … : ITranslate<TSource, TTarget>` in `<Wurzel>.Uebersetzungen`) nimmt einen Command ohne Ziel oder ein Antwort-Event und erzeugt einen Command; ihr Konstruktor nimmt genau die Quelle, `Translate()` baut das Ziel vollständig (Compiler); ein Graph nennt sie nie als Knoten; ein Ausgang eines laufenden Katalog-Graphen hat einen Empfänger; eine Antwort-Übersetzung nimmt ein Event, das das Decide eines übersetzten Commands ausgeben kann | CQRS119, CQRS121, CQRS115, CQRS120, CQRS123 |
 | R21 | Ein Bündel (`Buendel<A, B, …>` als Eingang eines `Auf`) bündelt verschiedene persistente Events mit ableitbarem Schlüssel: eine gemeinsame `Id<T>`, sonst `[Ueber<T>]`; keine = global | CQRS057, CQRS118 |
 
 Dazu die Projektstruktur ([07](07-projektstruktur.md), CQRS098): wo eine Primitive liegt, sagt die Tabelle `Abstractions/Projektstruktur.cs`.
@@ -393,7 +391,7 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter mit `[Kopf]` und `[Von(nameof(…))]` (ausdrückliche Kanten, eine Funktion auch mehrfach; aus Typen allein entsteht innen keine Kante), Ablaufformen als Formen der Ausgaben (Zusammenführen im Logik-Code); läuft als Instanz mit eigener Konfig, beliebig oft |
 | E14 | Quellen | Katalogfunktionen am Kopf eines Graphen, nicht im Log; durabel über den gesicherten Zustand |
 | E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json`); der Akteur einer Quellinstanz steht in ihrer Datei, geprüft gegen sein `IDarf` |
-| E17 | Funktionen und Aggregate | voneinander isoliert: Funktionen und Graphen nur in Katalogen, die Domäne rein; dazwischen steht eine Übersetzung (`IUebersetzung<TEin, TAus>`, `[Feld]`, Routing über den Typ) in einem eigenen Projekt der Anwendung — ohne Logik. Nur Clients und Quellen stoßen Funktionen an (konzept-akteure §5) |
+| E17 | Funktionen und Aggregate | voneinander isoliert: Funktionen und Graphen nur in Katalogen, die Domäne rein; dazwischen steht eine Übersetzung (`ITranslate<TSource, TTarget>`, vom Editor geschrieben, Routing über den Typ) in einem eigenen Projekt der Anwendung — ohne Logik. Nur Clients und Quellen stoßen Funktionen an (konzept-akteure §5) |
 | E16 | Akteur und Client | Akteur = `IDarf` + `IHoert` (ohne Art); Client = Record, der nur verkörpert; ein C#-Client nennt ihn mit `[assembly: IstClient<X>]`; Hinweise gehen nur an Akteure |
 
 Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
@@ -454,9 +452,11 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Funktion, wenn sie sonst in keinem Knoten steht. Ein Doppelklick öffnet eine Funktion von innen, einen Graphen eine Ebene tiefer.
 - **Übersetzungen und Eingänge:** eine Übersetzung entsteht **auf der Fläche**: ein Klick auf eine Nachricht am Ausgang eines Graphen (auch ein
   Zwischenstand) hebt die Commands an den Eingängen der Aggregate hervor, ein Klick auf einen davon legt die Übersetzung an — ein neuer Knoten
-  „Nachricht ↦ Command“ in der Spalte Übersetzungen (Name `<Nachricht>Zu<Command>`, die Id des Ziels ausdrücklich, wenn genau ein Feld passt).
-  Ein Doppelklick auf den Knoten öffnet die Verknüpfung der Felder: links die Felder von `TEin`, rechts die Parameter von `TAus` mit ihrer Regel („=“ nach Namen, „⇐“ ausdrücklich, „∅“ Standardwert, „⚠“ offen samt Meldung); „＋“ an einem Ziel hebt die
-  passenden Felder hervor (der Server rechnet sie), ein Klick schreibt `[Feld]`, ✕ löst es. Am Eingang eines Graphen „＋ Eingang“: eine Quelle (nur
+  in der Spalte Übersetzungen, ohne Kopf (die Klasse `{Nachricht}_{Command}_{n}`; gleich zugeordnet: gleiche Namen und die Id des Ziels, wenn genau
+  ein Feld passt).
+  Ein Doppelklick auf den Knoten öffnet die Verknüpfung der Felder: links die Felder der Quelle, rechts die Parameter des Ziels mit ihrer Regel („=“
+  gleicher Name, „⇐“ anderer Name, „∅“ Standardwert, „⚠“ offen — dann baut die Klasse nicht); „＋“ an einem Ziel hebt die passenden Felder hervor
+  (der Server rechnet sie), ein Klick verknüpft (der Server schreibt `Translate()` neu), ✕ löst es. Am Eingang eines Graphen „＋ Eingang“: eine Quelle (nur
   ohne Kopf) oder ein Client — direkt (ein Akteur darf den Eingang des Katalogs) oder eine neue bzw. vorhandene Nachricht der Domäne, die eine
   Kopf-Übersetzung in den Eingang macht (die neue Nachricht bekommt dessen Felder), danach der Akteur, der sie hineingibt (`IDarf`). „＋“ an einem
   Ausgang bietet gestrichelt „↦ ▣ Command an …“: ein vorhandener Command oder ein neuer samt Decide, Event und Apply; die Übersetzung dazwischen nennt

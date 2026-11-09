@@ -22,7 +22,7 @@
 |---|---|---|
 | `Domain` | die Domäne, **rein** (kennt keinen Katalog): Aggregate (State, Decider, Applier), Commands an Aggregate, Commands ohne Ziel eines Clients (an eine Kopf-Übersetzung), Events, Hinweise eines Decide, Wertobjekte, Enums; Queries an ein Aggregat und ihre Antworten (`Frage` im Decider — er sieht die Leseseite nicht) | Abstractions, Core |
 | `Domain.Projections` | ReadModels, Queries an Reader, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reader — ebenfalls ohne Katalog | Domain |
-| `Domain.Uebersetzungen` | die **Übersetzungen** (`record … : IUebersetzung<TEin, TAus>`): die eine Naht zwischen Katalogen und Domäne | Domain, die Kataloge, die die Anwendung nutzt |
+| `Domain.Uebersetzungen` | die **Übersetzungen** (`class …(TSource source) : ITranslate<TSource, TTarget>`): die eine Naht zwischen Katalogen und Domäne | Domain, die Kataloge, die die Anwendung nutzt |
 | `Domain.Akteure` | Akteure, Clients | Domain, Domain.Projections, Domain.Uebersetzungen |
 | `Domain.Infrastructure` | Store-Implementierungen — auch die einer Lese-Fähigkeit, die ein Katalog deklariert (CQRS124) | Domain, Domain.Projections, Kataloge |
 | `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Uebersetzungen |
@@ -72,7 +72,7 @@ hören (`IHoert`); ein Client nennt nur Akteure.
 | | `I<Store>.cs` | Store-Bündel mit seinen Fähigkeiten |
 | | `<Projektion>.cs`, `<Reader>.cs` | je Klasse eine Datei |
 | `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure (`record … : IAkteur`); Clients (`record … : IClient`) |
-| `Domain.Uebersetzungen/<Bereich>/` | `Uebersetzungen.cs` | Übersetzungen (Primitive `Uebersetzung`, `record … : IUebersetzung<TEin, TAus>` mit `[Feld]`) |
+| `Domain.Uebersetzungen/<Bereich>/` | `Uebersetzungen.cs` | Übersetzungen (Primitive `Uebersetzung`, `class {Quelle}_{Ziel}_{n}(TSource source) : ITranslate<TSource, TTarget>`) |
 | `Domain.Infrastructure/<Bereich>/` | `<Store>.cs`, `<Store>.Lesen.cs` | Store-Implementierung (Schreib- und Leseteil) |
 | `<Name>.Katalog/<Bereich>/` | `<Funktion>.cs` | je Funktion eine Datei (Primitive `Funktion`, eine Klasse mit Rumpf) |
 | | `<Technik>.cs` | je Technik (Schnittstelle oder Klasse im Konstruktor einer Funktion) und je Umsetzung eine Datei (Primitive `Technik`) |
@@ -98,7 +98,7 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 
 WAS ein Typ ist (die Primitive), bestimmt `Domain.SourceGeneration/Lageart.cs` nur aus Markern und Signaturen: ein Command ohne Ziel ist immer
 ein `KnotenCommand` und liegt im Katalog oder in der Domäne (ein Decide gibt keinen aus, CQRS114); eine Klasse mit `IFunktion` ist eine Funktion,
-ein Record mit `IGraph` ein Graph, einer mit `IUebersetzung<,>` eine Übersetzung; Technik und Konfig-Records folgen aus den Konstruktoren der Funktionen und ihrer Umsetzungen (gelesen über
+ein Record mit `IGraph` ein Graph, eine Klasse mit `ITranslate<,>` eine Übersetzung; Technik und Konfig-Records folgen aus den Konstruktoren der Funktionen und ihrer Umsetzungen (gelesen über
 `Infrastructure.SourceGeneration/Funktionsform.cs`, dieselbe Lesart wie Generator und Extractor), Fähigkeiten aus dem Bündel — dieselbe Lesart für
 Analyzer und `--check`.
 

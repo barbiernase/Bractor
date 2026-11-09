@@ -11,29 +11,54 @@ using Sondenkatalog.Katalog.Pruefung;
 
 namespace Leihwesen.Uebersetzungen;
 
-public sealed record RueckgabePruefen : IUebersetzung<PruefeRueckgabe, Rueckgabe>;
+#pragma warning disable CS9113
 
-[Feld(nameof(MeldeSchaden.AggregateId), nameof(Schaden.Fall))]
-public sealed record SchadenMelden : IUebersetzung<Schaden, MeldeSchaden>;
+public sealed class PruefeRueckgabe_Rueckgabe_1(PruefeRueckgabe source) : ITranslate<PruefeRueckgabe, Rueckgabe>
+{
+    public Rueckgabe Translate() => new(LeserId: source.LeserId, Beschaedigt: source.Beschaedigt);
+}
 
-[Feld(nameof(Schaetze.Fall), nameof(SchaetzeSchaden.Fall))]
-public sealed record SchadenSchaetzen : IUebersetzung<SchaetzeSchaden, Schaetze>;
+public sealed class Schaden_MeldeSchaden_1(Schaden source) : ITranslate<Schaden, MeldeSchaden>
+{
+    public MeldeSchaden Translate() => new(AggregateId: new(source.Fall), LeserId: source.LeserId);
+}
 
-[Feld(nameof(BegutachteVorOrt.AggregateId), nameof(VorOrt.Fall))]
-public sealed record VorOrtBegutachten : IUebersetzung<VorOrt, BegutachteVorOrt>;
+public sealed class SchaetzeSchaden_Schaetze_1(SchaetzeSchaden source) : ITranslate<SchaetzeSchaden, Schaetze>
+{
+    public Schaetze Translate() => new(Fall: source.Fall.Wert, LeserId: source.LeserId);
+}
 
-[Feld(nameof(EroeffneMahnung.AggregateId), nameof(Mahnbetrag.Vorgang))]
-public sealed record MahnungEroeffnen : IUebersetzung<Mahnbetrag, EroeffneMahnung>;
+public sealed class VorOrt_BegutachteVorOrt_1(VorOrt source) : ITranslate<VorOrt, BegutachteVorOrt>
+{
+    public BegutachteVorOrt Translate() => new(AggregateId: new(source.Fall), LeserId: source.LeserId);
+}
 
-public sealed record MahnungBemessen : IUebersetzung<BemesseMahnung, Bemesse>;
+public sealed class Mahnbetrag_EroeffneMahnung_1(Mahnbetrag source) : ITranslate<Mahnbetrag, EroeffneMahnung>
+{
+    public EroeffneMahnung Translate() => new(AggregateId: new(source.Vorgang), Betrag: source.Betrag);
+}
 
-public sealed record PruefungAusScan : IUebersetzung<RueckgabeGescannt, Scan>;
+public sealed class BemesseMahnung_Bemesse_1(BemesseMahnung source) : ITranslate<BemesseMahnung, Bemesse>
+{
+    public Bemesse Translate() => new(LeserId: source.LeserId);
+}
 
-[Feld(nameof(StartePruefung.AggregateId), nameof(Starte.Pruefung))]
-public sealed record PruefungStarten : IUebersetzung<Starte, StartePruefung>;
+public sealed class RueckgabeGescannt_Scan_1(RueckgabeGescannt source) : ITranslate<RueckgabeGescannt, Scan>
+{
+    public Scan Translate() => new(LeserId: source.LeserId, Seiten: source.Seiten);
+}
 
-[Feld(nameof(Gestartet.Pruefung), nameof(PruefungGestartet.PruefungId))]
-public sealed record PruefungGestartetMelden : IUebersetzung<PruefungGestartet, Gestartet>;
+public sealed class Starte_StartePruefung_1(Starte source) : ITranslate<Starte, StartePruefung>
+{
+    public StartePruefung Translate() => new(AggregateId: new(source.Pruefung), LeserId: source.LeserId, Seiten: source.Seiten);
+}
 
-[Feld(nameof(VermerkeSeite.AggregateId), nameof(Seitenbefund.Pruefung))]
-public sealed record SeiteVermerken : IUebersetzung<Seitenbefund, VermerkeSeite>;
+public sealed class PruefungGestartet_Gestartet_1(PruefungGestartet source) : ITranslate<PruefungGestartet, Gestartet>
+{
+    public Gestartet Translate() => new(Pruefung: source.PruefungId.Wert, Seiten: source.Seiten);
+}
+
+public sealed class Seitenbefund_VermerkeSeite_1(Seitenbefund source) : ITranslate<Seitenbefund, VermerkeSeite>
+{
+    public VermerkeSeite Translate() => new(AggregateId: new(source.Pruefung), Nummer: source.Nummer, Beschaedigt: source.Beschaedigt);
+}

@@ -38,6 +38,11 @@ public static class Umbenennen
                 if (patch.Any(p => p.Datei == rel)) continue;   // dieselbe Datei in mehreren Projekten (verlinkt)
                 patch.Add(new DateiPatch(rel, (await alt.GetTextAsync(ct)).ToString(), (await nachher.GetTextAsync(ct)).ToString()));
             }
+        // Eine Übersetzung heißt nach ihren Typen ({TSource}_{TTarget}_{n}, docs/04 §4.4): ihr Name zieht mit, wenn einer davon umbenannt wird.
+        if (symbol is INamedTypeSymbol)
+            for (var i = 0; i < patch.Count; i++)
+                if (patch[i].Nachher is { } text && UebersetzungenNachziehen(text, symbol.Name, neu) is { } neuText && neuText != text)
+                    patch[i] = patch[i] with { Nachher = neuText };
         // Ein Typ in Dateien seines Namens (<alt>.cs, Teile <alt>.<Teil>.cs wie <A>.Decider.cs/<Store>.Lesen.cs, docs/07 §7.4): die Dateien
         //   ziehen mit (entfernt + neu angelegt) — sonst hieße INeuerDienst.cs bald IGrenzwerte.
         static bool Eigene(string datei, string name) => datei == name + ".cs" || (datei.StartsWith(name + ".", StringComparison.Ordinal) && datei.EndsWith(".cs", StringComparison.Ordinal));
@@ -55,6 +60,36 @@ public static class Umbenennen
                 patch.Add(new DateiPatch(neuRel, null, text));
             }
         return (patch, symbol.Name);
+    }
+
+    /// <summary>
+    /// Benennt in <paramref name="text"/> jede Klasse <c>{alt}_{Ziel}_{n}</c> bzw. <c>{Quelle}_{alt}_{n}</c>, die <c>ITranslate&lt;…&gt;</c> mit dem schon
+    /// umbenannten Typ <paramref name="neu"/> implementiert, nach ihm um. Niemand verweist auf sie (das Generat folgt dem Build), nur die Deklaration zieht mit.
+    /// </summary>
+    private static string? UebersetzungenNachziehen(string text, string alt, string neu)
+    {
+        var baum = CSharpSyntaxTree.ParseText(text);
+        var wurzel = baum.GetRoot();
+        var klassen = wurzel.DescendantNodes().OfType<ClassDeclarationSyntax>()
+            .Select(k => (k, Typen: k.BaseList?.Types.Select(b => b.Type).OfType<GenericNameSyntax>()
+                .FirstOrDefault(g => g.Identifier.Text == "ITranslate" && g.TypeArgumentList.Arguments.Count == 2)?.TypeArgumentList.Arguments
+                .Select(a => a is QualifiedNameSyntax q ? q.Right.Identifier.Text : a is SimpleNameSyntax s ? s.Identifier.Text : a.ToString()).ToArray()))
+            .Where(x => x.Typen != null).ToList();
+        string? Neu(string name, string[] typen)
+        {
+            var teile = name.Split('_');
+            if (teile.Length != 3 || !int.TryParse(teile[2], out _)) return null;
+            var (q, z) = (teile[0] == alt && typen[0] == neu ? neu : teile[0], teile[1] == alt && typen[1] == neu ? neu : teile[1]);
+            if ((q, z) == (teile[0], teile[1])) return null;
+            var stamm = q + "_" + z + "_";
+            var n = int.Parse(teile[2]);
+            while (klassen.Any(x => x.k.Identifier.Text == stamm + n)) n++;   // der Zähler bleibt eindeutig
+            return stamm + n;
+        }
+        var ersetzt = klassen.Select(x => (x.k, Neu: Neu(x.k.Identifier.Text, x.Typen!))).Where(x => x.Neu != null).ToList();
+        if (ersetzt.Count == 0) return null;
+        return wurzel.ReplaceTokens(ersetzt.Select(x => x.k.Identifier), (alt_, _) =>
+            SyntaxFactory.Identifier(alt_.LeadingTrivia, ersetzt.First(x => x.k.Identifier == alt_).Neu!, alt_.TrailingTrivia)).ToFullString();
     }
 
     /// <summary>Das deklarierte Symbol, dessen Deklaration bei <paramref name="start"/> beginnt (für eine lokale Deklaration: ihre Variable).</summary>

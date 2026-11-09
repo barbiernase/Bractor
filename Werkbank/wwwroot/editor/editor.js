@@ -2145,8 +2145,9 @@
     const loeschbar=n&&fk.art!=="quelle"&&fk.art!=="uebersetzung"&&fk.spalte!=="eingang";
     const head=h("div",{class:"ghead"},
       h("span",{class:"gtitle hatname",title:(NODELABEL[n?n.kind:fk.art]||fk.art)+" · "+fk.name+(pid?" — Klick: Kette · Doppelklick: öffnen":"")},
-        h("span",{class:"gk"},(FL_SYM[fk.art]||"")+" "),fk.art==="uebersetzung"&&ueVon(fk.karte)
-          ?h("span",{class:"gn",title:"Übersetzung "+fk.name},ueVon(fk.karte).ein+" ↦ "+komBasis(ueVon(fk.karte).aus)):h("span",{class:"gn"},fk.name)),
+        // Eine Übersetzung trägt keinen Kopf auf der Fläche — sie ist der Knoten zwischen Nachricht und Command; Name und Typen im Tooltip.
+        fk.art==="uebersetzung"?null:h("span",{class:"gk"},(FL_SYM[fk.art]||"")+" "),
+        fk.art==="uebersetzung"?h("span",{class:"gn",title:fk.name+(ueVon(fk.karte)?" · "+ueVon(fk.karte).ein+" ↦ "+komBasis(ueVon(fk.karte).aus):"")},""):h("span",{class:"gn"},fk.name)),
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
       fk.art==="uebersetzung"?h("span",{class:"gx",title:"Die Übersetzung entfernen — was sie nimmt, ist danach wieder offen",
         onclick:e=>{e.stopPropagation();menueFix(e.clientX,e.clientY,"✕ ↦ "+fk.name,[{t:"✕ Übersetzung entfernen",gefahr:1,fn:()=>ueEntfernen(fk.karte)}]);}},"✕"):null,
@@ -2314,11 +2315,11 @@
     KOM={pfad,reiter:"komposition",wahl:knoten?{art:"knoten",name:knoten}:null};komZeige();}
   // Von innen öffnen: ein Graph seine Komposition, ein Aggregat sich selbst, Projektion und Reader ihren Store (mit ihnen gewählt).
   function flInnen(fk){if(fk.art==="graph"){komOeffne(fk.id);return;}if(fk.art==="uebersetzung"){ueOeffne(fk);return;}const pid=flPanelId(fk);if(pid)komKarte(pid);}
-  // ══ ÜBERSETZUNG (docs/04 §4.4): eine Karte in der Spalte Übersetzungen, ein Record der Domäne (IUebersetzung<TEin, TAus>); ihre
+  // ══ ÜBERSETZUNG (docs/04 §4.4): eine Karte in der Spalte Übersetzungen, eine Klasse der Anwendung (ITranslate<TSource, TTarget>); ihre
   //   Feldzuordnung öffnet ein Modal (Pfad = ihre Karten-Id „ue:uebersetzung:Name“), links die Felder von TEin, rechts die Parameter von TAus.
   function ueOeffne(fk){const id=fk.karte;if(KOM)KOM.pfad.push(id);else KOM={pfad:[id],reiter:"komposition",wahl:null};KOM.port=null;KOM.feld=null;komZeige();}
   function ueZeige(de,id){const u=ueVon(id);if(!u){KOM.pfad.pop();if(!KOM.pfad.length)KOM=null;return;}
-    const m=komRahmen("Feld für Feld, ohne Logik: „=“ nach Namen, „⇐“ ausdrücklich ([Feld]), „∅“ Standardwert, „⚠“ offen — ein Ziel (rechts) oder eine Quelle (links) wählen, dann das Gegenstück: das schreibt [Feld]");
+    const m=komRahmen("Der Konstruktor nimmt "+u.ein+", Translate() baut "+u.aus+" Feld für Feld aus source — „=“/„⇐“ verdrahtet, „∅“ Standardwert, „⚠“ offen. Ein Ziel (rechts) oder eine Quelle (links) wählen, dann das Gegenstück: das schreibt Translate()");
     m.append(h("div",{class:"kom-leib form"},h("div",{class:"ue-modal"},h("div",{class:"ue-modal-k"},"↦ "+u.name+" · "+u.namespace),komUebersetzungEl(u),
       h("div",{class:"kom-akte"},h("button",{class:"kom-akt gm-gefahr",title:"Die Übersetzung entfernen — was sie nimmt, ist danach wieder offen",
         onclick:()=>{ueEntfernen(id);KOM.pfad.pop();if(!KOM.pfad.length)komSchliesse();else komZeige();}},"✕ Übersetzung entfernen")))));
@@ -2334,7 +2335,7 @@
   const komInstanzen=name=>Object.keys(WB.instanzen||{}).filter(i=>((WB.instanzen[i]||{}).Graph||"")===name).sort();
   function komWaehle(w){KOM.wahl=w;komZeige();}
   // Einen Knoten öffnen: ein Graph eine Ebene tiefer, eine Funktion ihr Formular (Signatur, Konstruktor, Rümpfe).
-  function komKnotenOeffnen(k){if(k.art==="uebersetzung"){deFlash("ℹ "+k.name+" übersetzt "+k.typ.replace(/^Uebersetze</,"").replace(/>$/,"").replace(", "," ↦ ")+" — die Zuordnung steht auf der Karte",true);return;}
+  function komKnotenOeffnen(k){if(k.art==="uebersetzung"){deFlash("ℹ "+k.name+" übersetzt "+k.typ.replace(/^ITranslate</,"").replace(/>$/,"").replace(", "," ↦ ")+" — die Zuordnung steht auf der Karte",true);return;}
     if(k.art==="graph"&&k.karte){KOM.pfad.push(k.karte);KOM.wahl=null;komZeige();}
     else if(k.karte)komKarte(k.karte,true);else deFlash("ℹ "+k.typ+" ist eine Katalogfunktion des Frameworks — ihre Werte stehen in der Instanz",true);}
   function komKnotenMenue(id,k,e){menueFix(e.clientX,e.clientY,k.name+" : "+k.typ,[
@@ -2451,16 +2452,15 @@
         if(komSorte(o.typ)==="command"&&!(recByName(komBasis(o.typ))||{}).aggregat)pa.append(plus("nach",o.typ,"Anschließen: wer nimmt "+o.typ+"?"));ports.append(pa);});});
     if(ports.childNodes.length)el.append(ports);
     return el;}
-  // Die ↦-KARTE einer Übersetzung (docs/04 §4.4): links die Felder von TEin, rechts die Parameter von TAus mit ihrer Regel — „=“ nach Namen,
-  //   „⇐“ ausdrücklich ([Feld]), „∅“ Standardwert, „⚠“ offen. ＋ an einem Ziel hebt die Felder hervor, die passen (der Server rechnet sie), ein Klick
-  //   schreibt [Feld]; ✕ nimmt es zurück.
-  // Die Zuordnung einer Übersetzung auf ihrer Karte (Fläche): je Parameter von TAus seine Quelle — „⇐“ ausdrücklich, „=“ nach Namen, „∅“ Standard,
-  //   „⚠“ offen. Nur Anzeige; Doppelklick (bzw. Klick bei klein) öffnet das Modal, in dem zugeordnet wird.
-  const UE_REGEL={feld:["⇐","ausdrücklich ([Feld])"],name:["=","nach Namen"],standard:["∅","Standardwert des Parameters"]};
+  // Die Zuordnung einer Übersetzung auf ihrer Karte (Fläche): je Parameter von TAus sein Feld der Quelle, wie es in Translate() steht
+  //   (Ziel: source.Feld) — „=“ gleicher Name, „⇐“ anderer Name, „∅“ Standard, „⚠“ offen. Nur Anzeige; Doppelklick öffnet das Modal, in dem
+  //   verdrahtet wird.
+  const UE_REGEL={feld:["⇐","verdrahtet (source."],name:["=","verdrahtet (source."],standard:["∅","Standardwert des Parameters"]};
   const ueQuelle=z=>z.quelle||(z.regel==="name"?z.name:"");
+  const ueText=(t,q)=>t.endsWith("source.")?t+q+")":t;
   function ueZuordnungEl(u,oeffne,klein){const zs=u.ziele||[],offen=zs.filter(z=>!UE_REGEL[z.regel]).length,MAX=klein?4:8;
     const box=h("div",{class:"fl-ue-map"+(klein?" klein":""),title:"Doppelklick: Felder zuordnen",ondblclick:e=>{e.stopPropagation();oeffne();}});
-    zs.slice(0,MAX).forEach(z=>{const [sym,txt]=UE_REGEL[z.regel]||["⚠","offen"],q=ueQuelle(z);
+    zs.slice(0,MAX).forEach(z=>{const [sym,txt0]=UE_REGEL[z.regel]||["⚠","offen"],q=ueQuelle(z),txt=ueText(txt0,q);
       box.append(h("div",{class:"fl-ue-r r-"+(z.regel||"offen"),title:z.name+" ("+z.typ+") — "+txt+(q?" aus "+q:"")},
         h("span",{class:"fl-ue-q"},q||(z.regel==="standard"?"Standard":"—")),h("span",{class:"fl-ue-s"},sym),h("span",{class:"fl-ue-n"},z.name)));});
     if(zs.length>MAX)box.append(h("div",{class:"fl-ue-mehr"},"… "+(zs.length-MAX)+" weitere"));
@@ -2470,7 +2470,7 @@
     return box;}
   // Die ↦-KARTE einer Übersetzung im Modal (docs/04 §4.4): links die Felder von TEin, rechts die Parameter von TAus mit ihrer Regel, dazwischen
   //   je Zuordnung eine Linie. Zuordnen von beiden Seiten: ein Ziel wählen hebt die passenden Quellen hervor (der Server rechnet sie), eine Quelle
-  //   wählen die Ziele, die sie nehmen können; der zweite Klick schreibt [Feld]. ✕ nimmt es zurück; Esc bricht die Wahl ab.
+  //   wählen die Ziele, die sie nehmen können; der zweite Klick schreibt Translate() neu (Ziel: source.Feld). ✕ nimmt es zurück; Esc bricht ab.
   function komUebersetzungEl(u){const F=KOM.feld&&KOM.feld.knoten===u.name?KOM.feld:null,zs=u.ziele||[];
     const ziel=F&&F.ziel?zs.find(z=>z.name===F.ziel):null,quelle=F&&F.quelle?F.quelle:null;
     const nimmt=z=>(z.passend||[]).includes(quelle);
@@ -2484,12 +2484,12 @@
       L.set(q.name,el);links.append(el);});
     if(!(u.quellen||[]).length)links.append(h("div",{class:"kom-ue-f leise"},"— keine Felder"));
     const rechts=h("div",{class:"kom-ue-sp"},h("div",{class:"kom-ue-t",title:u.aus},u.aus));
-    zs.forEach(z=>{const [sym,txt]=UE_REGEL[z.regel]||["⚠","offen — Quelle wählen"],an=!!ziel&&ziel.name===z.name,passt=!!quelle&&nimmt(z);
+    zs.forEach(z=>{const [sym,txt0]=UE_REGEL[z.regel]||["⚠","offen — Quelle wählen"],txt=ueText(txt0,ueQuelle(z)),an=!!ziel&&ziel.name===z.name,passt=!!quelle&&nimmt(z);
       const el=h("div",{class:"kom-ue-f r-"+(z.regel||"offen")+(an?" aktiv":"")+(passt?" kand":"")+(F&&!an&&!passt?" leise":""),
         title:txt+(passt?" — Klick: "+z.name+" ← "+quelle:(z.passend||[]).length?" — Klick: Quelle wählen ("+z.passend.join(", ")+")":" — kein Feld von "+u.ein+" passt"),
         onclick:e=>{e.stopPropagation();if(passt)komFeldSetze(u,z.name,quelle);else if((z.passend||[]).length)waehle({ziel:z.name});}},
         h("span",{class:"kom-ue-r",title:txt},sym),z.name+" ",h("span",{class:"gn"},z.typ),
-        z.regel==="feld"?h("span",{class:"gx",title:"[Feld] lösen",onclick:e=>{e.stopPropagation();komFeldLoese(u,z.name);}},"✕"):null);
+        z.regel==="feld"||z.regel==="name"?h("span",{class:"gx",title:"Verdrahtung lösen",onclick:e=>{e.stopPropagation();komFeldLoese(u,z.name);}},"✕"):null);
       R.set(z.name,el);rechts.append(el);});
     const svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","kom-ue-linien");
     const box=h("div",{class:"kom-ue"},links,h("div",{class:"kom-ue-pfeil"},"↦"),rechts);box.append(svg);
@@ -3973,9 +3973,8 @@
   function komKnotenEntfernen(id,name){const g=komModell(id);if(!g)return;g.knoten=(g.knoten||[]).filter(x=>x.name!==name);
     g.knoten.forEach(x=>{x.von=ohneX(x.von,name);x.verlierbar=ohneX(x.verlierbar,name);});gTitel(g.name+": Knoten "+name+" entfernt");if(KOM)KOM.wahl=null;render();}
   // ══ EINGÄNGE UND ÜBERSETZUNGEN (docs/10 §10.9): nur Clients und Quellen stoßen Funktionen an. Eine Übersetzung
-  //   (Uebersetze<TEin, TAus>) verbindet die Nachricht eines Clients mit dem Eingang eines Katalogs und die Ausgabe einer Funktion mit einem Command
-  //   an ein Aggregat — Feld für Feld; was nicht nach Namen passt, nennt die ↦-Karte ausdrücklich ([Feld]). ══
-  const komUeTyp=(ein,aus)=>"Uebersetze<"+ein+", "+aus+">";
+  //   (ITranslate<TSource, TTarget>) verbindet die Nachricht eines Clients mit dem Eingang eines Katalogs und die Ausgabe einer Funktion mit einem
+  //   Command an ein Aggregat — Feld für Feld, verdrahtet auf der ↦-Karte. ══
   const komKnotenName=(g,stamm)=>{let n=stamm,i=2;while((g.knoten||[]).some(x=>x.name===n))n=stamm+(i++);return n;};
   // Die Felder einer Nachricht als neue Felder (eine Kopie: gleiche Namen und Typen — so passt die Übersetzung nach Namen).
   // ns: wohin die Kopie kommt — heißt dort ein Namespace-Teil wie ein Aggregat im Typ (Domain.Pipeline.Modell und Id<Modell>), meinte der einfache
@@ -4033,14 +4032,21 @@
       ...(cmds.length?[{kopf:"vorhanden"}]:[]),...cmds.map(r=>({t:"▣ "+r.aggregat+" · "+r.name,fn:()=>komUebersetzungAn(typ,r.name)}))]);}
   // Die Übersetzung typ ↦ cmd in der Domäne des Commands; die Id des Ziels nennt sie ausdrücklich, wenn genau ein Feld dafür in Frage kommt (eine Id
   //   dieses Aggregats, sonst ein Guid) — sonst bleibt sie offen, die ↦-Karte zeigt es.
+  // Die neue Übersetzung (eine Klasse ITranslate<TSource, TTarget>, docs/04 §4.4): je Parameter des Ziels die Quelle mit gleichem Namen und Typ, dazu
+  //   die Id des Ziels aus genau einem passenden Feld (eine Id dieses Aggregats, sonst ein Guid). Name {Quelle}_{Ziel}_{Zähler}.
   function komUebersetzungAn(typ,cmd){const r=recNamens(cmd);if(!r)return;
     const idFeld=aggIdFeld(),quelle=(recByName(komBasis(typ))||{}).felder||[],felder=[];
+    (r.felder||[]).forEach(z=>{if(z.name===idFeld)return;const q=quelle.find(f=>f.name===z.name&&komBasis(f.typ)===komBasis(z.typ));if(q)felder.push({ziel:z.name,quelle:q.name});});
     if(!quelle.some(f=>f.name===idFeld)){const ids=quelle.filter(f=>f.typ==="Id<"+r.aggregat+">"),guids=quelle.filter(f=>/^(System\.)?Guid$/.test(f.typ));
-      const w=ids.length===1?ids[0]:!ids.length&&guids.length===1?guids[0]:null;if(w)felder.push({ziel:idFeld,quelle:w.name});}
-    ueNeu(r.namespace,komBasis(typ),cmd,felder,komBasis(typ)+"Zu"+cmd);}
+      const w=ids.length===1?ids[0]:!ids.length&&guids.length===1?guids[0]:null;if(w)felder.unshift({ziel:idFeld,quelle:w.name});}
+    else felder.unshift({ziel:idFeld,quelle:idFeld});
+    const stamm=komBasis(typ)+"_"+cmd+"_";let n=1;while(nameFehler(stamm+n)||(MODEL.uebersetzungen||[]).some(u=>u.name===stamm+n))n++;
+    ueNeu(r.namespace,komBasis(typ),cmd,felder,stamm+n);}
   // Eine neue Übersetzung als Record der Domäne (Name eindeutig unter allen Typen).
-  function ueNeu(ns,ein,aus,felder,stamm){const n=uniq(stamm||(ein+"Hinein"));
-    (MODEL.uebersetzungen=MODEL.uebersetzungen||[]).push({_id:"uebersetzung:"+n,name:n,namespace:ns,ein,aus,felder,usings:[],quellen:[],ziele:[],fehler:[]});
+  function ueNeu(ns,ein,aus,felder,stamm){const n=uniq(stamm||(ein+"_"+aus+"_1"));
+    // Felder von Quelle und Ziel, wie das Modell sie kennt — daraus schreibt der Server den Konstruktor und Translate(), bis er sie selbst gelesen hat.
+    const fs=t=>((recByName(komBasis(t))||{}).felder||[]).map(f=>({name:f.name,typ:f.typ}));
+    (MODEL.uebersetzungen=MODEL.uebersetzungen||[]).push({_id:"uebersetzung:"+n,name:n,namespace:ns,ein,aus,felder,usings:[],quellen:fs(ein),ziele:[],fehler:[]});
     gTitel("↦ "+n+": "+ein+" ↦ "+aus);render();return n;}
   // Aggregat von innen, „＋ wer schickt ihn“: ein offener Ausgang eines Graphen auf der Fläche wird in den Command übersetzt — oder ein Graph aus
   //   einem Katalog wird an die Domäne gebunden (wie „＋ Graph“ am Band der Fläche).

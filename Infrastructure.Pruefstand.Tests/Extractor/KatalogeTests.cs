@@ -9,8 +9,8 @@ namespace Infrastructure.Pruefstand.Extractor;
 
 /// <summary>
 /// Die Geste „neuer Katalog“ (docs/07 §7.2) als Text-Patch: Projektdatei, Eintrag in der Solution samt Konfigurationen,
-/// Referenz der Schreibseite (ihre Übersetzungen nehmen seine Nachrichten, docs/07 §7.2) — und „nutzen“ setzt bzw. entfernt nur diese
-/// Referenz.
+/// Referenz des Projekts der Übersetzungen (sie nehmen seine Nachrichten, die Domäne bleibt rein, docs/07 §7.2) — und „nutzen“ setzt bzw.
+/// entfernt nur diese Referenz.
 /// </summary>
 public class KatalogeTests : IDisposable
 {
@@ -33,7 +33,7 @@ public class KatalogeTests : IDisposable
 
         """;
 
-    private const string Schreibseite = """
+    private const string Uebersetzungen = """
         <Project Sdk="Microsoft.NET.Sdk">
             <ItemGroup>
               <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
@@ -44,15 +44,15 @@ public class KatalogeTests : IDisposable
 
     public KatalogeTests()
     {
-        Directory.CreateDirectory(Path.Combine(_wurzel, "Domain"));
+        Directory.CreateDirectory(Path.Combine(_wurzel, "Domain.Uebersetzungen"));
         File.WriteAllText(Path.Combine(_wurzel, "Probe.sln"), Sln.Replace("\r\n", "\n"));
-        File.WriteAllText(Path.Combine(_wurzel, "Domain", "Domain.csproj"), Schreibseite.Replace("\r\n", "\n"));
+        File.WriteAllText(Path.Combine(_wurzel, "Domain.Uebersetzungen", "Domain.Uebersetzungen.csproj"), Uebersetzungen.Replace("\r\n", "\n"));
     }
 
     public void Dispose() { try { Directory.Delete(_wurzel, true); } catch (IOException) { } }
 
     [Fact]
-    public void Neuer_Katalog_schreibt_Projekt_Solution_und_Referenz_der_Schreibseite()
+    public void Neuer_Katalog_schreibt_Projekt_Solution_und_Referenz_der_Uebersetzungen()
     {
         var puffer = new Dateipuffer(_wurzel);
 
@@ -60,7 +60,7 @@ public class KatalogeTests : IDisposable
 
         projekt.Should().Be("Bild.Katalog");
         var patch = puffer.Patch();
-        patch.Select(p => p.Datei).Should().BeEquivalentTo("Bild.Katalog/Bild.Katalog.csproj", "Probe.sln", "Domain/Domain.csproj");
+        patch.Select(p => p.Datei).Should().BeEquivalentTo("Bild.Katalog/Bild.Katalog.csproj", "Probe.sln", "Domain.Uebersetzungen/Domain.Uebersetzungen.csproj");
         puffer.Lies("Bild.Katalog/Bild.Katalog.csproj").Should().Contain(@"<ProjectReference Include=""..\Abstractions\Abstractions.csproj"" />")
             .And.NotContain("Domain\\Domain.csproj", "ein Katalog kennt keine Anwendung");
         var sln = puffer.Lies("Probe.sln")!;
@@ -68,7 +68,7 @@ public class KatalogeTests : IDisposable
         var id = System.Text.RegularExpressions.Regex.Match(sln, @"Bild\.Katalog\.csproj"", ""\{(?<id>[^}]+)\}""").Groups["id"].Value;
         sln.Should().Contain($"{{{id}}}.Debug|Any CPU.ActiveCfg = Debug|Any CPU").And.Contain($"{{{id}}}.Release|x64.Build.0 = Release|Any CPU");
         sln.IndexOf($"{{{id}}}.Release|x64.Build.0", StringComparison.Ordinal).Should().BeLessThan(sln.LastIndexOf("EndGlobalSection", StringComparison.Ordinal));
-        puffer.Lies("Domain/Domain.csproj").Should().Contain(@"      <ProjectReference Include=""..\Bild.Katalog\Bild.Katalog.csproj"" />");
+        puffer.Lies("Domain.Uebersetzungen/Domain.Uebersetzungen.csproj").Should().Contain(@"      <ProjectReference Include=""..\Bild.Katalog\Bild.Katalog.csproj"" />");
     }
 
     [Fact]
@@ -87,11 +87,11 @@ public class KatalogeTests : IDisposable
         var puffer = new Dateipuffer(_wurzel);
         Kataloge.Nutzen(puffer, "Bild.Katalog", true);
         Kataloge.Nutzen(puffer, "Bild.Katalog", true);
-        var mit = puffer.Lies("Domain/Domain.csproj")!;
+        var mit = puffer.Lies("Domain.Uebersetzungen/Domain.Uebersetzungen.csproj")!;
         Abstractions.Projektstruktur.KatalogeIn(mit).Should().Equal("Bild.Katalog");
 
         Kataloge.Nutzen(puffer, "Bild.Katalog", false);
 
-        puffer.Lies("Domain/Domain.csproj").Should().Be(Schreibseite.Replace("\r\n", "\n"));
+        puffer.Lies("Domain.Uebersetzungen/Domain.Uebersetzungen.csproj").Should().Be(Uebersetzungen.Replace("\r\n", "\n"));
     }
 }
