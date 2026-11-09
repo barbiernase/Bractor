@@ -102,6 +102,8 @@ Der **Akteur einer Instanz** (Graph mit Quelle) muss dürfen, was aus seinen Aus
    rein; Übersetzungen, Akteure mit Katalog-Nachrichten und der Store einer Katalog-Fähigkeit in ihren Rollen-Projekten (`Uebersetzungen.*`,
    `Akteure.*`, `Speicher.*`); Antworten als Antwort-Übersetzungen (der Katalogimport teilt sich: eine Quelle hat keinen Kopf); eine absichtlich falsch
    liegende Funktion hält die Lage-Prüfung nach `<Name>.Katalog` im Soll; Gesten-Skript und `soll.txt` nachgezogen.
-6. **Sicht und Editor:** Die Spalte Graphen zeigt die Katalog-Graphen, die laufen (ohne Band, sie gehören keiner Domäne); die Spalte Übersetzungen die
-   Übersetzungen im Band ihrer Domäne; Kanten nach Typ. „＋ ↦“ an einem Ausgang legt eine Übersetzung in einer Domäne an, das Modal ordnet die Felder zu.
+6. **Sicht und Editor** (umgesetzt, geprüft auf einer eigenen Werkbank-Instanz): Die Spalte Graphen zeigt die Katalog-Graphen, die laufen (im Band
+   „📚 <Katalog>“, sie gehören keiner Domäne); die Spalte Übersetzungen die Übersetzungen im Band ihrer Domäne; Kanten nach Typ. „＋ ↦“ an einem Ausgang
+   bzw. am Kopf legt eine Übersetzung an — der Server legt sie nach `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs`, „neuer Katalog“ setzt die
+   Referenz der Übersetzungen; neue Funktionen und Graphen entstehen nur in Katalogen, eine Technik-Schnittstelle in eigener Datei.
 7. **Doku und Abnahme** (docs/04, 05, 07, 10, 11, 13, konzept-funktionen-im-editor, README, CLAUDE.md).

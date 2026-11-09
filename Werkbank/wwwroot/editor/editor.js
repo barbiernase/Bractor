@@ -2218,7 +2218,7 @@
     if(sq&&sp)FLGEO.baender.forEach(b=>{const x1=sq.x-40,x2=sp.x+sp.w+40,name=b.id?(FL().baender.find(x=>x.id===b.id)||{}).name||b.id:"ohne Domäne";
       const fr=h("div",{class:"fl-band"},h("span",{class:"fl-band-t",title:b.id||""},name));fr.style.setProperty("--dc","hsl("+domHue(b.id||"§")+" 45% 55%)");
       const sg=FLGEO.spalten.graphen;
-      if(b.id&&sg){const plus=h("button",{class:"fl-band-plus",title:"Einen Graphen aus einem Katalog an "+name+" binden — der Ablauf liegt im Bereich dieser Domäne und gehört ihr",
+      if(b.id&&sg){const plus=h("button",{class:"fl-band-plus",title:"Einen Graphen aus einem Katalog an "+name+" binden — eine Übersetzung dieser Domäne nimmt einen seiner Ausgänge",
         onclick:e=>{e.stopPropagation();flBandGraph(b.id,name,e);}},"＋ Graph");plus.style.left=(sg.x-x1)+"px";fr.append(plus);}
       Object.assign(fr.style,{left:x1+"px",top:b.y+"px",width:(x2-x1)+"px",height:b.h+"px"});ebene.append(fr);aus.y2=Math.max(aus.y2,b.y+b.h);});
     FLGEO.gruppen.forEach((r,id)=>{const g=FL().gruppen.find(x=>x.id===id)||{name:id};
@@ -4201,7 +4201,7 @@
     for(let i=0;i<200&&G_LAEUFT;i++)await new Promise(r=>setTimeout(r,50));
     if(document.activeElement&&gFokus())document.activeElement.blur();await gesteSenden();
     for(let i=0;i<200&&G_LAEUFT;i++)await new Promise(r=>setTimeout(r,50));}
-  // Kataloge (docs/plan-katalog-und-graphen.md, Schritt 2): anlegen (Projekt, Solution, Referenz der Abläufe) bzw. nutzen — eine Geste am Server, der
+  // Kataloge (docs/plan-ohne-pipeline.md): anlegen (Projekt, Solution, Referenz der Übersetzungen) bzw. nutzen — eine Geste am Server, der
   //   danach kalt neu lädt; das neue Board kommt mit der Antwort.
   async function gKatalog(body,titel){await gesteFlush();G_LAEUFT=true;
     try{const r=await fetch("/api/werkbank/katalog",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
@@ -4211,7 +4211,7 @@
     catch(e){badge(false);deFlash("⚠ Werkbank nicht erreichbar — "+titel+" nicht geschrieben",false);return false;}
     finally{G_LAEUFT=false;}}
   function katalogNeu(ev){frageFix(ev.clientX,ev.clientY,"📚 Neuer Katalog","Bildverarbeitung",
-    "Ein eigenes Projekt <Name>.Katalog: Funktionen und ihre Nachrichten, ohne Domäne — die Abläufe der Anwendung nutzen es.",n=>{
+    "Ein eigenes Projekt <Name>.Katalog: Funktionen, Graphen und ihre Nachrichten, ohne Domäne — die Übersetzungen der Anwendung nutzen es.",n=>{
       if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*(\.[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*)*$/.test(n.replace(/\.Katalog$/,"")))
         return "Ein Namespace: groß beginnen, nur Buchstaben und Ziffern, Teile durch Punkte";
       gKatalog({name:n},"Katalog "+n);});}
