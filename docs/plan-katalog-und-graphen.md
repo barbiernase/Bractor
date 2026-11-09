@@ -103,7 +103,8 @@ Neu im Code sind also genau ein generischer Knotentyp und ein Attribut. Alles an
   im anderen Graphen noch einmal hinzuschreiben.
 - **A3 Kein Katalog-Command verlässt einen Kompositionsgraphen.** Jeder Fall wird übersetzt oder von einem Knoten genommen. Hinweise dürfen
   hinaus, an die Akteure, die sie hören. Ein `Verwirf<T>` kommt erst, wenn ein Setting es braucht.
-- **A4 Anwendungsfunktionen bleiben vorerst erlaubt.** Funktionen mit Logik, die Domänentypen brauchen, bleiben in der Anwendung. Das sind die mit
+- **A4 Anwendungsfunktionen bleiben vorerst erlaubt.** *(Entschieden 2026-11-09: Funktionen nur in Katalogen — Plan in
+  [plan-ohne-pipeline.md](plan-ohne-pipeline.md).)* Funktionen mit Logik, die Domänentypen brauchen, bleiben in der Anwendung. Das sind die mit
   Lese-Fähigkeit auf einen Store (`RangeAufloesung`, `MitgliederEinfrieren`) und die mit Deutungslogik (`Bildeingang`). Isoliert ist, was im
   Katalog liegt. Ob Anwendungsfunktionen später ganz verschwinden, entscheidet Schritt 6 am Bestand.
 - **A5 Generische Ausprägungen** (`BildErzeugt<Vorschau>`): Der Editor zeigt und verdrahtet sie, Anlegen kommt später (Schritt 8). Der Standard
@@ -270,6 +271,6 @@ Offene Eingänge (`cqrs_eingaenge`) gibt es nur noch für Commands ohne Ziel von
 
 ## 4. Was offen bleibt
 
-- A4 (Anwendungsfunktionen ja oder nein) entscheiden wir am Bestand in Schritt 6.
+- A4 ist entschieden (2026-11-09): Funktionen nur in Katalogen, siehe [plan-ohne-pipeline.md](plan-ohne-pipeline.md).
 - `Core/Katalog` bleibt der Katalog des Frameworks (Quellen) und folgt denselben Regeln; ob er als Projekt in die Rolle umzieht, entscheiden wir,
   wenn der Editor Kataloge anlegen kann.

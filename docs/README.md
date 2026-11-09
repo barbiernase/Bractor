@@ -27,6 +27,7 @@ Stand 2026-11-07. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fa
 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Messverfahren, Messwerte (Tabellen schreibt `scripts/vermessung-tabelle.sh`) |
 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | offene Befunde (§13.0), Erledigtes; die eine Quelle für „offen“ |
 | [konzept-akteure.md](konzept-akteure.md) | Akteure (`IDarf`, `IHoert`), Clients, Reaktionen, Sitzung, Verteiler |
+| [plan-ohne-pipeline.md](plan-ohne-pipeline.md) | Plan (2026-11-09, nicht umgesetzt): Funktionen nur in Katalogen, die Pipeline-Schicht geht auf — Antwort-Übersetzung, Fähigkeiten aus Katalogen, Graphen in die Schreibseite |
 | [praesentation/](praesentation/) | Präsentation des Zielbilds als Geschichte (reveal.js; Leertaste weiter, ↓ genauer hinsehen, Esc Übersicht): kurz [zielbild.html](praesentation/zielbild.html) aus `geschichte.html`, vollständig [zielbild_full.html](praesentation/zielbild_full.html) aus `geschichte_full.html` (dazu Konsistenz und Garantien, Arbeitsplatz, Werkbank, LLM). Karten, Graphen, Diagramme aus `zielbild-seite.html`; `baue_deck.py` setzt zusammen — nach Änderungen `python3 docs/praesentation/baue_deck.py` bzw. mit `VORLAGE=geschichte_full.html … zielbild_full.html` |
 | [../vermessung/README.md](../vermessung/README.md) | Ablage der Messläufe |
 
