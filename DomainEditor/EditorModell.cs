@@ -367,8 +367,6 @@ public sealed record Rahmen
     public string ApplyMethode { get; init; } = Abstractions.Aggregatvertrag.Apply;
     /// <summary>Namespace → Verzeichnis (relativ zur Solution, „/"-getrennt). Enthält auch die Wurzel-Namespaces der Projekte.</summary>
     public IReadOnlyDictionary<string, string> Verzeichnisse { get; init; } = new Dictionary<string, string>();
-    /// <summary>Das Suffix der Abläufe zur Wurzel (Projektstruktur, docs/07): dort liegen Graphen, Funktionen der Anwendung und Client-Nachrichten.</summary>
-    public string AblaeufeSuffix { get; init; } = Abstractions.Projektstruktur.Von(Abstractions.Projektstruktur.Rolle.Ablaeufe).Suffix;
     /// <summary>Der allgemeine Katalog (Projektstruktur): die Commands, die alle Kataloge teilen dürfen; die Werkbank legt ihn beim ersten Gebrauch an.</summary>
     public string AllgemeinerKatalog { get; init; } = Abstractions.Projektstruktur.AllgemeinerKatalog;
     /// <summary>Je Katalog die Kataloge, die er referenziert (aus seiner Projektdatei) — wer einen Command eines anderen nimmt, braucht die Referenz.</summary>

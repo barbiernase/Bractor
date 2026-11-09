@@ -65,9 +65,11 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   je Ankunft — kein `T?`, `OneOf`, `IReadOnlyList` als Eingang, GR-EINGANG), dazu optional `Herkunft`, Lese-Fähigkeiten, `CancellationToken`; die Fälle der Rückgabe sind die Ausgangsports (`T`, `OneOf`, `IEnumerable`, `IAsyncEnumerable`:
   Commands und Hinweise). Ein Event hört sie nur als Antwort auf ihren eigenen Aggregat-Command (`CommandResult.Antwort`, CQRS108). Im Konstruktor:
   Konfig-Records, Technik (ohne Marker), `IZustand<T>`, `ILogger<T>`.
-- **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs`; jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch
-  mehrfach, oder eine **Übersetzung** `Uebersetze<TEin, TAus>` mit `[Feld(nameof(Ziel), nameof(Quelle))]`: zwischen Katalog und Domäne, Feld für
-  Feld ohne Logik, inline gerechnet, CQRS119–121). **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
+- **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs` eines **Katalogs** (`<Name>.Katalog`, domänenneutral; Funktionen und
+  Graphen gibt es nur dort); jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch mehrfach). Domänenspezifisch macht ihn eine
+  **Übersetzung** der Domäne: `[Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))] record X : IUebersetzung<TEin, TAus>` in `<Bereich>/Uebersetzungen.cs`,
+  Feld für Feld ohne Logik, Routing über den Typ (jede Ausgabe eines laufenden Graphen, ein Client-Command am Kopf, eine Antwort auf ihren Command;
+  docs/plan-ohne-pipeline.md, CQRS119–123); nur Übersetzungen nennen Katalog-Typen (CQRS122). **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
   jeder Kopf als `[Kopf]` (nimmt von außen, was keine Quelle speist; je Eingangstyp genau einer); nur eine Quelle trägt keins; was kein Knoten über
   `Von` nimmt, verlässt den Graphen (`GeneratedGraphen`, eine Lesart `Graphform`). Zwischen den Bausteinen bleibt es beim Typ-Routing mit genau einem
   Empfänger. Folge, Gabel, Wahl, Je sind Formen der Ausgaben; Zusammenführen, Sammeln, Warten stehen im Logik-Code (die Nachricht trägt mit, Zustand des
@@ -135,7 +137,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Werkbank | `Werkbank/` (Server `Werkbank/Server/`, Oberfläche `Werkbank/wwwroot/editor/`) |
 | Hosts | `Host.Grpc` (`AddCqrs(args)` der Komposition + `LaufeAsync`), `Host.Blazor` (Client) — beide mit `--umgebung <name>`; `Host.Pruefdomaene` (Messung S5) |
 | Beispieldomäne (Prüfling) | `Domain*`, `Domain.Akteure`, `Domain.Client.*` |
-| Prüfdomäne (zweite Anwendung, Framework-Tests) | `Pruefdomaene`, `Pruefdomaene.Projections`, `Pruefdomaene.Pipeline`, `Pruefdomaene.Akteure`, `Pruefdomaene.Laufzeit`, `Pruefdomaene.Integration.Tests` |
+| Prüfdomäne (zweite Anwendung, Framework-Tests) | `Pruefdomaene`, `Pruefdomaene.Projections`, `Pruefwerk.Katalog`, `Pruefdomaene.Akteure`, `Pruefdomaene.Laufzeit`, `Pruefdomaene.Integration.Tests` |
 | Umgebungen | `umgebungen/<name>/umgebung.json` und `umgebungen/<name>/graphen/<instanz>.json` |
 | Vermessung (E2E-Treiber, Ablage) | `Cqrs.Vermessung`, `scripts/vermessung-*.sh`, `vermessung/ergebnisse/` |
 

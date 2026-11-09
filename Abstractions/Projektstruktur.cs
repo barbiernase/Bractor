@@ -29,9 +29,6 @@ static class Projektstruktur
         Schreibseite,
         /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reader.</summary>
         Leseseite,
-        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Funktionen (Klassen im Host), Graphen, die Commands, die nur Knoten einander geben, Konfig-Records und
-        /// Technik.</summary>
-        Ablaeufe,
         /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure und Clients — der äußerste Ring.</summary>
         Akteure,
         /// <summary><c>&lt;Wurzel&gt;.Infrastructure</c>: Store-Implementierungen.</summary>
@@ -43,7 +40,8 @@ static class Projektstruktur
         /// <summary>
         /// <c>&lt;Name&gt;.Katalog</c>: ein FUNKTIONSKATALOG (docs/plan-katalog-und-graphen.md) — Funktionen, ihre Nachrichten (Commands ohne Ziel,
         /// Hinweise), Konfig-Records, Technik und Graphen, domänenneutral: er referenziert nur Abstractions (und andere Kataloge), keine Anwendung.
-        /// Keine Rolle EINER Anwendung: seine Wurzel ist sein eigener Name, die Abläufe einer Anwendung nutzen ihn per Referenz.
+        /// Keine Rolle EINER Anwendung: seine Wurzel ist sein eigener Name; eine Anwendung nutzt ihn per Referenz (ihre Domäne übersetzt ihn,
+        /// docs/plan-ohne-pipeline.md). Funktionen und Graphen gibt es nur hier.
         /// </summary>
         Katalog,
     }
@@ -61,18 +59,18 @@ static class Projektstruktur
         /// <summary>Eine Funktion (Klasse mit <c>IFunktion</c>, Baustein-Form, <c>Auf</c>): sie läuft im Host — je Funktion eine eigene Datei.</summary>
         Funktion,
         Konfig,
-        /// <summary>Ein Command ohne Ziel, den nur Knoten einander geben (kein <c>Decide</c> gibt ihn ab): bei den Abläufen bzw. im Katalog, in
-        /// <c>Commands.cs</c>.</summary>
+        /// <summary>Ein Command ohne Ziel, den kein <c>Decide</c> abgibt: im Katalog (Knoten geben ihn einander) oder bei der Schreibseite (die
+        /// Nachricht eines Clients an eine Kopf-Übersetzung), in <c>Commands.cs</c>.</summary>
         KnotenCommand,
-        /// <summary>Ein Hinweis (<c>ITransientEvent</c>, flüchtig, an Akteure): bei der Schreibseite, den Abläufen oder im Katalog — wer ihn
-        /// ausgibt, entscheidet; in <c>Events.cs</c>.</summary>
+        /// <summary>Ein Hinweis (<c>ITransientEvent</c>, flüchtig, an Akteure): bei der Schreibseite oder im Katalog — wer ihn ausgibt,
+        /// entscheidet; in <c>Events.cs</c>.</summary>
         Hinweis,
-        /// <summary>Ein Graph (<c>record … : IGraph</c>, Knoten als Parameter): bei den Abläufen, in <c>Graphen.cs</c>.</summary>
+        /// <summary>Ein Graph (<c>record … : IGraph</c>, Knoten als Parameter): im Katalog, in <c>Graphen.cs</c>.</summary>
         Graph,
         /// <summary>Eine Übersetzung (<c>record … : IUebersetzung&lt;TEin, TAus&gt;</c>): in der Domäne (Schreibseite), in <c>Uebersetzungen.cs</c> —
         /// sie macht einen Graphen aus einem Katalog domänenspezifisch (docs/plan-ohne-pipeline.md).</summary>
         Uebersetzung,
-        /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — bei den Abläufen,
+        /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — im Katalog,
         /// je Typ eine eigene Datei.</summary>
         Technik,
         /// <summary>Ein Akteur (<c>record … : IAkteur</c>) bzw. ein Client (<c>record … : IClient</c>): beim Rand, in <c>Akteure.cs</c> bzw. <c>Clients.cs</c>.</summary>
@@ -136,16 +134,14 @@ static class Projektstruktur
             new[] { "Commands.cs", "Events.cs", "ValueObjects.cs", "Enums.cs", "Queries.cs", "Responses.cs" }),
         new Eintrag(Rolle.Leseseite, ".Projections", true, new[] { Rolle.Schreibseite },
             new[] { "ReadModels.cs", "Queries.cs", "Responses.cs", "Enums.cs" }),
-        new Eintrag(Rolle.Ablaeufe, ".Pipeline", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
-            new[] { "Funktionen.cs", "Graphen.cs", "Commands.cs", "Konfigs.cs", "Enums.cs" }),
-        new Eintrag(Rolle.Akteure, ".Akteure", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe },
+        new Eintrag(Rolle.Akteure, ".Akteure", false, new[] { Rolle.Schreibseite, Rolle.Leseseite },
             new[] { "Akteure.cs", "Clients.cs" }),
         new Eintrag(Rolle.Speicher, ".Infrastructure", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
             new string[0]),
-        new Eintrag(Rolle.Leitung, ".Leitung", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe },
+        new Eintrag(Rolle.Leitung, ".Leitung", false, new[] { Rolle.Schreibseite, Rolle.Leseseite },
             new string[0], nurGeneriert: true),
         new Eintrag(Rolle.Komposition, ".Laufzeit", false,
-            new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung },
+            new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung },
             new string[0], nurGeneriert: true),
     };
 
@@ -169,11 +165,11 @@ static class Projektstruktur
 
     /// <summary>
     /// Die Rollen einer Anwendung, die Kataloge nutzen dürfen: die Schreibseite (ihre Übersetzungen machen Graphen aus Katalogen domänenspezifisch —
-    /// Zustand, Decide und Events nennen trotzdem keinen Katalog-Typ), die Abläufe, der Speicher (er setzt die Fähigkeiten um, die ein Katalog zum Lesen
-    /// deklariert) und alles darüber; die Leseseite kennt keine Funktionsnachricht.
+    /// Zustand, Decide und Events nennen trotzdem keinen Katalog-Typ, CQRS122), der Speicher (er setzt die Fähigkeiten um, die ein Katalog zum Lesen
+    /// deklariert) und alles darüber; die Leseseite kennt keine Funktionsnachricht. Eine neue Nutzung setzt die Referenz bei der Schreibseite.
     /// </summary>
     public static readonly IReadOnlyList<Rolle> NutzenKataloge = new[]
-        { Rolle.Schreibseite, Rolle.Ablaeufe, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung, Rolle.Komposition };
+        { Rolle.Schreibseite, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung, Rolle.Komposition };
 
     public static Eintrag Von(Rolle r) => r == Rolle.Katalog ? Katalog : Rollen.First(e => e.Rolle == r);
 
@@ -217,7 +213,7 @@ static class Projektstruktur
 
     /// <summary>Die Projekte, aus denen der Codegen Proto, STJ-Kontexte und Python-Basen erzeugt (alles außer den Store-Implementierungen).</summary>
     public static IEnumerable<string> CodegenProjekte(string wurzel) =>
-        new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe, Rolle.Akteure }.Select(r => Projekt(wurzel, r));
+        new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Akteure }.Select(r => Projekt(wurzel, r));
 
     /// <summary>
     /// Zerlegt einen Assembly-/Projektnamen in Wurzel und Rolle über das längste passende Suffix; ohne Suffix ist es die Schreibseite der
@@ -229,19 +225,6 @@ static class Projektstruktur
             if (name.EndsWith(e.Suffix, StringComparison.Ordinal) && name.Length > e.Suffix.Length)
                 return (name.Substring(0, name.Length - e.Suffix.Length), e.Rolle);
         return (name, Rolle.Schreibseite);
-    }
-
-    /// <summary>
-    /// Die Domäne eines Namespace bei den Abläufen (docs/konzept-funktionen-im-editor.md §4): <c>&lt;Wurzel&gt;.Pipeline.&lt;Bereich&gt;</c> →
-    /// <c>&lt;Wurzel&gt;.&lt;Bereich&gt;</c> (der Bereich der Schreibseite derselben Wurzel) — ein Ablauf gehört der Domäne, in deren Bereich er liegt.
-    /// Ohne Bereich oder außerhalb der Abläufe <c>null</c>.
-    /// </summary>
-    public static string? DomaeneDerAblaeufe(string ns)
-    {
-        var suffix = Von(Rolle.Ablaeufe).Suffix + ".";
-        var i = (ns ?? "").IndexOf(suffix, StringComparison.Ordinal);
-        if (i <= 0 || KatalogVon(ns!) != null) return null;
-        return ns!.Substring(0, i) + "." + ns.Substring(i + suffix.Length);
     }
 
     /// <summary>Ist <paramref name="projekt"/> ein Rollen-Projekt der Anwendung <paramref name="wurzel"/>?</summary>
@@ -260,7 +243,7 @@ static class Projektstruktur
             case Primitive.Wertobjekt:
                 return new[] { Rolle.Schreibseite, Rolle.Katalog };
             case Primitive.Hinweis:
-                return new[] { Rolle.Schreibseite, Rolle.Ablaeufe, Rolle.Katalog };
+                return new[] { Rolle.Schreibseite, Rolle.Katalog };
             case Primitive.Uebersetzung:
                 return new[] { Rolle.Schreibseite };
             case Primitive.StoreFaehigkeit:
@@ -272,16 +255,16 @@ static class Projektstruktur
                 return new[] { Rolle.Leseseite };
             case Primitive.KnotenCommand:
                 // Ein Command ohne Ziel: zwischen Knoten im Katalog — oder die Nachricht eines Clients an eine Kopf-Übersetzung in der Domäne.
-                return new[] { Rolle.Schreibseite, Rolle.Ablaeufe, Rolle.Katalog };
+                return new[] { Rolle.Schreibseite, Rolle.Katalog };
             case Primitive.Funktion: case Primitive.Graph:
             case Primitive.Konfig: case Primitive.Technik:
-                return new[] { Rolle.Ablaeufe, Rolle.Katalog };
+                return new[] { Rolle.Katalog };
             case Primitive.Akteur: case Primitive.Client:
                 return new[] { Rolle.Akteure };
             case Primitive.StoreImplementierung:
                 return new[] { Rolle.Speicher };
             case Primitive.Enum:
-                return new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe, Rolle.Katalog };
+                return new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Katalog };
             default:
                 return Rollen.Select(e => e.Rolle).Append(Rolle.Katalog).ToArray();
         }
@@ -320,7 +303,7 @@ static class Projektstruktur
     /// <summary>Der Namespace eines Typs im Bereich <paramref name="bereich"/> eines Projekts: Projekt + Ordner (ohne Bereich: das Projekt).</summary>
     public static string Namespace(string projekt, string? bereich) => string.IsNullOrEmpty(bereich) ? projekt : projekt + "." + bereich;
 
-    /// <summary>Der Bereich eines Namespace im Projekt (<c>Domain.Pipeline.ImagePair</c> in <c>Domain.Pipeline</c> → <c>ImagePair</c>); sonst <c>null</c>.</summary>
+    /// <summary>Der Bereich eines Namespace im Projekt (<c>Domain.Projections.ImagePair</c> in <c>Domain.Projections</c> → <c>ImagePair</c>); sonst <c>null</c>.</summary>
     public static string? BereichAus(string projekt, string ns) =>
         ns.StartsWith(projekt + ".", StringComparison.Ordinal) && ns.IndexOf('.', projekt.Length + 1) < 0 ? ns.Substring(projekt.Length + 1) : null;
 
@@ -338,9 +321,13 @@ static class Projektstruktur
         if (rolle == Rolle.Katalog)
             return $"'{typ}' ist {Text(p)} und gehört nicht in einen Katalog ({projekt}) — ein Katalog kennt keine Domäne; {Text(p)} liegt in einer "
                 + $"Anwendung ({string.Join(" oder ", erlaubt.Select(r => "<Wurzel>" + Von(r).Suffix))}, docs/07 §7.2)";
-        // In einem Projekt der Anwendung: das Rollen-Projekt der Anwendung (ein Katalog ist eine eigene Entscheidung, keine Korrektur der Lage).
-        return $"'{typ}' ist {Text(p)} und gehört nach {string.Join(" oder ", erlaubt.Where(r => r != Rolle.Katalog).Select(r => Projekt(wurzel, r)))}, "
-            + $"nicht nach {projekt} (docs/07 §7.2)";
+        // In einem Projekt der Anwendung: das Rollen-Projekt der Anwendung (ein Katalog ist eine eigene Entscheidung, keine Korrektur der Lage) — gibt es
+        //   keins, gehört die Primitive in einen Katalog (Funktionen, Graphen, Konfig, Technik: domänenneutral, docs/plan-ohne-pipeline.md).
+        var ziele = erlaubt.Where(r => r != Rolle.Katalog).Select(r => Projekt(wurzel, r)).ToList();
+        return ziele.Count == 0
+            ? $"'{typ}' ist {Text(p)} und gehört nach <Name>{Katalog.Suffix}, nicht nach {projekt} — eine Anwendung hat keine Funktionen und Graphen, sie "
+              + "nutzt sie aus einem Katalog und übersetzt sie (docs/07 §7.2)"
+            : $"'{typ}' ist {Text(p)} und gehört nach {string.Join(" oder ", ziele)}, nicht nach {projekt} (docs/07 §7.2)";
     }
 
     /// <summary>

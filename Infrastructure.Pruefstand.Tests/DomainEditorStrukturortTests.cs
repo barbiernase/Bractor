@@ -21,7 +21,7 @@ public class DomainEditorStrukturortTests
         {
             Verzeichnisse = new Dictionary<string, string>
             {
-                ["Domain"] = "Domain", ["Domain.Projections"] = "Domain.Projections", ["Domain.Pipeline"] = "Domain.Pipeline",
+                ["Domain"] = "Domain", ["Domain.Projections"] = "Domain.Projections",
                 ["Domain.Akteure"] = "Domain.Akteure", ["Domain.Infrastructure"] = "Domain.Infrastructure",
             },
         },
@@ -41,22 +41,20 @@ public class DomainEditorStrukturortTests
     public void Neue_Karten_landen_im_Projekt_ihrer_Rolle_im_selben_Bereich()
     {
         var pfade = Scaffolder.Generiere(Modell("Domain.Ausleihe")).Select(d => d.Pfad).ToList();
-        pfade.Should().Contain("Domain.Pipeline/Ausleihe/Konfigs.cs", "ein Konfig-Record gehört in die Abläufe, Sammeldatei Konfigs.cs");
-        pfade.Should().Contain("Domain.Pipeline/Ausleihe/Commands.cs", "ein Command ohne Ziel, den kein Decide abgibt, geben nur Knoten einander");
+        pfade.Should().Contain("Domain/Ausleihe/Commands.cs", "ein Command ohne Ziel liegt in der Domäne (die Nachricht eines Clients an eine Kopf-Übersetzung)");
         pfade.Should().Contain("Domain/Ausleihe/Events.cs", "ein gewöhnliches Event bleibt auf der Schreibseite");
         pfade.Should().Contain("Domain.Projections/Ausleihe/Queries.cs");
         pfade.Should().Contain("Domain.Akteure/Akteure.cs", "Akteure haben keinen Bereichs-Ordner");
-
-        var konfigs = Scaffolder.Generiere(Modell("Domain.Ausleihe")).Single(d => d.Pfad == "Domain.Pipeline/Ausleihe/Konfigs.cs");
-        konfigs.Inhalt.Should().Contain("namespace Domain.Pipeline.Ausleihe");
+        // Was nur in einen Katalog gehört (Konfig, Funktion), verschiebt der Server nicht: der Editor wählt den Katalog (docs/plan-ohne-pipeline.md).
+        pfade.Should().Contain("Domain/Ausleihe/Konfigs.cs");
     }
 
     [Fact]
     public void Der_Bereich_bleibt_auch_aus_einem_anderen_Rollen_Projekt()
     {
-        Strukturort.Ziel("Domain.Pipeline.Ausleihe", Abstractions.Projektstruktur.Rolle.Schreibseite).Should().Be("Domain.Ausleihe");
+        Strukturort.Ziel("Domain.Akteure", Abstractions.Projektstruktur.Rolle.Schreibseite).Should().Be("Domain");
         Strukturort.Ziel("Domain.Projections.Ausleihe", Abstractions.Projektstruktur.Rolle.Akteure).Should().Be("Domain.Akteure");
-        Strukturort.Ziel("Leihwesen.Ausleihe", Abstractions.Projektstruktur.Rolle.Ablaeufe).Should().BeNull("fremde Namespaces bleiben unverändert");
+        Strukturort.Ziel("Leihwesen.Ausleihe", Abstractions.Projektstruktur.Rolle.Leseseite).Should().BeNull("fremde Namespaces bleiben unverändert");
     }
 
     [Fact]

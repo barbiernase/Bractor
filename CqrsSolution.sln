@@ -37,8 +37,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.SourceGeneration", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Host.Blazor", "Host.Blazor\Host.Blazor.csproj", "{80AF6CA0-A896-4F05-A962-9C8A6701B258}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain.Pipeline", "Domain.Pipeline\Domain.Pipeline.csproj", "{34B2F279-904E-4625-A142-F22BA9434738}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GraphExtractor", "GraphExtractor\GraphExtractor.csproj", "{91E5BC89-692E-4F4F-9036-394211B0132B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain.Client.Modules.Blazor", "Domain.Client.Modules.Blazor\Domain.Client.Modules.Blazor.csproj", "{3B1C6726-F4F6-4151-B59E-7D43F6A679B7}"
@@ -317,18 +315,6 @@ Global
 		{80AF6CA0-A896-4F05-A962-9C8A6701B258}.Release|x64.Build.0 = Release|Any CPU
 		{80AF6CA0-A896-4F05-A962-9C8A6701B258}.Release|x86.ActiveCfg = Release|Any CPU
 		{80AF6CA0-A896-4F05-A962-9C8A6701B258}.Release|x86.Build.0 = Release|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Debug|x64.Build.0 = Debug|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Debug|x86.Build.0 = Debug|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Release|Any CPU.Build.0 = Release|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Release|x64.ActiveCfg = Release|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Release|x64.Build.0 = Release|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Release|x86.ActiveCfg = Release|Any CPU
-		{34B2F279-904E-4625-A142-F22BA9434738}.Release|x86.Build.0 = Release|Any CPU
 		{91E5BC89-692E-4F4F-9036-394211B0132B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{91E5BC89-692E-4F4F-9036-394211B0132B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{91E5BC89-692E-4F4F-9036-394211B0132B}.Debug|x64.ActiveCfg = Debug|Any CPU

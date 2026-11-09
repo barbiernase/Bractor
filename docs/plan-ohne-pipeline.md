@@ -89,8 +89,12 @@ Der **Akteur einer Instanz** (Graph mit Quelle) muss dürfen, was aus seinen Aus
    (`Graphform`, `GraphGenerator`); eine generierte Tabelle `GeneratedUebersetzungen` (Typ → Übersetzungen); das Kind übersetzt jede Ausgabe nach Typ,
    rechnet Antworten weiter, der Eingang übersetzt am Kopf; Analyzer CQRS116/119–121/123 auf das neue Bild; Start-Prüfung des Akteurs.
 2. **Beispieldomäne:** Graphen in den Katalog, `Aufnehmen` in die Domäne, `Domain.Pipeline` weg.
-3. **Prüfdomäne:** `Pruefdomaene.Katalog`, Übersetzungen, `Pruefdomaene.Pipeline` weg.
-4. **Die Rolle verschwindet:** Projektstruktur, `Lageart` (Graph nur im Katalog, Übersetzung in der Schreibseite), CQRS098, CQRS122, Codegen, Projekte.
+3. **Prüfdomäne** (umgesetzt, 2361e94a): `Pruefwerk.Katalog`, Übersetzungen, `Pruefdomaene.Pipeline` weg; Auftrag und Verteilung (reine Weiterleitungen
+   an Aggregate) sind Reaktionen des Workers.
+4. **Die Rolle verschwindet** (umgesetzt): Projektstruktur ohne `Ablaeufe` (Funktion, Graph, Konfig, Technik nur im Katalog; Command ohne Ziel und
+   Hinweis in Schreibseite oder Katalog), CQRS098 weist nach `<Name>.Katalog`, CQRS122 (`KatalogGrenzeAnalyzer`), Codegen und Werkbank lesen die
+   Kataloge aus allen Rollen, die sie nutzen dürfen, „neuer Katalog“ setzt die Referenz der Schreibseite; `Domain.Pipeline` weg. Die Sonde legt ihren
+   Store in den Speicher; ihre Domänen mit Funktionen bleiben absichtlich falsch liegend (die Lage weist sie nach `<Name>.Katalog`).
 5. **Sonde:** Graphen in Sonden-Kataloge, Übersetzungen in die Domänen der Sonde, Gesten-Skript, `soll.txt`.
 6. **Sicht und Editor:** Die Spalte Graphen zeigt die Katalog-Graphen, die laufen (ohne Band, sie gehören keiner Domäne); die Spalte Übersetzungen die
    Übersetzungen im Band ihrer Domäne; Kanten nach Typ. „＋ ↦“ an einem Ausgang legt eine Übersetzung in einer Domäne an, das Modal ordnet die Felder zu.

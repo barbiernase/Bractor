@@ -100,7 +100,7 @@ dotnet publish Host.Grpc/Host.Grpc.csproj \
     --self-contained \
     -o "$OUTPUT/grpc"
 
-# OpenCvSharp: die Linux-Runtime (OpenCvSharp4.official.runtime.linux-x64) legt publish selbst ab (Domain.Pipeline.csproj).
+# OpenCvSharp: die Linux-Runtime (OpenCvSharp4.official.runtime.linux-x64) legt publish selbst ab (Bildvorschau.Katalog.csproj).
 
 echo "  ✓ Host.Grpc"
 

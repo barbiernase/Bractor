@@ -104,16 +104,14 @@ public sealed partial class Sicht
     private string? AggDomaene(string aggregat) =>
         KarteVon.TryGetValue("agg:" + aggregat, out var a) && Domaene(a) is var d && d != OhneDomaene ? d : null;
     /// <summary>
-    /// Das Band eines Graphen: die Domäne, in deren Bereich er bei den Abläufen liegt (<c>Projektstruktur.DomaeneDerAblaeufe</c>), wenn es sie gibt —
-    /// so ordnet „＋ Graph“ an einer Domäne ihn ihr eindeutig zu. Sonst die Domäne der Aggregate, an die er schreibt (seine Ausgänge mit Ziel),
-    /// sonst derer, deren Decide seine Köpfe speist — eindeutig; sonst die Domäne seiner Karte. Lese-Fähigkeiten zählen nicht.
+    /// Das Band eines Graphen: der Katalog, in dem er liegt (domänenneutral). Liegt er falsch in einer Anwendung (die Lage meldet es), die Domäne der
+    /// Aggregate, an die er schreibt (seine Ausgänge mit Ziel), sonst derer, deren Decide seine Köpfe speist — eindeutig; sonst die Domäne seiner Karte.
+    /// Lese-Fähigkeiten zählen nicht.
     /// </summary>
     private string? GraphBand(JsonObject g)
     {
         // Ein Graph aus einem Katalog ist domänenneutral: er steht im Band seines Katalogs (docs/plan-ohne-pipeline.md).
         if (Abstractions.Projektstruktur.KatalogVon(S(g, "namespace")) is { } katalog) return katalog;
-        if (Abstractions.Projektstruktur.DomaeneDerAblaeufe(S(g, "namespace")) is { } ort
-            && _aggregate.Any(a => AggDomaene(S(a, "name")) == ort)) return ort;
         string? Eine(IEnumerable<string> aggs)
         {
             var ds = aggs.Where(a => a.Length > 0).Select(AggDomaene).Where(d => d != null).Distinct().ToList();

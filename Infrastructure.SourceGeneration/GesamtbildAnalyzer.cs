@@ -7,8 +7,8 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Infrastructure.SourceGeneration;
 
 /// <summary>
-/// Regeln, die das GESAMTBILD aller Domänen-Projekte brauchen — Erzeuger und Konsumenten liegen in verschiedenen Projekten (ein Event in
-/// <c>Domain</c>, die Funktion, die es erzeugt, in <c>Domain.Pipeline</c>; eine Query in <c>Domain</c>, ihr Reader in <c>Domain.Projections</c>).
+/// Regeln, die das GESAMTBILD aller Domänen-Projekte brauchen — Erzeuger und Konsumenten liegen in verschiedenen Projekten (ein Command ohne Ziel
+/// in einem Katalog, die Übersetzung, die ihn nimmt, in <c>Domain</c>; eine Query in <c>Domain</c>, ihr Reader in <c>Domain.Projections</c>).
 /// Darum laufen sie in der Laufzeit-Compilation, die alle Domänen-Projekte referenziert, und lesen nur Signaturen aus den Metadaten
 /// (Decide, Handles, Funktionen, Akteure, Clients) — Rümpfe werden nicht gebraucht (R1: der Ausgang steht in der Signatur).
 /// <list type="bullet">

@@ -4,10 +4,11 @@ namespace DomainEditor;
 
 /// <summary>
 /// Wohin eine NEUE Karte gehört (<c>docs/07-projektstruktur.md</c>, Tabelle <see cref="P"/>): das Projekt folgt aus der Rolle ihrer Primitive,
-/// der Bereich aus dem Namespace, den die Karte mitbringt, der Dateiname aus der Tabelle. Ein neuer Konfig-Record in <c>Domain.ImagePair</c> landet
-/// so in <c>Domain.Pipeline/ImagePair/Konfigs.cs</c> mit dem Namespace <c>Domain.Pipeline.ImagePair</c> — der Server entscheidet (W3), nicht
+/// der Bereich aus dem Namespace, den die Karte mitbringt, der Dateiname aus der Tabelle. Ein neues ReadModel in <c>Domain.ImagePair</c> landet
+/// so in <c>Domain.Projections/ImagePair/ReadModels.cs</c> mit dem Namespace <c>Domain.Projections.ImagePair</c> — der Server entscheidet (W3), nicht
 /// der Editor. Bestehendes (mit Datei) bleibt, wo es ist; Namespaces außerhalb der Rollen-Projekte der Wurzel bleiben unverändert — auch die
-/// eines Katalogs: was dort angelegt wird, bleibt im Katalog (die Lage-Prüfung meldet, was dort nicht hingehört).
+/// eines Katalogs: was dort angelegt wird, bleibt im Katalog (die Lage-Prüfung meldet, was dort nicht hingehört). Was nur in einen Katalog gehört
+/// (Funktion, Graph, Konfig, Technik), wählt der Editor dort; der Server verschiebt es nicht.
 /// </summary>
 public static class Strukturort
 {
@@ -26,10 +27,8 @@ public static class Strukturort
         {
             Records = m.Records.Select(r => r.Datei != null ? r : r with { Namespace = RecordNs(r) }).ToList(),
             Aggregate = m.Aggregate.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Schreibseite) }).ToList(),
-            BausteinFunktionen = m.BausteinFunktionen.Select(f => f.Datei != null ? f : f with { Namespace = Ns(f.Namespace, P.Rolle.Ablaeufe) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
             Clients = m.Clients.Select(c => c.Datei != null ? c : c with { Namespace = Ns(c.Namespace, P.Rolle.Akteure) }).ToList(),
-            Graphen = m.Graphen.Select(g => g.Datei != null ? g : g with { Namespace = Ns(g.Namespace, P.Rolle.Ablaeufe) }).ToList(),
             Lesen = lesen == null ? null : lesen with
             {
                 Stores = lesen.Stores.Select(s => (s.Datei != null ? s : s with { Namespace = Ns(s.Namespace, P.Rolle.Leseseite) }) with
@@ -65,8 +64,8 @@ public static class Strukturort
         P.KatalogVon(ns) != null || P.Projekte(wurzel).Any(p => ns == p || ns.StartsWith(p + ".", StringComparison.Ordinal));
 
     /// <summary>
-    /// Die Commands ohne Ziel, die kein Decide abgibt (Signatur-Fakt je <c>Decide</c>) — nur Knoten geben sie einander, sie liegen bei den Abläufen
-    /// (dieselbe Regel wie die Lage-Prüfung, <c>Domain.SourceGeneration/Lageart.cs</c>).
+    /// Die Commands ohne Ziel, die kein Decide abgibt (Signatur-Fakt je <c>Decide</c>) — Knoten geben sie einander oder ein Client einer
+    /// Kopf-Übersetzung (dieselbe Regel wie die Lage-Prüfung, <c>Domain.SourceGeneration/Lageart.cs</c>).
     /// </summary>
     public static ISet<string> Funktionsergebnisse(EditorModell m)
     {
@@ -100,5 +99,6 @@ public static class Strukturort
         _ => null,
     };
 
-    private static P.Rolle? Rolle(P.Primitive? p) => p is { } x ? P.RollenVon(x)[0] : null;
+    // Eine Primitive, die nur in einen Katalog gehört, hat in der Anwendung kein Ziel: ihr Namespace bleibt, wie der Editor ihn wählt.
+    private static P.Rolle? Rolle(P.Primitive? p) => p is { } x && P.RollenVon(x)[0] is var r && r != P.Rolle.Katalog ? r : null;
 }

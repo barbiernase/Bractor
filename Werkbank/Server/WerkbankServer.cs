@@ -101,13 +101,12 @@ public sealed class WerkbankServer
         return Convert.ToHexString(sha.Hash!)[..8].ToLowerInvariant();
     }
 
-    /// <summary>Die Kataloge, die die Abläufe der Anwendung nutzen (ihre Projektdatei nennt sie).</summary>
-    private IEnumerable<string> Kataloge()
-    {
-        var ablaeufe = Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Ablaeufe);
-        var datei = Path.Combine(_root, ablaeufe, ablaeufe + ".csproj");
-        return File.Exists(datei) ? Abstractions.Projektstruktur.KatalogeIn(File.ReadAllText(datei)).ToList() : [];
-    }
+    /// <summary>Die Kataloge, die die Anwendung nutzt (die Projektdatei eines Rollen-Projekts, das Kataloge nutzen darf, nennt sie).</summary>
+    private IEnumerable<string> Kataloge() =>
+        Abstractions.Projektstruktur.NutzenKataloge
+            .Select(r => Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, r))
+            .Select(p => Path.Combine(_root, p, p + ".csproj")).Where(File.Exists)
+            .SelectMany(d => Abstractions.Projektstruktur.KatalogeIn(File.ReadAllText(d))).Distinct(StringComparer.Ordinal).ToList();
 
     private string NeuesProto => Path.Combine(_root, Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Leitung), Abstractions.Projektstruktur.ProtoDatei);
 

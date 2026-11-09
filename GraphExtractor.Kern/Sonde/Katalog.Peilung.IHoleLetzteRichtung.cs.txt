@@ -2,7 +2,7 @@ using System.Threading.Tasks;
 using Abstractions;
 
 // SONDE — eine FÄHIGKEIT AUS DEM KATALOG (docs/plan-ohne-pipeline.md §2.3): der Katalog sagt mit seinen eigenen Typen, was er lesen will; umgesetzt
-// wird sie im Speicher der Anwendung, die ihn nutzt (Ablaeufe.Funkortung.cs.txt).
+// wird sie im Speicher der Anwendung, die ihn nutzt (Speicher.Funkortung.cs.txt).
 
 namespace Sondenkatalog.Katalog.Peilung;
 

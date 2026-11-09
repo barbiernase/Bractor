@@ -9,7 +9,8 @@ namespace Infrastructure.Pruefstand.Extractor;
 
 /// <summary>
 /// Die Geste „neuer Katalog“ (docs/plan-katalog-und-graphen.md, Schritt 2) als Text-Patch: Projektdatei, Eintrag in der Solution samt Konfigurationen,
-/// Referenz der Abläufe — und „nutzen“ setzt bzw. entfernt nur diese Referenz.
+/// Referenz der Schreibseite (ihre Übersetzungen nehmen seine Nachrichten, docs/plan-ohne-pipeline.md) — und „nutzen“ setzt bzw. entfernt nur diese
+/// Referenz.
 /// </summary>
 public class KatalogeTests : IDisposable
 {
@@ -18,7 +19,7 @@ public class KatalogeTests : IDisposable
     private const string Sln = """
 
         Microsoft Visual Studio Solution File, Format Version 12.00
-        Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain.Pipeline", "Domain.Pipeline\Domain.Pipeline.csproj", "{34B2F279-904E-4625-A142-F22BA9434738}"
+        Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain", "Domain\Domain.csproj", "{34B2F279-904E-4625-A142-F22BA9434738}"
         EndProject
         Global
         	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,26 +33,26 @@ public class KatalogeTests : IDisposable
 
         """;
 
-    private const string Ablaeufe = """
+    private const string Schreibseite = """
         <Project Sdk="Microsoft.NET.Sdk">
             <ItemGroup>
               <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
-              <ProjectReference Include="..\Domain\Domain.csproj" />
+              <ProjectReference Include="..\Core\Core.csproj" />
             </ItemGroup>
         </Project>
         """;
 
     public KatalogeTests()
     {
-        Directory.CreateDirectory(Path.Combine(_wurzel, "Domain.Pipeline"));
+        Directory.CreateDirectory(Path.Combine(_wurzel, "Domain"));
         File.WriteAllText(Path.Combine(_wurzel, "Probe.sln"), Sln.Replace("\r\n", "\n"));
-        File.WriteAllText(Path.Combine(_wurzel, "Domain.Pipeline", "Domain.Pipeline.csproj"), Ablaeufe.Replace("\r\n", "\n"));
+        File.WriteAllText(Path.Combine(_wurzel, "Domain", "Domain.csproj"), Schreibseite.Replace("\r\n", "\n"));
     }
 
     public void Dispose() { try { Directory.Delete(_wurzel, true); } catch (IOException) { } }
 
     [Fact]
-    public void Neuer_Katalog_schreibt_Projekt_Solution_und_Referenz_der_Ablaeufe()
+    public void Neuer_Katalog_schreibt_Projekt_Solution_und_Referenz_der_Schreibseite()
     {
         var puffer = new Dateipuffer(_wurzel);
 
@@ -59,15 +60,15 @@ public class KatalogeTests : IDisposable
 
         projekt.Should().Be("Bild.Katalog");
         var patch = puffer.Patch();
-        patch.Select(p => p.Datei).Should().BeEquivalentTo("Bild.Katalog/Bild.Katalog.csproj", "Probe.sln", "Domain.Pipeline/Domain.Pipeline.csproj");
+        patch.Select(p => p.Datei).Should().BeEquivalentTo("Bild.Katalog/Bild.Katalog.csproj", "Probe.sln", "Domain/Domain.csproj");
         puffer.Lies("Bild.Katalog/Bild.Katalog.csproj").Should().Contain(@"<ProjectReference Include=""..\Abstractions\Abstractions.csproj"" />")
-            .And.NotContain("Domain.csproj", "ein Katalog kennt keine Anwendung");
+            .And.NotContain("Domain\\Domain.csproj", "ein Katalog kennt keine Anwendung");
         var sln = puffer.Lies("Probe.sln")!;
         sln.Should().Contain(@"= ""Bild.Katalog"", ""Bild.Katalog\Bild.Katalog.csproj""");
         var id = System.Text.RegularExpressions.Regex.Match(sln, @"Bild\.Katalog\.csproj"", ""\{(?<id>[^}]+)\}""").Groups["id"].Value;
         sln.Should().Contain($"{{{id}}}.Debug|Any CPU.ActiveCfg = Debug|Any CPU").And.Contain($"{{{id}}}.Release|x64.Build.0 = Release|Any CPU");
         sln.IndexOf($"{{{id}}}.Release|x64.Build.0", StringComparison.Ordinal).Should().BeLessThan(sln.LastIndexOf("EndGlobalSection", StringComparison.Ordinal));
-        puffer.Lies("Domain.Pipeline/Domain.Pipeline.csproj").Should().Contain(@"      <ProjectReference Include=""..\Bild.Katalog\Bild.Katalog.csproj"" />");
+        puffer.Lies("Domain/Domain.csproj").Should().Contain(@"      <ProjectReference Include=""..\Bild.Katalog\Bild.Katalog.csproj"" />");
     }
 
     [Fact]
@@ -86,11 +87,11 @@ public class KatalogeTests : IDisposable
         var puffer = new Dateipuffer(_wurzel);
         Kataloge.Nutzen(puffer, "Bild.Katalog", true);
         Kataloge.Nutzen(puffer, "Bild.Katalog", true);
-        var mit = puffer.Lies("Domain.Pipeline/Domain.Pipeline.csproj")!;
+        var mit = puffer.Lies("Domain/Domain.csproj")!;
         Abstractions.Projektstruktur.KatalogeIn(mit).Should().Equal("Bild.Katalog");
 
         Kataloge.Nutzen(puffer, "Bild.Katalog", false);
 
-        puffer.Lies("Domain.Pipeline/Domain.Pipeline.csproj").Should().Be(Ablaeufe.Replace("\r\n", "\n"));
+        puffer.Lies("Domain/Domain.csproj").Should().Be(Schreibseite.Replace("\r\n", "\n"));
     }
 }

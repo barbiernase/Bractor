@@ -38,7 +38,6 @@
     <ProjectReference Include="..\Domain.Laufzeit\Domain.Laufzeit.csproj" />
     <ProjectReference Include="..\Domain\Domain.csproj" />
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
-    <ProjectReference Include="..\Domain.Pipeline\Domain.Pipeline.csproj" />
     <!-- Der Worker der Reaktionen (Schritt 6): die Range-Reaktion läuft im Test als Client gegen den Host. -->
     <ProjectReference Include="..\Domain.Client.Worker\Domain.Client.Worker.csproj" />
   </ItemGroup>

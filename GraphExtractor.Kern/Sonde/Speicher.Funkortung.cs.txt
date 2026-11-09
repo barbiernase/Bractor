@@ -4,9 +4,9 @@ using Marten;
 using Funkortung.Ortung;
 using Sondenkatalog.Katalog.Peilung;
 
-// SONDE — Reste bei den Abläufen, bis die Pipeline-Schicht aufgeht (docs/plan-ohne-pipeline.md): der Funker liegt absichtlich hier statt bei den
-// Akteuren (die Lage-Prüfung muss ihn weisen), und der Peilbuch-Speicher setzt die Lese-Fähigkeit des Katalogs um (er gehört in den Speicher).
-// Der Graph der Ortung ist die Peilkette des Katalogs; was sie domänenspezifisch macht, sind die Übersetzungen in Funkortung.Ortung.
+// SONDE — im Speicher der Anwendung (docs/plan-ohne-pipeline.md): der Peilbuch-Speicher setzt die Lese-Fähigkeit des Katalogs um (CQRS124); der
+// Funker liegt absichtlich hier statt bei den Akteuren (die Lage-Prüfung muss ihn weisen). Der Graph der Ortung ist die Peilkette des Katalogs; was sie
+// domänenspezifisch macht, sind die Übersetzungen in Funkortung.Ortung.
 
 namespace Funkortung.Ablauf;
 

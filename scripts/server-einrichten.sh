@@ -34,7 +34,7 @@ export DOTNET_NOLOGO=1
 export PATH="$DOTNET_ROOT:$PATH"
 EOF
 
-# ── System-Pakete: jq (vermessung-tabelle.sh), venv; GTK3 und libatomic braucht die native OpenCvSharp-Runtime (Domain.Pipeline.csproj) — nur Bibliotheken.
+# ── System-Pakete: jq (vermessung-tabelle.sh), venv; GTK3 und libatomic braucht die native OpenCvSharp-Runtime (Bildvorschau.Katalog.csproj) — nur Bibliotheken.
 PAKETE="jq python3.12-venv libgtk-3-0t64 libatomic1"
 if ! dpkg -s $PAKETE >/dev/null 2>&1; then
   echo "== Pakete installieren: $PAKETE"

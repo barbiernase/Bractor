@@ -2286,12 +2286,6 @@
   function komSorte(t){const r=MODEL.records.find(x=>x.name===komBasis(t)),k=r&&r.kind;
     return k==="event"?"event":k==="rejection"?"hinweis":k==="query"?"query":k==="queryresponse"?"antwort":"command";}
   const KOM_SYM={funktion:"ƒ",graph:"⬡",katalog:"⚡",uebersetzung:"↦",fehlt:"⚠"};
-  // Der Namespace der Abläufe zu einem Namespace der Domäne (<Wurzel>.<Bereich> → <Wurzel><Suffix der Abläufe>.<Bereich>, Projektstruktur): dort
-  //   liegen Graphen, Funktionen der Anwendung und die Nachrichten der Clients.
-  function ablaufNs(ns){const suf=(MODEL.rahmen||{}).ablaeufeSuffix||"",v=Object.keys((MODEL.rahmen||{}).verzeichnisse||{});
-    if(!suf)return ns;const wurzeln=v.filter(k=>k.endsWith(suf)).sort((a,b)=>b.length-a.length);
-    for(const p of wurzeln){const w=p.slice(0,-suf.length);if(ns===p||ns.startsWith(p+"."))return ns;if(ns===w)return p;if(ns.startsWith(w+"."))return p+ns.slice(w.length);}
-    return wurzeln[0]||ns;}
   // Wo zuletzt gezeigt wurde — für Namensfragen, die eine Geste ohne eigenes Ereignis stellt (＋ an einem Port im Modal).
   let ZEIGER={x:240,y:160};document.addEventListener("pointerdown",e=>{ZEIGER={x:e.clientX,y:e.clientY};},true);
   // Ein Graph, der gerade angelegt wurde und sich öffnen soll, sobald der Server seine Komposition liefert.
@@ -2506,17 +2500,17 @@
       u:"eine Übersetzung der Domäne nimmt "+P.typ+" und macht einen Command an ein Aggregat daraus (vorhanden oder neu samt Decide)",fn:e=>komCommandAn(P.typ,e)}]:[];
     return P.art==="von"?[{tiefe:Math.max(0,q.tiefe-1),t:"＋ neue Funktion davor",u:"gibt "+P.typ+" aus — und nimmt eine neue Nachricht von außen",fn:e=>komFunktionNeu(id,"davor",q,P.typ,e)}]
       :[{tiefe:q.tiefe+1,t:"＋ neue Funktion dahinter",u:"nimmt "+P.typ+" — sie öffnet sich danach von innen",fn:e=>komFunktionNeu(id,"dahinter",q,P.typ,e)},...ue];}
-  // Wo eine neue Funktion liegen darf: in der Anwendung (wenn der Graph dort liegt) und in jedem Katalog, der den Typ kennt (Typ aus dem Katalog
-  //   oder vom Framework) — ein Katalog kennt keine Domäne.
+  // Wo eine neue Funktion liegen darf: im Katalog des Graphen, sonst in jedem Katalog, der den Typ kennt (Typ aus dem Katalog oder vom Framework) —
+  //   eine Anwendung hat keine Funktionen (docs/plan-ohne-pipeline.md), ein Katalog kennt keine Domäne.
   function komOrte(g,typ){const gk=funKatalog(g),r=recByName(komBasis(typ)),rk=r?funKatalog(r):null,bk=komBaukasten();
     if(gk)return [{katalog:gk}];
-    return [{katalog:null},...(bk.kataloge||[]).filter(k=>!r||rk===k).map(k=>({katalog:k}))];}
+    return (bk.kataloge||[]).filter(k=>!r||rk===k).map(k=>({katalog:k}));}
   function komFunktionNeu(id,art,q,typ,ev){const g=komModell(id);if(!g)return;KOM.port=null;
     const anlegen=ort=>{const stamm=komBasis(typ).replace(/(Gefunden|Erstellt|Eingelesen|Verkleinert)$/,"");
       const weiter=bereich=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion "+art+" "+q.name,art==="dahinter"?"Verarbeite"+komBasis(typ):komBasis(typ)+"Bildung",
         art==="dahinter"?"Nimmt "+typ+"; Ausgänge danach im Modal":"Gibt "+typ+" aus; nimmt eine neue Nachricht von außen",n=>{
         const fe=nameFehler(n);if(fe&&!/gibt es schon/.test(fe))return fe;if(MODEL.bausteinFunktionen.some(x=>x.name===n))return n+" gibt es schon";
-        const ns=ort.katalog?ort.katalog+"."+bereich:g.namespace;
+        const ns=ort.katalog+"."+bereich;
         const f={_id:"funktion:"+n,name:n,namespace:ns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
         if(art==="dahinter")f.eingaenge.push({eingang:typ,ausgaben:[]});
         else{const auftrag=uniq(n+"Auftrag");funRecordNeu(f,auftrag,"command");f.eingaenge.push({eingang:auftrag,ausgaben:[typ]});}
@@ -2528,13 +2522,13 @@
         gTitel(g.name+": ƒ "+n+" "+art+" "+q.name);render();
         if(ort.katalog&&ort.katalog===funKatalog(g))setTimeout(()=>katOeffne(ort.katalog,n),0);
         else if(art==="dahinter")setTimeout(()=>komKarte("fb:"+f._id,true),0);});
-      if(!ort.katalog){weiter(null);return;}
       if(ort.katalog===funKatalog(g)&&katBereich(g,ort.katalog)){weiter(katBereich(g,ort.katalog));return;}
       frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+ort.katalog+" — Bereich","Allgemein","Der Ordner im Katalog",b=>{
         if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";setTimeout(()=>weiter(b),0);});};
     const orte=komOrte(g,typ);
+    if(!orte.length){deFlash("ℹ "+komBasis(typ)+" gehört einer Domäne — eine Funktion liegt im Katalog und nimmt nur seine Nachrichten; erst übersetzen (↦)",true);return;}
     if(orte.length===1){anlegen(orte[0]);return;}
-    menueFix(ev.clientX,ev.clientY,"Wo liegt die neue Funktion?",orte.map(o=>({t:o.katalog?"📚 "+o.katalog:"ƒ in der Anwendung ("+g.namespace+")",fn:()=>anlegen(o)})));}
+    menueFix(ev.clientX,ev.clientY,"Wo liegt die neue Funktion?",orte.map(o=>({t:"📚 "+o.katalog,fn:()=>anlegen(o)})));}
   function komLeinwand(id,d){
     const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
     const P=KOM.port&&KOM.port.art==="von"?KOM.port:null,zk=P?d.knoten.find(x=>x.name===P.knoten):null,kopfMoeglich=!!zk&&!zk.kopf;
@@ -3999,25 +3993,27 @@
       ...offen.map(({ab,o})=>({t:"⬡ "+ab.g.name+" · "+o.typ+" ↦ "+cmd,fn:()=>komUebersetzungAn(o.typ,cmd)})),
       ...(offen.length?[]:[{hinweis:"Kein Graph auf der Fläche hat einen offenen Ausgang."}]),
       {trenn:1},{t:"＋ Graph an "+String(A.namespace).split(".").pop()+" binden …",fn:()=>flBandGraph(A.namespace,String(A.namespace).split(".").pop(),ev)}]);}
-  // Ein Graph entsteht mit seinem ersten Knoten (ein leerer baut nicht, CQRS115): eine Funktion (Anwendung oder Katalog), eine Quelle oder ein Graph.
+  // Ein Graph entsteht mit seinem ersten Knoten (ein leerer baut nicht, CQRS115): eine Funktion, eine Quelle oder ein Graph. Er liegt in einem Katalog
+  //   (docs/plan-ohne-pipeline.md, eine Anwendung hat keine Graphen): in dem seines ersten Knotens, sonst im ersten genutzten bzw. dem allgemeinen.
   function graphNeuMitKnoten(ev,pos){const bk=komBaukasten();
     frageFix(ev.clientX,ev.clientY,"⬡ Neuer Graph",uniq("NeuerGraph"),"Danach: sein erster Knoten",n=>{const f=nameFehler(n);if(f)return f;
       if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
-      const ns=ablaufNs(defaultNsGlobal());
-      const mit=(typ,quelle)=>{(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,
+      const katNs=typ=>{const b=komBasis(typ),x=MODEL.bausteinFunktionen.find(y=>y.name===b)||(MODEL.graphen||[]).find(y=>y.name===b);
+        if(x&&funKatalog(x)&&(bk.kataloge||[]).includes(funKatalog(x)))return x.namespace;
+        return ((bk.kataloge||[])[0]||(MODEL.rahmen||{}).allgemeinerKatalog)+".Allgemein";};
+      const mit=(typ,quelle)=>{const ns=katNs(typ);(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,
         knoten:[{typ,name:typBasis(typ).replace(/^I(?=[A-ZÄÖÜ])/,""),kopf:!quelle,von:[],verlierbar:[]}],...pos});KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+" mit "+typ);render();};
-      // Eine neue Funktion als erster Knoten: in der Anwendung oder in einem Katalog (dort in einem Bereich), mit Auftrag und Ergebnis.
+      // Eine neue Funktion als erster Knoten: in einem Katalog (dort in einem Bereich), mit Auftrag und Ergebnis.
       const neueFn=katalog=>{const weiter=fns=>frageFix(ev.clientX,ev.clientY,"ƒ Erste Funktion von "+n,n.replace(/(Graph|Ablauf)$/,"")+"Rechnung",
           "Nimmt einen neuen Auftrag und gibt ein Ergebnis — beides danach im Modal der Funktion",fn=>{
           const fe=nameFehler(fn);if(fe&&!/gibt es schon/.test(fe))return fe;if(MODEL.bausteinFunktionen.some(x=>x.name===fn))return fn+" gibt es schon";
           const f={_id:"funktion:"+fn,name:fn,namespace:fns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
           const auftrag=uniq(fn+"Auftrag"),ergebnis=uniq(fn+"Ergebnis");funRecordNeu(f,auftrag,"command");funRecordNeu(f,ergebnis,"command");
           f.eingaenge.push({eingang:auftrag,ausgaben:[ergebnis]});MODEL.bausteinFunktionen.push(f);mit(fn,false);});
-        if(!katalog){setTimeout(()=>weiter(ns),0);return;}
         setTimeout(()=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+katalog+" — Bereich","Allgemein","Der Ordner im Katalog",b=>{
           if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";setTimeout(()=>weiter(katalog+"."+b),0);}),0);};
       setTimeout(()=>menueFix(ev.clientX,ev.clientY,"Erster Knoten von "+n,[
-        {t:"＋ ƒ neue Funktion in der Anwendung …",fn:()=>neueFn(null)},...(bk.kataloge||[]).map(k=>({t:"＋ ƒ neue Funktion in 📚 "+k+" …",fn:()=>neueFn(k)})),
+        ...(bk.kataloge||[]).map(k=>({t:"＋ ƒ neue Funktion in 📚 "+k+" …",fn:()=>neueFn(k)})),
         ...(bk.funktionen.length?[{kopf:"vorhanden"}]:[]),
         ...bk.funktionen.filter(x=>!x.quelle).map(x=>({t:(x.katalog?"📚 "+x.katalog+" · ":"ƒ ")+x.name,fn:()=>mit(x.name,false)})),
         ...(bk.katalog.length||bk.funktionen.some(x=>x.quelle)?[{kopf:"Quelle"}]:[]),
@@ -4085,10 +4081,6 @@
     if(KOM_NACH&&komDaten(KOM_NACH)){if(KOM){KOM.pfad.push(KOM_NACH);KOM.wahl=null;KOM.port=null;}else KOM={pfad:[KOM_NACH],reiter:"komposition",wahl:null};KOM_NACH=null;}
     if(KOM)komZeige();   // ein offenes Kompositions-Modal folgt dem neuen Board
   }
-  // ══ STUFE 3 (docs/konzept-funktionen-im-editor.md §4): „＋ Graph“ an einer Domäne bindet einen Graphen aus einem Katalog an sie. Es entsteht ein
-  //   Ablauf im Bereich der Domäne bei den Abläufen (ablaufNs) mit dem Katalog-Graphen als Knoten ([Kopf]); er gehört damit dieser Domäne (das Band
-  //   rechnet der Server aus dem Ort) und öffnet sich — Eingang und Übersetzungen der Outputs folgen dort. Bis jeder Output übersetzt ist, baut er nicht.
-  function ablaufDomaene(ns){const suf=(MODEL.rahmen||{}).ablaeufeSuffix||"",i=String(ns||"").indexOf(suf+".");return suf&&i>0?ns.slice(0,i)+"."+ns.slice(i+suf.length+1):null;}
   // „＋ Graph“ am Band einer Domäne (docs/plan-ohne-pipeline.md): ein Graph aus einem Katalog wird domänenspezifisch, indem eine Übersetzung dieser
   //   Domäne einen seiner Ausgänge nimmt — Graph wählen, Ausgang wählen, dann den Command an ein Aggregat dieser Domäne.
   function flBandGraph(dom,name,ev){const katGraphen=(MODEL.graphen||[]).filter(g=>funKatalog(g));

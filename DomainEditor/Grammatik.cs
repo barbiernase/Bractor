@@ -126,23 +126,22 @@ public static class Grammatik
             + "ist ein Fehler; ein Graph mit Quelle hat sonst keinen Kopf (docs/04 §4.4).", "error",
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Köpfe je Eingangstyp, Kopf ohne Eingang von außen; Lesart Graphform)"),
              new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (der Kopf gibt den Eingang an den Knoten, der seinen Typ nimmt)")]),
-        new("GR-UEBERSETZUNG", "Übersetzung: Uebersetze<TEin, TAus> mit [Feld]", "Zwischen Katalog und Domäne steht eine Übersetzung: ein Knoten "
-            + "Uebersetze<TEin, TAus> im Graph-Record macht aus einem Command ohne Ziel genau einen Command (ohne Ziel an einen Knoten, mit Ziel an ein "
-            + "Aggregat) — Feld für Feld, ohne Logik. Je Parameter von TAus eine Quelle: [Feld(nameof(Ziel), nameof(Quelle))] am Knoten (ausdrücklich auch "
-            + "Guid ⇄ Id<T>), sonst ein Feld von TEin mit gleichem Namen und implizit zuweisbarem Typ, sonst der Standardwert. Sie läuft inline (hinter einer "
-            + "Funktion in deren Kind, am Kopf beim Annehmen), nie zwei hintereinander; am Kopf gibt sie an Knoten des Graphen oder an ein Aggregat. Kein "
-            + "Command eines Katalogs verlässt einen Graphen der Anwendung (docs/04 §4.4). Nennt sie einen Graphen im Graphen, greift sie jede seiner "
-            + "Nachrichten ab, auch einen Zwischenstand: [Von(nameof(A), Innen = nameof(T.X))] genau die Nachricht des Knotens X; ohne Innen einen "
-            + "Ausgang bzw. den einen inneren Knoten, der TEin ausgibt (mehrere: nenne den Knoten). Eine Antwort-Übersetzung nimmt statt eines Commands "
-            + "das Event, mit dem ein Aggregat den Command der Übersetzung in ihrem [Von] beantwortet (eines, das sein Decide ausgeben kann); sie läuft gleich "
-            + "nach dem Senden, und eine Antwort zählt nicht als Kante eines Kreises.", "error",
+        new("GR-UEBERSETZUNG", "Übersetzung: IUebersetzung<TEin, TAus> mit [Feld]", "Graphen und Funktionen liegen in Katalogen, domänenneutral; "
+            + "domänenspezifisch macht sie eine Übersetzung der Domäne: [Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))] public sealed record X : "
+            + "IUebersetzung<TEin, TAus>; in <Bereich>/Uebersetzungen.cs. Sie macht aus einem Command ohne Ziel (oder einem Event, das ein Aggregat auf ihren "
+            + "Command antwortet) genau einen Command — Feld für Feld, ohne Logik: je Parameter von TAus eine Quelle, [Feld] (ausdrücklich auch Guid ⇄ "
+            + "Id<T>), sonst ein Feld von TEin mit gleichem Namen und implizit zuweisbarem Typ, sonst der Standardwert. Wohin, entscheidet der Typ: jede "
+            + "Ausgabe eines laufenden Graphen mit Typ TEin wird im Kind übersetzt, ein Command ohne Ziel eines Clients am Kopf, eine Antwort gleich nach dem "
+            + "Senden; TAus geht an sein Aggregat bzw. an den Kopf genau eines Graphen. Ein Graph nennt sie nie als Knoten. Nur Übersetzungen nennen "
+            + "Katalog-Typen: Zustand, Decide, Apply, Commands an Aggregate, Events, Hinweise und Aggregat-Queries sprechen die Sprache der Domäne.", "error",
             [An("CQRS119", "Domain.SourceGeneration/GraphAnalyzer.cs (Zuordnung unvollständig, Typ nicht zuweisbar, [Feld] ohne Ziel bzw. Quelle; Lesart Uebersetzungsform)"),
-             An("CQRS120", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Katalog-Command verlässt einen Graphen der Anwendung)"),
+             An("CQRS120", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (ein Ausgang eines laufenden Katalog-Graphen ohne Empfänger)"),
              An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TEin weder Command ohne Ziel noch Antwort-Event, TAus kein Command)"),
+             An("CQRS122", "Domain.SourceGeneration/KatalogGrenzeAnalyzer.cs (ein Katalog-Typ in Zustand, Decide, Apply, Command, Event, Hinweis, Aggregat-Query)"),
              An("CQRS123", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Antwort-Übersetzung nimmt ein Event, das das Decide nicht ausgibt)"),
-             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (zwei Übersetzungen hintereinander, Kopf-Übersetzung gibt hinaus)"),
-             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedGraphen: je Übersetzung eine Methode, ihre Wege)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (hinter einer Funktion inline gerechnet), GraphActor.cs (am Kopf)")]),
+             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (ein Graph nennt eine Übersetzung als Knoten)"),
+             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedUebersetzungen: je Übersetzung Typen und Rechnung)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (Ausgaben und Antworten nach Typ), Verkettung.cs (am Kopf)")]),
         new("GR-KETTE", "Eine Kette je Kopf", "Eine Nachricht am Kopf startet eine Kette: jeder Schritt rechnet je ankommender Nachricht und gibt seine "
             + "Ausgaben nach der Wegtabelle weiter; niemand führt Buch über die ganze Kette. Fertig ist der Kopf, wenn alle gesicherten Ausgaben fertig "
             + "sind — die Rückmeldung reicht über die gesicherten Kanten zurück; wirft ein Knoten auch nach seinen Wiederholungen, reicht „gescheitert“ "

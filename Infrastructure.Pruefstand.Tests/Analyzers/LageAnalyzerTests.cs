@@ -43,13 +43,16 @@ public class LageAnalyzerTests
         """;
 
     [Fact]
-    public async Task Funktionen_Graphen_und_Commands_zwischen_Knoten_gehoeren_in_die_Ablaeufe()
+    public async Task Funktionen_und_Graphen_gehoeren_in_einen_Katalog_nie_in_die_Anwendung()
     {
-        (await Befunde("Leihwesen", Bausteine)).Should().HaveCount(4, "Funktion, Graph und die Commands, die nur Knoten einander geben")
-            .And.Contain(b => b.Contains("'Mahnwesen' ist eine Funktion"))
-            .And.Contain(b => b.Contains("'Mahnablauf' ist ein Graph"))
-            .And.Contain(b => b.Contains("'Gemahnt' ist ein Command zwischen Knoten"));
-        (await Befunde("Leihwesen.Pipeline", Bausteine)).Should().BeEmpty();
+        // docs/plan-ohne-pipeline.md: eine Anwendung hat keine Funktionen und Graphen — sie nutzt sie aus einem Katalog und übersetzt sie. Ein Command
+        //   ohne Ziel darf in der Domäne liegen (die Nachricht eines Clients an eine Kopf-Übersetzung).
+        var befunde = await Befunde("Leihwesen", Bausteine);
+        befunde.Should().HaveCount(2, "Funktion und Graph")
+            .And.OnlyContain(b => b.Contains("gehört nach <Name>.Katalog, nicht nach Leihwesen"));
+        befunde.Should().Contain(b => b.Contains("'Mahnwesen' ist eine Funktion")).And.Contain(b => b.Contains("'Mahnablauf' ist ein Graph"));
+        (await Befunde("Leihwesen.Projections", Bausteine)).Should().Contain(b => b.Contains("'Gemahnt' ist ein Command zwischen Knoten")
+            && b.Contains("gehört nach Leihwesen, nicht nach Leihwesen.Projections"));
     }
 
     [Fact]
@@ -84,19 +87,19 @@ public class LageAnalyzerTests
     [Fact]
     public void Die_Tabelle_kennt_Wurzel_und_Rolle()
     {
-        Projektstruktur.Zerlege("Domain.Pipeline").Should().Be(("Domain", Projektstruktur.Rolle.Ablaeufe));
+        Projektstruktur.Zerlege("Domain.Pipeline").Should().Be(("Domain.Pipeline", Projektstruktur.Rolle.Schreibseite), "eine Rolle Abläufe gibt es nicht mehr");
         Projektstruktur.Zerlege("Domain").Should().Be(("Domain", Projektstruktur.Rolle.Schreibseite));
         Projektstruktur.Zerlege("Pruefdomaene.Projections").Should().Be(("Pruefdomaene", Projektstruktur.Rolle.Leseseite));
-        Projektstruktur.Projekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Pipeline", "Domain.Akteure", "Domain.Infrastructure",
+        Projektstruktur.Projekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Akteure", "Domain.Infrastructure",
             "Domain.Leitung", "Domain.Laufzeit");
-        Projektstruktur.CodegenProjekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Pipeline", "Domain.Akteure");
-        Projektstruktur.HandgeschriebeneProjekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Pipeline", "Domain.Akteure",
+        Projektstruktur.CodegenProjekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Akteure");
+        Projektstruktur.HandgeschriebeneProjekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Akteure",
             "Domain.Infrastructure");   // der Werkbank-Stand: ohne Leitung und Komposition (nur Generate)
         Projektstruktur.Datei(Projektstruktur.Primitive.Decider, "Konto").Should().Be("Konto.Decider.cs");
         Projektstruktur.Datei(Projektstruktur.Primitive.Funktion, "Rechnen").Should().Be("Rechnen.cs", "je Funktion eine eigene Datei");
         Projektstruktur.Datei(Projektstruktur.Primitive.Client, "Theke").Should().Be("Clients.cs");
-        Projektstruktur.BereichAus("Domain.Pipeline", "Domain.Pipeline.ImagePair").Should().Be("ImagePair");
-        Projektstruktur.BereichAus("Domain.Pipeline", "Domain.ImagePair").Should().BeNull();
+        Projektstruktur.BereichAus("Domain.Projections", "Domain.Projections.ImagePair").Should().Be("ImagePair");
+        Projektstruktur.BereichAus("Domain.Projections", "Domain.ImagePair").Should().BeNull();
         // Kataloge: eigene Wurzel, keine Rolle EINER Anwendung (Projekte kennt sie nicht), ihr Projekt aus dem Namespace.
         Projektstruktur.Zerlege("Bild.Verarbeitung.Katalog").Should().Be(("Bild.Verarbeitung", Projektstruktur.Rolle.Katalog));
         Projektstruktur.IstKatalog("Bild.Katalog").Should().BeTrue();

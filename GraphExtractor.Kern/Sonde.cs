@@ -56,12 +56,12 @@ public static class Sonde
         foreach (var (name, text) in Quelltexte())
             fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), name, text, folders: new[] { "__sonde" },
                 filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
-        // Was den fremden Katalog nennt (Graphen mit Übersetzungen), liegt bei den Abläufen — nur sie kennen einen Katalog (docs/07).
-        var ablaeufe = fork.Projects.First(p => p.AssemblyName == Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel,
-            Abstractions.Projektstruktur.Rolle.Ablaeufe));
-        foreach (var (name, text) in Ablaeufetexte())
-            fork = fork.AddDocument(DocumentId.CreateNewId(ablaeufe.Id), name, text, folders: new[] { "__sonde" },
-                filePath: Path.Combine(Path.GetDirectoryName(ablaeufe.FilePath)!, "__sonde", name));
+        // Was die Lese-Fähigkeit des fremden Katalogs umsetzt, liegt im Speicher der Anwendung (docs/07) — dort, wo Stores stehen.
+        var speicher = fork.Projects.First(p => p.AssemblyName == Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel,
+            Abstractions.Projektstruktur.Rolle.Speicher));
+        foreach (var (name, text) in Speichertexte())
+            fork = fork.AddDocument(DocumentId.CreateNewId(speicher.Id), name, text, folders: new[] { "__sonde" },
+                filePath: Path.Combine(Path.GetDirectoryName(speicher.FilePath)!, "__sonde", name));
         // Der fremde Katalog als eigenes Projekt: jede Datei im Bereichs-Ordner, wie die Projektstruktur ihn will (docs/07 §7.3).
         var gezeichnet = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (name, text) in Katalogtexte())
@@ -407,19 +407,20 @@ public static class Sonde
     /// <summary>Die Quelltexte der Sonden-Domäne (Dateiname, Text) — auch die Fixture der Gesten-Tests im Prüfstand; ohne den Katalog und ohne das,
     /// was ihn nennt.</summary>
     public static IEnumerable<(string Name, string Text)> Quelltexte() => Quellen()
-        .Where(q => !q.Name.StartsWith(KatalogPraefix, StringComparison.Ordinal) && !q.Name.StartsWith(AblaeufePraefix, StringComparison.Ordinal));
+        .Where(q => !q.Name.StartsWith(KatalogPraefix, StringComparison.Ordinal) && !q.Name.StartsWith(SpeicherPraefix, StringComparison.Ordinal));
 
-    /// <summary>Die Quelltexte der Sonde, die den fremden Katalog nennen (Dateien „Ablaeufe.&lt;Name&gt;.cs.txt“) — sie liegen bei den Abläufen.</summary>
-    public static IEnumerable<(string Name, string Text)> Ablaeufetexte() => Quellen().Where(q => q.Name.StartsWith(AblaeufePraefix, StringComparison.Ordinal));
+    /// <summary>Die Quelltexte der Sonde für den Speicher der Anwendung (Dateien „Speicher.&lt;Name&gt;.cs.txt“): ein Store, der eine Fähigkeit des
+    /// fremden Katalogs umsetzt (CQRS124).</summary>
+    public static IEnumerable<(string Name, string Text)> Speichertexte() => Quellen().Where(q => q.Name.StartsWith(SpeicherPraefix, StringComparison.Ordinal));
 
-    private const string AblaeufePraefix = "Ablaeufe.";
+    private const string SpeicherPraefix = "Speicher.";
 
     /// <summary>Die Quelltexte des fremden Katalogs der Sonde (Dateien „Katalog.&lt;Bereich&gt;.&lt;Datei&gt;.cs.txt“).</summary>
     public static IEnumerable<(string Name, string Text)> Katalogtexte() => Quellen().Where(q => q.Name.StartsWith(KatalogPraefix, StringComparison.Ordinal));
 
     private const string KatalogPraefix = "Katalog.";
 
-    /// <summary>Das Projekt des fremden Katalogs der Sonde (docs/plan-katalog-und-graphen.md): nur Abstractions, genutzt von den Abläufen der Anwendung.</summary>
+    /// <summary>Das Projekt des fremden Katalogs der Sonde (docs/plan-ohne-pipeline.md): nur Abstractions, genutzt von der Domäne der Anwendung.</summary>
     public const string SondenKatalog = "Sondenkatalog.Katalog";
 
     /// <summary>„Katalog.Peilung.Commands.cs“ → Bereich „Peilung“, Datei „Commands.cs“.</summary>
@@ -431,30 +432,29 @@ public static class Sonde
     }
 
     /// <summary>
-    /// Der Fork mit dem Katalog-Projekt der Sonde: Optionen, Referenzen und Analyzer wie der Vertrag bzw. die Abläufe, eine Projekt-Referenz nur auf
-    /// Abstractions — und die Abläufe der Anwendung nutzen ihn (wie nach der Geste „neuer Katalog“), so liegt er in der Hülle der Laufzeit.
+    /// Der Fork mit dem Katalog-Projekt der Sonde: Optionen, Referenzen und Analyzer wie ein Katalog der Solution (sonst wie die Domäne), eine
+    /// Projekt-Referenz nur auf Abstractions — und die Domäne der Anwendung nutzt ihn (wie nach der Geste „neuer Katalog“), so liegt er in der Hülle der
+    /// Laufzeit.
     /// </summary>
     private static (Solution, ProjectId) MitKatalog(Solution solution, string solutionDir, ProjectId domaene)
     {
         var vertrag = solution.Projects.First(p => p.AssemblyName == "Abstractions");
-        var ablaeufe = solution.Projects.First(p => p.AssemblyName == Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel,
-            Abstractions.Projektstruktur.Rolle.Ablaeufe));
+        var vorbild = solution.Projects.Where(p => Abstractions.Projektstruktur.IstKatalog(p.AssemblyName ?? ""))
+            .OrderBy(p => p.AssemblyName, StringComparer.Ordinal).FirstOrDefault() ?? solution.GetProject(domaene)!;
         var id = ProjectId.CreateNewId(SondenKatalog);
         var info = ProjectInfo.Create(id, VersionStamp.Create(), SondenKatalog, SondenKatalog, LanguageNames.CSharp,
                 filePath: Path.Combine(solutionDir, SondenKatalog, SondenKatalog + ".csproj"),
-                compilationOptions: ablaeufe.CompilationOptions, parseOptions: ablaeufe.ParseOptions,
-                projectReferences: new[] { new ProjectReference(vertrag.Id) }, metadataReferences: ablaeufe.MetadataReferences,
-                analyzerReferences: ablaeufe.AnalyzerReferences)
+                compilationOptions: vorbild.CompilationOptions, parseOptions: vorbild.ParseOptions,
+                projectReferences: new[] { new ProjectReference(vertrag.Id) }, metadataReferences: vorbild.MetadataReferences,
+                analyzerReferences: vorbild.AnalyzerReferences)
             .WithDefaultNamespace(SondenKatalog);
-        var fork = solution.AddProject(info).AddProjectReference(ablaeufe.Id, new ProjectReference(id));
-        // Die Domäne der Sonde nutzt ihn auch: ihre Übersetzungen nehmen seine Nachrichten (docs/plan-ohne-pipeline.md).
-        if (!fork.GetProject(domaene)!.ProjectReferences.Any(r => r.ProjectId == id)) fork = fork.AddProjectReference(domaene, new ProjectReference(id));
-        // MSBuild reicht die Referenz transitiv weiter (Komposition, Akteure, Leitung sehen den Katalog über die Abläufe bzw. die Domäne), ein
-        //   Roslyn-Fork nicht.
-        foreach (var p in solution.Projects.Where(p => p.ProjectReferences.Any(r => r.ProjectId == ablaeufe.Id || r.ProjectId == domaene)))
+        // Die Domäne der Sonde nutzt ihn: ihre Übersetzungen nehmen seine Nachrichten (docs/plan-ohne-pipeline.md).
+        var fork = solution.AddProject(info).AddProjectReference(domaene, new ProjectReference(id));
+        // MSBuild reicht die Referenz transitiv weiter (Speicher, Komposition, Akteure, Leitung sehen den Katalog über die Domäne), ein Roslyn-Fork nicht.
+        foreach (var p in solution.Projects.Where(p => p.ProjectReferences.Any(r => r.ProjectId == domaene)))
             if (!fork.GetProject(p.Id)!.ProjectReferences.Any(r => r.ProjectId == id)) fork = fork.AddProjectReference(p.Id, new ProjectReference(id));
-        // Globale usings (ImplicitUsings) wie in den Abläufen — Task & Co. ohne using.
-        foreach (var d in ablaeufe.Documents.Where(d => d.FilePath?.EndsWith(".GlobalUsings.g.cs", StringComparison.Ordinal) == true))
+        // Globale usings (ImplicitUsings) wie im Vorbild — Task & Co. ohne using.
+        foreach (var d in vorbild.Documents.Where(d => d.FilePath?.EndsWith(".GlobalUsings.g.cs", StringComparison.Ordinal) == true))
             fork = fork.AddDocument(DocumentId.CreateNewId(id), Path.GetFileName(d.FilePath!), d.GetTextAsync().Result,
                 filePath: Path.Combine(solutionDir, SondenKatalog, "obj", Path.GetFileName(d.FilePath!)));
         return (fork, id);

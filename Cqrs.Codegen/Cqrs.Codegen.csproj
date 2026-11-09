@@ -26,7 +26,6 @@
          Ordner (AppContext.BaseDirectory). Zugleich erzwingen die Referenzen die Build-Reihenfolge
          (Domain-Projekte VOR dem Prepass). -->
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
-    <ProjectReference Include="..\Domain.Pipeline\Domain.Pipeline.csproj" />
     <ProjectReference Include="..\Domain.Akteure\Domain.Akteure.csproj" />
 
     <!-- Die Codegen-Projekte der Prüfdomäne (zweite Anwendung, docs/13 T-1): ihr Prepass hängt an Pruefdomaene.Laufzeit. Welche DLLs
