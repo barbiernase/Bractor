@@ -81,6 +81,8 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
     {
         "IState", "IDecider`1", "IApplier`1", "ICommand", "IEvent", "IQuery", "IQueryResponse", "IReadModel", "IWriteStore", "IReadStore",
         "IProjektion", "IReader", "IFunktion", "IGraph", "IWertobjekt",
+        // Die Übersetzungen der Anwendung (<Wurzel>.Uebersetzungen, ein Projekt nur mit ihnen).
+        "IUebersetzung`2",
         // Der Rand (Domain.Akteure): wer was hineingibt und hört, und welcher Client wen verkörpert.
         "IAkteur", "IClient",
     };

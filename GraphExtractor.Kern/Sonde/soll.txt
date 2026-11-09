@@ -759,3 +759,6 @@ besitz Funkortung.Ortung.OrtungAngefordert command -> §rand
 besitz Funkortung.Ortung.VermerkePeilung command -> aggregate:Peilstelle
 besitz Funkortung.Ortung.PeilungVermerkt event -> aggregate:Peilstelle
 lage Funker -> Domain.Akteure
+lage Hinein -> Domain.Uebersetzungen
+lage Vermerken -> Domain.Uebersetzungen
+lage Bestaetigen -> Domain.Uebersetzungen

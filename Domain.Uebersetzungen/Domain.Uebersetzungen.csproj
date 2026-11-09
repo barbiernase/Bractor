@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Die ÜBERSETZUNGEN der Anwendung Domain (docs/plan-ohne-pipeline.md, docs/07): die eine Naht zwischen den Katalogen und der Domäne. Sie referenzieren
+         die Schreibseite und die Kataloge, deren Graphen sie binden — die Domäne selbst bleibt rein und kennt keinen Katalog. -->
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+        <ProjectReference Include="..\Domain\Domain.csproj" />
+        <ProjectReference Include="..\Bildvorschau.Katalog\Bildvorschau.Katalog.csproj" />
+        <ProjectReference Include="..\Bildverarbeitung.Katalog\Bildverarbeitung.Katalog.csproj" />
+    </ItemGroup>
+
+</Project>

@@ -67,9 +67,10 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Konfig-Records, Technik (ohne Marker), `IZustand<T>`, `ILogger<T>`.
 - **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs` eines **Katalogs** (`<Name>.Katalog`, domänenneutral; Funktionen und
   Graphen gibt es nur dort); jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch mehrfach). Domänenspezifisch macht ihn eine
-  **Übersetzung** der Domäne: `[Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))] record X : IUebersetzung<TEin, TAus>` in `<Bereich>/Uebersetzungen.cs`,
-  Feld für Feld ohne Logik, Routing über den Typ (jede Ausgabe eines laufenden Graphen, ein Client-Command am Kopf, eine Antwort auf ihren Command;
-  docs/plan-ohne-pipeline.md, CQRS119–123); nur Übersetzungen nennen Katalog-Typen (CQRS122). **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
+  **Übersetzung**: `[Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))] record X : IUebersetzung<TEin, TAus>` in
+  `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs`, Feld für Feld ohne Logik, Routing über den Typ (jede Ausgabe eines laufenden Graphen, ein
+  Client-Command am Kopf, eine Antwort auf ihren Command; docs/plan-ohne-pipeline.md, CQRS119–121/123). Nur das Projekt der Übersetzungen (und
+  Speicher, Akteure, Leitung, Komposition) referenziert Kataloge: **die Domäne bleibt rein**. **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
   jeder Kopf als `[Kopf]` (nimmt von außen, was keine Quelle speist; je Eingangstyp genau einer); nur eine Quelle trägt keins; was kein Knoten über
   `Von` nimmt, verlässt den Graphen (`GeneratedGraphen`, eine Lesart `Graphform`). Zwischen den Bausteinen bleibt es beim Typ-Routing mit genau einem
   Empfänger. Folge, Gabel, Wahl, Je sind Formen der Ausgaben; Zusammenführen, Sammeln, Warten stehen im Logik-Code (die Nachricht trägt mit, Zustand des
@@ -136,8 +137,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Grammatik, Scaffolder | `DomainEditor/` |
 | Werkbank | `Werkbank/` (Server `Werkbank/Server/`, Oberfläche `Werkbank/wwwroot/editor/`) |
 | Hosts | `Host.Grpc` (`AddCqrs(args)` der Komposition + `LaufeAsync`), `Host.Blazor` (Client) — beide mit `--umgebung <name>`; `Host.Pruefdomaene` (Messung S5) |
-| Beispieldomäne (Prüfling) | `Domain*`, `Domain.Akteure`, `Domain.Client.*` |
-| Prüfdomäne (zweite Anwendung, Framework-Tests) | `Pruefdomaene`, `Pruefdomaene.Projections`, `Pruefwerk.Katalog`, `Pruefdomaene.Akteure`, `Pruefdomaene.Laufzeit`, `Pruefdomaene.Integration.Tests` |
+| Beispieldomäne (Prüfling) | `Domain*`, `Domain.Uebersetzungen`, `Domain.Akteure`, `Domain.Client.*`, Kataloge `Bildvorschau.Katalog`, `Bildverarbeitung.Katalog` |
+| Prüfdomäne (zweite Anwendung, Framework-Tests) | `Pruefdomaene`, `Pruefdomaene.Projections`, `Pruefdomaene.Uebersetzungen`, `Pruefwerk.Katalog`, `Pruefdomaene.Akteure`, `Pruefdomaene.Laufzeit`, `Pruefdomaene.Integration.Tests` |
 | Umgebungen | `umgebungen/<name>/umgebung.json` und `umgebungen/<name>/graphen/<instanz>.json` |
 | Vermessung (E2E-Treiber, Ablage) | `Cqrs.Vermessung`, `scripts/vermessung-*.sh`, `vermessung/ergebnisse/` |
 

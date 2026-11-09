@@ -38,6 +38,7 @@ public static class Vertrag
     public static readonly string IWertobjekt = typeof(IWertobjekt).FullName!;
     public static readonly string IFunktion = typeof(IFunktion).FullName!;
     public static readonly string IGraph = typeof(IGraph).FullName!;
+    public static readonly string IUebersetzung = typeof(IUebersetzung<,>).FullName!;
     public static readonly string IMessagePayload = typeof(IMessagePayload).FullName!;
     public static readonly string IAusgabe = typeof(IAusgabe).FullName!;
     public static readonly string IDecider = typeof(IDecider<>).FullName!;

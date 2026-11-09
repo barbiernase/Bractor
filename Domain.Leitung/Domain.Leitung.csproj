@@ -29,6 +29,7 @@
     <ProjectReference Include="..\Domain\Domain.csproj" />
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
     <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Domain.Uebersetzungen\Domain.Uebersetzungen.csproj" />
   </ItemGroup>
 
   <!-- CODEGEN-PREPASS der Anwendung (Cqrs.Codegen/CqrsCodegen.targets): hier, weil dieses Projekt der erste Consumer ist (domain.proto

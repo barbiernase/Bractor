@@ -3,9 +3,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
-    <!-- Die Kataloge, deren Graphen die Übersetzungen der Domäne binden (docs/plan-ohne-pipeline.md). -->
-    <ProjectReference Include="..\Bildvorschau.Katalog\Bildvorschau.Katalog.csproj" />
-    <ProjectReference Include="..\Bildverarbeitung.Katalog\Bildverarbeitung.Katalog.csproj" />
     <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj" />
     <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj"
                       OutputItemType="Analyzer"

@@ -1,7 +1,8 @@
 using Abstractions;
 using Pruefwerk.Katalog.Abrechnung;
+using Pruefdomaene.Abrechnung;
 
-namespace Pruefdomaene.Abrechnung;
+namespace Pruefdomaene.Uebersetzungen.Abrechnung;
 
 // ÜBERSETZUNGEN (docs/plan-ohne-pipeline.md): Freigabe und Mahnung des Katalogs Pruefwerk werden Rechnungen und Kundenkonten — der Vorgang ist die
 // Rechnung, der Empfänger das Konto.

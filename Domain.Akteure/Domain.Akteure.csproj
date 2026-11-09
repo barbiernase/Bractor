@@ -14,9 +14,8 @@
         <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
         <ProjectReference Include="..\Domain\Domain.csproj" />
         <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
-        <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj"
-                          OutputItemType="Analyzer"
-                          ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Domain.Uebersetzungen\Domain.Uebersetzungen.csproj" />
     </ItemGroup>
 
 </Project>

@@ -29,10 +29,10 @@ public static class Lagepruefung
                 if (P.IstProjekt(wurzel, r) && !erlaubt.Contains(r))
                     befunde.Add($"{projekt.AssemblyName} referenziert {r} — erlaubt sind nur {(erlaubt.Count == 0 ? "keine Rollen-Projekte" : string.Join(", ", erlaubt))} (docs/07 §7.2)");
                 else if (P.IstKatalog(r) && !P.NutzenKataloge.Contains(P.Zerlege(projekt.AssemblyName).Rolle) && !Ueber(projekt, r))
-                    befunde.Add($"{projekt.AssemblyName} referenziert den Katalog {r} — die Domäne kennt keine Funktionsnachricht; Kataloge nutzen nur "
+                    befunde.Add($"{projekt.AssemblyName} referenziert den Katalog {r} — die Domäne bleibt rein, sie kennt keinen Katalog; Kataloge nutzen nur "
                         + $"{string.Join(", ", P.NutzenKataloge.Select(x => P.Projekt(wurzel, x)))} (docs/07 §7.2)");
         }
-        // Der Katalog kommt nur über ein Rollen-Projekt, das ihn nutzen darf (die Schreibseite mit ihren Übersetzungen) — MSBuild reicht Referenzen
+        // Der Katalog kommt nur über ein Rollen-Projekt, das ihn nutzen darf (die Übersetzungen) — MSBuild reicht Referenzen
         //   transitiv weiter, gemeint ist hier nur die eigene.
         bool Ueber(Project projekt, string katalog) => projekt.ProjectReferences.Select(x => solution.GetProject(x.ProjectId)).OfType<Project>()
             .Any(x => P.IstProjekt(wurzel, x.AssemblyName) && P.NutzenKataloge.Contains(P.Zerlege(x.AssemblyName).Rolle)

@@ -29,6 +29,8 @@ public static class Strukturort
             Aggregate = m.Aggregate.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Schreibseite) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
             Clients = m.Clients.Select(c => c.Datei != null ? c : c with { Namespace = Ns(c.Namespace, P.Rolle.Akteure) }).ToList(),
+            // Eine neue Übersetzung im Bereich einer Domäne: bei den Übersetzungen der Anwendung im selben Bereich (die Domäne bleibt rein).
+            Uebersetzungen = m.Uebersetzungen.Select(u => u.Datei != null ? u : u with { Namespace = Ns(u.Namespace, P.Rolle.Uebersetzungen) }).ToList(),
             Lesen = lesen == null ? null : lesen with
             {
                 Stores = lesen.Stores.Select(s => (s.Datei != null ? s : s with { Namespace = Ns(s.Namespace, P.Rolle.Leseseite) }) with

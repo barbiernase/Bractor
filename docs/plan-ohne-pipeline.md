@@ -16,14 +16,15 @@ Es gibt zwei Arten von Code, die nichts voneinander wissen müssen, und eine dü
 
 - Ein **Graph** ist immer domänenneutral und liegt in einem Katalog, wie eine Funktion. Es gibt keinen Graphen der Anwendung mehr, keinen „Ablauf“, keine
   Rolle `Ablaeufe`, kein `<Wurzel>.Pipeline`. Was früher ein Ablauf war (Dateiwächter + Bildaufbereitung), ist ein Graph im Katalog.
-- Eine **Übersetzung** macht ihn domänenspezifisch. Sie ist eine eigene kleine Deklaration in der Domäne, nicht mehr ein Knoten im Graphen.
+- Eine **Übersetzung** macht ihn domänenspezifisch. Sie ist eine eigene kleine Deklaration der Anwendung im Projekt `<Wurzel>.Uebersetzungen`
+  (neben der Domäne, damit diese rein bleibt), nicht mehr ein Knoten im Graphen.
 - Die **Umgebung** sagt, welche Katalog-Graphen laufen (Instanzen). Struktur ist Code, Auswahl und Werte sind Konfig (W7) — unverändert.
 
 ## 2. Die Übersetzung als Code-Fakt
 
 ```csharp
-// Domain/ImagePair/Uebersetzungen.cs
-namespace Domain.ImagePair;
+// Domain.Uebersetzungen/ImagePair/Uebersetzungen.cs
+namespace Domain.Uebersetzungen.ImagePair;
 
 /// <summary>Das gedeutete Bild aus der Bildaufbereitung wird ein Paar: die Id aus der Guid des Schlüssels, alles andere nach Namen.</summary>
 [Feld(nameof(NimmBildAuf.AggregateId), nameof(BildGedeutet.Paar))]
@@ -34,7 +35,7 @@ public sealed record Aufnehmen : IUebersetzung<BildGedeutet, NimmBildAuf>;
   ist der Name der Übersetzung (Karte, Spur, Command-Ids).
 - Die Zuordnung bleibt, wie sie ist (A1, CQRS119): `[Feld]`, sonst gleicher Name mit implizit zuweisbarem Typ, sonst der Standardwert; Feld für Feld,
   ohne Logik (CQRS121).
-- Lage: Primitive `Uebersetzung`, Schreibseite, Sammeldatei `Uebersetzungen.cs` im Bereich des Aggregats, an das sie schreibt bzw. dessen Antwort sie
+- Lage: Primitive `Uebersetzung`, Rolle Übersetzungen (`<Wurzel>.Uebersetzungen`), Sammeldatei `Uebersetzungen.cs` im Bereich des Aggregats, an das sie schreibt bzw. dessen Antwort sie
   nimmt (für eine Kopf-Übersetzung: der Bereich der Nachricht, die sie nimmt).
 
 ## 3. Wohin eine Nachricht geht — Routing über Typen (Invariante 3)
@@ -67,8 +68,9 @@ Der **Akteur einer Instanz** (Graph mit Quelle) muss dürfen, was aus seinen Aus
 - **Lese-Fähigkeit aus dem Katalog** (umgesetzt, 54fd8181): der Katalog deklariert, was er lesen will, ein Store im Speicher der Anwendung setzt es um;
   CQRS124 meldet eine Fähigkeit ohne Store.
 - **`Herkunft.NeueId(zweck)`** (umgesetzt): eine Id ohne Aggregat-Typ für Katalogfunktionen; die Übersetzung macht daraus `Id<T>` (`[Feld]`).
-- **CQRS122** (neu, Schritt 4): Zustand, `Decide`, `Apply`, Commands an Aggregate, Events, Hinweise und Aggregat-Queries nennen keinen Katalog-Typ —
-  erlaubt sind sie nur in Übersetzungen. Die Domäne referenziert Kataloge, der Analyzer hält sie trotzdem sauber.
+- **Die Domäne bleibt rein** (Tobi, 2026-11-09, statt des Analyzers CQRS122): die Übersetzungen liegen in einem eigenen Rollen-Projekt
+  `<Wurzel>.Uebersetzungen`, das die Schreibseite und die Kataloge referenziert; Schreib- und Leseseite kennen keinen Katalog (Projektgrenze, `--check`
+  Lage). Eine Übersetzung anderswo weist CQRS098 dorthin.
 - Die Antwort-Übersetzung über `[Von]` auf eine Übersetzung im Graphen (54fd8181) wird durch das Routing über Typen (§3.3) ersetzt.
 
 ## 5. Bestand
@@ -77,8 +79,8 @@ Der **Akteur einer Instanz** (Graph mit Quelle) muss dürfen, was aus seinen Aus
 |---|---|
 | `Domain.Pipeline/ImagePair`: `Linienimport` (Dateiwächter → Bildaufbereitung → Übersetzung) | Graph im Katalog `Bildvorschau.Katalog` (Dateiwächter → Bildaufbereitung, ohne Übersetzung); Instanzen wie heute |
 | `Domain.Pipeline/ImagePair`: `Bildaufnahme` (Kopf Bildaufbereitung → Übersetzung) | entfällt: eine Instanz des Katalog-Graphen `Bildaufbereitung` (Kopf `DateiGefunden`) |
-| die Übersetzung `Aufnehmen` in beiden | eine Übersetzung `Domain/ImagePair/Uebersetzungen.cs` |
-| `Pruefdomaene.Pipeline`: Funktionen, die die Domäne kennen, ihre Graphen | `Pruefdomaene.Katalog` (neutral), die Abbildungen als Übersetzungen in `Pruefdomaene/<Bereich>/Uebersetzungen.cs` |
+| die Übersetzung `Aufnehmen` in beiden | eine Übersetzung `Domain.Uebersetzungen/ImagePair/Uebersetzungen.cs` |
+| `Pruefdomaene.Pipeline`: Funktionen, die die Domäne kennen, ihre Graphen | `Pruefdomaene.Katalog` (neutral), die Abbildungen als Übersetzungen in `Pruefdomaene.Uebersetzungen/<Bereich>/Uebersetzungen.cs` |
 | `Pruefdomaene.Pipeline/Skalierung`: `Hochrechnung` mit zwei Übersetzungen | Kopf- und Ausgangs-Übersetzung in `Pruefdomaene/Messung`; `Skalierer` läuft als Instanz eines Graphen im Katalog `Rechenwerk.Katalog` |
 | Sonde: `Ablaeufe.Funkortung` (Graph `Ortung` mit Übersetzungen) | Graph `Ortung` im Sonden-Katalog, Übersetzungen in `Funkortung.Ortung` |
 | Tobis Versuch `Domain/Pipeline/ImagePair/Graphen.cs` (in-Graph-Übersetzungen) | bleibt liegen, bis Tobi sagt, was daraus wird — im neuen Modell sind es vier Übersetzungen in `Domain/ImagePair` |
@@ -92,8 +94,9 @@ Der **Akteur einer Instanz** (Graph mit Quelle) muss dürfen, was aus seinen Aus
 3. **Prüfdomäne** (umgesetzt, 2361e94a): `Pruefwerk.Katalog`, Übersetzungen, `Pruefdomaene.Pipeline` weg; Auftrag und Verteilung (reine Weiterleitungen
    an Aggregate) sind Reaktionen des Workers.
 4. **Die Rolle verschwindet** (umgesetzt): Projektstruktur ohne `Ablaeufe` (Funktion, Graph, Konfig, Technik nur im Katalog; Command ohne Ziel und
-   Hinweis in Schreibseite oder Katalog), CQRS098 weist nach `<Name>.Katalog`, CQRS122 (`KatalogGrenzeAnalyzer`), Codegen und Werkbank lesen die
-   Kataloge aus allen Rollen, die sie nutzen dürfen, „neuer Katalog“ setzt die Referenz der Schreibseite; `Domain.Pipeline` weg. Die Sonde legt ihren
+   Hinweis in Schreibseite oder Katalog), CQRS098 weist nach `<Name>.Katalog`; die Übersetzungen in `<Wurzel>.Uebersetzungen` (die Domäne bleibt
+   rein); Codegen und Werkbank lesen die Kataloge aus allen Rollen, die sie nutzen dürfen, „neuer Katalog“ setzt die Referenz der Übersetzungen;
+   `Domain.Pipeline` weg. Die Sonde legt ihren
    Store in den Speicher; ihre Domänen mit Funktionen bleiben absichtlich falsch liegend (die Lage weist sie nach `<Name>.Katalog`).
 5. **Sonde:** Graphen in Sonden-Kataloge, Übersetzungen in die Domänen der Sonde, Gesten-Skript, `soll.txt`.
 6. **Sicht und Editor:** Die Spalte Graphen zeigt die Katalog-Graphen, die laufen (ohne Band, sie gehören keiner Domäne); die Spalte Übersetzungen die

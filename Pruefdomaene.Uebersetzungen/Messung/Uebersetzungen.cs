@@ -1,8 +1,9 @@
 using Abstractions;
 using Pruefwerk.Katalog.Messung;
 using Rechenwerk.Katalog.Skalierung;
+using Pruefdomaene.Messung;
 
-namespace Pruefdomaene.Messung;
+namespace Pruefdomaene.Uebersetzungen.Messung;
 
 // ÜBERSETZUNGEN in beide Richtungen (docs/plan-ohne-pipeline.md): die Hochrechnung aus dem Katalog Rechenwerk wird domänenspezifisch — die Anforderung
 // eines Clients am Kopf hinein, das Ergebnis heraus an die Messstelle.

@@ -5,8 +5,8 @@ namespace GraphExtractor;
 
 /// <summary>
 /// Kataloge anlegen und nutzen (docs/plan-katalog-und-graphen.md, Schritt 2): ein Funktionskatalog ist ein eigenes Projekt <c>&lt;Name&gt;.Katalog</c>,
-/// das nur <c>Abstractions</c> referenziert. Die Geste schreibt seine Projektdatei, trägt ihn in die Solution ein und gibt der Schreibseite der
-/// Anwendung die Referenz (ihre Übersetzungen nehmen seine Nachrichten, docs/plan-ohne-pipeline.md) — als Text-Patch über den <see cref="Dateipuffer"/> (Verlauf und ↶ wie jede Geste). Die Werkbank lädt danach kalt neu.
+/// das nur <c>Abstractions</c> referenziert. Die Geste schreibt seine Projektdatei, trägt ihn in die Solution ein und gibt den Übersetzungen der
+/// Anwendung die Referenz (sie nehmen seine Nachrichten, die Domäne bleibt rein, docs/plan-ohne-pipeline.md) — als Text-Patch über den <see cref="Dateipuffer"/> (Verlauf und ↶ wie jede Geste). Die Werkbank lädt danach kalt neu.
 /// </summary>
 public static class Kataloge
 {
@@ -31,11 +31,11 @@ public static class Kataloge
         return projekt;
     }
 
-    /// <summary>Die Anwendung nutzt den Katalog (Referenz der Schreibseite setzen) bzw. nicht mehr (Referenz entfernen).</summary>
+    /// <summary>Die Anwendung nutzt den Katalog (Referenz der Übersetzungen setzen) bzw. nicht mehr (Referenz entfernen).</summary>
     public static void Nutzen(Dateipuffer puffer, string katalog, bool nutzen, string wurzel = P.StandardWurzel)
     {
-        var schreibseite = P.Projekt(wurzel, P.Rolle.Schreibseite);
-        Referenz(puffer, schreibseite, katalog, nutzen, $"die Anwendung {wurzel} hat keine Schreibseite");
+        var uebersetzungen = P.Projekt(wurzel, P.Rolle.Uebersetzungen);
+        Referenz(puffer, uebersetzungen, katalog, nutzen, $"die Anwendung {wurzel} hat kein Projekt {uebersetzungen}");
     }
 
     /// <summary>

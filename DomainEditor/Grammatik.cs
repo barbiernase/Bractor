@@ -127,17 +127,18 @@ public static class Grammatik
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Köpfe je Eingangstyp, Kopf ohne Eingang von außen; Lesart Graphform)"),
              new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (der Kopf gibt den Eingang an den Knoten, der seinen Typ nimmt)")]),
         new("GR-UEBERSETZUNG", "Übersetzung: IUebersetzung<TEin, TAus> mit [Feld]", "Graphen und Funktionen liegen in Katalogen, domänenneutral; "
-            + "domänenspezifisch macht sie eine Übersetzung der Domäne: [Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))] public sealed record X : "
-            + "IUebersetzung<TEin, TAus>; in <Bereich>/Uebersetzungen.cs. Sie macht aus einem Command ohne Ziel (oder einem Event, das ein Aggregat auf ihren "
+            + "domänenspezifisch macht sie eine Übersetzung der Anwendung: [Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))] public sealed record X : "
+            + "IUebersetzung<TEin, TAus>; in <Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs. Sie macht aus einem Command ohne Ziel (oder einem Event, das ein Aggregat auf ihren "
             + "Command antwortet) genau einen Command — Feld für Feld, ohne Logik: je Parameter von TAus eine Quelle, [Feld] (ausdrücklich auch Guid ⇄ "
             + "Id<T>), sonst ein Feld von TEin mit gleichem Namen und implizit zuweisbarem Typ, sonst der Standardwert. Wohin, entscheidet der Typ: jede "
             + "Ausgabe eines laufenden Graphen mit Typ TEin wird im Kind übersetzt, ein Command ohne Ziel eines Clients am Kopf, eine Antwort gleich nach dem "
-            + "Senden; TAus geht an sein Aggregat bzw. an den Kopf genau eines Graphen. Ein Graph nennt sie nie als Knoten. Nur Übersetzungen nennen "
-            + "Katalog-Typen: Zustand, Decide, Apply, Commands an Aggregate, Events, Hinweise und Aggregat-Queries sprechen die Sprache der Domäne.", "error",
+            + "Senden; TAus geht an sein Aggregat bzw. an den Kopf genau eines Graphen. Ein Graph nennt sie nie als Knoten. Nur das Projekt der "
+            + "Übersetzungen referenziert Kataloge: die Domäne (Schreib- und Leseseite) bleibt rein und kennt keinen Katalog.", "error",
             [An("CQRS119", "Domain.SourceGeneration/GraphAnalyzer.cs (Zuordnung unvollständig, Typ nicht zuweisbar, [Feld] ohne Ziel bzw. Quelle; Lesart Uebersetzungsform)"),
              An("CQRS120", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (ein Ausgang eines laufenden Katalog-Graphen ohne Empfänger)"),
              An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TEin weder Command ohne Ziel noch Antwort-Event, TAus kein Command)"),
-             An("CQRS122", "Domain.SourceGeneration/KatalogGrenzeAnalyzer.cs (ein Katalog-Typ in Zustand, Decide, Apply, Command, Event, Hinweis, Aggregat-Query)"),
+             An("CQRS098", "Domain.SourceGeneration/LageAnalyzer.cs (eine Übersetzung außerhalb von <Wurzel>.Uebersetzungen)"),
+             new("check", null, "GraphExtractor.Kern/Lagepruefung.cs (Schreib- oder Leseseite referenziert einen Katalog)"),
              An("CQRS123", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Antwort-Übersetzung nimmt ein Event, das das Decide nicht ausgibt)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (ein Graph nennt eine Übersetzung als Knoten)"),
              new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedUebersetzungen: je Übersetzung Typen und Rechnung)"),

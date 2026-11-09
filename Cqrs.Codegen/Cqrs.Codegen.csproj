@@ -33,6 +33,8 @@
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Akteure\Pruefdomaene.Akteure.csproj" />
+    <ProjectReference Include="..\Domain.Uebersetzungen\Domain.Uebersetzungen.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Uebersetzungen\Pruefdomaene.Uebersetzungen.csproj" />
   </ItemGroup>
 
   <ItemGroup>

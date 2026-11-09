@@ -1,7 +1,8 @@
 using Abstractions;
 using Pruefwerk.Katalog.Import;
+using Pruefdomaene.Import;
 
-namespace Pruefdomaene.Import;
+namespace Pruefdomaene.Uebersetzungen.Import;
 
 // ÜBERSETZUNGEN (docs/plan-ohne-pipeline.md): Annahme und Zeilenlauf des Katalogs Pruefwerk werden Importaufträge — der Vorgang ist der Auftrag.
 

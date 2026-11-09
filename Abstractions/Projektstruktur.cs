@@ -25,10 +25,14 @@ static class Projektstruktur
     /// <summary>Die Rolle eines Projekts der Anwendung (docs/07 §7.2).</summary>
     public enum Rolle
     {
-        /// <summary><c>&lt;Wurzel&gt;</c>: Aggregate, Commands, Events, Hinweise, Wertobjekte, Enums; Queries an Aggregate und ihre Antworten.</summary>
+        /// <summary><c>&lt;Wurzel&gt;</c>: Aggregate, Commands, Events, Hinweise, Wertobjekte, Enums; Queries an Aggregate und ihre Antworten. Rein: sie
+        /// kennt keinen Katalog.</summary>
         Schreibseite,
         /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reader.</summary>
         Leseseite,
+        /// <summary><c>&lt;Wurzel&gt;.Uebersetzungen</c>: die Übersetzungen (<c>IUebersetzung&lt;TEin, TAus&gt;</c>) — die eine Naht zwischen Katalogen und
+        /// Domäne (docs/plan-ohne-pipeline.md). Sie referenziert die Schreibseite und die Kataloge, deren Graphen sie bindet; so bleibt die Domäne rein.</summary>
+        Uebersetzungen,
         /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure und Clients — der äußerste Ring.</summary>
         Akteure,
         /// <summary><c>&lt;Wurzel&gt;.Infrastructure</c>: Store-Implementierungen.</summary>
@@ -67,8 +71,8 @@ static class Projektstruktur
         Hinweis,
         /// <summary>Ein Graph (<c>record … : IGraph</c>, Knoten als Parameter): im Katalog, in <c>Graphen.cs</c>.</summary>
         Graph,
-        /// <summary>Eine Übersetzung (<c>record … : IUebersetzung&lt;TEin, TAus&gt;</c>): in der Domäne (Schreibseite), in <c>Uebersetzungen.cs</c> —
-        /// sie macht einen Graphen aus einem Katalog domänenspezifisch (docs/plan-ohne-pipeline.md).</summary>
+        /// <summary>Eine Übersetzung (<c>record … : IUebersetzung&lt;TEin, TAus&gt;</c>): bei den Übersetzungen der Anwendung, in <c>Uebersetzungen.cs</c>
+        /// — sie macht einen Graphen aus einem Katalog domänenspezifisch (docs/plan-ohne-pipeline.md).</summary>
         Uebersetzung,
         /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — im Katalog,
         /// je Typ eine eigene Datei.</summary>
@@ -134,14 +138,16 @@ static class Projektstruktur
             new[] { "Commands.cs", "Events.cs", "ValueObjects.cs", "Enums.cs", "Queries.cs", "Responses.cs" }),
         new Eintrag(Rolle.Leseseite, ".Projections", true, new[] { Rolle.Schreibseite },
             new[] { "ReadModels.cs", "Queries.cs", "Responses.cs", "Enums.cs" }),
-        new Eintrag(Rolle.Akteure, ".Akteure", false, new[] { Rolle.Schreibseite, Rolle.Leseseite },
+        new Eintrag(Rolle.Uebersetzungen, ".Uebersetzungen", true, new[] { Rolle.Schreibseite },
+            new[] { "Uebersetzungen.cs" }),
+        new Eintrag(Rolle.Akteure, ".Akteure", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Uebersetzungen },
             new[] { "Akteure.cs", "Clients.cs" }),
         new Eintrag(Rolle.Speicher, ".Infrastructure", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
             new string[0]),
-        new Eintrag(Rolle.Leitung, ".Leitung", false, new[] { Rolle.Schreibseite, Rolle.Leseseite },
+        new Eintrag(Rolle.Leitung, ".Leitung", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Uebersetzungen },
             new string[0], nurGeneriert: true),
         new Eintrag(Rolle.Komposition, ".Laufzeit", false,
-            new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung },
+            new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Uebersetzungen, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung },
             new string[0], nurGeneriert: true),
     };
 
@@ -164,12 +170,12 @@ static class Projektstruktur
     public const string AllgemeinerKatalog = "Allgemein.Katalog";
 
     /// <summary>
-    /// Die Rollen einer Anwendung, die Kataloge nutzen dürfen: die Schreibseite (ihre Übersetzungen machen Graphen aus Katalogen domänenspezifisch —
-    /// Zustand, Decide und Events nennen trotzdem keinen Katalog-Typ, CQRS122), der Speicher (er setzt die Fähigkeiten um, die ein Katalog zum Lesen
-    /// deklariert) und alles darüber; die Leseseite kennt keine Funktionsnachricht. Eine neue Nutzung setzt die Referenz bei der Schreibseite.
+    /// Die Rollen einer Anwendung, die Kataloge nutzen dürfen: die Übersetzungen (sie machen Graphen aus Katalogen domänenspezifisch), der Speicher (er
+    /// setzt die Fähigkeiten um, die ein Katalog zum Lesen deklariert) und alles darüber. Schreib- und Leseseite bleiben rein: sie kennen keinen Katalog.
+    /// Eine neue Nutzung setzt die Referenz bei den Übersetzungen.
     /// </summary>
     public static readonly IReadOnlyList<Rolle> NutzenKataloge = new[]
-        { Rolle.Schreibseite, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung, Rolle.Komposition };
+        { Rolle.Uebersetzungen, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung, Rolle.Komposition };
 
     public static Eintrag Von(Rolle r) => r == Rolle.Katalog ? Katalog : Rollen.First(e => e.Rolle == r);
 
@@ -213,7 +219,7 @@ static class Projektstruktur
 
     /// <summary>Die Projekte, aus denen der Codegen Proto, STJ-Kontexte und Python-Basen erzeugt (alles außer den Store-Implementierungen).</summary>
     public static IEnumerable<string> CodegenProjekte(string wurzel) =>
-        new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Akteure }.Select(r => Projekt(wurzel, r));
+        new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Uebersetzungen, Rolle.Akteure }.Select(r => Projekt(wurzel, r));
 
     /// <summary>
     /// Zerlegt einen Assembly-/Projektnamen in Wurzel und Rolle über das längste passende Suffix; ohne Suffix ist es die Schreibseite der
@@ -245,7 +251,7 @@ static class Projektstruktur
             case Primitive.Hinweis:
                 return new[] { Rolle.Schreibseite, Rolle.Katalog };
             case Primitive.Uebersetzung:
-                return new[] { Rolle.Schreibseite };
+                return new[] { Rolle.Uebersetzungen };
             case Primitive.StoreFaehigkeit:
                 // Eine Fähigkeit deklariert die Leseseite für ihre Projektionen und Reader — oder ein Katalog für seine Funktionen (mit seinen eigenen
                 //   Typen); umgesetzt wird sie im Speicher der Anwendung (docs/plan-ohne-pipeline.md §2.3).
