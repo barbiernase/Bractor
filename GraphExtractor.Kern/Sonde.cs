@@ -358,9 +358,7 @@ public static class Sonde
         //   die Kanten (aufgefaltete Pfade bei einem Graphen im Graphen).
         string Knoten(JsonNode k) => $"{S(k, "name")}:{S(k, "typ")}{(k["kopf"]?.GetValue<bool>() == true ? " [Kopf]" : "")}"
             + (A(k, "von").Any() ? $" [Von {string.Join("+", A(k, "von").Select(v => (string?)v))}]" : "")
-            + (A(k, "verlierbar").Any() ? $" [Verlierbar {string.Join("+", A(k, "verlierbar").Select(v => (string?)v))}]" : "")
-            + (A(k, "felder").Any() ? $" [Feld {string.Join("+", A(k, "felder").Select(f => S(f, "ziel") + "=" + S(f, "quelle")))}]" : "")
-            + (S(k, "innen").Length > 0 ? $" [Innen {S(k, "innen")}]" : "");
+            + (A(k, "verlierbar").Any() ? $" [Verlierbar {string.Join("+", A(k, "verlierbar").Select(v => (string?)v))}]" : "");
         foreach (var g in A(b, "graphen").Where(Sonde))
         {
             z.Add($"graph {S(g, "namespace")}.{S(g, "name")} | knoten {string.Join(", ", A(g, "knoten").Select(Knoten))}"
@@ -368,11 +366,13 @@ public static class Sonde
                   + (g["quelle"] is { } q ? $" | quelle {q}" : ""));
             foreach (var k in A(g, "kanten"))
                 z.Add($"kante {S(g, "name")} | {S(k, "von")} -{S(k, "typ")}-> {S(k, "nach")}");
-            // Übersetzungen (docs/04 §4.4): je Parameter von TAus seine Quelle und Regel — was die ↦-Karte zeigt.
-            foreach (var u in A(g, "uebersetzungen"))
-                z.Add($"uebersetzung {S(g, "name")}.{S(u, "knoten")} | {S(u, "ein")} -> {S(u, "aus")} | "
-                      + string.Join(", ", A(u, "ziele").Select(x => $"{S(x, "name")}={(S(x, "quelle") is { Length: > 0 } q ? q : "")}({(S(x, "regel") is { Length: > 0 } r ? r : "offen")})")));
         }
+        // Übersetzungen der Domäne (docs/plan-ohne-pipeline.md): je Record seine [Feld] und je Parameter von TAus seine Quelle und Regel — was die ↦-Karte
+        //   zeigt.
+        foreach (var u in A(b, "uebersetzungen").Where(Sonde))
+            z.Add($"uebersetzung {S(u, "namespace")}.{S(u, "name")} | {S(u, "ein")} -> {S(u, "aus")}"
+                  + (A(u, "felder").Any() ? $" [Feld {string.Join("+", A(u, "felder").Select(f => S(f, "ziel") + "=" + S(f, "quelle")))}]" : "") + " | "
+                  + string.Join(", ", A(u, "ziele").Select(x => $"{S(x, "name")}={(S(x, "quelle") is { Length: > 0 } q ? q : "")}({(S(x, "regel") is { Length: > 0 } r ? r : "offen")})")));
         // Regel Z: Zustandsfelder der zustandslosen Übersetzer (Symbol-Fakt, im Build CQRS083 GR-ZUSTAND).
         foreach (var o in A(b, "projektionen").Where(Sonde).Where(o => A(o["code"], "zustand").Any()))
             z.Add($"zustand projektion {S(o, "namespace")}.{S(o, "name")} | {string.Join(", ", A(o["code"], "zustand").Select(x => (string?)x))}");

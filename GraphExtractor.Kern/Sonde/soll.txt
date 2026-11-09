@@ -622,13 +622,6 @@ lage IWertTabelle -> Domain.Pipeline
 lage LineareWertTabelle -> Domain.Pipeline
 lage WertTabellenKonfig -> Domain.Pipeline
 lage GutachtenKonfig -> Domain.Pipeline
-lage SchadenErfasst -> Domain.Pipeline
-lage SchadenGeschaetzt -> Domain.Pipeline
-lage GutachtenErhalten -> Domain.Pipeline
-lage SchaetzeSchaden -> Domain.Pipeline
-lage PruefeRueckgabe -> Domain.Pipeline
-lage BemesseMahnung -> Domain.Pipeline
-lage PruefeVormerkung -> Domain.Pipeline
 lage Pruefungsstart -> Domain.Pipeline
 lage Seitenpruefer -> Domain.Pipeline
 lage Offenzaehlung -> Domain.Pipeline
@@ -637,11 +630,8 @@ lage Mahnbemessung -> Domain.Pipeline
 lage ISeitenleser -> Domain.Pipeline
 lage Lichtpruefung -> Domain.Pipeline
 lage Handpruefung -> Domain.Pipeline
-lage RueckgabeGescannt -> Domain.Pipeline
-lage SeiteZuPruefen -> Domain.Pipeline
 lage Registrierung -> Domain.Pipeline
 lage Adresspruefung -> Domain.Pipeline
-lage PruefeAdresse -> Domain.Pipeline
 lage Sensorabfrage -> Domain.Pipeline
 lage Plausibilisierung -> Domain.Pipeline
 lage Messwertpruefung -> Domain.Pipeline
@@ -654,40 +644,25 @@ lage Messwertaufbereitung -> Domain.Pipeline
 lage Messkette -> Domain.Pipeline
 lage Stoerungsoeffnung -> Domain.Pipeline
 lage Alarmierung -> Domain.Pipeline
-lage OeffneStoerungFuer -> Domain.Pipeline
-lage AlarmiereBereitschaft -> Domain.Pipeline
 lage ISensorbus -> Domain.Pipeline
 lage Feldbus -> Domain.Pipeline
 lage ITelefonie -> Domain.Pipeline
 lage Telefonanlage -> Domain.Pipeline
 lage SensorabfrageKonfig -> Domain.Pipeline
-lage Rohwert -> Domain.Pipeline
-lage Plausibel -> Domain.Pipeline
-lage AlarmVerteilt -> Domain.Pipeline
-lage PerAnrufErreicht -> Domain.Pipeline
-lage PerFunkErreicht -> Domain.Pipeline
 lage Katalogeingang -> Domain.Pipeline
 lage Zeilenleser -> Domain.Pipeline
 lage Artikelanlage -> Domain.Pipeline
 lage Katalogimport -> Domain.Pipeline
 lage CsvZerleger -> Domain.Pipeline
 lage CsvKonfig -> Domain.Pipeline
-lage KatalogBereit -> Domain.Pipeline
-lage Zeile -> Domain.Pipeline
 lage Tendenzbildung -> Domain.Pipeline
 lage Glaettung -> Domain.Pipeline
 lage Prognosemodell -> Domain.Pipeline
 lage Prognose -> Domain.Pipeline
-lage BildePrognose -> Domain.Pipeline
 lage Kurzglaettung -> Domain.Pipeline
 lage IStatistik -> Domain.Pipeline
 lage Statistik -> Domain.Pipeline
 lage GlaettungsKonfig -> Domain.Pipeline
-lage Tendenz -> Domain.Pipeline
-lage ZeichneKarte -> Domain.Pipeline
-lage LoescheKarte -> Domain.Pipeline
-lage KarteGezeichnet -> Domain.Pipeline
-lage KarteSkaliert -> Domain.Pipeline
 lage Kartenzeichnung -> Domain.Pipeline
 lage Kantenglaettung -> Domain.Pipeline
 lage Kartenschaerfung -> Domain.Pipeline
@@ -697,7 +672,6 @@ lage Kartenablage -> Domain.Pipeline
 lage Daumenmeldung -> Domain.Pipeline
 lage Kartenfilter -> Domain.Pipeline
 lage Kartenausgabe -> Domain.Pipeline
-lage Geglaettet -> Domain.Pipeline
 # Leseseite → Projektionen; Store-Implementierungen → Infrastruktur
 lage LeihEintrag -> Domain.Projections
 lage Ausleihzaehler -> Domain.Projections
@@ -750,7 +724,7 @@ record Sondenkatalog.Katalog.Peilung.PeilungBestaetigt command | RichtungGrad:do
 record Sondenkatalog.Katalog.Peilung.Peilabweichung rejection | Grad:double
 faehigkeit Sondenkatalog.Katalog.Peilung.IHoleLetzteRichtung liest IHoleLetzteRichtung.LetzteAsync
 store Sondenkatalog.Katalog.Peilung.IHoleLetzteRichtung klasse=1 | schreibt  | liest LetzteAsync():double
-sicht Sondenkatalog.Katalog.Peilung.IHoleLetzteRichtung store domaene=Sondenkatalog.Katalog.Peilung block=§geteilt
+sicht Sondenkatalog.Katalog.Peilung.IHoleLetzteRichtung store domaene=Funkortung.Ortung block=§geteilt
 record Sondenkatalog.Katalog.Peilung.PeilKonfig konfig | MindestGuete:double
 funktion Sondenkatalog.Katalog.Peilung.Peilung(konfig:PeilKonfig, empfaenger:IPeilempfaenger) | Auf(PeilungBestaetigt) liest IHoleLetzteRichtung letzte -> Peilabweichung || Auf(Peile) -> Gepeilt; PeilungUnmoeglich
 funktion Sondenkatalog.Katalog.Peilung.Peilmeldung() | Auf(Gepeilt) -> Peilbericht
@@ -767,26 +741,22 @@ besitz Sondenkatalog.Katalog.Peilung.Peile command -> §begriffe
 besitz Sondenkatalog.Katalog.Peilung.Peilprotokoll event -> §begriffe
 lage Peilprotokoll -> nicht Sondenkatalog.Katalog
 
-# ── Funkortung (Funkortung.cs.txt): ÜBERSETZUNG IN BEIDE RICHTUNGEN — ein Client-Eingang ↦ Katalog-Eingang (Feld nach Namen, zwei ausdrücklich),
-#    die Peilung des fremden Katalogs, ihr Ergebnis ↦ Command an die Peilstelle (der Ausgang samt [Feld] kommt aus einer Geste) und die ANTWORT der
-#    Peilstelle ↦ zurück an die Peilung (Antwort-Übersetzung: die Kante Vermerken → Bestaetigen trägt das Event; zurück an Peilen ist kein Kreis).
-graph Funkortung.Ablauf.Ortung | knoten Hinein:Uebersetze<OrtungAngefordert, Peile> [Kopf] [Feld Auftrag=Stelle+DauerMs=Messdauer], Peilen:Peilung [Von Hinein+Bestaetigen], Vermerken:Uebersetze<Gepeilt, VermerkePeilung> [Von Peilen] [Feld AggregateId=Auftrag], Bestaetigen:Uebersetze<PeilungVermerkt, PeilungBestaetigt> [Von Vermerken] | koepfe OrtungAngefordert | aus Peilabweichung, PeilungUnmoeglich, VermerkePeilung
-kante Ortung | Hinein -Peile-> Peilen
-kante Ortung | Peilen -Gepeilt-> Vermerken
-kante Ortung | Vermerken -PeilungVermerkt-> Bestaetigen
-kante Ortung | Bestaetigen -PeilungBestaetigt-> Peilen
-uebersetzung Ortung.Hinein | OrtungAngefordert -> Peile | Auftrag=Stelle(feld), FrequenzMhz=FrequenzMhz(name), DauerMs=Messdauer(feld)
-uebersetzung Ortung.Vermerken | Gepeilt -> VermerkePeilung | AggregateId=Auftrag(feld), RichtungGrad=RichtungGrad(name), Guete=Guete(name), Quelle=(standard)
-uebersetzung Ortung.Bestaetigen | PeilungVermerkt -> PeilungBestaetigt | RichtungGrad=RichtungGrad(name), Guete=Guete(name)
+# ── Funkortung (Funkortung.cs.txt): ÜBERSETZUNGEN IN DER DOMÄNE (docs/plan-ohne-pipeline.md) — der Graph ist die neutrale Peilkette des fremden
+#    Katalogs; eine Kopf-Übersetzung macht aus der Nachricht des Funkers ihren Eingang (Feld nach Namen, zwei ausdrücklich), eine Übersetzung macht
+#    aus dem Ergebnis (ein Zwischenstand, der im Graphen weiterläuft) einen Command an die Peilstelle, und die ANTWORT der Peilstelle geht zurück an den
+#    Kopf der Peilkette — beide aus dem Gesten-Skript.
+uebersetzung Funkortung.Ortung.Hinein | OrtungAngefordert -> Peile [Feld Auftrag=Stelle+DauerMs=Messdauer] | Auftrag=Stelle(feld), FrequenzMhz=FrequenzMhz(name), DauerMs=Messdauer(feld)
+uebersetzung Funkortung.Ortung.Vermerken | Gepeilt -> VermerkePeilung [Feld AggregateId=Auftrag] | AggregateId=Auftrag(feld), RichtungGrad=RichtungGrad(name), Guete=Guete(name), Quelle=(standard)
+uebersetzung Funkortung.Ortung.Bestaetigen | PeilungVermerkt -> PeilungBestaetigt | RichtungGrad=RichtungGrad(name), Guete=Guete(name)
 akteur Funkortung.Ablauf.Funker | darf OrtungAngefordert | hoert PeilungVermerkt
 aggregat Funkortung.Ortung.Peilstelle | Richtung:double
 decide Peilstelle.VermerkePeilung -> PeilungVermerkt
 apply Peilstelle.PeilungVermerkt
-record Funkortung.Ablauf.OrtungAngefordert command | Stelle:Id<Peilstelle>, FrequenzMhz:double, Messdauer:int
+record Funkortung.Ortung.OrtungAngefordert command | Stelle:Id<Peilstelle>, FrequenzMhz:double, Messdauer:int
 record Funkortung.Ortung.VermerkePeilung command aggregat=Peilstelle | AggregateId:Id<Peilstelle>, RichtungGrad:double, Guete:double, Quelle:string="Katalog"
 record Funkortung.Ortung.PeilungVermerkt event aggregat=Peilstelle | RichtungGrad:double, Guete:double, Quelle:string
 sicht Funkortung.Ablauf.Funker akteur domaene=Funkortung.Ortung block=§akteure
-besitz Funkortung.Ablauf.OrtungAngefordert command -> §rand
+besitz Funkortung.Ortung.OrtungAngefordert command -> §rand
 besitz Funkortung.Ortung.VermerkePeilung command -> aggregate:Peilstelle
 besitz Funkortung.Ortung.PeilungVermerkt event -> aggregate:Peilstelle
 lage Funker -> Domain.Akteure
