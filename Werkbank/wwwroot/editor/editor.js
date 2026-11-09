@@ -2011,7 +2011,7 @@
   //   Fläche öffnet (Doppelklick) die Karte der Sicht dahinter im Modal, ein Port den Typ seiner Nachricht; ein Klick hebt die Kette hervor.
   const FL_SPALTE={ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf)",neu:["akteur","client"]},quellen:{t:"Quellen",u:"lauschen am Kopf eines Graphen",neu:["quelle"]},
     graphen:{t:"Graphen",u:"rechnen vor dem Aggregat",neu:["graph"]},
-    uebersetzungen:{t:"Übersetzungen",u:"Output eines Graphen ↦ Command eines Aggregats",neu:[]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
+    uebersetzungen:{t:"Übersetzungen",u:"Nachricht ↦ Command — was auf was, wählbar im Modal",neu:["uebersetzung"]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
     projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["store"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört)",neu:["akteur"]}};
   const FL_SYM={akteur:"👤",quelle:"⚡",graph:"⬡",uebersetzung:"↦",aggregate:"▣",projektion:"⇶",reader:"⌕",store:"🗄"};
   const FL_SORTE={command:"",event:"",hinweis:"✉ ",query:"? ",antwort:"↩ ",frist:"⏱ "};
@@ -2209,7 +2209,7 @@
   // Rahmen der Fläche: Spaltenköpfe (mit ＋ und den Clients), Bänder der Domänen, Store-Gruppen.
   function flRahmen(ebene){const aus={x2:0,y2:0};
     FL().spalten.forEach(s=>{const g=FLGEO.spalten[s];if(!g)return;const d=FL_SPALTE[s];
-      const neu=e=>{e.stopPropagation();if(d.neu[0]==="store"){stoNeuAnlegen(e);return;}if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
+      const neu=e=>{e.stopPropagation();if(d.neu[0]==="store"){stoNeuAnlegen(e);return;}if(d.neu[0]==="uebersetzung"){ueNeuGenerisch(e);return;}if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
       const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),d.neu.length?h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋"):null),h("div",{class:"fl-u"},d.u),
         s==="ausgang"&&MODEL.clients.length?h("div",{class:"fk-chips"},...MODEL.clients.map(c=>h("button",{class:"fk-chip",title:"Client "+c.name+" verkörpert "+(c.verkoerpert||[]).join(", ")+" — Klick: Panel",
           onclick:e=>{e.stopPropagation();komKarte("cl:"+c._id);}},"🔌 "+clientAnzeige(c)))):null);
@@ -2302,10 +2302,60 @@
   function ueOeffne(fk){const id=fk.karte;if(KOM)KOM.pfad.push(id);else KOM={pfad:[id],reiter:"komposition",wahl:null};KOM.port=null;KOM.feld=null;komZeige();}
   function ueZeige(de,id){const u=ueVon(id);if(!u){KOM.pfad.pop();if(!KOM.pfad.length)KOM=null;return;}
     const m=komRahmen("Feld für Feld, ohne Logik: „=“ nach Namen, „⇐“ ausdrücklich ([Feld]), „∅“ Standardwert, „⚠“ offen — ein Ziel (rechts) oder eine Quelle (links) wählen, dann das Gegenstück: das schreibt [Feld]");
-    m.append(h("div",{class:"kom-leib form"},h("div",{class:"ue-modal"},h("div",{class:"ue-modal-k"},"↦ "+u.name+" · "+u.namespace),komUebersetzungEl(u),
+    m.append(h("div",{class:"kom-leib form"},h("div",{class:"ue-modal"},h("div",{class:"ue-modal-k"},"↦ "+u.name+" · "+u.namespace),ueVerdrahtungEl(u),komUebersetzungEl(u),
       h("div",{class:"kom-akte"},h("button",{class:"kom-akt gm-gefahr",title:"Die Übersetzung entfernen — was sie nimmt, ist danach wieder offen",
         onclick:()=>{ueEntfernen(id);KOM.pfad.pop();if(!KOM.pfad.length)komSchliesse();else komZeige();}},"✕ Übersetzung entfernen")))));
     de.append(m);}
+  // ══ GENERISCH (IUebersetzung<TEin, TAus>): was eine Übersetzung nimmt und was sie erzeugt, ist im Modal frei wählbar — TEin ein Command ohne
+  //   Ziel (Ausgang eines Graphen, Nachricht eines Clients) oder ein Event (die Antwort eines Aggregats), TAus ein Command an ein Aggregat oder an den
+  //   Kopf eines Graphen. Darunter steht, was dort verdrahtet ist (Graph, Akteur, Aggregat) — ein Klick öffnet es.
+  const ueGraphDaten=()=>(MODEL.graphen||[]).map(g=>({g,d:komDaten("gr:"+g._id)})).filter(x=>x.d);
+  function ueEinKandidaten(){const aus=new Map();
+    ueGraphDaten().forEach(({g,d})=>(d.ausgaenge||[]).filter(a=>a.sorte==="command").forEach(a=>{const t=komBasis(a.typ);if(!aus.has(t))aus.set(t,"⬡ "+g.name);}));
+    const cmds=MODEL.records.filter(r=>r.kind==="command"&&!r.aggregat&&!aus.has(r.name)).map(r=>r.name).sort();
+    const evs=MODEL.records.filter(r=>r.kind==="event").map(r=>r.name).sort();
+    return [...(aus.size?[{kopf:"Ausgang eines Graphen"},...[...aus].sort((a,b)=>a[0].localeCompare(b[0])).map(([t,v])=>({typ:t,t:t+" · "+v}))]:[]),
+      ...(cmds.length?[{kopf:"Command ohne Ziel (Nachricht eines Clients, Zwischenstand)"},...cmds.map(t=>({typ:t,t}))]:[]),
+      ...(evs.length?[{kopf:"Event — die Antwort eines Aggregats"},...evs.map(t=>({typ:t,t:t+" · ▣ "+((recByName(t)||{}).aggregat||"")}))]:[])];}
+  function ueAusKandidaten(){const koepfe=new Map();
+    ueGraphDaten().forEach(({g,d})=>(d.koepfe||[]).forEach(k=>{const t=komBasis(k.typ);if(!koepfe.has(t))koepfe.set(t,"⬡ "+g.name);}));
+    const agg=MODEL.records.filter(r=>r.kind==="command"&&r.aggregat).sort((a,b)=>(a.aggregat+a.name).localeCompare(b.aggregat+b.name));
+    return [...(agg.length?[{kopf:"Command an ein Aggregat"},...agg.map(r=>({typ:r.name,t:r.name+" · ▣ "+r.aggregat}))]:[]),
+      ...(koepfe.size?[{kopf:"Kopf eines Graphen"},...[...koepfe].sort((a,b)=>a[0].localeCompare(b[0])).map(([t,v])=>({typ:t,t:t+" · "+v}))]:[])];}
+  // Wer TEin liefert bzw. wer TAus nimmt — aus Graphen, Akteuren und Decides des Modells.
+  function ueLiefert(typ){const t=komBasis(typ),r=recByName(t),x=[];
+    // Ein Graph liefert ihn als Ausgang oder als Zwischenstand eines Knotens (die Übersetzung nimmt beides nach dem Typ).
+    ueGraphDaten().forEach(({g,d})=>{const aus=(d.ausgaenge||[]).some(a=>komBasis(a.typ)===t),innen=(d.knoten||[]).some(k=>(k.aus||[]).some(a=>komBasis(a)===t));
+      if(aus||innen)x.push({t:"⬡ "+g.name+(aus?"":" · Zwischenstand"),id:"gr:"+g._id});});
+    MODEL.akteure.filter(a=>(a.darf||[]).includes(t)).forEach(a=>x.push({t:"👤 "+a.name,id:"akt:"+a._id}));
+    if(r&&r.kind==="event"&&r.aggregat)x.push({t:"▣ "+r.aggregat+" (Antwort)",id:"agg:"+r.aggregat});
+    return x;}
+  function ueAn(typ){const t=komBasis(typ),r=recByName(t),x=[];
+    if(r&&r.aggregat)x.push({t:"▣ "+r.aggregat,id:"agg:"+r.aggregat});
+    ueGraphDaten().forEach(({g,d})=>{if((d.koepfe||[]).some(k=>komBasis(k.typ)===t))x.push({t:"⬡ "+g.name+" (Kopf)",id:"gr:"+g._id});});
+    return x;}
+  function ueTypSetze(u,seite,typ){if(u[seite]===typ)return;u[seite]=typ;u.felder=[];u.quellen=seite==="ein"?[]:u.quellen;u.ziele=[];
+    gTitel("↦ "+u.name+": "+u.ein+" ↦ "+u.aus);render();}
+  function ueVerdrahtungEl(u){
+    const seite=(art,typ,liste,titel,kand)=>h("div",{class:"ue-seite"},h("div",{class:"ue-seite-k"},art),
+      h("button",{class:"ue-typ",title:titel+" — Klick: einen anderen Typ wählen",onclick:ev=>{ev.stopPropagation();
+        menueFix(ev.clientX,ev.clientY,titel,kand().map(k=>k.kopf?k:{t:(k.typ===typ?"● ":"")+k.t,fn:()=>{ueTypSetze(u,art==="nimmt"?"ein":"aus",k.typ);komZeige();}}));}},typ+" ▾"),
+      h("div",{class:"ue-draht"},...(liste.length?liste.map(x=>h("button",{class:"ue-chip",title:"Öffnen",onclick:ev=>{ev.stopPropagation();komKarte(x.id,true);}},x.t))
+        :[h("span",{class:"ue-leer"},art==="nimmt"?"⚠ niemand liefert "+typ:"⚠ niemand nimmt "+typ)])));
+    return h("div",{class:"ue-verdraht"},
+      seite("nimmt",u.ein,ueLiefert(u.ein),"Was die Übersetzung nimmt (TEin)",ueEinKandidaten),
+      h("div",{class:"ue-verdraht-p"},"↦"),
+      seite("macht",u.aus,ueAn(u.aus),"Was sie daraus macht (TAus)",ueAusKandidaten));}
+  // „＋“ in der Spalte Übersetzungen: eine neue Übersetzung, generisch — erst was sie nimmt, dann was sie macht; die Domäne folgt aus dem Command an
+  //   ein Aggregat (bzw. der Nachricht der Domäne), sonst wird gefragt. Danach öffnet sie sich zum Zuordnen der Felder.
+  function ueNeuGenerisch(ev){const x=ev.clientX,y=ev.clientY,doms=[...new Set(MODEL.aggregate.map(A=>A.namespace))].sort();
+    const fertig=(ns,ein,aus)=>{const n=ueNeu(ns,ein,aus,[],komBasis(ein)+"Zu"+komBasis(aus));
+      setTimeout(()=>ueOeffne({karte:"ue:uebersetzung:"+n}),0);};
+    menueFix(x,y,"↦ Neue Übersetzung — was nimmt sie?",ueEinKandidaten().map(k=>k.kopf?k:{t:k.t,fn:()=>setTimeout(()=>
+      menueFix(x,y,"↦ "+k.typ+" — was macht sie daraus?",ueAusKandidaten().filter(a=>a.kopf||a.typ!==k.typ).map(a=>a.kopf?a:{t:a.t,fn:()=>{
+        const ra=recByName(a.typ),re=recByName(k.typ),ns=ra&&ra.aggregat?ra.namespace:re&&!funKatalog(re)?re.namespace:null;
+        if(ns){fertig(ns,k.typ,a.typ);return;}
+        setTimeout(()=>menueFix(x,y,"In welcher Domäne lebt die Übersetzung?",doms.map(d=>({t:"▣ "+d,fn:()=>fertig(d,k.typ,a.typ)}))),0);}})),0)}));}
   function ueEntfernen(karte){const u=ueVon(karte);if(!u)return;MODEL.uebersetzungen=(MODEL.uebersetzungen||[]).filter(x=>x!==u);gTitel("✕ ↦ "+u.name);render();}
   function komSchliesse(){KOM=null;const m=document.querySelector("#de .kom");if(m)m.remove();}
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&KOM){e.stopImmediatePropagation();if(KOM.port||KOM.feld){KOM.port=null;KOM.feld=null;komZeige();}else komSchliesse();}},true);

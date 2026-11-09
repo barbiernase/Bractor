@@ -893,6 +893,16 @@
 #de .fl-ue-z.offen{color:#ffb35c}
 #de .ue-modal{padding:18px 22px;max-width:760px}
 #de .ue-modal-k{font:700 13px ui-monospace,monospace;color:#d5e2f7;margin-bottom:12px}
+#de .ue-verdraht{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:start;margin:0 0 14px;padding:10px;border:1px solid #2a3550;border-radius:8px;background:#121826}
+#de .ue-verdraht-p{font:700 18px ui-monospace,monospace;color:#7c5cff;padding-top:18px}
+#de .ue-seite{display:flex;flex-direction:column;gap:5px;min-width:0}
+#de .ue-seite-k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#7f8ba3}
+#de .ue-typ{align-self:flex-start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 12px ui-monospace,monospace;color:#e6edf8;background:#1b2338;border:1px solid #3d4a6b;border-radius:6px;padding:4px 8px;cursor:pointer}
+#de .ue-typ:hover{border-color:#7c5cff;color:#fff}
+#de .ue-draht{display:flex;flex-wrap:wrap;gap:4px}
+#de .ue-chip{font-size:11px;color:#b9c6dc;background:#182033;border:1px solid #2d3a57;border-radius:10px;padding:2px 8px;cursor:pointer}
+#de .ue-chip:hover{border-color:#7c5cff;color:#fff}
+#de .ue-leer{font-size:11px;color:#f0b35a}
 /* Der ganze Graph in der Ablauf-Karte: Spalten nach Tiefe, Knoten mit Ein- und Ausgangsports, jeder Fall eines OneOf ein Port */
 /* Aufgeklappt trägt die Karte den ganzen Graphen: sie wächst mit ihm (max-content; spezifischer als die feste Breite der Karten im Ablauf-Canvas),
    die Spalte mit ihr; die Spalten rechts rücken weiter, nichts ragt hinaus. */

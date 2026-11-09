@@ -702,14 +702,30 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
     private (string, string)? UebersetzungFelder(string text, Uebersetzung u)
     {
         if (Typ(Parse(text), u.Name, u.Namespace) is not TypeDeclarationSyntax decl) return (text, $"Übersetzung {u.Name} nicht gefunden");
-        if (Felder(decl).SequenceEqual(u.Felder)) return null;
-        // Die übrigen Attribut-Listen bleiben; die [Feld] stehen danach je eine Zeile über dem Record, in der Reihenfolge des Modells.
-        var andere = decl.AttributeLists.Where(l => !l.Attributes.All(IstFeld)).Select(l => l.ToString());
-        var einzug = new string(' ', decl.GetLocation().GetLineSpan().StartLinePosition.Character);
-        var vorne = string.Concat(andere.Concat(u.Felder.Select(f => Scaffolder.UebersetzungsFeldText(u, f))).Select(x => x + "\n" + einzug));
-        var start = decl.AttributeLists.Count > 0 ? decl.AttributeLists[0].SpanStart : decl.Modifiers.Count > 0 ? decl.Modifiers[0].SpanStart : decl.Keyword.SpanStart;
-        var ende = decl.Modifiers.Count > 0 ? decl.Modifiers[0].SpanStart : decl.Keyword.SpanStart;
-        return (MitNamespaces(Anwenden(text, [(start, ende, vorne)]), [u.Ein, u.Aus]), "Felder");
+        var edits = new List<(int, int, string)>();
+        var notiz = new List<string>();
+        // Generisch: was sie nimmt und was sie macht, steht in der Basisliste — IUebersetzung<TEin, TAus> folgt dem Modell.
+        var marker = nameof(Abstractions.IUebersetzung<object, object>);
+        var soll = $"{marker}<{u.Ein}, {u.Aus}>";
+        if (decl.BaseList?.Types.FirstOrDefault(t => t.Type is GenericNameSyntax g && g.Identifier.Text == marker
+                || t.Type is QualifiedNameSyntax { Right: GenericNameSyntax q } && q.Identifier.Text == marker) is { } basis
+            && N(basis.Type.ToString()) != N(soll))
+        {
+            edits.Add((basis.Type.SpanStart, basis.Type.Span.End, soll));
+            notiz.Add($"{u.Ein} ↦ {u.Aus}");
+        }
+        if (!Felder(decl).SequenceEqual(u.Felder))
+        {
+            // Die übrigen Attribut-Listen bleiben; die [Feld] stehen danach je eine Zeile über dem Record, in der Reihenfolge des Modells.
+            var andere = decl.AttributeLists.Where(l => !l.Attributes.All(IstFeld)).Select(l => l.ToString());
+            var einzug = new string(' ', decl.GetLocation().GetLineSpan().StartLinePosition.Character);
+            var vorne = string.Concat(andere.Concat(u.Felder.Select(f => Scaffolder.UebersetzungsFeldText(u, f))).Select(x => x + "\n" + einzug));
+            var start = decl.AttributeLists.Count > 0 ? decl.AttributeLists[0].SpanStart : decl.Modifiers.Count > 0 ? decl.Modifiers[0].SpanStart : decl.Keyword.SpanStart;
+            var ende = decl.Modifiers.Count > 0 ? decl.Modifiers[0].SpanStart : decl.Keyword.SpanStart;
+            edits.Add((start, ende, vorne));
+            notiz.Add("Felder");
+        }
+        return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), [u.Ein, u.Aus]), string.Join(", ", notiz));
     }
 
     private static bool IstFeld(AttributeSyntax a) => a.Name.ToString().Split('.')[^1] is var n && (n == Scaffolder.FeldAttribut || n == Scaffolder.FeldAttribut + "Attribute");
