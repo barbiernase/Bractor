@@ -95,7 +95,7 @@ int Erzeuge(string wurzel)
     // Nur die Rollen-Projekte, die es in dieser Anwendung gibt (eine Test-Anwendung hat z. B. nur die Schreibseite).
     // Ein Projekt ist, was eine .csproj hat — ein liegengebliebener bin-Ordner eines gelöschten Projekts (Checkout ohne git clean -x) ist keins.
     var targetProjects = Struktur.CodegenProjekte(wurzel).Where(p => File.Exists(Path.Combine(solutionDir, p, p + ".csproj"))).ToArray();
-    // Die Kataloge, die die Anwendung nutzt (docs/plan-ohne-pipeline.md: ihre Domäne übersetzt sie, ihr Speicher setzt ihre Fähigkeiten um): ihre
+    // Die Kataloge, die die Anwendung nutzt (docs/07 §7.2: ihre Domäne übersetzt sie, ihr Speicher setzt ihre Fähigkeiten um): ihre
     //   Nachrichten und Zustände gehören in Leitung und Kontexte wie die der Rollen-Projekte, und eine Änderung an ihnen muss den Codegen neu auslösen
     //   (Stand-Hash). Gesucht wird in jedem Rollen-Projekt, das Kataloge nutzen darf.
     foreach (var rolle in Struktur.NutzenKataloge)

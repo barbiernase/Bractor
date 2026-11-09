@@ -124,7 +124,7 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
     }, ct);
 
     /// <summary>
-    /// Einen Funktionskatalog anlegen (docs/plan-katalog-und-graphen.md, Schritt 2): Projektdatei, Eintrag in der Solution, Referenz der Abläufe —
+    /// Einen Funktionskatalog anlegen (docs/07 §7.2): Projektdatei, Eintrag in der Solution, Referenz der Übersetzungen —
     /// danach lädt der Arbeitsbereich kalt neu (neue Projekte kennt nur das kalte Laden). Mit <paramref name="nutzer"/> nutzt dieser Katalog den
     /// genannten (Referenz in seiner Projektdatei); gibt es den genannten noch nicht, entsteht er zuerst — so legt der erste Gebrauch den allgemeinen
     /// Katalog an.

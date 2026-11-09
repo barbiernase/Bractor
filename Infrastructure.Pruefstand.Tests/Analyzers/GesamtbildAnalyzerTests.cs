@@ -67,7 +67,7 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
 
     private static async Task<string[]> Ids(string domaene) => (await Befunde(domaene)).Select(d => d.Id).ToArray();
 
-    // Ein Graph liegt im Katalog und ist domänenneutral (docs/plan-ohne-pipeline.md): bindet die Domäne ihn an (hier gibt ein Akteur an seinen Kopf),
+    // Ein Graph liegt im Katalog und ist domänenneutral (docs/04 §4.4): bindet die Domäne ihn an (hier gibt ein Akteur an seinen Kopf),
     //   braucht jeder Command ohne Ziel, der ihn verlässt, einen Empfänger — eine Übersetzung der Domäne, die seinen Typ nimmt, oder den Kopf eines Graphen.
     private const string Rechenkatalog = """
         namespace Rechen.Katalog {

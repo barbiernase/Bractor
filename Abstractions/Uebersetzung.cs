@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Eine ÜBERSETZUNG (docs/04 §4.4, docs/plan-ohne-pipeline.md): sie macht einen domänenneutralen Graphen aus einem Katalog domänenspezifisch und lebt
+/// Eine ÜBERSETZUNG (docs/04 §4.4, docs/04 §4.4): sie macht einen domänenneutralen Graphen aus einem Katalog domänenspezifisch und lebt
 /// darum in der Domäne, als eigener Record: <c>public sealed record Aufnehmen : IUebersetzung&lt;BildGedeutet, NimmBildAuf&gt;;</c>. Aus einer Nachricht
 /// <typeparamref name="TEin"/> macht sie genau eine Nachricht <typeparamref name="TAus"/> — Feld für Feld, ohne Bedingung, ohne Logik. Die Felder ordnet
 /// der Generator zu: je Parameter von <typeparamref name="TAus"/> ein <see cref="FeldAttribute"/> am Record, sonst eine Eigenschaft von

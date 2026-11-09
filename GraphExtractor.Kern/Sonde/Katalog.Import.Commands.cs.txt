@@ -1,6 +1,6 @@
 using Abstractions;
 
-// SONDE — fremder Katalog, Bereich Import (docs/plan-ohne-pipeline.md): Dateiannahme und Zeilenimport domänenneutral — Import und Artikel sind Guids.
+// SONDE — fremder Katalog, Bereich Import (docs/04 §4.4): Dateiannahme und Zeilenimport domänenneutral — Import und Artikel sind Guids.
 
 namespace Sondenkatalog.Katalog.Import;
 

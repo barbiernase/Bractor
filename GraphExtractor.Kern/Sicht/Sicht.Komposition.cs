@@ -45,7 +45,7 @@ public sealed partial class Sicht
 
     /// <summary>
     /// Die Komposition eines Graphen (<c>board.sicht.komposition[gr:…]</c>), dazu <c>flach</c>: alle Teilgraphen aufgefaltet auf eine Ebene, damit man
-    /// den ganzen Graphen auf einmal sieht (docs/konzept-funktionen-im-editor.md §3).
+    /// den ganzen Graphen auf einmal sieht (docs/10 §10.9).
     /// </summary>
     public JsonObject Komposition(JsonObject g)
     {

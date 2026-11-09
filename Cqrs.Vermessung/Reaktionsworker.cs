@@ -5,7 +5,8 @@ namespace Cqrs.Vermessung;
 /// <summary>
 /// Der Client, der auf die Fakten einer Anwendung reagiert, neben ihrem Host, solange ein Lauf dauert (Schritt 6: ein Decide gibt nur Fakten aus, die
 /// Folgen stößt ein Client an). Beispieldomäne: in S3 meldet er jedes fertige Teil am Sammelvorgang, in S4 löst er die Range auf und schließt das
-/// Einfrieren ab. Prüfdomäne (S5): er gibt jeden Auftrag, jede Verteilung und jeden unterschrittenen Posten an den Kopf seines Graphen. Sein Stand
+/// Einfrieren ab. Prüfdomäne (S5): er reagiert auf Auftrag, Verteilung und unterschrittene Posten direkt mit den Commands an Posten, Kontingent,
+/// Auftrag und Verteilung (seit 2026-11-09 ohne Graphen — die waren reine Weiterleitungen, docs/04 §4.5). Sein Stand
 /// gilt für den Lauf (eine frische Datenbank je Wiederholung).
 /// </summary>
 internal sealed class Reaktionsworker : IAsyncDisposable

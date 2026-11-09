@@ -8,7 +8,7 @@ using System.Linq;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Die EINE Lesart einer ÜBERSETZUNG (docs/04 §4.4, docs/plan-ohne-pipeline.md) für Generator, Analyzer und Extractor — nur Code-Fakten: ein
+    /// Die EINE Lesart einer ÜBERSETZUNG (docs/04 §4.4, docs/04 §4.4) für Generator, Analyzer und Extractor — nur Code-Fakten: ein
     /// Record der Domäne mit <c>IUebersetzung&lt;TEin, TAus&gt;</c> und seinen <c>[Feld(nameof(Ziel), nameof(Quelle))]</c>. Je Parameter des
     /// Konstruktors von <c>TAus</c> eine Quelle, in dieser Reihenfolge: <c>[Feld]</c> am Record (ausdrücklich darf ein <c>Guid</c> ein <c>Id&lt;T&gt;</c>
     /// füllen und umgekehrt), eine Eigenschaft von <c>TEin</c> mit gleichem Namen und implizit zuweisbarem Typ, der Standardwert des Parameters — sonst

@@ -187,7 +187,7 @@ public static class ParitaetsPruefung
                 .ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Knoten ({k.Name})", sollKnoten.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istKnoten, befunde);
         }
-        // Übersetzungen (docs/plan-ohne-pipeline.md): je Record Ein, Aus und seine [Feld].
+        // Übersetzungen (docs/04 §4.4): je Record Ein, Aus und seine [Feld].
         Vergleiche("Übersetzung", soll.Uebersetzungen, Arten("uebersetzung").Select(k => $"{Voll(k)}|{UebersetzungsSchluessel((string?)k.Ref["ein"] ?? "",
             (string?)k.Ref["aus"] ?? "", (k.Ref["felder"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
                 .Select(f => new FeldZuordnung((string?)f["ziel"] ?? "", (string?)f["quelle"] ?? "")).ToList())}").ToHashSet(StringComparer.Ordinal), befunde);

@@ -51,7 +51,7 @@ public sealed record EditorModell
     /// Graph, dazu <c>[Kopf]</c> und <c>[Von(…)]</c>). Köpfe, Ausgänge und Kanten folgen aus den Attributen — abgeleitet, nicht Modell.
     /// </summary>
     public IReadOnlyList<Graph> Graphen { get; init; } = [];
-    /// <summary>Die Übersetzungen der Domänen (docs/plan-ohne-pipeline.md): je Record mit <c>IUebersetzung&lt;TEin, TAus&gt;</c> einer.</summary>
+    /// <summary>Die Übersetzungen der Domänen (docs/04 §4.4): je Record mit <c>IUebersetzung&lt;TEin, TAus&gt;</c> einer.</summary>
     public IReadOnlyList<Uebersetzung> Uebersetzungen { get; init; } = [];
     /// <summary>
     /// Die LESESEITE als Signatur-Fakten: Stores (Fähigkeiten + Bündel + Impl-Klasse), Projektionen und Reader.
@@ -646,7 +646,7 @@ public sealed record Graph
 }
 
 /// <summary>
-/// Eine ÜBERSETZUNG (docs/plan-ohne-pipeline.md): ein Record der Domäne, <c>public sealed record {Name} : IUebersetzung&lt;{Ein}, {Aus}&gt;;</c>, mit den
+/// Eine ÜBERSETZUNG (docs/04 §4.4): ein Record der Domäne, <c>public sealed record {Name} : IUebersetzung&lt;{Ein}, {Aus}&gt;;</c>, mit den
 /// Abweichungen der Feldzuordnung als <c>[Feld(nameof({Aus}.Ziel), nameof({Ein}.Quelle))]</c>. Sie macht einen Graphen aus einem Katalog
 /// domänenspezifisch; wohin sie gehört, sagt nur der Typ <see cref="Ein"/>. Abgeleitet (nicht editierbar): die Felder von <c>TEin</c>, je Parameter von
 /// <c>TAus</c> seine Quelle mit Regel (<c>feld</c>, <c>name</c>, <c>standard</c>, leer = offen) und den Feldern von <c>TEin</c>, die ausdrücklich passen

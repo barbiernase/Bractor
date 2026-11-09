@@ -4,9 +4,9 @@ using P = Abstractions.Projektstruktur;
 namespace GraphExtractor;
 
 /// <summary>
-/// Kataloge anlegen und nutzen (docs/plan-katalog-und-graphen.md, Schritt 2): ein Funktionskatalog ist ein eigenes Projekt <c>&lt;Name&gt;.Katalog</c>,
+/// Kataloge anlegen und nutzen (docs/07 §7.2): ein Funktionskatalog ist ein eigenes Projekt <c>&lt;Name&gt;.Katalog</c>,
 /// das nur <c>Abstractions</c> referenziert. Die Geste schreibt seine Projektdatei, trägt ihn in die Solution ein und gibt den Übersetzungen der
-/// Anwendung die Referenz (sie nehmen seine Nachrichten, die Domäne bleibt rein, docs/plan-ohne-pipeline.md) — als Text-Patch über den <see cref="Dateipuffer"/> (Verlauf und ↶ wie jede Geste). Die Werkbank lädt danach kalt neu.
+/// Anwendung die Referenz (sie nehmen seine Nachrichten, die Domäne bleibt rein, docs/07 §7.2) — als Text-Patch über den <see cref="Dateipuffer"/> (Verlauf und ↶ wie jede Geste). Die Werkbank lädt danach kalt neu.
 /// </summary>
 public static class Kataloge
 {
@@ -86,7 +86,7 @@ public static class Kataloge
         """
         <Project Sdk="Microsoft.NET.Sdk">
 
-            <!-- Ein Funktionskatalog (docs/plan-katalog-und-graphen.md): Funktionen, ihre Nachrichten, Konfig, Technik und Graphen, domänenneutral —
+            <!-- Ein Funktionskatalog (docs/07 §7.2): Funktionen, ihre Nachrichten, Konfig, Technik und Graphen, domänenneutral —
                  er referenziert nur Abstractions (und andere Kataloge), nie eine Anwendung. -->
             <PropertyGroup>
                 <TargetFramework>net9.0</TargetFramework>

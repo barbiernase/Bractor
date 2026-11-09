@@ -87,7 +87,7 @@ public sealed partial class Sicht
     }
     /// <summary>
     /// Steht der Graph auf der Fläche? Ein Graph gehört keinem anderen Graphen (sonst steht er in dessen Komposition), und liegt er in einem Katalog,
-    /// bindet die Anwendung ihn an (docs/plan-ohne-pipeline.md §3): eine Übersetzung nimmt einen seiner Ausgänge oder gibt an seinen Kopf, ein Akteur
+    /// bindet die Anwendung ihn an (docs/04 §4.4): eine Übersetzung nimmt einen seiner Ausgänge oder gibt an seinen Kopf, ein Akteur
     /// gibt an seinen Kopf, oder er hat eine Quelle (eine Instanz liest sie). Ein Graph ohne Anbindung ist eine Blaupause im Katalog-Modal.
     /// </summary>
     private bool AufFlaeche(JsonObject g)
@@ -110,7 +110,7 @@ public sealed partial class Sicht
     /// </summary>
     private string? GraphBand(JsonObject g)
     {
-        // Ein Graph aus einem Katalog ist domänenneutral: er steht im Band seines Katalogs (docs/plan-ohne-pipeline.md).
+        // Ein Graph aus einem Katalog ist domänenneutral: er steht im Band seines Katalogs (docs/04 §4.4).
         if (Abstractions.Projektstruktur.KatalogVon(S(g, "namespace")) is { } katalog) return katalog;
         string? Eine(IEnumerable<string> aggs)
         {
@@ -187,7 +187,7 @@ public sealed partial class Sicht
             karten.Add(new(gid, gid, "graph", S(g, "name"), "graphen", band, null, ports));
             flaecheVon[gid] = gid;
         }
-        // ③½ Übersetzungen der Domänen (docs/plan-ohne-pipeline.md): je Record eine Karte im Band ihrer Domäne — der des Aggregats, an das sie schreibt
+        // ③½ Übersetzungen der Domänen (docs/04 §4.4): je Record eine Karte im Band ihrer Domäne — der des Aggregats, an das sie schreibt
         //   bzw. dessen Antwort sie nimmt, sonst der ihres Namespace. Die Kanten folgen dem Typ: von dem Graphen, der TEin ausgibt (bzw. vom Akteur, der
         //   es gibt, vom Aggregat, das so antwortet), zu dem, der TAus nimmt.
         foreach (var u in _uebersetzungen)

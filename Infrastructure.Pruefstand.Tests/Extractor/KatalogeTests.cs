@@ -8,8 +8,8 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Extractor;
 
 /// <summary>
-/// Die Geste „neuer Katalog“ (docs/plan-katalog-und-graphen.md, Schritt 2) als Text-Patch: Projektdatei, Eintrag in der Solution samt Konfigurationen,
-/// Referenz der Schreibseite (ihre Übersetzungen nehmen seine Nachrichten, docs/plan-ohne-pipeline.md) — und „nutzen“ setzt bzw. entfernt nur diese
+/// Die Geste „neuer Katalog“ (docs/07 §7.2) als Text-Patch: Projektdatei, Eintrag in der Solution samt Konfigurationen,
+/// Referenz der Schreibseite (ihre Übersetzungen nehmen seine Nachrichten, docs/07 §7.2) — und „nutzen“ setzt bzw. entfernt nur diese
 /// Referenz.
 /// </summary>
 public class KatalogeTests : IDisposable

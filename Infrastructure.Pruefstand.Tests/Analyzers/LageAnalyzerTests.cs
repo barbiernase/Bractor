@@ -45,7 +45,7 @@ public class LageAnalyzerTests
     [Fact]
     public async Task Funktionen_und_Graphen_gehoeren_in_einen_Katalog_nie_in_die_Anwendung()
     {
-        // docs/plan-ohne-pipeline.md: eine Anwendung hat keine Funktionen und Graphen — sie nutzt sie aus einem Katalog und übersetzt sie. Ein Command
+        // docs/07 §7.2: eine Anwendung hat keine Funktionen und Graphen — sie nutzt sie aus einem Katalog und übersetzt sie. Ein Command
         //   ohne Ziel darf in der Domäne liegen (die Nachricht eines Clients an eine Kopf-Übersetzung).
         var befunde = await Befunde("Leihwesen", Bausteine);
         befunde.Should().HaveCount(2, "Funktion und Graph")
@@ -58,7 +58,7 @@ public class LageAnalyzerTests
     [Fact]
     public async Task Ein_Katalog_traegt_Funktionen_Nachrichten_und_Hinweise_aber_keine_Domaene()
     {
-        // Funktion, Graph, Commands zwischen Knoten, Konfig und Hinweis gehören in einen Katalog (docs/plan-katalog-und-graphen.md) …
+        // Funktion, Graph, Commands zwischen Knoten, Konfig und Hinweis gehören in einen Katalog (docs/07 §7.2) …
         (await Befunde("Bild.Katalog", Bausteine + "public record Unlesbar(string Pfad) : ITransientEvent;")).Should().BeEmpty();
         // … ein Fakt im Log und ein Aggregat nicht: ein Katalog kennt keine Domäne.
         var befunde = await Befunde("Bild.Katalog", "public record Gelesen(int N) : IEvent; public record Zaehle(Id<Zaehler> AggregateId) : ICommand<Zaehler>; "

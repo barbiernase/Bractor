@@ -8,7 +8,7 @@ using Domain.Projections.ImagePair;
 namespace Domain.Client.Worker;
 
 /// <summary>
-/// Die Reaktionen auf Datensätze (docs/plan-katalog-und-graphen.md §1, Schritt 6): ein Decide gibt nur Fakten aus; was danach geschieht, stößt dieser
+/// Die Reaktionen auf Datensätze (docs/konzept-akteure.md §3): ein Decide gibt nur Fakten aus; was danach geschieht, stößt dieser
 /// Client an (als Datensatzpfleger). Auf <see cref="RangeAngefordert"/> sucht er die Paare der Kriterien (Seite für Seite) und gibt sie dem Datensatz
 /// (<see cref="NimmRangeAuf"/>, auch leer — das Decide sagt dann „Range leer“). Auf <see cref="EinfrierenAngefordert"/> liest er je Mitglied den
 /// Label-Stand und die Bildpfade, teilt deterministisch auf (<see cref="SplitZuteiler"/>) und schließt ab (<see cref="SchliesseEinfrierenAb"/>).

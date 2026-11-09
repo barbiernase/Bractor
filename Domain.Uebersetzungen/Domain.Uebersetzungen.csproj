@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <!-- Die ÜBERSETZUNGEN der Anwendung Domain (docs/plan-ohne-pipeline.md, docs/07): die eine Naht zwischen den Katalogen und der Domäne. Sie referenzieren
+    <!-- Die ÜBERSETZUNGEN der Anwendung Domain (docs/07 §7.2, docs/07): die eine Naht zwischen den Katalogen und der Domäne. Sie referenzieren
          die Schreibseite und die Kataloge, deren Graphen sie binden — die Domäne selbst bleibt rein und kennt keinen Katalog. -->
     <PropertyGroup>
         <TargetFramework>net9.0</TargetFramework>

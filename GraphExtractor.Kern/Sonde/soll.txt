@@ -737,14 +737,14 @@ lage IArtikelprotokoll -> Domain.Projections
 lage Artikelzaehlung -> Domain.Projections
 lage Artikelprotokoll -> Domain.Infrastructure
 
-# ── Der fremde Katalog (Sondenkatalog.Katalog, eigenes Projekt, nur Abstractions; docs/plan-katalog-und-graphen.md): Funktionen mit Konfig und Technik,
+# ── Der fremde Katalog (Sondenkatalog.Katalog, eigenes Projekt, nur Abstractions; docs/07 §7.2): Funktionen mit Konfig und Technik,
 #    Commands ohne Ziel, Hinweise, ein Graph, aus dem nur Hinweise hinausgehen — und ein Fakt, der nicht in einen Katalog gehört.
 record Sondenkatalog.Katalog.Peilung.Peile command | Auftrag:Guid, FrequenzMhz:double, DauerMs:int
 record Sondenkatalog.Katalog.Peilung.Gepeilt command | Auftrag:Guid, FrequenzMhz:double, RichtungGrad:double, Guete:double
 record Sondenkatalog.Katalog.Peilung.PeilungUnmoeglich rejection | FrequenzMhz:double, Grund:string
 record Sondenkatalog.Katalog.Peilung.Peilbericht rejection | FrequenzMhz:double, RichtungGrad:double
 record Sondenkatalog.Katalog.Peilung.Peilprotokoll event | FrequenzMhz:double
-# Was die Anwendung zurückgibt (aus der Antwort ihres Aggregats übersetzt), und eine Lese-Fähigkeit, die der Katalog deklariert (docs/plan-ohne-pipeline.md
+# Was die Anwendung zurückgibt (aus der Antwort ihres Aggregats übersetzt), und eine Lese-Fähigkeit, die der Katalog deklariert (docs/04 §4.4
 #    §2.3): die Sicht zeigt sie als Store des Katalogs, umgesetzt wird sie im Speicher der Anwendung (Klasse 1 über MartenStore).
 record Sondenkatalog.Katalog.Peilung.PeilungBestaetigt command | RichtungGrad:double, Guete:double
 record Sondenkatalog.Katalog.Peilung.Peilabweichung rejection | Grad:double
@@ -767,7 +767,7 @@ besitz Sondenkatalog.Katalog.Peilung.Peile command -> §begriffe
 besitz Sondenkatalog.Katalog.Peilung.Peilprotokoll event -> §begriffe
 lage Peilprotokoll -> nicht Sondenkatalog.Katalog
 
-# ── Funkortung (Funkortung.cs.txt, Uebersetzungen.Funkortung.cs.txt): ÜBERSETZUNGEN NEBEN DER REINEN DOMÄNE (docs/plan-ohne-pipeline.md, im Projekt
+# ── Funkortung (Funkortung.cs.txt, Uebersetzungen.Funkortung.cs.txt): ÜBERSETZUNGEN NEBEN DER REINEN DOMÄNE (docs/04 §4.4, im Projekt
 #    der Übersetzungen) — der Graph ist die neutrale Peilkette des fremden
 #    Katalogs; eine Kopf-Übersetzung macht aus der Nachricht des Funkers ihren Eingang (Feld nach Namen, zwei ausdrücklich), eine Übersetzung macht
 #    aus dem Ergebnis (ein Zwischenstand, der im Graphen weiterläuft) einen Command an die Peilstelle, und die ANTWORT der Peilstelle geht zurück an den
@@ -788,7 +788,7 @@ besitz Funkortung.Ortung.VermerkePeilung command -> aggregate:Peilstelle
 besitz Funkortung.Ortung.PeilungVermerkt event -> aggregate:Peilstelle
 lage Funker -> Domain.Akteure
 
-# ── Absichtlich falsch (Erinnerung.cs.txt): eine Funktion und ihr Graph in der Anwendung — eine Anwendung hat keine (docs/plan-ohne-pipeline.md);
+# ── Absichtlich falsch (Erinnerung.cs.txt): eine Funktion und ihr Graph in der Anwendung — eine Anwendung hat keine (docs/04 §4.4);
 #    erkannt wird beides wie im Katalog, die Lage weist beides nach <Name>.Katalog ──
 besitz Leihwesen.Erinnerung.Erinnere command -> §begriffe
 besitz Leihwesen.Erinnerung.Erinnert rejection -> bausteinfunktion:Erinnerungsdienst

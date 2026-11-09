@@ -10,7 +10,7 @@ namespace Abstractions;
 /// <item><c>decide:&lt;Aggregat&gt;/&lt;Command&gt;</c></item>
 /// <item><c>funktion:&lt;Funktion&gt;</c> (die Rechnung — so leiten <c>Herkunft</c> und Ids ab), <c>knoten:&lt;Instanz&gt;/&lt;Knoten&gt;</c> (der Schritt eines
 /// Laufs in der Spur: Instanz eines Graphen und Pfad des Knotens, <c>linie1/Aufbereitung.Vorschau</c>), <c>projektion:&lt;Typ&gt;</c>,
-/// <c>akteur:&lt;Akteur&gt;</c>, <c>uebersetzung:&lt;Übersetzung&gt;</c> (eine Übersetzung der Domäne, docs/plan-ohne-pipeline.md)</item>
+/// <c>akteur:&lt;Akteur&gt;</c>, <c>uebersetzung:&lt;Übersetzung&gt;</c> (eine Übersetzung der Domäne, docs/04 §4.4)</item>
 /// </list>
 /// Alle Namen sind einfache Typ- bzw. Variablennamen (ohne Namespace).
 /// <para>In den Generatoren (netstandard2.0, per Link) ist die Klasse <c>internal</c> — sonst sähe ein Projekt, das Abstractions UND einen

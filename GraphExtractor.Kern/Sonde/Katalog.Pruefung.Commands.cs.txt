@@ -1,6 +1,6 @@
 using Abstractions;
 
-// SONDE — fremder Katalog, Bereich Pruefung (docs/plan-ohne-pipeline.md): Seitenprüfung und Mahnbemessung domänenneutral.
+// SONDE — fremder Katalog, Bereich Pruefung (docs/04 §4.4): Seitenprüfung und Mahnbemessung domänenneutral.
 
 namespace Sondenkatalog.Katalog.Pruefung;
 

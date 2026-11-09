@@ -1,6 +1,6 @@
 using Abstractions;
 
-// SONDE — fremder Katalog, Bereich Messung (docs/plan-ohne-pipeline.md): Messkette, Störungsöffnung und Alarmierung domänenneutral — Sensor und
+// SONDE — fremder Katalog, Bereich Messung (docs/04 §4.4): Messkette, Störungsöffnung und Alarmierung domänenneutral — Sensor und
 // Fall sind Guids.
 
 namespace Sondenkatalog.Katalog.Messung;

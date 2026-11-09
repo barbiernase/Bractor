@@ -144,7 +144,7 @@ public sealed partial class Sicht
         foreach (var f in _bausteinFunktionen) k.Add(new("fb:" + S(f, "_id"), "bausteinfunktion", S(f, "name"), f));
         // Graphen (docs/04 §4.4): eine Karte je Graph-Record — seine Knoten sind Funktionen oder Graphen.
         foreach (var g in _graphen) k.Add(new("gr:" + S(g, "_id"), "graph", S(g, "name"), g));
-        // Übersetzungen (docs/plan-ohne-pipeline.md): eine Karte je Record der Domäne — sie nimmt TEin und erzeugt TAus.
+        // Übersetzungen (docs/04 §4.4): eine Karte je Record der Domäne — sie nimmt TEin und erzeugt TAus.
         foreach (var u in _uebersetzungen) k.Add(new("ue:" + S(u, "_id"), "uebersetzung", S(u, "name"), u));
         foreach (var rm in _readModels) k.Add(new("rm:" + S(rm, "_id"), "readmodel", S(rm, "name"), rm));
         foreach (var s in _stores) k.Add(new("sto:" + S(s, "_id"), "store", S(s, "name"), s));

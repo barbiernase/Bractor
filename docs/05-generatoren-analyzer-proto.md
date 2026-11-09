@@ -39,7 +39,7 @@ für die Lage-Prüfung ist; dieselbe Lesart für CQRS098 und `--check`), `Kodefo
 
 | Generator-Projekt | hängt als Analyzer an |
 |---|---|
-| `Domain.SourceGeneration` | `Domain`, `Domain.Projections`, `Domain.Pipeline`, `Domain.Akteure`; `Pruefdomaene`, `Pruefdomaene.Projections`, `Pruefdomaene.Pipeline` |
+| `Domain.SourceGeneration` | `Domain`, `Domain.Projections`, `Domain.Uebersetzungen`, `Domain.Akteure`; `Pruefdomaene`, `Pruefdomaene.Projections`, `Pruefdomaene.Uebersetzungen`; die Kataloge (`<Name>.Katalog`) |
 | `Projections.SourceGeneration` | `Domain.Infrastructure`, `Pruefdomaene.Infrastructure` |
 | `Infrastructure.SourceGeneration` | `Domain.Laufzeit`, `Pruefdomaene.Laufzeit` (Komposition: alle Laufzeit-Generatoren und der `GesamtbildAnalyzer`, Gate `Laufzeitprojekt.Ist`) und `Domain.Leitung` (dort nur der `DtoMapperSourceGenerator`, Gate Rolle Leitung); der `CommandEmitAnalyzer` hat kein Gate und läuft in allen dreien |
 | `Client.SourceGeneration` | `Domain.Client.Modules.Blazor` |
@@ -80,7 +80,7 @@ melden die Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein 
 | `PullPathGenerator` | `IProjektion` + `Auf` (über `Projektionsform`) | `GeneratedProjektionen`, `GeneratedPullPaths` | je Projektion Dispatch auf ihr `Auf`, gehörte Typen, Store aus dem Fähigkeits-Bereich, Batch-Kind `batch-<Projektion>`, `Projektionseintrag` mit Code-Stand; ein Store je Projektion (CQRS052), Klasse 3 nur mit `[MindestensEinmal]` (CQRS110); je Bündel seine Beschreibung (`<P>_Buendel`: je Event, woher sein Schlüssel kommt — Lesart `Buendelform`), ein Dispatch über den `Buendelblick` und das Verzeichnis der Schlüssel (`Rueckblick`); ein nicht ableitbarer Schlüssel ist CQRS118 ([04](04-konsum-und-prozess-maschine.md) §4.1–§4.3.1) |
 | `WeckplanGenerator` | `Auf` der Projektionen (dieselbe Lesart), `FristGesetzt` | `GeneratedWeckplan` | je Event-Typ, wen ein Commit weckt: `batch-<P>` je Partition, die Uhr ([03](03-schreibseite.md) §3.5) |
 | `FunktionsBausteinGenerator` | Klasse mit `IFunktion` + `Auf` bzw. `Lausche` (über `Funktionsform`), generische je Typargument eines Knotens | `GeneratedFunktionsBausteine` | je Funktion Operationen mit Ports, Ausgaben, Lese-Fähigkeiten, Bau und die Rechnung (`Rechne`, Ports und Ausgaben als Objekte) (CQRS100: Form — Schnittstelle, mehr als eine Nachricht je `Auf` oder `T?`/`OneOf`/Liste als Eingang, Hinweis als Eingang, nur Events gehört, Event ausgegeben; CQRS101) ([04](04-konsum-und-prozess-maschine.md) §4.4) |
-| `GraphGenerator` | Record mit `IGraph` (über `Graphform`, `Uebersetzungsform`) | `GeneratedGraphen` | je Graph die Knoten (aufgefaltet, mit Pfad), je Operation ihr Eingang, ihre Ausgaben und die Wegtabelle (je Ausgabetyp die Empfänger, gesichert oder verlierbar), Köpfe, Ausgänge; die Kanten aus den `Von` am nehmenden Knoten, eine genannte Quelle speist die Eingänge ihres Typs; je Übersetzung (`Uebersetze<TEin, TAus>`) ein `UebersetzungPlan` mit der Rechnung Feld für Feld und ihren Wegen (Formfehler meldet CQRS115, die Zuordnung CQRS119/CQRS121) |
+| `GraphGenerator` | Record mit `IGraph` (über `Graphform`), Record mit `IUebersetzung<,>` (über `Uebersetzungsform`) | `GeneratedGraphen`, `GeneratedUebersetzungen` | je Graph die Knoten (aufgefaltet, mit Pfad), je Operation ihr Eingang, ihre Ausgaben und die Wegtabelle (je Ausgabetyp die Empfänger, gesichert oder verlierbar), Köpfe, Ausgänge; die Kanten aus den `Von` am nehmenden Knoten, eine genannte Quelle speist die Eingänge ihres Typs; je Übersetzung (`Uebersetze<TEin, TAus>`) ein `UebersetzungPlan` mit der Rechnung Feld für Feld und ihren Wegen (Formfehler meldet CQRS115, die Zuordnung CQRS119/CQRS121) |
 | `QueryDienstGenerator` | `IReader` + `Frage`, `Frage` im Decider (über `Projektionsform`) | `GeneratedQueryDienst : IQueryDienst` | je Query die Frage mit Lese-Fähigkeiten; die Projektionen dahinter aus den Fähigkeiten (dieselben Stores), die gezeigten Ids aus den `Id<T>`-Feldern von Antwort und Query; eine Query an ein Aggregat geht über `AggregatAbfrage` an die Identität aus ihrem Glied `Id<TAggregat>`, Stand = das Aggregat mit seiner Version |
 | `SnapshotRegistrationGenerator` | `IState` | `RegisteredSnapshotTypes`, `GeneratedSnapshotSchema` (Datei `GeneratedSnapshotRegistration.g.cs`) | Marten-Registrierung; Schema-Version = FNV-1a-Struktur-Hash + `CodeHash` |
 | `EventJsonGenerator` | persistierte Events (`IEvent` ohne `ITransientEvent`) | `GeneratedEventJson` | Event-JSON über `EventJsonSerializerContext.Default.{Typ}` |
@@ -181,7 +181,7 @@ Build-Verbot gegen `System.Reflection` fehlt (docs/13 W10-2).
 - **Domain-Seite:** die Generatoren sehen nur im aktuellen Projekt deklarierte Typen. Deshalb muss Aggregat-Generat **selbst-enthalten** sein,
   und Code-Fakten, die nur im Quelltext stehen, gibt die Domänen-Compilation als Assembly-Angabe weiter (`Projektionsstand`, vom
   `PullPathGenerator` in der Komposition gelesen). Die Domänen-Analyzer lesen dagegen auch referenzierte Assemblies, die den Vertrag nutzen
-  (`Domain.SourceGeneration/Typen.cs`) — etwa die Lage-Prüfung oder die Regeln über Funktionen in `Domain.Pipeline`.
+  (`Domain.SourceGeneration/Typen.cs`) — etwa die Lage-Prüfung oder die Regeln über Funktionen und Übersetzungen.
 - **Infrastructure-Seite:** sieht die kompilierten Domänen-Symbole aller Rollen-Projekte. Deshalb liegen das *aggregatübergreifende* Routing,
   Weckplan, Verkettung und die Regeln über alle Domänen-Projekte (`GesamtbildAnalyzer`) hier, in der Komposition.
 - **Client-Seite:** syntax-lokal, außer `WiringGenerator`, der per `CompilationProvider` referenzierte Assemblies (den Vertrag in
@@ -190,7 +190,7 @@ Build-Verbot gegen `System.Reflection` fehlt (docs/13 W10-2).
 ## 5.7 Der Codegen-Schritt im Build
 
 ```
-Domain · Domain.Projections · Domain.Akteure · Domain.Pipeline     (bauen)
+Domain · Domain.Projections · Domain.Uebersetzungen · Domain.Akteure (bauen)
         ▼
 Cqrs.Codegen                     (gebaut über eine reine Build-Reihenfolge-Referenz aus Domain.Leitung)
         ▼

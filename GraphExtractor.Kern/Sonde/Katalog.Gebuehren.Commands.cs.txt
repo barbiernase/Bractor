@@ -1,6 +1,6 @@
 using Abstractions;
 
-// SONDE — fremder Katalog, Bereich Gebuehren (docs/plan-ohne-pipeline.md): Rückgabeprüfung und Schadensbewertung domänenneutral — Fall, Leser und
+// SONDE — fremder Katalog, Bereich Gebuehren (docs/04 §4.4): Rückgabeprüfung und Schadensbewertung domänenneutral — Fall, Leser und
 // Vorgang sind Guids.
 
 namespace Sondenkatalog.Katalog.Gebuehren;

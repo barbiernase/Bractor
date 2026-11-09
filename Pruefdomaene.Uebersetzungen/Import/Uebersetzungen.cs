@@ -4,7 +4,7 @@ using Pruefdomaene.Import;
 
 namespace Pruefdomaene.Uebersetzungen.Import;
 
-// ÜBERSETZUNGEN (docs/plan-ohne-pipeline.md): Annahme und Zeilenlauf des Katalogs Pruefwerk werden Importaufträge — der Vorgang ist der Auftrag.
+// ÜBERSETZUNGEN (docs/04 §4.4): Annahme und Zeilenlauf des Katalogs Pruefwerk werden Importaufträge — der Vorgang ist der Auftrag.
 
 [Feld(nameof(Anfordern.Menge), nameof(ImportAngefordert.Zeilen))]
 public sealed record ImportAnnehmen : IUebersetzung<ImportAngefordert, Anfordern>;

@@ -4,7 +4,7 @@ using Pruefdomaene.Abrechnung;
 
 namespace Pruefdomaene.Uebersetzungen.Abrechnung;
 
-// ÜBERSETZUNGEN (docs/plan-ohne-pipeline.md): Freigabe und Mahnung des Katalogs Pruefwerk werden Rechnungen und Kundenkonten — der Vorgang ist die
+// ÜBERSETZUNGEN (docs/04 §4.4): Freigabe und Mahnung des Katalogs Pruefwerk werden Rechnungen und Kundenkonten — der Vorgang ist die
 // Rechnung, der Empfänger das Konto.
 
 [Feld(nameof(Pruefe.Vorgang), nameof(Freizugeben.Rechnung))]

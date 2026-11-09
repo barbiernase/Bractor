@@ -16,7 +16,7 @@ Stand 2026-11-07. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fa
 | Datei | Inhalt |
 |---|---|
 | [03-schreibseite.md](03-schreibseite.md) | Command → Decide → Event → Log: Aggregat-Actor, Bündel, Group-Commit, Inbox, Horizont, was ein Decide ausgibt |
-| [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | Batch-Leser der Projektionen, Store-Klassen, Funktionen und Graphen (Instanz, Kette, Rechner, Zustand, Eingang am Kopf), Abläufe, Emit, Uhr, Quellen, Spur |
+| [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | Batch-Leser der Projektionen, Store-Klassen, Funktionen und Graphen im Katalog, Übersetzungen (Routing über den Typ), Instanz, Kette, Rechner, Zustand, Eingang am Kopf, Abläufe, Emit, Uhr, Quellen, Spur |
 | [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generatoren, Analyzer, Boot-Guards, Codegen im Build |
 | [06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md) | Wire-Serializer, Cluster, Multi-Node, Umgebung als Ordner, Einblick und JSON-Eingang |
 | [07-projektstruktur.md](07-projektstruktur.md) | feste Projekt- und Ordnerstruktur (eine Quelle mit `Abstractions/Projektstruktur.cs`) |
@@ -27,12 +27,11 @@ Stand 2026-11-07. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fa
 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Messverfahren, Messwerte (Tabellen schreibt `scripts/vermessung-tabelle.sh`) |
 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | offene Befunde (§13.0), Erledigtes; die eine Quelle für „offen“ |
 | [konzept-akteure.md](konzept-akteure.md) | Akteure (`IDarf`, `IHoert`), Clients, Reaktionen, Sitzung, Verteiler |
-| [plan-ohne-pipeline.md](plan-ohne-pipeline.md) | Plan (2026-11-09, nicht umgesetzt): Funktionen nur in Katalogen, die Pipeline-Schicht geht auf — Antwort-Übersetzung, Fähigkeiten aus Katalogen, Graphen in die Schreibseite |
 | [praesentation/](praesentation/) | Präsentation des Zielbilds als Geschichte (reveal.js; Leertaste weiter, ↓ genauer hinsehen, Esc Übersicht): kurz [zielbild.html](praesentation/zielbild.html) aus `geschichte.html`, vollständig [zielbild_full.html](praesentation/zielbild_full.html) aus `geschichte_full.html` (dazu Konsistenz und Garantien, Arbeitsplatz, Werkbank, LLM). Karten, Graphen, Diagramme aus `zielbild-seite.html`; `baue_deck.py` setzt zusammen — nach Änderungen `python3 docs/praesentation/baue_deck.py` bzw. mit `VORLAGE=geschichte_full.html … zielbild_full.html` |
 | [../vermessung/README.md](../vermessung/README.md) | Ablage der Messläufe |
 
 Gelöschte Dokumente (`01-ueberblick.md`, `02-design-prinzipien.md`, `konzept-werkbank.md` — Leitsätze W1–W12 in Kurzform in `CLAUDE.md` —, die
-Editor- und LLM-Konzepte, die früheren Pläne) liegen im Git-Verlauf.
+Editor- und LLM-Konzepte samt „Funktionen im Editor“, die früheren Pläne bis „Katalog und Graphen“ und „ohne Pipeline“) liegen im Git-Verlauf.
 
 ## Konventionen
 

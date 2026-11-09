@@ -81,7 +81,7 @@ public sealed partial class Sicht
         }
         return (ein, aus);
 
-        // Übersetzungen der Domäne (docs/plan-ohne-pipeline.md): sie nehmen TEin (geht an ▶) und erzeugen TAus (◀ kommt aus).
+        // Übersetzungen der Domäne (docs/04 §4.4): sie nehmen TEin (geht an ▶) und erzeugen TAus (◀ kommt aus).
         void UebersetzungsPartner(string n, List<Partner> e, List<Partner> a)
         {
             foreach (var u in _uebersetzungen)

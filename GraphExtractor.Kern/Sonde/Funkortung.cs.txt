@@ -1,6 +1,6 @@
 using Abstractions;
 
-// SONDE — ÜBERSETZUNG IN BEIDE RICHTUNGEN (docs/plan-ohne-pipeline.md), die Domäne: die Peilstelle vermerkt, was gepeilt wurde. Sie ist rein — sie
+// SONDE — ÜBERSETZUNG IN BEIDE RICHTUNGEN (docs/04 §4.4), die Domäne: die Peilstelle vermerkt, was gepeilt wurde. Sie ist rein — sie
 // kennt den Katalog nicht. Der Graph ist die domänenneutrale Peilkette des fremden Katalogs; domänenspezifisch machen ihn die Übersetzungen
 // (Uebersetzungen.Funkortung.cs.txt, im Projekt der Übersetzungen).
 

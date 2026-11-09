@@ -19,7 +19,7 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
 /// <item>CQRS116 (GR-EMPFAENGER; Fehler) — ein Command ohne Ziel, der seinen Erzeuger verlässt (von einem Akteur, aus einem Knoten, den kein Knoten
 ///   desselben Graphen nimmt), hat genau einen Empfänger: den Kopf genau eines Graphen. Kein Empfänger oder mehrere sind ein Fehler. Ein Graph
-///   in einem Katalog ist eine Blaupause (docs/konzept-funktionen-im-editor.md §3): er läuft erst als Knoten eines Graphen der Anwendung — seine Köpfe
+///   in einem Katalog ist eine Blaupause (docs/10 §10.9): er läuft erst als Knoten eines Graphen der Anwendung — seine Köpfe
 ///   empfangen nichts, seine Ausgänge verlassen nichts, geprüft wird dort, wo er steht.</item>
 /// <item>CQRS117 (GR-GRAPH-KNOTEN; Warnung) — eine Funktion, die in keinem Graphen ein Knoten ist, läuft nie (ein Graph läuft als Instanz).</item>
 /// <item>CQRS120 (GR-UEBERSETZUNG; Fehler) — ein Command eines Katalogs verlässt einen Graphen der Anwendung: jeder Fall wird übersetzt
@@ -219,7 +219,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                         befehle.Count == 0 ? "sie gibt keinen Command aus" : "ihre Commands: " + string.Join(", ", befehle.Select(b => b.Name))));
         }
 
-        // Die Übersetzungen der Domänen (docs/plan-ohne-pipeline.md §3): sie nehmen nach Typ, was ein Graph ausgibt, was ein Client gibt, was ein Aggregat
+        // Die Übersetzungen der Domänen (docs/04 §4.4): sie nehmen nach Typ, was ein Graph ausgibt, was ein Client gibt, was ein Aggregat
         //   auf den Command einer Übersetzung antwortet.
         var uebersetzungen = typen.Where(Uebersetzungsform.IstUebersetzung).Select(Uebersetzungsform.Lies).Where(u => u.Fehler.Count == 0).ToList();
         string V(ITypeSymbol t) => Funktionsform.Voll(t);

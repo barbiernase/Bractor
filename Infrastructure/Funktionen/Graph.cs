@@ -34,7 +34,7 @@ public sealed record KnotenPlan(string Name, string Funktion, IReadOnlyList<Oper
 /// <summary>
 /// Eine ÜBERSETZUNG der Domäne (generiert aus einem Record mit <c>IUebersetzung&lt;TEin, TAus&gt;</c>, <c>GeneratedUebersetzungen</c>): ihr Name, was
 /// sie nimmt und erzeugt, die Rechnung (Feld für Feld, ohne Logik). Sie hängt an keinem Graphen — wohin sie gehört, sagt der Typ, den sie nimmt
-/// (<see cref="Uebersetzungen"/>, docs/plan-ohne-pipeline.md §3).
+/// (<see cref="Uebersetzungen"/>, docs/04 §4.4).
 /// </summary>
 public sealed record UebersetzungPlan(string Name, Type Ein, Type Aus, Func<object, object> Rechne);
 

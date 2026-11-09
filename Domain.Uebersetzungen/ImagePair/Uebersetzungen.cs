@@ -4,7 +4,7 @@ using Domain.ImagePair;
 
 namespace Domain.Uebersetzungen.ImagePair;
 
-// ÜBERSETZUNGEN (docs/plan-ohne-pipeline.md): sie machen die domänenneutralen Graphen aus den Katalogen zu Bildpaaren. Wohin sie gehören, sagt nur der
+// ÜBERSETZUNGEN (docs/04 §4.4): sie machen die domänenneutralen Graphen aus den Katalogen zu Bildpaaren. Wohin sie gehören, sagt nur der
 // Typ, den sie nehmen — hier jedes gedeutete Bild, aus welcher Instanz der Bildaufbereitung bzw. des Linienimports auch immer.
 
 /// <summary>

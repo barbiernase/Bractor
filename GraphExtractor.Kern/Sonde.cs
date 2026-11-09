@@ -372,7 +372,7 @@ public static class Sonde
             foreach (var k in A(g, "kanten"))
                 z.Add($"kante {S(g, "name")} | {S(k, "von")} -{S(k, "typ")}-> {S(k, "nach")}");
         }
-        // Übersetzungen der Domäne (docs/plan-ohne-pipeline.md): je Record seine [Feld] und je Parameter von TAus seine Quelle und Regel — was die ↦-Karte
+        // Übersetzungen der Domäne (docs/04 §4.4): je Record seine [Feld] und je Parameter von TAus seine Quelle und Regel — was die ↦-Karte
         //   zeigt.
         foreach (var u in A(b, "uebersetzungen").Where(Sonde))
             z.Add($"uebersetzung {S(u, "namespace")}.{S(u, "name")} | {S(u, "ein")} -> {S(u, "aus")}"
@@ -436,7 +436,7 @@ public static class Sonde
 
     private const string KatalogPraefix = "Katalog.";
 
-    /// <summary>Das Projekt des fremden Katalogs der Sonde (docs/plan-ohne-pipeline.md): nur Abstractions, genutzt von der Domäne der Anwendung.</summary>
+    /// <summary>Das Projekt des fremden Katalogs der Sonde (docs/04 §4.4): nur Abstractions, genutzt von der Domäne der Anwendung.</summary>
     public const string SondenKatalog = "Sondenkatalog.Katalog";
 
     /// <summary>„Katalog.Peilung.Commands.cs“ → Bereich „Peilung“, Datei „Commands.cs“.</summary>
@@ -463,7 +463,7 @@ public static class Sonde
                     .Select(p => new ProjectReference(p.Id)).ToArray(), metadataReferences: vorbild.MetadataReferences,
                 analyzerReferences: vorbild.AnalyzerReferences)
             .WithDefaultNamespace(SondenKatalog);
-        // Die Anwendung nutzt ihn (docs/plan-ohne-pipeline.md): jedes Rollen-Projekt, das Kataloge nutzen darf (Übersetzungen, Akteure, Speicher, Leitung,
+        // Die Anwendung nutzt ihn (docs/04 §4.4): jedes Rollen-Projekt, das Kataloge nutzen darf (Übersetzungen, Akteure, Speicher, Leitung,
         //   Komposition) — die Domäne bleibt rein. MSBuild reichte die Referenz der Übersetzungen transitiv weiter, ein Roslyn-Fork nicht.
         var fork = solution.AddProject(info);
         foreach (var rolle in Abstractions.Projektstruktur.NutzenKataloge)

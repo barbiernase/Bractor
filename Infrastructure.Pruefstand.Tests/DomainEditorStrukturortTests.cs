@@ -45,7 +45,7 @@ public class DomainEditorStrukturortTests
         pfade.Should().Contain("Domain/Ausleihe/Events.cs", "ein gewöhnliches Event bleibt auf der Schreibseite");
         pfade.Should().Contain("Domain.Projections/Ausleihe/Queries.cs");
         pfade.Should().Contain("Domain.Akteure/Akteure.cs", "Akteure haben keinen Bereichs-Ordner");
-        // Was nur in einen Katalog gehört (Konfig, Funktion), verschiebt der Server nicht: der Editor wählt den Katalog (docs/plan-ohne-pipeline.md).
+        // Was nur in einen Katalog gehört (Konfig, Funktion), verschiebt der Server nicht: der Editor wählt den Katalog (docs/04 §4.4).
         pfade.Should().Contain("Domain/Ausleihe/Konfigs.cs");
     }
 

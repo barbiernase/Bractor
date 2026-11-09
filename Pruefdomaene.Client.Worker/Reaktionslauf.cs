@@ -16,7 +16,7 @@ using Pruefdomaene.Verteilung;
 namespace Pruefdomaene.Client.Worker;
 
 /// <summary>
-/// Die Reaktionen der Prüfdomäne (docs/plan-ohne-pipeline.md): ein Decide gibt nur Fakten aus, was danach geschieht, stößt dieser Client an. Wo ein Graph
+/// Die Reaktionen der Prüfdomäne (docs/04 §4.4): ein Decide gibt nur Fakten aus, was danach geschieht, stößt dieser Client an. Wo ein Graph
 /// aus dem Katalog Pruefwerk rechnet (Freigabe, Mahnung, Merkmalbildung, Import), gibt er die Nachricht der Domäne, die eine Übersetzung in den Kopf des
 /// Graphen macht; wo nur Aggregate einander antworten (Auftrag, Verteilung, Nachschub, Gutschrift), gibt er die Commands selbst — der Beleg im Fakt sagt,
 /// zu welchem Vorgang es gehört. Genau einmal trägt der Läufer: dieselbe Position ergibt dieselben Command-Ids.

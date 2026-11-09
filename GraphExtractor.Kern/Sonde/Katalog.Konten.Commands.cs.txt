@@ -1,6 +1,6 @@
 using Abstractions;
 
-// SONDE — fremder Katalog, Bereich Konten (docs/plan-ohne-pipeline.md): die Registrierung domänenneutral — Benutzer und Adresse sind Guids.
+// SONDE — fremder Katalog, Bereich Konten (docs/04 §4.4): die Registrierung domänenneutral — Benutzer und Adresse sind Guids.
 
 namespace Sondenkatalog.Katalog.Konten;
 

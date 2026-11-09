@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <!-- Ein Funktionskatalog (docs/plan-ohne-pipeline.md): die Funktionen und Graphen, an denen die Prüfdomäne das Framework prüft — Freigabe und Mahnung,
+    <!-- Ein Funktionskatalog (docs/07 §7.2): die Funktionen und Graphen, an denen die Prüfdomäne das Framework prüft — Freigabe und Mahnung,
          Import als Strom, Merkmalbildung mit Zustand und Lese-Fähigkeit. Domänenneutral: er referenziert nur Abstractions, nie eine Anwendung; was daraus
          in der Prüfdomäne wird, sagen ihre Übersetzungen. -->
     <PropertyGroup>

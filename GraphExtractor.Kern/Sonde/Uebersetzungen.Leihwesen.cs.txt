@@ -5,7 +5,7 @@ using Leihwesen.Pruefung;
 using Sondenkatalog.Katalog.Gebuehren;
 using Sondenkatalog.Katalog.Pruefung;
 
-// SONDE — die Übersetzungen des Leihwesens (docs/plan-ohne-pipeline.md): die Köpfe der Graphen aus den Nachrichten der Clients, ihre Ergebnisse an
+// SONDE — die Übersetzungen des Leihwesens (docs/04 §4.4): die Köpfe der Graphen aus den Nachrichten der Clients, ihre Ergebnisse an
 // Schadensfall, Mahnvorgang und Seitenprüfung, die ANTWORT der Seitenprüfung auf den Start zurück in den Katalog — Guid ⇄ Id ausdrücklich. Die
 // Mahnung kommt aus zwei Graphen (Schätzung und Bemessung): EINE Übersetzung für den Typ.
 

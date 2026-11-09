@@ -1,7 +1,7 @@
 using Abstractions;
 using Sondenkatalog.Katalog.Konten;
 
-// SONDE — die Übersetzungen des Kundenportals (docs/plan-ohne-pipeline.md): die Prüfung hinein, die Reservierung an die Adresse, die zwei ANTWORTEN
+// SONDE — die Übersetzungen des Kundenportals (docs/04 §4.4): die Prüfung hinein, die Reservierung an die Adresse, die zwei ANTWORTEN
 // der Adresse zurück in den Katalog (Antwort-Übersetzungen, Event als Eingang), Bestätigung und Absage an den Benutzer — Guid ⇄ Id ausdrücklich.
 
 namespace Kundenportal.Konten;

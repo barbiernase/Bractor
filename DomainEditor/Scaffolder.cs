@@ -106,7 +106,7 @@ public static class Scaffolder
             dateien.Add(new(g.Key.Pfad, GraphDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
                 !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
 
-        // ── Übersetzungen (docs/plan-ohne-pipeline.md) → ihre echte Datei; sonst die (eine) Datei der Übersetzungen ihres Namespace; sonst
+        // ── Übersetzungen (docs/04 §4.4) → ihre echte Datei; sonst die (eine) Datei der Übersetzungen ihres Namespace; sonst
         //    Uebersetzungen.cs im Verzeichnis ──
         foreach (var g in modell.Uebersetzungen.GroupBy(x => (Pfad: x.Datei ?? UebersetzungsZiel(modell, x.Namespace), x.Namespace)))
             dateien.Add(new(g.Key.Pfad, UebersetzungsDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
@@ -326,7 +326,7 @@ public static class Scaffolder
     }
 
     /// <summary>
-    /// Eine ÜBERSETZUNG (docs/plan-ohne-pipeline.md): je Abweichung ein <c>[Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))]</c> über dem Record, dann
+    /// Eine ÜBERSETZUNG (docs/04 §4.4): je Abweichung ein <c>[Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))]</c> über dem Record, dann
     /// <c>public sealed record Name : IUebersetzung&lt;Ein, Aus&gt;;</c>.
     /// </summary>
     public static string UebersetzungRecord(Uebersetzung u) =>

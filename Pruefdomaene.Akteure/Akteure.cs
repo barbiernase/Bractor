@@ -21,7 +21,7 @@ public sealed record Messwart : IAkteur,
     IDarf<Pruefdomaene.Messung.HochrechnungAngefordert>;
 
 /// <summary>
-/// Die Sachbearbeitung (docs/plan-ohne-pipeline.md: ein Decide gibt nur Fakten aus, was danach geschieht, stößt ein Client an): auf jedes Fakt, das einen
+/// Die Sachbearbeitung (docs/04 §4.4: ein Decide gibt nur Fakten aus, was danach geschieht, stößt ein Client an): auf jedes Fakt, das einen
 /// Ablauf beginnt oder fortsetzt, gibt sie die Nachricht der Domäne an einen Graphen des Katalogs (Freigabe, Mahnung, Messwert, Import) oder die
 /// Commands an die Aggregate selbst (Gutschrift, Auftrag samt Gegenzügen, Verteilung und Zubuchung, Nachschub, und die Vermerke der Antworten).
 /// </summary>

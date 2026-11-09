@@ -74,7 +74,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        };");
             sb.AppendLine("    }");
             sb.AppendLine();
-            // Die ÜBERSETZUNGEN der Domänen (docs/plan-ohne-pipeline.md §2): je Record mit IUebersetzung<TEin, TAus> eine Rechnung, Feld für Feld nach
+            // Die ÜBERSETZUNGEN der Domänen (docs/04 §4.4): je Record mit IUebersetzung<TEin, TAus> eine Rechnung, Feld für Feld nach
             //   Uebersetzungsform. Wohin sie gehören, sagt nur der Typ, den sie nehmen.
             var uebersetzungen = Vertragsassemblies.Typen(c).Where(Uebersetzungsform.IstUebersetzung).OrderBy(t => t.Name, System.StringComparer.Ordinal)
                 .Select(Uebersetzungsform.Lies).Where(u => u.Fehler.Count == 0).ToList();

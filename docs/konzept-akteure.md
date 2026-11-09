@@ -261,7 +261,7 @@ des Eingangs: die Kette und ihre Commands tragen das Fakt als Ursache. Nimmt kei
 - **Lesen ab Position** (`LiesLog` → `LogSeite`): das Log ab einer Position, nur die Typen der Hör-Liste der Sitzung, die im Log stehen (Hinweise
   nie), höchstens 1000 Einträge je Seite und nur bis zum Horizont der Vollständigkeit — wer ab `bis` weiterliest, verpasst nichts. So führt ein
   Client eine Projektion bei sich oder liest nach dem Wiederverbinden nach.
-- **Reaktionen** (§3, docs/plan-katalog-und-graphen.md §1): was nach einem Fakt weitergehen soll, stößt ein Client an. Er hört das Event
+- **Reaktionen** (§3): was nach einem Fakt weitergehen soll, stößt ein Client an. Er hört das Event
   (`IHoert`), liest, was er braucht (Queries), und gibt Commands hinein (`IDarf`) — an ein Aggregat oder ohne Ziel an den Kopf eines Graphen.
   Genau einmal ohne Festhalten beim Framework: der Läufer (`Client.Infrastructure/Reaktionen`, `cqrs_client.reaktionen`) liest das Log ab seiner
   gesicherten Position (`LiesLog`; ein Push weckt ihn nur), leitet jede Command-Id aus Reaktion, Position, Nummer und Stelle ab (in C# und Python

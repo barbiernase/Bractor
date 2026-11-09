@@ -2061,7 +2061,7 @@
   const flLoesbar=(fk,p)=>(fk.art==="akteur"&&fk.spalte==="ausgang"&&p.richtung==="aus")||(fk.art==="akteur"&&fk.spalte==="eingang"&&p.richtung==="ein"&&p.sorte!=="antwort")
     ||(fk.art==="projektion"&&p.richtung==="ein");
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&FLPORT&&!KOM){e.stopImmediatePropagation();FLPORT=null;flMarkiere();}},true);
-  // ══ EIN GRAPH AUF DER FLÄCHE, aufgeklappt (docs/plan-ohne-pipeline.md): der Graph aus einem Katalog mit allen Funktionen, oben sein Eingang (wer
+  // ══ EIN GRAPH AUF DER FLÄCHE, aufgeklappt (docs/04 §4.4): der Graph aus einem Katalog mit allen Funktionen, oben sein Eingang (wer
   //   an seinen Kopf gibt: ein Akteur, eine Kopf-Übersetzung der Domäne), an jedem Command-Port „＋ ↦“ — eine Übersetzung in einer Domäne nimmt die
   //   Nachricht nach ihrem Typ (ein Ausgang oder ein Zwischenstand). Der Graph bleibt domänenneutral; die Übersetzungen stehen in ihrer Spalte.
   //   Doppelklick auf eine Funktion öffnet sie im Katalog-Modal, auf den Graphen sein Graph-Modal.
@@ -2276,7 +2276,7 @@
   //   Instanzen. Alles aus board.sicht.komposition und board.sicht.baukasten; ein Graph im Graphen öffnet eine Ebene tiefer (Brotkrumen).
   let KOM=null;   // {pfad:[Graph-Karten-Id …], reiter:"komposition"|"instanzen", wahl:{art:"knoten",name}|{art:"baustein",gruppe,name}|null}
   const komDaten=id=>(SICHT().komposition||{})[id];
-  // Ein Graph auf einer Ebene (docs/konzept-funktionen-im-editor.md §3): seine Teilgraphen aufgefaltet (board.sicht.komposition[…].flach) — jeder
+  // Ein Graph auf einer Ebene (docs/10 §10.9): seine Teilgraphen aufgefaltet (board.sicht.komposition[…].flach) — jeder
   //   Knoten mit Pfad als Namen, seinem lokalen Namen und dem Graphen, dem er gehört; Gesten treffen diesen Graphen (komOrt).
   const komFlach=id=>{const d=komDaten(id);return d&&d.flach?{...d,...d.flach}:d;};
   const komOrt=(id,k)=>({id:(k&&k.graph)||id,name:(k&&k.lokal)||(k&&k.name)});
@@ -2296,7 +2296,7 @@
     KOM={pfad,reiter:"komposition",wahl:knoten?{art:"knoten",name:knoten}:null};komZeige();}
   // Von innen öffnen: ein Graph seine Komposition, ein Aggregat sich selbst, Projektion und Reader ihren Store (mit ihnen gewählt).
   function flInnen(fk){if(fk.art==="graph"){komOeffne(fk.id);return;}if(fk.art==="uebersetzung"){ueOeffne(fk);return;}const pid=flPanelId(fk);if(pid)komKarte(pid);}
-  // ══ ÜBERSETZUNG (docs/plan-ohne-pipeline.md): eine Karte in der Spalte Übersetzungen, ein Record der Domäne (IUebersetzung<TEin, TAus>); ihre
+  // ══ ÜBERSETZUNG (docs/04 §4.4): eine Karte in der Spalte Übersetzungen, ein Record der Domäne (IUebersetzung<TEin, TAus>); ihre
   //   Feldzuordnung öffnet ein Modal (Pfad = ihre Karten-Id „ue:uebersetzung:Name“), links die Felder von TEin, rechts die Parameter von TAus.
   function ueOeffne(fk){const id=fk.karte;if(KOM)KOM.pfad.push(id);else KOM={pfad:[id],reiter:"komposition",wahl:null};KOM.port=null;KOM.feld=null;komZeige();}
   function ueZeige(de,id){const u=ueVon(id);if(!u){KOM.pfad.pop();if(!KOM.pfad.length)KOM=null;return;}
@@ -2378,7 +2378,7 @@
     m.append(h("div",{class:"kom-leib"},komBaukastenEl(id,d),lw));de.append(m);komLege(lw,id,d);}
 
   // ── Leinwand: Knoten wie auf der Fläche (Kopf + Ports), Technik und Konfig als Chips; Ränder für Köpfe und Ausgänge ──
-  //   (docs/plan-katalog-und-graphen.md, Schritt 4) Die Ports eines Funktionsknotens stehen je Auf: sein Eingang, darunter seine Ausgänge mit
+  //   (docs/10 §10.9) Die Ports eines Funktionsknotens stehen je Auf: sein Eingang, darunter seine Ausgänge mit
   //   Vielfachheit (1 · 0..1 · 0..n). „＋“ an einem Eingang hebt die Knoten hervor, die den Typ ausgeben (dazu „von außen“ = [Kopf]), „＋“ an einem
   //   Ausgang die Knoten, die ihn nehmen ([Von] am Nehmer); gestrichelt steht, was neu entstehen kann: eine Funktion davor bzw. dahinter. Eine Antwort
   //   (Event auf einen eigenen Command an ein Aggregat) kommt vom Aggregat — sie hat kein ＋.
@@ -2495,13 +2495,13 @@
         fn:()=>katEinsetzen(id,f.name,q.name,P.art==="von"?"davor":"dahinter")}));
       return [...kand,P.art==="von"?{tiefe:Math.max(0,q.tiefe-1),t:"＋ neue Funktion davor",u:"gibt "+P.typ+" aus — und nimmt eine neue Nachricht von außen",fn:e=>komFunktionNeu(id,"davor",q,P.typ,e)}
         :{tiefe:q.tiefe+1,t:"＋ neue Funktion mit diesem Input",u:"nimmt "+P.typ+" — sie öffnet sich danach im Katalog-Modal",fn:e=>komFunktionNeu(id,"dahinter",q,P.typ,e)}];}
-    // Ein Command ohne Ziel an einem Ausgang: eine Übersetzung der Domäne kann ihn nehmen (docs/plan-ohne-pipeline.md).
+    // Ein Command ohne Ziel an einem Ausgang: eine Übersetzung der Domäne kann ihn nehmen (docs/04 §4.4).
     const ue=P.art!=="von"&&komSorte(P.typ)==="command"&&!(recByName(komBasis(P.typ))||{}).aggregat?[{tiefe:q.tiefe+1,t:"↦ ▣ Command an …",
       u:"eine Übersetzung der Domäne nimmt "+P.typ+" und macht einen Command an ein Aggregat daraus (vorhanden oder neu samt Decide)",fn:e=>komCommandAn(P.typ,e)}]:[];
     return P.art==="von"?[{tiefe:Math.max(0,q.tiefe-1),t:"＋ neue Funktion davor",u:"gibt "+P.typ+" aus — und nimmt eine neue Nachricht von außen",fn:e=>komFunktionNeu(id,"davor",q,P.typ,e)}]
       :[{tiefe:q.tiefe+1,t:"＋ neue Funktion dahinter",u:"nimmt "+P.typ+" — sie öffnet sich danach von innen",fn:e=>komFunktionNeu(id,"dahinter",q,P.typ,e)},...ue];}
   // Wo eine neue Funktion liegen darf: im Katalog des Graphen, sonst in jedem Katalog, der den Typ kennt (Typ aus dem Katalog oder vom Framework) —
-  //   eine Anwendung hat keine Funktionen (docs/plan-ohne-pipeline.md), ein Katalog kennt keine Domäne.
+  //   eine Anwendung hat keine Funktionen (docs/04 §4.4), ein Katalog kennt keine Domäne.
   function komOrte(g,typ){const gk=funKatalog(g),r=recByName(komBasis(typ)),rk=r?funKatalog(r):null,bk=komBaukasten();
     if(gk)return [{katalog:gk}];
     return (bk.kataloge||[]).filter(k=>!r||rk===k).map(k=>({katalog:k}));}
@@ -3502,7 +3502,7 @@
     items.push({trenn:1},NODEBY.has("rec:"+komBasis(k.typ))?{t:"◎ "+k.typ+" im Panel",fn:()=>waehle("rec:"+komBasis(k.typ))}:null);
     menueFix(ev.clientX,ev.clientY,k.typ+" · "+k.art+" · "+V.name+" → "+N.name,items);}
 
-  // ══ KATALOG-MODAL (docs/konzept-funktionen-im-editor.md, Stufe 1): die Funktionswelt ohne Domäne. Links die Kataloge mit ihren Funktionen und
+  // ══ KATALOG-MODAL (docs/10 §10.9): die Funktionswelt ohne Domäne. Links die Kataloge mit ihren Funktionen und
   //   Graphen, in der Mitte die gewählte Funktion als Reihe — Input-Command ─▶ ƒ ─▶ Output-Commands (mehrere = ein OneOf, je Fall ein Port), je
   //   Input ein Auf —, rechts die Command-Liste des Katalogs und die des allgemeinen Katalogs (Commands, die alle Kataloge teilen). Input und Output
   //   sind ein neuer Command oder einer aus diesen Listen; was neu entsteht, landet in der Liste. Ein Command aus dem allgemeinen Katalog setzt die
@@ -3631,7 +3631,7 @@
       frageFix(ev.clientX,ev.clientY,"＋ Command in "+kat+" — Bereich","Gemeinsam","Der Ordner im Katalog ("+kat+".<Bereich>)",x=>{
         if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(x))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";anlegen(x);});}},"＋ Command"));
     return box;}
-  // ══ STUFE 2 (docs/konzept-funktionen-im-editor.md §3): ein Graph im Katalog entsteht mit seiner ersten Funktion (er baut sofort) und wird im
+  // ══ STUFE 2 (docs/10 §10.9): ein Graph im Katalog entsteht mit seiner ersten Funktion (er baut sofort) und wird im
   //   Graph-Modal verkettet; „＋“ an einem Port bietet die Funktionen aller Kataloge, deren Input bzw. Output genau dieser Command ist. Eine Funktion
   //   aus einem anderen Katalog setzt die Projektreferenz mit.
   const katAlleFunktionen=()=>MODEL.bausteinFunktionen.filter(f=>!istGerufen(f)&&funKatalog(f)&&!(f.lauscht||[]).length);
@@ -3703,7 +3703,7 @@
       if(allg&&allg!==kat)rechts.append(katListeEl("Allgemein · geteilt",allg,null,true));
       const fw=katFramework();if(fw.length){rechts.append(h("div",{class:"kom-sec"},"Framework · Quellen"));fw.forEach(nm=>rechts.append(katCmdKarte(nm,kat,{ort:"fw:"})));}}
     m.append(h("div",{class:"kom-leib kat"},links,mitte,rechts));de.append(m);}
-  // ══ FUNKTION VON INNEN (docs/plan-katalog-und-graphen.md, Schritt 3): der Vertrag einer Funktion — Eingänge · Auf · Ausgänge · Rahmen — mit
+  // ══ FUNKTION VON INNEN (docs/10 §10.9): der Vertrag einer Funktion — Eingänge · Auf · Ausgänge · Rahmen — mit
   //   derselben Mechanik wie Aggregat und Store (innenZeige: Detailstufen, ✎, ＋ am Port, gestrichelte Karten, ✕ mit Löschplan). Eingang ↔ Auf ist 1:1
   //   (je Eingangstyp ein Auf, R2), Auf → Ausgänge frei; der Rahmen ist der Konstruktor (Konfig, Technik, Zustand, Logger). Die Form der Ausgabe folgt
   //   aus Strom und Zahl der Ausgänge (1 · 0..1 · 0..n), dazu „asynchron“. Was im Katalog liegt, kennt keine Domäne: dort gibt es keinen Command an
@@ -3915,7 +3915,7 @@
       {t:"✕ [Von("+von+")] lösen",gefahr:1,fn:()=>{k.von=ohneX(k.von,von);k.verlierbar=ohneX(k.verlierbar,von);gTitel(g.name+": "+nach+" nicht mehr von "+von);render();}}]);}
   function komKnotenEntfernen(id,name){const g=komModell(id);if(!g)return;g.knoten=(g.knoten||[]).filter(x=>x.name!==name);
     g.knoten.forEach(x=>{x.von=ohneX(x.von,name);x.verlierbar=ohneX(x.verlierbar,name);});gTitel(g.name+": Knoten "+name+" entfernt");if(KOM)KOM.wahl=null;render();}
-  // ══ EINGÄNGE UND ÜBERSETZUNGEN (docs/plan-katalog-und-graphen.md, Schritt 5): nur Clients und Quellen stoßen Funktionen an. Eine Übersetzung
+  // ══ EINGÄNGE UND ÜBERSETZUNGEN (docs/10 §10.9): nur Clients und Quellen stoßen Funktionen an. Eine Übersetzung
   //   (Uebersetze<TEin, TAus>) verbindet die Nachricht eines Clients mit dem Eingang eines Katalogs und die Ausgabe einer Funktion mit einem Command
   //   an ein Aggregat — Feld für Feld; was nicht nach Namen passt, nennt die ↦-Karte ausdrücklich ([Feld]). ══
   const komUeTyp=(ein,aus)=>"Uebersetze<"+ein+", "+aus+">";
@@ -3941,7 +3941,7 @@
   function komClientKopf(id,g,d,m,ev){const ziele=d.knoten.flatMap(k=>k.ein.filter(t=>!komIstAntwort(t)).map(t=>({k,t})));
     menueFix(ev.clientX,ev.clientY,"Kopf für "+(m||"die neue Nachricht"),[...(ziele.length?[{kopf:"↦ übersetzen in den Eingang von …"}]:[]),
       ...ziele.map(({k,t})=>({t:"↦ "+t+" ("+k.name+")",fn:()=>komKopfUebersetzung(t,ev,m)}))]);}
-  // Eine Kopf-Übersetzung (docs/plan-ohne-pipeline.md §3.4): eine Nachricht einer Domäne (neu, mit den Feldern des Eingangs, oder m) ↦ der Eingang t eines
+  // Eine Kopf-Übersetzung (docs/04 §4.4): eine Nachricht einer Domäne (neu, mit den Feldern des Eingangs, oder m) ↦ der Eingang t eines
   //   Graphen; danach, wer sie hineingibt.
   function komKopfUebersetzung(t,ev,m){const doms=[...new Set(MODEL.aggregate.map(A=>A.namespace))].sort();
     const anlegen=(ns,n)=>{ueNeu(ns,n,komBasis(t),[]);setTimeout(()=>komAkteurWahl(n,ev),0);};
@@ -3958,7 +3958,7 @@
       {trenn:1},{t:"＋ neuer Akteur …",fn:()=>frageFix(ev.clientX,ev.clientY,"👤 Neuer Akteur","","Er gibt "+m+" hinein (IDarf)",n=>{const f=nameFehler(n);if(f)return f;
         MODEL.akteure.push({_id:"ak"+(NID++),name:n,namespace:haeufigsterNs(MODEL.akteure)||defaultNsGlobal(),darf:[m],hoert:[]});gTitel("👤 "+n+" darf "+m);render();})},
       {hinweis:"Ohne Akteur gibt niemand "+m+" hinein — der Rand zeigt es an."}]);}
-  // „↦ ▣ Command an …“ an einer Nachricht eines Graphen: eine Übersetzung der Domäne (docs/plan-ohne-pipeline.md) nimmt sie nach ihrem Typ und macht
+  // „↦ ▣ Command an …“ an einer Nachricht eines Graphen: eine Übersetzung der Domäne (docs/04 §4.4) nimmt sie nach ihrem Typ und macht
   //   einen vorhandenen Command an ein Aggregat daraus oder einen neuen samt Decide. dom: nur die Aggregate dieser Domäne (etwa vom Band aus).
   function komCommandAn(typ,ev,dom){if(KOM)KOM.port=null;
     const eigene=MODEL.aggregate.filter(A=>!dom||A.namespace===dom),aggs=eigene.length?eigene:MODEL.aggregate;
@@ -3994,7 +3994,7 @@
       ...(offen.length?[]:[{hinweis:"Kein Graph auf der Fläche hat einen offenen Ausgang."}]),
       {trenn:1},{t:"＋ Graph an "+String(A.namespace).split(".").pop()+" binden …",fn:()=>flBandGraph(A.namespace,String(A.namespace).split(".").pop(),ev)}]);}
   // Ein Graph entsteht mit seinem ersten Knoten (ein leerer baut nicht, CQRS115): eine Funktion, eine Quelle oder ein Graph. Er liegt in einem Katalog
-  //   (docs/plan-ohne-pipeline.md, eine Anwendung hat keine Graphen): in dem seines ersten Knotens, sonst im ersten genutzten bzw. dem allgemeinen.
+  //   (docs/04 §4.4, eine Anwendung hat keine Graphen): in dem seines ersten Knotens, sonst im ersten genutzten bzw. dem allgemeinen.
   function graphNeuMitKnoten(ev,pos){const bk=komBaukasten();
     frageFix(ev.clientX,ev.clientY,"⬡ Neuer Graph",uniq("NeuerGraph"),"Danach: sein erster Knoten",n=>{const f=nameFehler(n);if(f)return f;
       if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
@@ -4081,7 +4081,7 @@
     if(KOM_NACH&&komDaten(KOM_NACH)){if(KOM){KOM.pfad.push(KOM_NACH);KOM.wahl=null;KOM.port=null;}else KOM={pfad:[KOM_NACH],reiter:"komposition",wahl:null};KOM_NACH=null;}
     if(KOM)komZeige();   // ein offenes Kompositions-Modal folgt dem neuen Board
   }
-  // „＋ Graph“ am Band einer Domäne (docs/plan-ohne-pipeline.md): ein Graph aus einem Katalog wird domänenspezifisch, indem eine Übersetzung dieser
+  // „＋ Graph“ am Band einer Domäne (docs/04 §4.4): ein Graph aus einem Katalog wird domänenspezifisch, indem eine Übersetzung dieser
   //   Domäne einen seiner Ausgänge nimmt — Graph wählen, Ausgang wählen, dann den Command an ein Aggregat dieser Domäne.
   function flBandGraph(dom,name,ev){const katGraphen=(MODEL.graphen||[]).filter(g=>funKatalog(g));
     if(!katGraphen.length){menueFix(ev.clientX,ev.clientY,"＋ Graph an "+name,[{hinweis:"Noch kein Graph in einem Katalog — erst dort anlegen: Funktionen verketten im Graph-Modal."},
@@ -4201,7 +4201,7 @@
     for(let i=0;i<200&&G_LAEUFT;i++)await new Promise(r=>setTimeout(r,50));
     if(document.activeElement&&gFokus())document.activeElement.blur();await gesteSenden();
     for(let i=0;i<200&&G_LAEUFT;i++)await new Promise(r=>setTimeout(r,50));}
-  // Kataloge (docs/plan-ohne-pipeline.md): anlegen (Projekt, Solution, Referenz der Übersetzungen) bzw. nutzen — eine Geste am Server, der
+  // Kataloge (docs/04 §4.4): anlegen (Projekt, Solution, Referenz der Übersetzungen) bzw. nutzen — eine Geste am Server, der
   //   danach kalt neu lädt; das neue Board kommt mit der Antwort.
   async function gKatalog(body,titel){await gesteFlush();G_LAEUFT=true;
     try{const r=await fetch("/api/werkbank/katalog",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});

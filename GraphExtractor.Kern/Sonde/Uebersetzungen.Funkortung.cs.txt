@@ -1,7 +1,7 @@
 using Abstractions;
 using Sondenkatalog.Katalog.Peilung;
 
-// SONDE — die Übersetzungen der Funkortung (docs/plan-ohne-pipeline.md), im Projekt der Übersetzungen (die Domäne bleibt rein): am Kopf die Nachricht
+// SONDE — die Übersetzungen der Funkortung (docs/04 §4.4), im Projekt der Übersetzungen (die Domäne bleibt rein): am Kopf die Nachricht
 // des Funkers in den Eingang des Katalogs (Frequenz nach Namen, die Stelle als Auftrag, die Messdauer als DauerMs ausdrücklich). Das Ergebnis wird ein
 // Command an die Peilstelle und ihre Antwort geht an die Peilung zurück — beide Übersetzungen legt das Gesten-Skript an (Gezeichnet.gesten.json) und
 // hängt sie hier an (dieselbe Datei für denselben Namespace).

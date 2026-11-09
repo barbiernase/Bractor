@@ -22,7 +22,7 @@ namespace Domain.SourceGeneration;
 /// Offen ist X (bzw. ein OneOf-Typargument), wenn es ein Interface, ein Typ-Parameter, <c>object</c> oder eine abstrakte
 /// Klasse ist. <c>Task</c>/<c>ValueTask</c>/<c>void</c> ohne Ergebnis sind erlaubt (reine Effekte, z. B. Projektionen).
 ///
-/// <b>CQRS114 — ein Decide gibt nur Events, Hinweise und Fristen aus</b> (docs/plan-katalog-und-graphen.md §1, Schritt 6): keinen Command, weder an ein
+/// <b>CQRS114 — ein Decide gibt nur Events, Hinweise und Fristen aus</b> (docs/03, docs/konzept-akteure.md §3): keinen Command, weder an ein
 /// Aggregat noch ohne Ziel. Was nach einem Fakt geschehen soll, stößt ein Client an, der darauf reagiert; Aggregate reden über Graphen und Clients.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]

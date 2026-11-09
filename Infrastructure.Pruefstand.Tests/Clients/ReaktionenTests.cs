@@ -14,7 +14,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Clients;
 
 /// <summary>
-/// Reaktionen eines Clients (docs/plan-katalog-und-graphen.md, Schritt 6): der Läufer liest ab dem gesicherten Stand, reagiert je Event-Typ, sendet
+/// Reaktionen eines Clients (docs/konzept-akteure.md §3): der Läufer liest ab dem gesicherten Stand, reagiert je Event-Typ, sendet
 /// mit Ids aus Reaktion, Position und Stelle und sichert den Stand erst nach den Antworten. Bewiesen gegen eine Leitung im Speicher: die Ids, der
 /// Stand, kein zweites Senden nach einem Neustart ab dem Stand, dieselben Ids ohne gesicherten Stand, das Wiederholen mit derselben Id bei Stille,
 /// mehrere Events an einer Position, ein Command ohne Ziel an den Kopf eines Graphen.

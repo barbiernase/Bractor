@@ -4,7 +4,7 @@ using Marten;
 using Funkortung.Ortung;
 using Sondenkatalog.Katalog.Peilung;
 
-// SONDE — im Speicher der Anwendung (docs/plan-ohne-pipeline.md): der Peilbuch-Speicher setzt die Lese-Fähigkeit des Katalogs um (CQRS124); der
+// SONDE — im Speicher der Anwendung (docs/04 §4.4): der Peilbuch-Speicher setzt die Lese-Fähigkeit des Katalogs um (CQRS124); der
 // Funker liegt absichtlich hier statt bei den Akteuren (die Lage-Prüfung muss ihn weisen). Der Graph der Ortung ist die Peilkette des Katalogs; was sie
 // domänenspezifisch macht, sind die Übersetzungen in Funkortung.Ortung.
 

@@ -246,7 +246,7 @@ public class FunktionsLaufzeitTests
     /// <summary>Die Kennung des Aufrufs, den <paramref name="von"/> mit seiner Ausgabe an <paramref name="stelle"/> bei <paramref name="ort"/> auslöst.</summary>
     private static Guid Danach(Guid von, string vonOrt, string ort, int stelle = 0, int auf = 0) => Kettenvertrag.Aufruf(Kettenvertrag.Weiter(von, vonOrt, stelle), ort, auf);
 
-    // ── Übersetzungen der Domäne (docs/plan-ohne-pipeline.md §3): nach Typ, inline im Kind des Knotens; eine Antwort gleich nach dem Senden; am Kopf
+    // ── Übersetzungen der Domäne (docs/04 §4.4): nach Typ, inline im Kind des Knotens; eine Antwort gleich nach dem Senden; am Kopf
     //    beim Annehmen (Verkettung.Ziele) ──────────
 
     [Fact]

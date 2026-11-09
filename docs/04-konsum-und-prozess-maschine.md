@@ -1,12 +1,13 @@
 # 04 — Konsum, Funktionen und Uhr
 
-Stand 2026-11-07, gegen den Code geprüft. Wie man Projektion, Reader, Funktion, Graph und Quelle schreibt, steht in [10](10-entwickler-api.md).
+Stand 2026-11-09, gegen den Code geprüft. Wie man Projektion, Reader, Funktion, Graph und Quelle schreibt, steht in [10](10-entwickler-api.md).
 
 Durabler Konsument des Logs ist nur die **Projektion**: sie schreibt ein Read-Model (replaybar); der Wecker am Commit weckt schnell, der Takt je
 Partition heilt verlorene Weckrufe, gelesen wird geordnet aus dem Event-Store (Invariante 1), der Fortschritt liegt durabel im Store. Gerechnet
 wird vor dem Aggregat in **Funktionsgraphen**: eine Funktion ist eine Klasse mit typisierten Ports, ein Graph nennt Funktionen als Knoten, jede
 Kante steht als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; ein Graph läuft als Instanz, jede Kopf-Nachricht startet eine Kette (jeder Schritt rechnet je Nachricht). Funktionen lesen nie das Log, zwischen ihnen
-fließen Commands; genau einmal wirkt, was einen Graphen verlässt, über die offenen Eingänge am Kopf und die Inbox der Ziele (§4.4). Eine **Quelle**
+fließen Commands; genau einmal wirkt, was einen Graphen verlässt, über die offenen Eingänge am Kopf und die Inbox der Ziele (§4.4). Funktionen und
+Graphen liegen **nur in Katalogen** (domänenneutral); domänenspezifisch machen sie die **Übersetzungen** einer Anwendung (§4.4). Eine **Quelle**
 ist eine Funktion des Katalogs am Kopf eines Graphen (§4.7). Was ein Baustein ist, folgt aus seiner Code-Form (Marker-Interface,
 Fähigkeits-Parameter, Signatur); einen zweiten Marker gibt es nicht. Zeit kommt über die **Uhr**: ein Decide setzt eine Frist, die Uhr sendet sie fällig.
 
@@ -246,17 +247,17 @@ je `Auf` der Eingang als Objekt, die Ausgaben in Reihenfolge, reflexionsfrei).
 **Zusammenführen, Einsammeln, Warten** stehen im Logik-Code, nicht in der Signatur. Mehrere Nachrichten, `T?`, `OneOf<…>` oder
 `IReadOnlyList<T>` als Eingang sind ein Formfehler (CQRS100, GR-EINGANG). Drei Wege, in dieser Reihenfolge:
 
-- **Die Nachricht trägt mit, was danach gebraucht wird.** Die Vorschau der Bildaufbereitung trägt die Datei der Quelle, so meldet der Eingang
-  das Bild aus ihr allein (`Domain.Pipeline/ImagePair/Bildeingang.cs`):
+- **Die Nachricht trägt mit, was danach gebraucht wird.** Die Vorschau der Bildaufbereitung trägt die Datei der Quelle, so deutet die letzte
+  Funktion das Bild aus ihr allein (`Bildvorschau.Katalog/Aufbereitung/Dateinamendeutung.cs`):
   ```csharp
-  public OneOf<NimmBildAuf, DateinameUnbekannt> Auf(VorschauErstellt vorschau) => …;
+  public OneOf<BildGedeutet, DateinameUnbekannt> Auf(VorschauErstellt vorschau) => …;
   ```
 - **Ein Knoten mit Zustand** nimmt jede Nachricht in einem eigenen `Auf` und hält die erste in `IZustand<T>`, bis die zweite da ist (bis dahin ein
   leerer Strom) — das Prognosemodell der Sonde (`Vorhersage.cs.txt`) führt so zwei Glättungen zusammen.
 - **Ein Aggregat** zählt oder führt zusammen, wenn das Ergebnis fachlich zählt: je Element meldet sich ein Command, das Decide zählt mit und
   schließt nach dem letzten ab (Zähl-Aggregat, §4.5); Warten auf Zeit ist eine Frist im Decide.
 
-**Graph.** Ein Graph ist ein Record `: IGraph` in `Graphen.cs` der Abläufe; jeder Parameter ist ein **Knoten** (Name = Konfig-Schlüssel, Typ = eine
+**Graph.** Ein Graph ist ein Record `: IGraph` in `Graphen.cs` eines Katalogs (docs/07 §7.2); jeder Parameter ist ein **Knoten** (Name = Konfig-Schlüssel, Typ = eine
 Funktion oder ein anderer Graph), die Reihenfolge bedeutet nichts. Dieselbe Funktion darf mehrfach stehen — zwei Knoten mit je eigener Konfig
 (Vorschau und Daumenbild aus derselben Skalierung). Jede innere **Kante** steht am nehmenden Knoten: `[Von(nameof(A), nameof(B))]` nennt die Knoten
 desselben Graphen, von denen er bekommt; eine genannte Quelle speist die Ports, deren Typ sie ausgibt, und mindestens einen. Jedes Argument ist
@@ -280,38 +281,46 @@ public sealed record Bildaufbereitung(
     [Von(nameof(Einlesen))] Bildverkleinerung Verkleinern,
     [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast,
     [Von(nameof(Kontrast))] Dateinamendeutung Deuten) : IGraph;
-// Domain.Pipeline/ImagePair/Graphen.cs — der Ablauf der Domäne: Quelle, Graph aus dem Katalog als Schachtel, die Übersetzung in den Command an das Paar
-public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] Bildaufbereitung Aufbereitung,
-    [Von(nameof(Aufbereitung)), Feld(nameof(NimmBildAuf.AggregateId), nameof(BildGedeutet.Paar))] Uebersetze<BildGedeutet, NimmBildAuf> Aufnehmen) : IGraph;
+// Bildvorschau.Katalog/Aufbereitung/Graphen.cs — Quelle am Kopf, die Bildaufbereitung als Schachtel; das gedeutete Bild verlässt den Graphen
+public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] Bildaufbereitung Aufbereitung) : IGraph;
 ```
 Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.txt`, Kartenausgabe): dieselbe Funktion zweimal, eine Kette gleichen
 Typs, ein Knoten mit `[Kopf]` und `[Von]`, ein Graph im Graphen, dessen Ausgang ein anderer Knoten per `Von(nameof(Filter))` nimmt.
 
-**Übersetzung.** Funktionen eines Katalogs und Aggregate kennen einander nicht; nur der Graph der Anwendung kennt beide, und an den Grenzen steht
-ein Knoten `Uebersetze<TEin, TAus>` (`Abstractions/Uebersetzung.cs`). Er macht aus einem Command ohne Ziel genau einen Command — ohne Ziel an einen
-Knoten, mit Ziel an ein Aggregat —, Feld für Feld und ohne Logik: je Parameter von `TAus` (sein Konstruktor) eine Quelle, in dieser Reihenfolge
-`[Feld(nameof(Ziel), nameof(Quelle))]` am Knoten (ausdrücklich darf ein `Guid` ein `Id<T>` füllen und umgekehrt), eine Eigenschaft von `TEin` mit
-gleichem Namen und implizit zuweisbarem Typ (gleich, Basis bzw. Schnittstelle, `T` → `T?`, erweiternde Zahlen), der Standardwert des Parameters —
-sonst CQRS119. Fremde Enums, Wertobjekte und Ids anderer Aggregate werden nie still zugeordnet; die Id des Ziel-Aggregats kommt aus der Nachricht.
-`TEin` ist ein Command ohne Ziel, `TAus` ein Command (CQRS121). Für Kanten, Köpfe und Ausgänge gilt sie als Knoten mit einer Operation; nie zwei
-hintereinander, und am Kopf gibt sie an Knoten des Graphen oder an ein Aggregat (CQRS115). Kein Command eines Katalogs verlässt einen Graphen der
-Anwendung — jeder Fall wird übersetzt oder von einem Knoten genommen (CQRS120; ein Graph, der als Schachtel steht, gibt dem äußeren). Die Lesart
-ist `Uebersetzungsform` (per Link in Generator, Analyzer und Extractor). Sie läuft **inline**, wo die Nachricht gerade ist, ohne Parent, Zustand,
-Konfig oder Rechner: hinter einer Funktion rechnet das Kind sie vor dem Emitter (ein Command an ein Aggregat sofort, Id aus Aufruf, Ort der
-Übersetzung und Stelle; einer an Knoten mit dem Erfolg an den Parent, der die Wege der Übersetzung nimmt), am Kopf der Graph-Actor beim Annehmen
-(ihr Ergebnis an die Knoten, die sie nennen, oder als Command an sein Aggregat; die Kette ist fertig, wenn das Ziel entschied). Der Wirker in der
-Spur ist ihr Knoten (`knoten:<instanz>/<knoten>`). Der `GraphGenerator` erzeugt je Übersetzung einen `UebersetzungPlan` mit der Rechnung und ihren
-Wegen.
+**Übersetzung.** Funktionen und Graphen eines Katalogs kennen keine Domäne (ein Bezug ist ein `Guid`, keine `Id<T>`), und die Domäne kennt keinen
+Katalog. Domänenspezifisch macht sie eine **Übersetzung** der Anwendung: ein Record `: IUebersetzung<TEin, TAus>` in
+`<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` (`Abstractions/Uebersetzung.cs`; das Projekt referenziert Domäne und Kataloge, docs/07). Sie
+macht aus einer Nachricht genau einen Command, Feld für Feld und ohne Logik: je Parameter von `TAus` (sein Konstruktor) eine Quelle, in dieser
+Reihenfolge `[Feld(nameof(Ziel), nameof(Quelle))]` am Record (ausdrücklich darf ein `Guid` ein `Id<T>` füllen und umgekehrt), eine Eigenschaft von
+`TEin` mit gleichem Namen und implizit zuweisbarem Typ (gleich, Basis bzw. Schnittstelle, `T` → `T?`, erweiternde Zahlen), der Standardwert des
+Parameters — sonst CQRS119. Fremde Enums, Wertobjekte und Ids anderer Aggregate werden nie still zugeordnet. `TEin` ist ein Command ohne Ziel oder
+ein Event (eine Antwort), `TAus` ein Command (CQRS121); ein Graph nennt eine Übersetzung nie als Knoten (CQRS115). Die Lesart ist
+`Uebersetzungsform` (per Link in Generator, Analyzer und Extractor), der `GraphGenerator` erzeugt `GeneratedUebersetzungen` (je Übersetzung Typen
+und Rechnung).
+
+**Wohin, sagt der Typ** (Invariante 3), für alle Instanzen gleich — wer je Instanz anderes will, braucht andere Typen:
+- **Ausgang und Zwischenstand:** jede Ausgabe eines laufenden Graphen mit Typ `TEin` übersetzt das Kind gleich nach dem Rechnen (inline, ohne
+  Parent, Zustand, Konfig oder Rechner) — einen Command an ein Aggregat sendet es sofort (Id aus Aufruf, Ort der Übersetzung und Stelle), einen
+  Command ohne Ziel gibt es an den Kopf genau eines Graphen. Ein Ausgang eines laufenden Katalog-Graphen ohne Empfänger ist CQRS120.
+- **Antwort:** antwortet das Aggregat auf den Command einer Übersetzung mit einem Event, das eine Übersetzung nimmt, rechnet das Kind sie gleich
+  weiter (Antwort-Übersetzung; das Event muss eines sein, das das Decide des übersetzten Commands ausgeben kann, CQRS123). Ihr Ergebnis geht an den
+  Kopf eines Graphen — darum nimmt ein Graph mit Quelle keine Antwort (er hat keinen Kopf), sie geht an einen eigenen Graphen.
+- **Kopf:** einen Command ohne Ziel eines Clients (eine Nachricht der Domäne) übersetzt der Eingang in den Eingang eines Graphen
+  (`Verkettung.Ziele`).
+Der Wirker in der Spur ist die Übersetzung (`uebersetzung:<Name>`). Ein Graph eines Katalogs **läuft** in einer Anwendung, wenn eine Übersetzung oder
+ein Akteur ihn bindet.
 ```csharp
-// Pruefdomaene.Pipeline/Skalierung/Graphen.cs — Client ↦ Katalog Rechenwerk ↦ Aggregat
-public sealed record Hochrechnung(
-    [Kopf, Feld(nameof(Skalieren.Bezug), nameof(HochrechnungAngefordert.Stelle))] Uebersetze<HochrechnungAngefordert, Skalieren> Hinein,
-    [Von(nameof(Hinein))] Skalierer Rechnen,
-    [Von(nameof(Rechnen)), Feld(nameof(MeldeAusreisser.AggregateId), nameof(Skaliert.Bezug))] Uebersetze<Skaliert, MeldeAusreisser> Melden) : IGraph;
+// Domain.Uebersetzungen/ImagePair/Uebersetzungen.cs — das gedeutete Bild jeder Instanz der Bildaufbereitung bzw. des Linienimports wird ein Paar
+[Feld(nameof(NimmBildAuf.AggregateId), nameof(BildGedeutet.Paar))]
+public sealed record Aufnehmen : IUebersetzung<BildGedeutet, NimmBildAuf>;
+
+// Pruefdomaene.Uebersetzungen/Messung/Uebersetzungen.cs — Client ↦ Katalog Rechenwerk (Kopf) und dessen Ergebnis ↦ Aggregat
+[Feld(nameof(Skalieren.Bezug), nameof(HochrechnungAngefordert.Stelle))]
+public sealed record Hinein : IUebersetzung<HochrechnungAngefordert, Skalieren>;
 ```
 
 **Instanz.** Ein Graph ist eine Blaupause und läuft erst als **Instanz**: eine Datei je Instanz, `umgebungen/<name>/graphen/<instanz>.json`, mit
-`Graph`, bei einem Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt), wahlweise dem `Rechner`, auf dem sie läuft, und je Knoten
+`Graph`, bei einem Quellkopf dem `Akteur` (er gibt hinein, was aus den Ausgängen des Graphen nach der Übersetzung entsteht), wahlweise dem `Rechner`, auf dem sie läuft, und je Knoten
 die Felder seiner Konfig-Records sowie
 `Parallel` (Standard 256), `Warteschlange` (10 000), `Wiederholungen` (3), `Vorwaermen`, `Zeitlimit` und `Technik` (die Umsetzung je Technik,
 nötig bei mehreren):
@@ -321,8 +330,8 @@ nötig bei mehreren):
   "Aufbereitung.Verkleinern": { "Wiederholungen": 1, "AusgabePfad": "${env:HOME}/cqrs-sim/${branch}/preprocessed" } }
 ```
 Dieselbe Blaupause läuft beliebig oft (zwei Dateiwächter auf zwei Verzeichnissen sind zwei Instanzen des Linienimports). Der Start prüft jede
-Instanz (`GraphInstanzen.Aus`): den Graphen gibt es, jeder Schlüssel ist ein Knoten, der Akteur existiert und darf jeden Command, der den Graphen
-verlässt (`IDarf`), und ein Graph mit Command-Kopf läuft je Umgebung genau einmal. Die Werte der Konfig-Records und die Wahl der Technik bindet
+Instanz (`GraphInstanzen.Aus`): den Graphen gibt es, jeder Schlüssel ist ein Knoten, der Akteur existiert und darf jeden Command, der aus einem
+Ausgang nach der Übersetzung entsteht (`IDarf`), und ein Graph mit Command-Kopf läuft je Umgebung genau einmal. Die Werte der Konfig-Records und die Wahl der Technik bindet
 `BindeTechnik` streng (fehlend, unbekannt, mehrdeutig, Kreis über Technik: Boot-Fehler). Ohne Umgebung (Prüfstände, Tests) läuft je Graph eine
 Instanz unter seinem Namen, ein Graph mit Quelle nur, wenn der Test die Konfig der Quelle nennt. Den Akteur einer Instanz mit Command-Kopf erbt
 die Kette vom Auslöser; eine Quellinstanz trägt den Akteur ihrer Datei.
@@ -428,25 +437,23 @@ Decide entscheidet jeden Schritt aus seinem Zustand, sein Log ist der Ablauf. Ag
 reagieren, miteinander (ein Decide gibt keinen Command aus, CQRS114). Die Zugehörigkeit eines fremden Events zu einem Ablauf ist ein **fachliches
 Feld** (A2), kein Korrelations-Header.
 
-**Beispiel: der Auftrag der Prüfdomäne** (`Pruefdomaene/Auftrag/`, `Pruefdomaene.Pipeline/Auftrag/`). Ein Auftrag reserviert einen Posten und belegt
-ein Kontingent (zwei unabhängige Zweige); erst wenn beide gelungen sind, ist er bestätigt; scheitert einer, wird zurückgenommen, was gelang.
-- `StarteAuftrag` → `AuftragGestartet`; der `ReaktionsWorker` hört es und gibt den Command ohne Ziel `AuftragAbzuwickeln` an den Kopf des Graphen
-  `Auftragsablauf`:
-  die Funktion `Auftragsabwicklung` gibt `ReservierePosten` und `BelegeKontingent` aus, beide mit dem **Beleg** `(Belegart.Auftrag, AuftragId)` als
-  fachlichem Feld.
-- Posten und Kontingent entscheiden für sich (`PostenReserviert`, `ReservierungAbgelehnt` …) und tragen den Beleg im Event. Die Funktion hört sie
-  als Antwort auf ihre Commands und gibt `VermerkeReservierung`, `VermerkeBelegung` bzw. `VermerkeAbsage` an den Auftrag.
+**Beispiel: der Auftrag der Prüfdomäne** (`Pruefdomaene/Auftrag/`, `Pruefdomaene.Client.Worker/Reaktionslauf.cs`). Ein Auftrag reserviert einen
+Posten und belegt ein Kontingent (zwei unabhängige Zweige); erst wenn beide gelungen sind, ist er bestätigt; scheitert einer, wird zurückgenommen,
+was gelang. Gerechnet wird hier nichts — der Ablauf besteht aus Fakten und den Reaktionen eines Clients:
+- `StarteAuftrag` → `AuftragGestartet`; der `ReaktionsWorker` hört es und gibt `ReservierePosten` und `BelegeKontingent`, beide mit dem **Beleg**
+  `(Belegart.Auftrag, AuftragId)` als fachlichem Feld.
+- Posten und Kontingent entscheiden für sich (`PostenReserviert`, `ReservierungAbgelehnt` …) und tragen den Beleg im Event; der Worker hört sie
+  und gibt `VermerkeReservierung`, `VermerkeBelegung` bzw. `VermerkeAbsage` an den Auftrag.
 - Das Decide des Auftrags entscheidet **Join** und **Kompensation**: sind Reservierung und Belegung vermerkt, folgt `AuftragBestaetigt`; kommt
   eine Absage, folgt `AuftragGescheitert` und für jeden gelungenen Zweig ein Fakt, das den Gegenzug anfordert (`PostenfreigabeAngefordert`,
   `KontingententlastungAngefordert`) — genau einmal, weil der Zustand es sich merkt; eine verspätete Rückmeldung nimmt sich selbst zurück. Der
-  `ReaktionsWorker` macht daraus `PostenFreizugeben` bzw. `KontingentZuEntlasten`, die Auftragsabwicklung sendet den Gegenzug (`GibPostenFrei`,
-  `EntlasteKontingent`).
+  Worker sendet daraus den Gegenzug (`GibPostenFrei`, `EntlasteKontingent`).
 
-**Je im Graphen, Zählen im Aggregat** (`Pruefdomaene.Pipeline/Verteilung/`): ist die Quelle einer Verteilung reserviert (`QuelleReserviert`), gibt der
-`ReaktionsWorker` `Zubuchen` an den Kopf der `Zubuchung`. Der Graph `Zubuchung` teilt auf (`Zielaufteilung`, ein Strom: je Ziel ein `ZielZubuchen`, je
-Element eine Nachricht) und bucht je Ziel (`Zielbuchung` → `BuchePostenZu`); die Antwort `PostenZugebucht` meldet er der Verteilung
-(`VermerkeZubuchung`). Die Verteilung zählt mit (`ZielZugebucht`) und schließt nach dem letzten Ziel ab (`VerteilungAbgeschlossen` mit der Summe) —
-das Einsammeln steht im Aggregat, nicht im Graphen.
+**Rechnen im Graphen, Zählen im Aggregat** (`Pruefwerk.Katalog/Messung/`, `Pruefdomaene.Uebersetzungen/Messung/`): ein neuer Messwert geht über die
+Übersetzung in den Kopf der Merkmalbildung; sie bildet das Merkmal, prüft auf Ausreißer und schätzt mit Zustand und einer Lese-Fähigkeit des
+Katalogs (umgesetzt vom Store der Messreihe), die Übersetzungen machen aus Ausreißer und Schätzung Commands an die Messstelle. Was eingesammelt
+oder gezählt wird, entscheidet ein Aggregat (Zähl-Aggregat: je Element meldet sich ein Command, das Decide zählt mit und schließt nach dem
+letzten ab) — nicht der Graph.
 
 **Frist statt Zeitlimit.** Ein Decide gibt `Frist<TCmd>(Befehl, Nach)` aus; die Uhr (§4.7) sendet den Befehl fällig an dasselbe Aggregat, und
 dessen Decide entscheidet, ob er noch etwas bedeutet. Beispiel: der Trainings-Wächter der Beispieldomäne setzt beim Start eines Trainingslaufs
@@ -499,7 +506,7 @@ Inbox des Ziels einmal. In Sim verschiebt ein Uhr-Versatz die Datenbank-Uhr (Dur
 
 **Quellen** sind Funktionen aus dem Katalog des Frameworks (`Core/Katalog/`). Eine Quellfunktion hat `Lausche(CancellationToken)` statt `Auf` —
 ein `IAsyncEnumerable` ihrer Commands — und steht am Kopf eines Graphen, als dessen einziger Kopf (CQRS115); die Domäne nennt sie als Knoten
-(`Linienimport(Dateiwaechter Eingang, Bildaufbereitung Aufbereitung, Uebersetze<BildGedeutet, NimmBildAuf> Aufnehmen)`), ihre Werte stehen in der Instanz. Was sie meldet, ist ein gewöhnlicher
+(`Linienimport(Dateiwaechter Eingang, Bildaufbereitung Aufbereitung)` im Katalog `Bildvorschau`), ihre Werte stehen in der Instanz. Was sie meldet, ist ein gewöhnlicher
 Command ohne Ziel (`Abstractions/Katalog.cs`), den der nächste Knoten nimmt; Codegen und Leitung kennen die Katalog-Commands wie die der Domäne.
 
 | Katalogfunktion | meldet | Konfig (am Knoten) | Zustand |

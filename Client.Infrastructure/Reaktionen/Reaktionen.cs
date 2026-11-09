@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace Client.Infrastructure.Reaktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// REAKTIONEN EINES CLIENTS (docs/plan-katalog-und-graphen.md §1, Schritt 6): nur Clients und Quellen stoßen Funktionen an. Was nach einem Fakt
+// REAKTIONEN EINES CLIENTS (docs/konzept-akteure.md §3): nur Clients und Quellen stoßen Funktionen an. Was nach einem Fakt
 // weitergehen soll, stößt ein Client an — er hört das Event (IHoert seines Akteurs), liest, was er braucht (Queries), und gibt Commands hinein
 // (IDarf). Genau einmal ohne Festhalten beim Framework: der Client liest das Log ab seiner gesicherten Position (LiesLog, nur Hörbares, bis zum
 // Horizont), jede Command-Id leitet der Läufer aus Reaktion, Position und Stelle ab — nach einem Neustart rechnet er dieselben Ids, und die Inbox

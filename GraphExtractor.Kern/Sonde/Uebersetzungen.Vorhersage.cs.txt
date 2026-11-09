@@ -1,7 +1,7 @@
 using Abstractions;
 using Sondenkatalog.Katalog.Vorhersage;
 
-// SONDE — die Übersetzungen des Wetterdiensts (docs/plan-ohne-pipeline.md): der Kopf der Prognose aus der Nachricht des Warndiensts (die Station als
+// SONDE — die Übersetzungen des Wetterdiensts (docs/04 §4.4): der Kopf der Prognose aus der Nachricht des Warndiensts (die Station als
 // Guid ausdrücklich, die Temperatur nach Namen), die Prognose des Katalogs als Command an die Station.
 
 namespace Wetterdienst.Vorhersage;

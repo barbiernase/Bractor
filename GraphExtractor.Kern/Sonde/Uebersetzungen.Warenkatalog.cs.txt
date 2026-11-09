@@ -2,7 +2,7 @@ using Abstractions;
 using Warenkatalog.Import;
 using Sondenkatalog.Katalog.Import;
 
-// SONDE — die Übersetzungen des Warenkatalogs (docs/plan-ohne-pipeline.md): der Import an den Vorgang, seine ANTWORT in den Kopf des Zeilenimports,
+// SONDE — die Übersetzungen des Warenkatalogs (docs/04 §4.4): der Import an den Vorgang, seine ANTWORT in den Kopf des Zeilenimports,
 // Fortschritt und Bilanz an den Vorgang, jeder Artikel an seinen Stream — Guid ⇄ Id ausdrücklich, der Rest nach Namen.
 
 namespace Warenkatalog.Uebersetzungen;

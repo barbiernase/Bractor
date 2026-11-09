@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// CQRS119/CQRS121 (GR-UEBERSETZUNG): eine Übersetzung ist ein Record der Domäne (<c>IUebersetzung&lt;TEin, TAus&gt;</c>, docs/plan-ohne-pipeline.md)
+/// CQRS119/CQRS121 (GR-UEBERSETZUNG): eine Übersetzung ist ein Record der Domäne (<c>IUebersetzung&lt;TEin, TAus&gt;</c>, docs/04 §4.4)
 /// und ordnet nach der einen Lesart (<c>Uebersetzungsform</c>) zu — <c>[Feld]</c>, gleicher Name mit implizit zuweisbarem Typ, Standardwert, sonst ein
 /// Fehler; <c>Guid</c> ⇄ <c>Id&lt;T&gt;</c> nur ausdrücklich. Sie nimmt einen Command ohne Ziel oder ein Event (eine Antwort) und erzeugt einen Command;
 /// ein Graph nennt sie nie als Knoten (CQRS115).

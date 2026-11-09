@@ -37,8 +37,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **W6** Keine Simulation: Durchspielen = echter Host in Umgebung `sim` gegen eine eigene, echte DB.
 - **W7** Umgebung = ein Ordner (`umgebungen/<name>/umgebung.json`, je Instanz eines Graphen `graphen/<instanz>.json`); Struktur ist Code,
   Auswahl und Werte sind Konfig.
-- **W8** Quellen = Funktionen aus dem Katalog des Frameworks (`Core/Katalog`: `Dateiwaechter`, `Taktgeber`, `Webhook`) am Kopf eines Graphen; die
-  Domäne nennt sie als Knoten, ihre Werte stehen in der Instanz.
+- **W8** Quellen = Funktionen aus dem Katalog des Frameworks (`Core/Katalog`: `Dateiwaechter`, `Taktgeber`, `Webhook`) am Kopf eines Graphen; ein
+  Graph eines Katalogs nennt sie als Knoten, ihre Werte stehen in der Instanz.
 - **W9** Spur: jeder Log-Eintrag trägt `ursache`, `wirker`, `ueber`, `stand`; der Wirker ist die Karten-Id.
 - **W10** Keine Reflection, auch nicht in Werkzeugen (= Inv. 4).
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
@@ -69,7 +69,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Graphen gibt es nur dort); jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch mehrfach). Domänenspezifisch macht ihn eine
   **Übersetzung**: `[Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))] record X : IUebersetzung<TEin, TAus>` in
   `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs`, Feld für Feld ohne Logik, Routing über den Typ (jede Ausgabe eines laufenden Graphen, ein
-  Client-Command am Kopf, eine Antwort auf ihren Command; docs/plan-ohne-pipeline.md, CQRS119–121/123). Nur das Projekt der Übersetzungen (und
+  Client-Command am Kopf, eine Antwort auf ihren Command; docs/04 §4.4, CQRS119–121/123). Nur das Projekt der Übersetzungen (und
   Speicher, Akteure, Leitung, Komposition) referenziert Kataloge: **die Domäne bleibt rein**. **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
   jeder Kopf als `[Kopf]` (nimmt von außen, was keine Quelle speist; je Eingangstyp genau einer); nur eine Quelle trägt keins; was kein Knoten über
   `Von` nimmt, verlässt den Graphen (`GeneratedGraphen`, eine Lesart `Graphform`). Zwischen den Bausteinen bleibt es beim Typ-Routing mit genau einem
@@ -206,7 +206,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - Werkbank-Abnahme (echte Werkbank auf einer Kopie, eigene Sim-DB, sequentiell, nach `dotnet build`):
   `dotnet test Werkbank.Abnahme.Tests/Werkbank.Abnahme.Tests.csproj`
 - Werkbank: `dotnet run --project Werkbank` → http://localhost:5178/editor/ (in `.claude/launch.json` als „Werkbank“). ⟳ baut und startet den echten
-  Host in der gewählten Umgebung; die Fläche in sechs Spalten, Graph, Aggregat und Store von innen (docs/10 §10.9).
+  Host in der gewählten Umgebung; die Fläche in sieben Spalten (mit Übersetzungen), Graph, Aggregat und Store von innen (docs/10 §10.9).
 - Hosts: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `Host.Blazor -- --umgebung sim-main` (Sim-DB `cqrs_sim_<branch>` über `CQRS_BRANCH`).
 - Multi-Node (3 Nodes + Consul): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (`docs/06-transport-multinode-betrieb.md`).
 - Gate „frischer Checkout baut“ (vor jedem Push): `./pruefe-checkout.sh` (Worktree des Commits: ignorierte Quellen, Build, Drift, Prüfstand)
@@ -228,4 +228,4 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Offen, Schulden | `docs/13-reifegrad-schulden-bewertung.md` §13.0 |
 | Tests, Zahlen, Messwerte | `docs/12-tests-und-vermessung.md` |
 
-Gelöschte Dokumente (Werkbank-Konzept, Editor- und LLM-Konzepte, die Pläne Pub/Sub-Neustrukturierung, Commands und Funktionsgraphen, Ausdrückliche Kanten in Graphen, Graphen ohne Lauf-Steuerung und Eine Instanz läuft auf ihrem Rechner) liegen im Git-Verlauf.
+Gelöschte Dokumente (Werkbank-Konzept, Editor- und LLM-Konzepte samt „Funktionen im Editor“, die Pläne Pub/Sub-Neustrukturierung, Commands und Funktionsgraphen, Ausdrückliche Kanten in Graphen, Graphen ohne Lauf-Steuerung, Eine Instanz läuft auf ihrem Rechner, Katalog und Graphen sowie Ohne Pipeline) liegen im Git-Verlauf.

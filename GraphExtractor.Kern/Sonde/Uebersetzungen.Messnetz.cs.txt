@@ -1,7 +1,7 @@
 using Abstractions;
 using Sondenkatalog.Katalog.Messung;
 
-// SONDE — die Übersetzungen des Messnetzes (docs/plan-ohne-pipeline.md): der geprüfte Messwert an den Sensor, der Alarm der Schichtleitung in den
+// SONDE — die Übersetzungen des Messnetzes (docs/04 §4.4): der geprüfte Messwert an den Sensor, der Alarm der Schichtleitung in den
 // Kopf der Störungsöffnung und deren Ergebnis an den Störungsfall, die Alarmierung hinein und jede Erreichung an den Fall (Guid ⇄ Id ausdrücklich).
 
 namespace Anlagen.Messung;

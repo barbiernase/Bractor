@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <!-- Ein Funktionskatalog (docs/konzept-funktionen-im-editor.md): die Bildaufbereitung — einlesen, verkleinern, Kontrast ausgleichen —, ihre
+    <!-- Ein Funktionskatalog (docs/10 §10.9): die Bildaufbereitung — einlesen, verkleinern, Kontrast ausgleichen —, ihre
          Nachrichten, Konfig und Technik (OpenCV), domänenneutral: er referenziert nur Abstractions, nie eine Anwendung. -->
     <PropertyGroup>
         <TargetFramework>net9.0</TargetFramework>

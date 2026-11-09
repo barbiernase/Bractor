@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <!-- Ein Funktionskatalog (docs/plan-katalog-und-graphen.md): Funktionen, ihre Nachrichten, Konfig, Technik und Graphen, domänenneutral —
+    <!-- Ein Funktionskatalog (docs/07 §7.2): Funktionen, ihre Nachrichten, Konfig, Technik und Graphen, domänenneutral —
          er referenziert nur Abstractions (und andere Kataloge), nie eine Anwendung. -->
     <PropertyGroup>
         <TargetFramework>net9.0</TargetFramework>

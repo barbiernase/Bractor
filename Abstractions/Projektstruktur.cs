@@ -31,7 +31,7 @@ static class Projektstruktur
         /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reader.</summary>
         Leseseite,
         /// <summary><c>&lt;Wurzel&gt;.Uebersetzungen</c>: die Übersetzungen (<c>IUebersetzung&lt;TEin, TAus&gt;</c>) — die eine Naht zwischen Katalogen und
-        /// Domäne (docs/plan-ohne-pipeline.md). Sie referenziert die Schreibseite und die Kataloge, deren Graphen sie bindet; so bleibt die Domäne rein.</summary>
+        /// Domäne (docs/07 §7.2). Sie referenziert die Schreibseite und die Kataloge, deren Graphen sie bindet; so bleibt die Domäne rein.</summary>
         Uebersetzungen,
         /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure und Clients — der äußerste Ring.</summary>
         Akteure,
@@ -42,10 +42,10 @@ static class Projektstruktur
         /// <summary><c>&lt;Wurzel&gt;.Laufzeit</c>: die Komposition — Framework + Rollen-Projekte, die generierten Laufzeit-Tabellen.</summary>
         Komposition,
         /// <summary>
-        /// <c>&lt;Name&gt;.Katalog</c>: ein FUNKTIONSKATALOG (docs/plan-katalog-und-graphen.md) — Funktionen, ihre Nachrichten (Commands ohne Ziel,
+        /// <c>&lt;Name&gt;.Katalog</c>: ein FUNKTIONSKATALOG (docs/07 §7.2) — Funktionen, ihre Nachrichten (Commands ohne Ziel,
         /// Hinweise), Konfig-Records, Technik und Graphen, domänenneutral: er referenziert nur Abstractions (und andere Kataloge), keine Anwendung.
         /// Keine Rolle EINER Anwendung: seine Wurzel ist sein eigener Name; eine Anwendung nutzt ihn per Referenz (ihre Domäne übersetzt ihn,
-        /// docs/plan-ohne-pipeline.md). Funktionen und Graphen gibt es nur hier.
+        /// docs/07 §7.2). Funktionen und Graphen gibt es nur hier.
         /// </summary>
         Katalog,
     }
@@ -72,7 +72,7 @@ static class Projektstruktur
         /// <summary>Ein Graph (<c>record … : IGraph</c>, Knoten als Parameter): im Katalog, in <c>Graphen.cs</c>.</summary>
         Graph,
         /// <summary>Eine Übersetzung (<c>record … : IUebersetzung&lt;TEin, TAus&gt;</c>): bei den Übersetzungen der Anwendung, in <c>Uebersetzungen.cs</c>
-        /// — sie macht einen Graphen aus einem Katalog domänenspezifisch (docs/plan-ohne-pipeline.md).</summary>
+        /// — sie macht einen Graphen aus einem Katalog domänenspezifisch (docs/07 §7.2).</summary>
         Uebersetzung,
         /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — im Katalog,
         /// je Typ eine eigene Datei.</summary>
@@ -164,7 +164,7 @@ static class Projektstruktur
     public static readonly IReadOnlyList<string> KatalogDarfReferenzieren = new[] { "Abstractions", "Core" };
 
     /// <summary>
-    /// Der allgemeine Katalog (docs/konzept-funktionen-im-editor.md §2): ein Katalog wie jeder andere, der die Commands hält, die mehrere Kataloge
+    /// Der allgemeine Katalog (docs/10 §10.9): ein Katalog wie jeder andere, der die Commands hält, die mehrere Kataloge
     /// teilen; jeder Katalog darf ihn nutzen. Die Werkbank legt ihn beim ersten Gebrauch an.
     /// </summary>
     public const string AllgemeinerKatalog = "Allgemein.Katalog";
@@ -254,7 +254,7 @@ static class Projektstruktur
                 return new[] { Rolle.Uebersetzungen };
             case Primitive.StoreFaehigkeit:
                 // Eine Fähigkeit deklariert die Leseseite für ihre Projektionen und Reader — oder ein Katalog für seine Funktionen (mit seinen eigenen
-                //   Typen); umgesetzt wird sie im Speicher der Anwendung (docs/plan-ohne-pipeline.md §2.3).
+                //   Typen); umgesetzt wird sie im Speicher der Anwendung (docs/07 §7.2).
                 return new[] { Rolle.Leseseite, Rolle.Katalog };
             case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel:
             case Primitive.Projektion: case Primitive.Reader:
@@ -328,7 +328,7 @@ static class Projektstruktur
             return $"'{typ}' ist {Text(p)} und gehört nicht in einen Katalog ({projekt}) — ein Katalog kennt keine Domäne; {Text(p)} liegt in einer "
                 + $"Anwendung ({string.Join(" oder ", erlaubt.Select(r => "<Wurzel>" + Von(r).Suffix))}, docs/07 §7.2)";
         // In einem Projekt der Anwendung: das Rollen-Projekt der Anwendung (ein Katalog ist eine eigene Entscheidung, keine Korrektur der Lage) — gibt es
-        //   keins, gehört die Primitive in einen Katalog (Funktionen, Graphen, Konfig, Technik: domänenneutral, docs/plan-ohne-pipeline.md).
+        //   keins, gehört die Primitive in einen Katalog (Funktionen, Graphen, Konfig, Technik: domänenneutral, docs/07 §7.2).
         var ziele = erlaubt.Where(r => r != Rolle.Katalog).Select(r => Projekt(wurzel, r)).ToList();
         return ziele.Count == 0
             ? $"'{typ}' ist {Text(p)} und gehört nach <Name>{Katalog.Suffix}, nicht nach {projekt} — eine Anwendung hat keine Funktionen und Graphen, sie "

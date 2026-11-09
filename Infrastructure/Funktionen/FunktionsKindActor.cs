@@ -178,7 +178,7 @@ public sealed class FunktionsKindActor(
     }
 
     /// <summary>
-    /// Eine Übersetzung der Domäne inline (docs/plan-ohne-pipeline.md §3): aus der Ausgabe <paramref name="x"/> genau eine Nachricht, Feld für Feld. Ein
+    /// Eine Übersetzung der Domäne inline (docs/04 §4.4): aus der Ausgabe <paramref name="x"/> genau eine Nachricht, Feld für Feld. Ein
     /// Command an ein Aggregat geht sofort über den Emitter (Id aus Aufruf, Ort der Übersetzung und Stelle); jedes Event der Antwort, das eine Übersetzung
     /// nimmt, rechnet sie gleich weiter (eine Antwort-Übersetzung; Kennung aus Aufruf, Ort, Stelle und Nummer, Ursache das Event). Ein Command ohne Ziel
     /// geht an den Kopf der Instanz, die ihn nimmt. Die Spur nennt die Übersetzung als Wirker.

@@ -255,7 +255,7 @@ public class SichtTests
         kanten.Should().Contain($"{(string?)abfrage["id"]} -Rohwert/quelle-> {messkette}");
         kanten.Should().Contain($"{theke}|aus -LeiheAus/schreiben-> agg:Leihvorgang");
         // Ein Decide gibt keinen Command aus: den Kopf der Mahnbemessung gibt das Archiv hinein (es reagiert auf die Mahnung) — über die Übersetzung,
-        //   die aus seiner Nachricht den Eingang des Katalogs macht (docs/plan-ohne-pipeline.md).
+        //   die aus seiner Nachricht den Eingang des Katalogs macht (docs/04 §4.4).
         var archiv = "akt:" + Id(board, "akteure", "name", "Archiv");
         string Ue(string name) => "ue:" + Id(board, "uebersetzungen", "name", name);
         kanten.Should().Contain($"{archiv}|aus -BemesseMahnung/schreiben-> {Ue("MahnungBemessen")}");

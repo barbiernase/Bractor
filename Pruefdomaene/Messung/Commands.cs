@@ -14,7 +14,7 @@ public record MeldeAusreisser(Id<Messstelle> AggregateId, double Wert) : IComman
 
 /// <summary>
 /// Ein Client fordert die Hochrechnung eines Werts für eine Messstelle an — eine Nachricht der Domäne, die eine Kopf-Übersetzung in den Eingang des
-/// Graphen <c>Hochrechnung</c> aus dem Katalog Rechenwerk übersetzt; das Ergebnis kommt als Ausreißer an die Messstelle (docs/plan-ohne-pipeline.md §3).
+/// Graphen <c>Hochrechnung</c> aus dem Katalog Rechenwerk übersetzt; das Ergebnis kommt als Ausreißer an die Messstelle (docs/04 §4.4).
 /// </summary>
 public sealed record HochrechnungAngefordert(Id<Messstelle> Stelle, double Wert) : ICommand;
 

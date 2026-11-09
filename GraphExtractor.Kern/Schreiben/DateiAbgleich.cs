@@ -669,7 +669,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (attribute.Any(a => Name(a) == Scaffolder.KopfAttribut), vons.SelectMany(Namen).ToList(), vons.Where(Verlierbar).SelectMany(Namen).ToList());
     }
 
-    // ── Übersetzung (docs/plan-ohne-pipeline.md): ihre [Feld] am Record gehören dem Modell; Ein und Aus stehen im Marker (eine neue Übersetzung legt
+    // ── Übersetzung (docs/04 §4.4): ihre [Feld] am Record gehören dem Modell; Ein und Aus stehen im Marker (eine neue Übersetzung legt
     //    der Scaffolder an) ──
     private (string, string)? UebersetzungFelder(string text, Uebersetzung u)
     {

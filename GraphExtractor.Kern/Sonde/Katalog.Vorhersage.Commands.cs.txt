@@ -1,6 +1,6 @@
 using Abstractions;
 
-// SONDE — fremder Katalog, Bereich Vorhersage (docs/plan-ohne-pipeline.md): die Prognose und die Kartenausgabe domänenneutral — eine Station ist ein
+// SONDE — fremder Katalog, Bereich Vorhersage (docs/04 §4.4): die Prognose und die Kartenausgabe domänenneutral — eine Station ist ein
 // Guid, keine Id einer Anwendung.
 
 namespace Sondenkatalog.Katalog.Vorhersage;

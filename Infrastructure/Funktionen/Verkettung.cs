@@ -30,7 +30,7 @@ public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, Funkti
     public IReadOnlySet<Type> ImGraphen { get; init; } = KeineKanten;
 
     /// <summary>
-    /// Die Übersetzungen der Domänen nach Typ (docs/plan-ohne-pipeline.md §3): jede Ausgabe, die eine nimmt, rechnet das Kind inline — ein Ausgang wie
+    /// Die Übersetzungen der Domänen nach Typ (docs/04 §4.4): jede Ausgabe, die eine nimmt, rechnet das Kind inline — ein Ausgang wie
     /// ein Zwischenstand; ebenso jedes Event, mit dem ein Aggregat den Command einer Übersetzung beantwortet.
     /// </summary>
     public Uebersetzungen Uebersetzungen { get; init; } = Uebersetzungen.Leer;
@@ -69,7 +69,7 @@ public sealed class Verkettung(IReadOnlyDictionary<Type, string[]> hoerer, Ueber
 
     /// <summary>
     /// Wohin die Nachricht eines Clients am Kopf geht: an die Instanzen, deren Graph sie am Kopf nimmt — sonst übersetzt (eine Kopf-Übersetzung der
-    /// Domäne, docs/plan-ohne-pipeline.md §3.4) an die Instanzen, deren Graph das Ergebnis nimmt. Je Ziel die Nachricht, die dort ankommt.
+    /// Domäne, docs/04 §4.4) an die Instanzen, deren Graph das Ergebnis nimmt. Je Ziel die Nachricht, die dort ankommt.
     /// </summary>
     public IReadOnlyList<(string Instanz, object Nachricht)> Ziele(object nachricht)
     {

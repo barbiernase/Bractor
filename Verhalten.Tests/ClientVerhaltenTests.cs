@@ -354,7 +354,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     [Fact]
     public async Task Eine_Reaktion_wirkt_genau_einmal_auch_nach_einem_Neustart_des_Clients_mit_und_ohne_gesicherten_Stand()
     {
-        // Schritt 6 (docs/plan-katalog-und-graphen.md): ein Client reagiert auf ein Event, das sein Akteur hört — er liest ab seinem Stand, die
+        // Schritt 6 (docs/konzept-akteure.md §3): ein Client reagiert auf ein Event, das sein Akteur hört — er liest ab seinem Stand, die
         //   Command-Id leitet der Läufer aus Reaktion, Position und Stelle ab. Neustart mit Stand: nichts noch einmal; ohne Stand (verloren): dieselbe
         //   Id noch einmal, die Inbox des Aggregats verwirft sie.
         var paar = await b.KomplettesPaarAsync();

@@ -422,7 +422,7 @@ public sealed class GraphRaw
 }
 
 /// <summary>
-/// Eine Übersetzung der Domäne (<c>record X : IUebersetzung&lt;TEin, TAus&gt;</c>, docs/plan-ohne-pipeline.md): Ein, Aus, die <c>[Feld]</c> wie sie
+/// Eine Übersetzung der Domäne (<c>record X : IUebersetzung&lt;TEin, TAus&gt;</c>, docs/04 §4.4): Ein, Aus, die <c>[Feld]</c> wie sie
 /// dastehen und abgeleitet die Zuordnung (Lesart <c>Infrastructure.SourceGeneration.Uebersetzungsform</c>).
 /// </summary>
 public sealed class UebersetzungRaw
