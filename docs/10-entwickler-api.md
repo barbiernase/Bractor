@@ -452,12 +452,10 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   einem Kopf dafür (Verbindung). Der Baukasten öffnet per Klick und setzt per „＋“ als Knoten ein (Funktion, Graph als Schachtel, Quelle) — gezogen
   wird nicht mehr. „＋ Technik/Konfig“ am Knoten (Konstruktor), Klick auf eine Kante (verlierbar, lösen), ✕ am Knoten: aus dem Graphen bzw. samt
   Funktion, wenn sie sonst in keinem Knoten steht. Ein Doppelklick öffnet eine Funktion von innen, einen Graphen eine Ebene tiefer.
-- **Übersetzungen und Eingänge:** eine Übersetzung ist **generisch** (`IUebersetzung<TEin, TAus>`): ihr Modal (Doppelklick auf die ↦-Karte) zeigt
-  oben, was sie nimmt und was sie macht — beide Typen per Klick wählbar („▾“: `TEin` ein Ausgang oder Zwischenstand eines Graphen, eine Nachricht
-  eines Clients oder ein Event als Antwort, `TAus` ein Command an ein Aggregat oder an den Kopf eines Graphen; der Server schreibt die Basisliste
-  um) —, darunter, was dort verdrahtet ist (Graph, Akteur, Aggregat; ein Klick öffnet es, „⚠“ wenn niemand liefert bzw. nimmt). „＋“ im Kopf der
-  Spalte Übersetzungen legt eine neue an: erst was sie nimmt, dann was sie macht, die Domäne folgt aus dem Command (sonst gefragt). Darunter links die
-  Felder von `TEin`, rechts die Parameter von `TAus` mit ihrer Regel („=“ nach Namen, „⇐“ ausdrücklich, „∅“ Standardwert, „⚠“ offen samt Meldung); „＋“ an einem Ziel hebt die
+- **Übersetzungen und Eingänge:** eine Übersetzung entsteht **auf der Fläche**: ein Klick auf eine Nachricht am Ausgang eines Graphen (auch ein
+  Zwischenstand) hebt die Commands an den Eingängen der Aggregate hervor, ein Klick auf einen davon legt die Übersetzung an — ein neuer Knoten
+  „Nachricht ↦ Command“ in der Spalte Übersetzungen (Name `<Nachricht>Zu<Command>`, die Id des Ziels ausdrücklich, wenn genau ein Feld passt).
+  Ein Doppelklick auf den Knoten öffnet die Verknüpfung der Felder: links die Felder von `TEin`, rechts die Parameter von `TAus` mit ihrer Regel („=“ nach Namen, „⇐“ ausdrücklich, „∅“ Standardwert, „⚠“ offen samt Meldung); „＋“ an einem Ziel hebt die
   passenden Felder hervor (der Server rechnet sie), ein Klick schreibt `[Feld]`, ✕ löst es. Am Eingang eines Graphen „＋ Eingang“: eine Quelle (nur
   ohne Kopf) oder ein Client — direkt (ein Akteur darf den Eingang des Katalogs) oder eine neue bzw. vorhandene Nachricht der Domäne, die eine
   Kopf-Übersetzung in den Eingang macht (die neue Nachricht bekommt dessen Felder), danach der Akteur, der sie hineingibt (`IDarf`). „＋“ an einem
