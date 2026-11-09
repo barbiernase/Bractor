@@ -312,7 +312,7 @@ ein Akteur ihn bindet.
 ```csharp
 // Domain.Uebersetzungen/ImagePair/Uebersetzungen.cs — das gedeutete Bild jeder Instanz der Bildaufbereitung bzw. des Linienimports wird ein Paar
 [Feld(nameof(NimmBildAuf.AggregateId), nameof(BildGedeutet.Paar))]
-public sealed record Aufnehmen : IUebersetzung<BildGedeutet, NimmBildAuf>;
+public sealed record BildGedeutetZuNimmBildAuf : IUebersetzung<BildGedeutet, NimmBildAuf>;   // so legt die Fläche sie an
 
 // Pruefdomaene.Uebersetzungen/Messung/Uebersetzungen.cs — Client ↦ Katalog Rechenwerk (Kopf) und dessen Ergebnis ↦ Aggregat
 [Feld(nameof(Skalieren.Bezug), nameof(HochrechnungAngefordert.Stelle))]

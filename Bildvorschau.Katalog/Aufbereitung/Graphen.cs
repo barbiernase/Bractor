@@ -19,7 +19,7 @@ public sealed record Bildaufbereitung(
 /// <summary>
 /// Der Linienimport (docs/04 §4.7): ein Dateiwächter am Kopf (eine Quellfunktion aus dem Katalog des Frameworks), danach die Bildaufbereitung — je
 /// gefundene Datei ein Lauf. Eine Instanz je Linie (je Verzeichnis), dieselbe Blaupause beliebig oft. Domänenneutral: das gedeutete Bild verlässt den
-/// Graphen, eine Übersetzung der Domäne macht es zu einem Command (die Bildaufnahme: <c>Domain.ImagePair.Aufnehmen</c>); der Akteur der Instanz
+/// Graphen, eine Übersetzung der Domäne macht es zu einem Command (etwa an das Bildpaar); der Akteur der Instanz
 /// darf, was daraus wird.
 /// </summary>
 public sealed record Linienimport(
