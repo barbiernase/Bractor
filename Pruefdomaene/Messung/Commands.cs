@@ -11,3 +11,9 @@ public record VermerkeSchaetzung(Id<Messstelle> AggregateId, double Erwartet, in
 /// <summary>Ein Messwert über der Schwelle (die Prüfung rechnet im Host oder draußen).</summary>
 public record MeldeAusreisser(Id<Messstelle> AggregateId, double Wert) : ICommand<Messstelle>;
 
+
+/// <summary>
+/// Ein Client fordert die Hochrechnung eines Werts für eine Messstelle an — eine Nachricht der Domäne, die eine Kopf-Übersetzung in den Eingang des
+/// Graphen <c>Hochrechnung</c> aus dem Katalog Rechenwerk übersetzt; das Ergebnis kommt als Ausreißer an die Messstelle (docs/plan-ohne-pipeline.md §3).
+/// </summary>
+public sealed record HochrechnungAngefordert(Id<Messstelle> Stelle, double Wert) : ICommand;

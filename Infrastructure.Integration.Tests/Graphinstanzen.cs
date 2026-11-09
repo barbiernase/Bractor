@@ -5,8 +5,8 @@ namespace Infrastructure.Integration.Tests;
 /// <summary>
 /// Die Instanzen der Graphen der Beispieldomäne für die Hosts der Integrations-Tests (je Graph eine, wie <c>umgebungen/sim-main/graphen</c>): die
 /// Bildaufbereitung (aus dem Katalog) mit Parallel und Wiederholungen ihrer drei Bild-Knoten und dem Ausgabe-Pfad — mit <paramref name="eingang"/> im
-/// Linienimport unter einem Dateiwächter auf diesem Verzeichnis, sonst in der Bildaufnahme (Kopf DateiGefunden) —, die übrigen mit den Standards. Die Arbeit der Akteure
-/// (Klassifizierer, TrainingsSystem) kommt ohne Datei dazu.
+/// Linienimport unter einem Dateiwächter auf diesem Verzeichnis, sonst für sich (Kopf DateiGefunden) —, die übrigen mit den Standards. Das gedeutete
+/// Bild übersetzt die Domäne (Domain.ImagePair.Aufnehmen).
 /// </summary>
 internal static class Graphinstanzen
 {
@@ -18,10 +18,10 @@ internal static class Graphinstanzen
             if (mitPfad && ausgabe is not null) k.Werte["AusgabePfad"] = ausgabe;
             return k;
         }
-        const string vor = "Aufbereitung.";
+        var vor = eingang is null ? "" : "Aufbereitung.";
         var bild = new GraphInstanzKonfig
         {
-            Graph = eingang is null ? "Bildaufnahme" : "Linienimport",
+            Graph = eingang is null ? "Bildaufbereitung" : "Linienimport",
             Akteur = eingang is null ? null : "KameraSystem",
             Knoten = { [vor + "Einlesen"] = Bild(false), [vor + "Verkleinern"] = Bild(true), [vor + "Kontrast"] = Bild(true) },
         };

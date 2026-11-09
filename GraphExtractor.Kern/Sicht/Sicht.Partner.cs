@@ -42,13 +42,7 @@ public sealed partial class Sicht
         {
             FunktionsPartner(nm, ein, aus);
             AkteurePartner(ein, nm);
-            // Übersetzungen (Uebersetze<TEin, TAus>): sie nehmen TEin und erzeugen TAus — ihr Graph ist der Partner.
-            foreach (var g in _graphen)
-                foreach (var u in Alle(g["uebersetzungen"]))
-                {
-                    if (S(u, "aus") == nm) P(ein, "gr:" + S(g, "_id"), "↦ " + S(g, "name") + "." + S(u, "knoten") + " (aus " + S(u, "ein") + ")");
-                    if (S(u, "ein") == nm) P(aus, "gr:" + S(g, "_id"), "↦ " + S(g, "name") + "." + S(u, "knoten") + " (nach " + S(u, "aus") + ")");
-                }
+            UebersetzungsPartner(nm, ein, aus);
             if (ein.Count == 0) P(ein, null, "Außenwelt (Client)", "abgeleitet: kein interner Erzeuger · kein Akteur");
             foreach (var d in _decider) if (S(d, "command") == nm) P(aus, "dec:" + S(d, "_id"), "Decide @ " + Agg(d, "— kein Aggregat"));
         }
@@ -58,6 +52,7 @@ public sealed partial class Sicht
                 if (Alle(d["ergibt"]).Any(o => S(o, "event") == nm))
                     P(ein, "dec:" + S(d, "_id"), "Decide(" + (S(d, "command") is { Length: > 0 } c ? c : "?") + ") @ " + Agg(d, "—"));
             FunktionsPartner(nm, ein, aus);
+            UebersetzungsPartner(nm, ein, aus);
             HD("projektion", (o, hd, id) =>
             {
                 if (HandleEvents(hd).Contains(nm)) P(aus, id, HText(o, hd));
@@ -85,6 +80,16 @@ public sealed partial class Sicht
             if (aus.Count == 0) P(aus, null, "Außenwelt (Client)", "abgeleitet · kein Akteur");
         }
         return (ein, aus);
+
+        // Übersetzungen der Domäne (docs/plan-ohne-pipeline.md): sie nehmen TEin (geht an ▶) und erzeugen TAus (◀ kommt aus).
+        void UebersetzungsPartner(string n, List<Partner> e, List<Partner> a)
+        {
+            foreach (var u in _uebersetzungen)
+            {
+                if (Basis(S(u, "aus")) == n) P(e, "ue:" + S(u, "_id"), "↦ " + S(u, "name") + " (aus " + S(u, "ein") + ")");
+                if (Basis(S(u, "ein")) == n) P(a, "ue:" + S(u, "_id"), "↦ " + S(u, "name") + " (nach " + S(u, "aus") + ")");
+            }
+        }
 
         // Funktionen: ein Auf, das die Nachricht ausgibt (◀ kommt aus), bzw. sie als Eingang nimmt (geht an ▶) — nur aus der Signatur.
         void FunktionsPartner(string n, List<Partner> e, List<Partner> a)

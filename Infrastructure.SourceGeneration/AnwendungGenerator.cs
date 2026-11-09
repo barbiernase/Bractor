@@ -120,6 +120,7 @@ namespace Infrastructure.SourceGeneration
             {
                 "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsBaustein> Bausteine => {0}.Alle",
                 "IReadOnlyList<global::Infrastructure.Funktionen.GraphPlan> Graphen => global::Infrastructure.Funktionen.GeneratedGraphen.Alle",
+                "IReadOnlyList<global::Infrastructure.Funktionen.UebersetzungPlan> Uebersetzungen => global::Infrastructure.Funktionen.GeneratedUebersetzungen.Alle",
             });
             Tabelle(sb, "TechnikTabelle", "ITechnikTabelle", "global::Infrastructure.Funktionen.GeneratedTechnik", new[]
             {

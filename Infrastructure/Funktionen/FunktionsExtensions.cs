@@ -13,7 +13,8 @@ public static class GraphInstanzExtensions
     /// </summary>
     public static GraphInstanzen BindeGraphen(this IServiceCollection services, UmgebungKonfig u)
     {
-        var instanzen = GraphInstanzen.Aus(u.Graphen, Anwendung.Funktionen.Graphen, Anwendung.Akteure.Rechte);
+        var instanzen = GraphInstanzen.Aus(u.Graphen, Anwendung.Funktionen.Graphen, Anwendung.Akteure.Rechte,
+            new Uebersetzungen(Anwendung.Funktionen.Uebersetzungen));
         services.Replace(ServiceDescriptor.Singleton(instanzen));
         Console.WriteLine($"[CQRS] Instanzen: {string.Join(", ", instanzen.Alle.Select(i => i.Name + " (" + i.Graph.Name + ")").DefaultIfEmpty("keine"))}");
         return instanzen;

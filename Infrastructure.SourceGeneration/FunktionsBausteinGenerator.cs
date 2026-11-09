@@ -68,7 +68,7 @@ namespace Infrastructure.SourceGeneration
                 if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && (f.Aufs.Count > 0 || f.Lausche != null)) gut.Add(f);
             }
             // Generische Funktionen: je Typargument, mit dem ein Graph sie als Knoten nennt, ein Baustein (Bildverkleinerung<Vorschau>).
-            var konstruiert = typen.Where(Graphform.IstGraph).SelectMany(g => Graphform.Lies(g).Knoten).Where(k => k.Uebersetzung == null).Select(k => k.Typ)
+            var konstruiert = typen.Where(Graphform.IstGraph).SelectMany(g => Graphform.Lies(g).Knoten).Select(k => k.Typ)
                 .Where(k => k.IsGenericType).GroupBy(Funktionsform.Voll).Select(x => x.First()).OrderBy(Funktionsform.Voll, System.StringComparer.Ordinal);
             foreach (var t in konstruiert)
             {

@@ -27,7 +27,7 @@ public class BildeingangTests
 
     private static BildGedeutet Gedeutet(string name) => (BildGedeutet)new Dateinamendeutung().Auf(Aufbereitet(name)).Value;
 
-    // Was die Übersetzung des Ablaufs rechnet (Uebersetze<BildGedeutet, NimmBildAuf>, AggregateId ← Paar, der Rest nach Namen).
+    // Was die Übersetzung der Domäne rechnet (Domain.ImagePair.Aufnehmen: BildGedeutet → NimmBildAuf, AggregateId ← Paar, der Rest nach Namen).
     private static NimmBildAuf Aufnahme(string name) => Aufnahme(Gedeutet(name));
     private static NimmBildAuf Aufnahme(BildGedeutet g) => new(new(g.Paar), g.PairKey, g.ProduziertAm, g.AufgenommenAm, g.UrsprungsPfad, g.Version,
         g.OriginalDateiname, g.DateigroesseBytes, g.BreitePixel, g.HoehePixel, g.ErstelltAm, g.Pfad);

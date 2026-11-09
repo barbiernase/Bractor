@@ -107,7 +107,7 @@ public sealed partial class Sicht
             knoten.Add(o);
         }
         // Wo eine Kante an einer Schachtel tatsächlich beginnt bzw. endet: an den Knoten ihrer Ausgänge bzw. Köpfe für diesen Typ.
-        // Ein Ausgang der Schachtel kommt von seinen Knoten; ein Zwischenstand (Abgriff einer Übersetzung) von dem inneren Knoten, der ihn ausgibt.
+        // Ein Ausgang der Schachtel kommt von seinen Knoten (sonst von dem inneren Knoten, der ihn ausgibt).
         IEnumerable<string> Quellen(string n, string typ)
         {
             if (!innen.TryGetValue(n, out var f)) return [pfad + n];
@@ -117,7 +117,7 @@ public sealed partial class Sicht
         IEnumerable<string> Ziele(string n, string typ) => innen.TryGetValue(n, out var f)
             ? Alle(f["koepfe"]).Where(a => Basis(S(a, "typ")) == Basis(typ)).SelectMany(a => L(a, "knoten")).Distinct() : [pfad + n];
         foreach (var e in Alle(k["kanten"]))
-            foreach (var v in S(e, "innen").Length > 0 && innen.ContainsKey(S(e, "von")) ? [pfad + S(e, "von") + "." + S(e, "innen")] : Quellen(S(e, "von"), S(e, "typ")))
+            foreach (var v in Quellen(S(e, "von"), S(e, "typ")))
                 foreach (var z in Ziele(S(e, "nach"), S(e, "typ")))
                     kanten.Add(new JsonObject
                     {
@@ -140,11 +140,8 @@ public sealed partial class Sicht
     {
         var gid = "gr:" + S(g, "_id");
         var knoten = Alle(g["knoten"]).ToList();
-        // Eine Übersetzung nimmt TEin und gibt TAus (aus ihrer Zuordnung, die der Server rechnet); sonst die Ports der Funktion bzw. des Graphen.
-        var uebersetzungen = Alle(g["uebersetzungen"]).ToDictionary(u => S(u, "knoten"), u => u, StringComparer.Ordinal);
-        var ports = knoten.ToDictionary(k => S(k, "name"), k => uebersetzungen.TryGetValue(S(k, "name"), out var u)
-            ? (Ein: new List<string> { S(u, "ein") }, Aus: new List<string> { S(u, "aus") }, Art: "uebersetzung", Karte: (string?)null)
-            : KnotenPorts(S(k, "typ")), StringComparer.Ordinal);
+        // Die Ports der Funktion bzw. des Graphen (eine Übersetzung ist kein Knoten: sie lebt in der Domäne).
+        var ports = knoten.ToDictionary(k => S(k, "name"), k => KnotenPorts(S(k, "typ")), StringComparer.Ordinal);
         // Tiefe in der Kette: 0 für Köpfe und Quellen, sonst eins mehr als die tiefste Quelle in [Von] (kreisfrei, CQRS115; begrenzt zur Sicherheit).
         var tiefe = new Dictionary<string, int>(StringComparer.Ordinal);
         int Tiefe(string n, int rest)
@@ -164,26 +161,12 @@ public sealed partial class Sicht
         foreach (var kn in knoten)
         {
             var n = S(kn, "name");
-            // Eine Antwort-Übersetzung (TEin ist ein Event) nimmt die Antwort des Aggregats auf den Command der Übersetzung in ihrem [Von] (Graphform).
-            if (uebersetzungen.TryGetValue(n, out var un) && Sorte(S(un, "ein")) == "event")
-            {
-                foreach (var v in L(kn, "von").Where(v => ports.TryGetValue(v, out var pv) && pv.Art == "uebersetzung"))
-                    kanten.Add(new JsonObject { ["von"] = v, ["nach"] = n, ["typ"] = S(un, "ein"), ["verlierbar"] = false, ["antwort"] = true });
-                continue;
-            }
-            // Eine Übersetzung, die einen Graphen nennt, greift auch seine Zwischenstände ab (Abgriff, Graphform): alles, was seine Funktionen ausgeben.
-            var abgriff = uebersetzungen.ContainsKey(n);
             foreach (var v in L(kn, "von").Where(ports.ContainsKey))
-                foreach (var a in abgriff && ports[v].Art == "graph" && GraphNamens(Basis(typVon[v])) is { } ig
-                             ? ports[v].Aus.Concat(InnereFunktionen(ig).SelectMany(f => Alle(f["eingaenge"]).SelectMany(e => L(e, "ausgaben")))).Distinct().ToList()
-                             : ports[v].Aus)
+                foreach (var a in ports[v].Aus)
                     foreach (var t in ports[n].Ein.Where(e => e == a || (Basis(e) == Basis(a) && Args(a).Length > 0 && Args(e) == Args(typVon[v]))))
                     {
                         innen.Add(v + "|" + Basis(t));
-                        var e = new JsonObject { ["von"] = v, ["nach"] = n, ["typ"] = t, ["verlierbar"] = L(kn, "verlierbar").Contains(v) };
-                        // Ein Abgriff mit Innen = nameof(…): die Kante kommt genau von diesem Knoten im Graphen (die flache Ansicht löst den Pfad auf).
-                        if (abgriff && S(kn, "innen").Length > 0) e["innen"] = S(kn, "innen");
-                        kanten.Add(e);
+                        kanten.Add(new JsonObject { ["von"] = v, ["nach"] = n, ["typ"] = t, ["verlierbar"] = L(kn, "verlierbar").Contains(v) });
                     }
         }
         var koepfe = new JsonArray();
@@ -214,11 +197,6 @@ public sealed partial class Sicht
                 ["ein"] = Arr(ein), ["aus"] = Arr(aus),
             };
             if (karte != null) o["karte"] = karte;
-            if (uebersetzungen.TryGetValue(n, out var ue))
-            {
-                o["uebersetzung"] = ue.DeepClone();
-                o["felder"] = (kn["felder"] as JsonArray ?? new JsonArray()).DeepClone();
-            }
             if (BausteinFunktion(Basis(S(kn, "typ"))) is { } f)
             {
                 o["konstruktor"] = new JsonArray(BausteinKonstruktor(f).GroupBy(p => S(p, "typ")).Select(x => (JsonNode)KonstruktorChip(f, x.First())).ToArray());

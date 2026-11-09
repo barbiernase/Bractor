@@ -67,45 +67,40 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
 
     private static async Task<string[]> Ids(string domaene) => (await Befunde(domaene)).Select(d => d.Id).ToArray();
 
+    // Ein Graph liegt im Katalog und ist domänenneutral (docs/plan-ohne-pipeline.md): bindet die Domäne ihn an (hier gibt ein Akteur an seinen Kopf),
+    //   braucht jeder Command ohne Ziel, der ihn verlässt, einen Empfänger — eine Übersetzung der Domäne, die seinen Typ nimmt, oder den Kopf eines Graphen.
+    private const string Rechenkatalog = """
+        namespace Rechen.Katalog {
+        public record Rechne(int N) : ICommand;
+        public record Gerechnet(Guid Bezug, int N) : ICommand;
+        public sealed class Rechner : IFunktion { public Gerechnet Auf(Rechne r) => default!; }
+        public sealed record Kette([Kopf] Rechner R) : IGraph;
+        }
+        """;
+
     [Fact]
-    public async Task Ein_Katalog_Command_der_einen_Graphen_der_Anwendung_verlaesst_ist_CQRS120()
+    public async Task Ein_angebundener_Katalog_Graph_ohne_Uebersetzung_seines_Ausgangs_ist_CQRS120()
     {
-        var befunde = await Befunde("""
-            public record Vermerke(int N) : ICommand;
-            public sealed record Roh([Kopf] Rechen.Katalog.Rechner R) : IGraph;
-            public sealed record Rechnung([Kopf] Rechen.Katalog.Rechner R) : IGraph;
-            public sealed record Aussen([Kopf] Rechnung Innen, [Von(nameof(Innen))] Uebersetze<Rechen.Katalog.Gerechnet, Vermerke> U) : IGraph;
-            """, katalog: """
-            namespace Rechen.Katalog {
-            public record Rechne(int N) : ICommand;
-            public record Gerechnet(int N) : ICommand;
-            public sealed class Rechner : IFunktion { public Gerechnet Auf(Rechne r) => default!; }
-            }
-            """);
+        var befunde = await Befunde("public sealed record Nutzer : IAkteur, IDarf<Rechen.Katalog.Rechne>;", katalog: Rechenkatalog);
         befunde.Where(d => d.Id == GesamtbildAnalyzer.VerlaesstId).Select(d => d.GetMessage()).Should().ContainSingle()
-            .Which.Should().StartWith("'Roh'", "nur Roh lässt Gerechnet hinaus — Rechnung steht als Schachtel in Aussen, und dort wird übersetzt");
+            .Which.Should().StartWith("'Kette'").And.Contain("Gerechnet").And.Contain("IUebersetzung<Gerechnet, …>");
     }
 
-    // Ein Graph im Katalog ist eine Blaupause (docs/konzept-funktionen-im-editor.md §3): seine offenen Outputs sind seine Signatur, übersetzt wird erst
-    //   dort, wo er als Knoten eines Graphen der Anwendung steht; seine Köpfe empfangen nichts, solange er nicht dort steht.
     [Fact]
-    public async Task Ein_Graph_im_Katalog_ist_eine_Blaupause_Outputs_und_Koepfe_zaehlen_erst_in_der_Anwendung()
+    public async Task Eine_Uebersetzung_der_Domaene_nimmt_den_Ausgang_eines_Katalog_Graphen_nach_seinem_Typ()
     {
         var befunde = await Befunde("""
             public sealed record Nutzer : IAkteur, IDarf<Rechen.Katalog.Rechne>;
-            public sealed record Roh([Kopf] Rechen.Katalog.Rechner R) : IGraph;
-            """, katalog: """
-            namespace Rechen.Katalog {
-            public record Rechne(int N) : ICommand;
-            public record Gerechnet(int N) : ICommand;
-            public sealed class Rechner : IFunktion { public Gerechnet Auf(Rechne r) => default!; }
-            public sealed record Kette([Kopf] Rechner R) : IGraph;
-            }
-            """);
-        befunde.Where(d => d.Id is GesamtbildAnalyzer.EmpfaengerId or GesamtbildAnalyzer.VerlaesstId).Select(d => d.GetMessage())
-            .Should().NotContain(m => m.Contains("Kette"), "der Katalog-Graph läuft nicht für sich — weder sein Output noch sein Kopf zählt")
-            .And.Contain(m => m.StartsWith("'Gerechnet'") && m.Contains("Roh.R"), "der Graph der Anwendung lässt Gerechnet weiter unübersetzt hinaus");
+            [Feld(nameof(Eroeffne.AggregateId), nameof(Rechen.Katalog.Gerechnet.Bezug))] public sealed record Vermerken : IUebersetzung<Rechen.Katalog.Gerechnet, Eroeffne>;
+            """, katalog: Rechenkatalog);
+        befunde.Where(d => d.Id is GesamtbildAnalyzer.EmpfaengerId or GesamtbildAnalyzer.VerlaesstId).Should().BeEmpty(
+            "Gerechnet nimmt die Übersetzung Vermerken — der Graph bleibt neutral, die Domäne macht ihn spezifisch");
     }
+
+    [Fact]
+    public async Task Ein_Graph_im_Katalog_ohne_Anbindung_ist_eine_Blaupause()
+        => (await Befunde("", katalog: Rechenkatalog)).Where(d => d.Id is GesamtbildAnalyzer.EmpfaengerId or GesamtbildAnalyzer.VerlaesstId)
+            .Should().BeEmpty("niemand gibt an seinen Kopf, keine Übersetzung nimmt seinen Ausgang — er läuft nicht");
 
     [Fact]
     public async Task Eine_geschlossene_Domaene_ist_still()

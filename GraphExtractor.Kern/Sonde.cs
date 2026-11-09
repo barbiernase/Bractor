@@ -52,7 +52,7 @@ public static class Sonde
         // Ziel: ein Projekt, das Aggregate trägt (dort laufen die Domänen-Generatoren, der Vertrag ist referenziert).
         var ziel = lage.Analyse.Where(a => lage.AggregatAssemblies.Contains(a.Compilation.AssemblyName ?? ""))
             .OrderBy(a => a.Projekt.Name, StringComparer.Ordinal).First().Projekt;
-        var (fork, katalog) = MitKatalog(solution, solutionDir);
+        var (fork, katalog) = MitKatalog(solution, solutionDir, ziel.Id);
         foreach (var (name, text) in Quelltexte())
             fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), name, text, folders: new[] { "__sonde" },
                 filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
@@ -116,7 +116,7 @@ public static class Sonde
             endstand.Add((d.FilePath!, (await d.GetTextAsync()).ToString(), d.Project.Id == katalog, d.Project.AssemblyName));
             gezeichnet.Add(Path.GetFullPath(d.FilePath!));
         }
-        (fork, katalog) = MitKatalog(solution, solutionDir);
+        (fork, katalog) = MitKatalog(solution, solutionDir, ziel.Id);
         // Jede Datei wieder in ihr Projekt (die Sonde im Ziel, was den Katalog nennt bei den Abläufen, der Katalog für sich).
         foreach (var (pfad, text, imKatalog, projekt) in endstand)
             fork = imKatalog
@@ -243,8 +243,8 @@ public static class Sonde
         foreach (var t in typen.Where(t => t.ContainingType == null))
         {
             var form = Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) ? Infrastructure.SourceGeneration.Funktionsform.Lies(t).Fehler.Select(f => ("CQRS100", f.Text))
-                : Infrastructure.SourceGeneration.Graphform.IstGraph(t) && Infrastructure.SourceGeneration.Graphform.Lies(t) is var g
-                    ? g.Fehler.Select(f => ("CQRS115", f.Text)).Concat(g.Regelfehler.Select(f => (f.Id, f.Text)))
+                : Infrastructure.SourceGeneration.Graphform.IstGraph(t) ? Infrastructure.SourceGeneration.Graphform.Lies(t).Fehler.Select(f => ("CQRS115", f.Text))
+                : Infrastructure.SourceGeneration.Uebersetzungsform.IstUebersetzung(t) ? Infrastructure.SourceGeneration.Uebersetzungsform.Lies(t).Fehler.Select(f => (f.Id, f.Text))
                 : [];
             foreach (var (id, text) in form)
             {
@@ -434,7 +434,7 @@ public static class Sonde
     /// Der Fork mit dem Katalog-Projekt der Sonde: Optionen, Referenzen und Analyzer wie der Vertrag bzw. die Abläufe, eine Projekt-Referenz nur auf
     /// Abstractions — und die Abläufe der Anwendung nutzen ihn (wie nach der Geste „neuer Katalog“), so liegt er in der Hülle der Laufzeit.
     /// </summary>
-    private static (Solution, ProjectId) MitKatalog(Solution solution, string solutionDir)
+    private static (Solution, ProjectId) MitKatalog(Solution solution, string solutionDir, ProjectId domaene)
     {
         var vertrag = solution.Projects.First(p => p.AssemblyName == "Abstractions");
         var ablaeufe = solution.Projects.First(p => p.AssemblyName == Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel,
@@ -447,9 +447,12 @@ public static class Sonde
                 analyzerReferences: ablaeufe.AnalyzerReferences)
             .WithDefaultNamespace(SondenKatalog);
         var fork = solution.AddProject(info).AddProjectReference(ablaeufe.Id, new ProjectReference(id));
-        // MSBuild reicht die Referenz transitiv weiter (Komposition, Akteure, Leitung sehen den Katalog über die Abläufe), ein Roslyn-Fork nicht.
-        foreach (var p in solution.Projects.Where(p => p.ProjectReferences.Any(r => r.ProjectId == ablaeufe.Id)))
-            fork = fork.AddProjectReference(p.Id, new ProjectReference(id));
+        // Die Domäne der Sonde nutzt ihn auch: ihre Übersetzungen nehmen seine Nachrichten (docs/plan-ohne-pipeline.md).
+        if (!fork.GetProject(domaene)!.ProjectReferences.Any(r => r.ProjectId == id)) fork = fork.AddProjectReference(domaene, new ProjectReference(id));
+        // MSBuild reicht die Referenz transitiv weiter (Komposition, Akteure, Leitung sehen den Katalog über die Abläufe bzw. die Domäne), ein
+        //   Roslyn-Fork nicht.
+        foreach (var p in solution.Projects.Where(p => p.ProjectReferences.Any(r => r.ProjectId == ablaeufe.Id || r.ProjectId == domaene)))
+            if (!fork.GetProject(p.Id)!.ProjectReferences.Any(r => r.ProjectId == id)) fork = fork.AddProjectReference(p.Id, new ProjectReference(id));
         // Globale usings (ImplicitUsings) wie in den Abläufen — Task & Co. ohne using.
         foreach (var d in ablaeufe.Documents.Where(d => d.FilePath?.EndsWith(".GlobalUsings.g.cs", StringComparison.Ordinal) == true))
             fork = fork.AddDocument(DocumentId.CreateNewId(id), Path.GetFileName(d.FilePath!), d.GetTextAsync().Result,

@@ -4,22 +4,11 @@ using Marten;
 using Funkortung.Ortung;
 using Sondenkatalog.Katalog.Peilung;
 
-// SONDE — ÜBERSETZUNG IN BEIDE RICHTUNGEN (docs/04 §4.4), die Abläufe: ein Funker fordert eine Ortung an (ein Client-Eingang); am Kopf wird sie in
-// den Eingang des fremden Katalogs übersetzt (Frequenz nach Namen, die Stelle als Auftrag und die Messdauer als DauerMs ausdrücklich), die Peilung des
-// Katalogs rechnet, und ihr Ergebnis wird ein Command an die Peilstelle — der Auftrag wird wieder ihre Id (Guid → Id ausdrücklich), die Güte kommt
-// nach Namen, die Quelle aus dem Standardwert. Den Ausgang setzt eine Geste (Gezeichnet.gesten.json), samt [Feld]. Was der Katalog sonst meldet (ein
-// Hinweis), darf hinaus. Der Funker liegt absichtlich hier statt bei den Akteuren. Dieselbe Geste übersetzt die ANTWORT der Peilstelle zurück in den
-// Katalog (Uebersetze<PeilungVermerkt, PeilungBestaetigt>, an die Peilung zurück — eine Antwort, kein Kreis); die Peilung liest dann über die Fähigkeit
-// des Katalogs, die der Peilbuch-Speicher hier umsetzt (bis die Pipeline-Schicht aufgeht, liegt er bei den Abläufen).
+// SONDE — Reste bei den Abläufen, bis die Pipeline-Schicht aufgeht (docs/plan-ohne-pipeline.md): der Funker liegt absichtlich hier statt bei den
+// Akteuren (die Lage-Prüfung muss ihn weisen), und der Peilbuch-Speicher setzt die Lese-Fähigkeit des Katalogs um (er gehört in den Speicher).
+// Der Graph der Ortung ist die Peilkette des Katalogs; was sie domänenspezifisch macht, sind die Übersetzungen in Funkortung.Ortung.
 
 namespace Funkortung.Ablauf;
-
-public record OrtungAngefordert(Id<Peilstelle> Stelle, double FrequenzMhz, int Messdauer) : ICommand;
-
-public sealed record Ortung(
-    [Kopf, Feld(nameof(Peile.Auftrag), nameof(OrtungAngefordert.Stelle)), Feld(nameof(Peile.DauerMs), nameof(OrtungAngefordert.Messdauer))]
-        Uebersetze<OrtungAngefordert, Peile> Hinein,
-    [Von(nameof(Hinein))] Peilung Peilen) : IGraph;
 
 public sealed record Funker : IAkteur, IDarf<OrtungAngefordert>, IHoert<PeilungVermerkt>;
 

@@ -132,7 +132,8 @@ public static class EingangsExtensions
     public static IServiceCollection AddEingaenge(this IServiceCollection services)
     {
         services.AddSingleton<IOffeneEingaenge>(sp => new OffeneEingaenge(sp.GetRequiredService<Marten.IDocumentStore>()));
-        services.TryAddSingleton(sp => sp.GetService<Infrastructure.Funktionen.GraphInstanzen>()?.Koepfe() ?? Infrastructure.Funktionen.Verkettung.Leer);
+        services.TryAddSingleton(sp => sp.GetService<Infrastructure.Funktionen.GraphInstanzen>()?.Koepfe(
+            new Infrastructure.Funktionen.Uebersetzungen(Infrastructure.Komposition.Anwendung.Funktionen.Uebersetzungen)) ?? Infrastructure.Funktionen.Verkettung.Leer);
         services.AddSingleton<IClusterKindContributor, ZustellerKind>();
         services.AddHostedService(sp => new ZustellTakt(sp.GetRequiredService<ActorSystem>(), sp.GetService<ILogger<ZustellTakt>>(),
             sp.GetService<IEingangsZustellung>() is not null));

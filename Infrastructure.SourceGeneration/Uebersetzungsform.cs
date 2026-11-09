@@ -8,14 +8,13 @@ using System.Linq;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Die EINE Lesart einer ÜBERSETZUNG (docs/04 §4.4) für Generator, Analyzer und Extractor — nur Code-Fakten: ein Knoten
-    /// <c>Uebersetze&lt;TEin, TAus&gt;</c> eines Graph-Records und seine <c>[Feld(nameof(Ziel), nameof(Quelle))]</c>. Je Parameter des Konstruktors von
-    /// <c>TAus</c> eine Quelle, in dieser Reihenfolge: <c>[Feld]</c> am Knoten (ausdrücklich darf ein <c>Guid</c> ein <c>Id&lt;T&gt;</c> füllen und
-    /// umgekehrt), eine Eigenschaft von <c>TEin</c> mit gleichem Namen und implizit zuweisbarem Typ, der Standardwert des Parameters — sonst CQRS119.
-    /// <c>TEin</c> ist ein Command ohne Ziel, <c>TAus</c> ein Command (ohne Ziel oder an ein Aggregat), sonst CQRS121.
-    /// <para>Eine ANTWORT-ÜBERSETZUNG nimmt statt eines Commands ein Event: die Antwort des Aggregats auf den Command, den die Übersetzung erzeugt, die
-    /// sie in <c>[Von]</c> nennt (<see cref="Graphform"/>; ob das <c>Decide</c> dieses Commands das Event ausgeben kann, prüft CQRS123 im Gesamtbild).
-    /// So kommt die Antwort eines Aggregats zurück in den Graphen, ohne dass eine Funktion ein Event der Domäne kennt.</para>
+    /// Die EINE Lesart einer ÜBERSETZUNG (docs/04 §4.4, docs/plan-ohne-pipeline.md) für Generator, Analyzer und Extractor — nur Code-Fakten: ein
+    /// Record der Domäne mit <c>IUebersetzung&lt;TEin, TAus&gt;</c> und seinen <c>[Feld(nameof(Ziel), nameof(Quelle))]</c>. Je Parameter des
+    /// Konstruktors von <c>TAus</c> eine Quelle, in dieser Reihenfolge: <c>[Feld]</c> am Record (ausdrücklich darf ein <c>Guid</c> ein <c>Id&lt;T&gt;</c>
+    /// füllen und umgekehrt), eine Eigenschaft von <c>TEin</c> mit gleichem Namen und implizit zuweisbarem Typ, der Standardwert des Parameters — sonst
+    /// CQRS119. <c>TEin</c> ist ein Command ohne Ziel oder ein Event, <c>TAus</c> ein Command (ohne Ziel oder an ein Aggregat), sonst CQRS121.
+    /// <para>Eine ANTWORT-ÜBERSETZUNG nimmt statt eines Commands ein Event: die Antwort eines Aggregats auf den Command einer Übersetzung (ob das
+    /// <c>Decide</c> eines solchen Commands das Event ausgeben kann, prüft CQRS123 im Gesamtbild).</para>
     /// </summary>
     internal static class Uebersetzungsform
     {
@@ -43,6 +42,8 @@ namespace Infrastructure.SourceGeneration
         /// <summary>Eine gelesene Übersetzung: Ein, Aus, die Felder von <c>TEin</c>, je Parameter von <c>TAus</c> seine Quelle und die Fehler.</summary>
         internal sealed class Form
         {
+            /// <summary>Die Übersetzung selbst (der Record der Domäne); ihr Name ist der Name der Übersetzung.</summary>
+            public INamedTypeSymbol Typ = null!;
             public ITypeSymbol Ein = null!, Aus = null!;
             /// <summary>Die lesbaren Eigenschaften von <c>TEin</c> (öffentlich, Instanz), in Reihenfolge der Deklaration.</summary>
             public List<IPropertySymbol> Felder = new List<IPropertySymbol>();
@@ -54,39 +55,47 @@ namespace Infrastructure.SourceGeneration
             public bool IstAntwort;
         }
 
-        /// <summary>Ist <paramref name="t"/> eine Übersetzung — <c>Abstractions.Uebersetze&lt;TEin, TAus&gt;</c>?</summary>
-        public static bool Ist(ITypeSymbol t) =>
-            t is INamedTypeSymbol { IsGenericType: true, Arity: 2, Name: "Uebersetze" } n
-            && n.OriginalDefinition.ContainingNamespace?.ToDisplayString() == "Abstractions";
+        /// <summary>Der Marker <c>IUebersetzung&lt;TEin, TAus&gt;</c>, den <paramref name="t"/> trägt (oder ist) — sonst null.</summary>
+        public static INamedTypeSymbol? Marker(ITypeSymbol t) =>
+            (t is INamedTypeSymbol n ? new[] { n }.Concat(n.AllInterfaces) : t.AllInterfaces).FirstOrDefault(i =>
+                i is { IsGenericType: true, Arity: 2, Name: "IUebersetzung" } && i.OriginalDefinition.ContainingNamespace?.ToDisplayString() == "Abstractions");
 
-        /// <summary>Die <c>[Feld]</c> eines Parameters (Ziel, Quelle), wie sie dastehen.</summary>
-        public static List<(string Ziel, string Quelle, Location Ort)> Felder(IParameterSymbol p) =>
-            p.GetAttributes().Where(a => a.AttributeClass != null && Funktionsform.Name(a.AttributeClass) == Feld && a.ConstructorArguments.Length == 2)
+        /// <summary>Trägt <paramref name="t"/> den Marker einer Übersetzung (auch als Typ eines Parameters — dann ist es ein Fehler)?</summary>
+        public static bool Ist(ITypeSymbol t) => Marker(t) != null;
+
+        /// <summary>Ist <paramref name="t"/> eine Übersetzung der Domäne — ein konkreter Record bzw. eine Klasse mit <c>IUebersetzung&lt;TEin, TAus&gt;</c>?</summary>
+        public static bool IstUebersetzung(INamedTypeSymbol t) => t.TypeKind == TypeKind.Class && !t.IsAbstract && !t.IsGenericType && Ist(t);
+
+        /// <summary>Die <c>[Feld]</c> einer Übersetzung (Ziel, Quelle), wie sie dastehen.</summary>
+        public static List<(string Ziel, string Quelle, Location Ort)> Felder(ISymbol s) =>
+            s.GetAttributes().Where(a => a.AttributeClass != null && Funktionsform.Name(a.AttributeClass) == Feld && a.ConstructorArguments.Length == 2)
                 .Select(a => (a.ConstructorArguments[0].Value as string ?? "", a.ConstructorArguments[1].Value as string ?? "",
-                    a.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? p.Locations.FirstOrDefault() ?? Location.None))
+                    a.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? s.Locations.FirstOrDefault() ?? Location.None))
                 .ToList();
 
-        /// <summary>Liest die Übersetzung <paramref name="u"/> am Knoten <paramref name="p"/> (dessen <c>[Feld]</c>).</summary>
-        public static Form Lies(INamedTypeSymbol u, IParameterSymbol p, Location ort)
+        /// <summary>Liest die Übersetzung <paramref name="t"/> (<see cref="IstUebersetzung"/> vorausgesetzt): Marker, Zuordnung, Fehler.</summary>
+        public static Form Lies(INamedTypeSymbol t)
         {
-            var f = new Form { Ein = u.TypeArguments[0], Aus = u.TypeArguments[1] };
-            var felder = Felder(p);
+            var u = Marker(t)!;
+            var p = t;
+            var ort = t.Locations.FirstOrDefault() ?? Location.None;
+            var f = new Form { Typ = t, Ein = u.TypeArguments[0], Aus = u.TypeArguments[1] };
+            var felder = Felder(t);
             f.Abweichungen = felder.Select(x => (x.Ziel, x.Quelle)).ToList();
             var ein = f.Ein as INamedTypeSymbol;
             var aus = f.Aus as INamedTypeSymbol;
             f.IstAntwort = ein != null && Funktionsform.Hat(ein, "Abstractions.IEvent") && !Funktionsform.Hat(ein, "Abstractions.ITransientEvent");
             if (ein == null || !f.IstAntwort && !Funktionsform.IstCommandOhneZiel(ein))
                 f.Fehler.Add((Nachricht, $"die Übersetzung '{p.Name}' nimmt {f.Ein.ToDisplayString()} — sie nimmt einen Command ohne Ziel (die Ausgabe "
-                    + "einer Funktion oder die Nachricht eines Clients) oder die Antwort eines Aggregats (ein Event) auf den Command der Übersetzung, die "
-                    + "sie in [Von] nennt", ort));
+                    + "eines Graphen oder die Nachricht eines Clients) oder die Antwort eines Aggregats (ein Event) auf den Command einer Übersetzung", ort));
             if (aus == null || aus.TypeKind != TypeKind.Class || aus.IsAbstract || aus.IsGenericType && aus.TypeArguments.Any(a => a.TypeKind == TypeKind.TypeParameter)
                 || !Funktionsform.Hat(aus, "Abstractions.ICommand"))
                 f.Fehler.Add((Nachricht, $"die Übersetzung '{p.Name}' erzeugt {f.Aus.ToDisplayString()} — sie erzeugt einen Command (ohne Ziel an einen "
                     + "Knoten oder Graphen, mit Ziel an ein Aggregat)", ort));
             if (f.Fehler.Count > 0) return f;
 
-            for (var t = (ITypeSymbol?)ein; t != null && t.SpecialType != SpecialType.System_Object; t = t.BaseType)
-                foreach (var e in t.GetMembers().OfType<IPropertySymbol>())
+            for (var b = (ITypeSymbol?)ein; b != null && b.SpecialType != SpecialType.System_Object; b = b.BaseType)
+                foreach (var e in b.GetMembers().OfType<IPropertySymbol>())
                     if (e.DeclaredAccessibility == Accessibility.Public && !e.IsStatic && !e.IsIndexer && e.GetMethod != null && e.Name != "EqualityContract"
                         && !f.Felder.Any(x => x.Name == e.Name))
                         f.Felder.Add(e);

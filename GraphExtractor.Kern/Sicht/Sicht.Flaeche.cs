@@ -86,11 +86,19 @@ public sealed partial class Sicht
         }
     }
     /// <summary>
-    /// Steht der Graph auf der Fläche — er gehört keinem anderen Graphen (sonst steht er in dessen Komposition) und liegt nicht in einem Katalog
-    /// (eine Blaupause: sie steht im Katalog-Modal und kommt erst als Knoten eines Ablaufs auf die Fläche)?
+    /// Steht der Graph auf der Fläche? Ein Graph gehört keinem anderen Graphen (sonst steht er in dessen Komposition), und liegt er in einem Katalog,
+    /// bindet die Anwendung ihn an (docs/plan-ohne-pipeline.md §3): eine Übersetzung nimmt einen seiner Ausgänge oder gibt an seinen Kopf, ein Akteur
+    /// gibt an seinen Kopf, oder er hat eine Quelle (eine Instanz liest sie). Ein Graph ohne Anbindung ist eine Blaupause im Katalog-Modal.
     /// </summary>
-    private bool AufFlaeche(JsonObject g) => KarteVon.TryGetValue("gr:" + S(g, "_id"), out var k) && !Besitzer(k).StartsWith("gr:", StringComparison.Ordinal)
-        && Abstractions.Projektstruktur.KatalogVon(S(g, "namespace")) == null;
+    private bool AufFlaeche(JsonObject g)
+    {
+        if (!KarteVon.TryGetValue("gr:" + S(g, "_id"), out var k) || Besitzer(k).StartsWith("gr:", StringComparison.Ordinal)) return false;
+        if (Abstractions.Projektstruktur.KatalogVon(S(g, "namespace")) == null) return true;
+        var uebersetzt = _uebersetzungen.Select(u => Basis(S(u, "ein"))).ToHashSet(StringComparer.Ordinal);
+        var gegeben = _uebersetzungen.Select(u => Basis(S(u, "aus"))).Concat(_akteure.SelectMany(a => L(a, "darf"))).ToHashSet(StringComparer.Ordinal);
+        return L(g, "ausgaenge").Any(t => uebersetzt.Contains(Basis(t))) || L(g, "koepfe").Any(t => gegeben.Contains(Basis(t)))
+               || Quellknoten(g).Any();
+    }
 
     // ── Band (Domäne) ──
     private string? AggDomaene(string aggregat) =>
@@ -102,6 +110,8 @@ public sealed partial class Sicht
     /// </summary>
     private string? GraphBand(JsonObject g)
     {
+        // Ein Graph aus einem Katalog ist domänenneutral: er steht im Band seines Katalogs (docs/plan-ohne-pipeline.md).
+        if (Abstractions.Projektstruktur.KatalogVon(S(g, "namespace")) is { } katalog) return katalog;
         if (Abstractions.Projektstruktur.DomaeneDerAblaeufe(S(g, "namespace")) is { } ort
             && _aggregate.Any(a => AggDomaene(S(a, "name")) == ort)) return ort;
         string? Eine(IEnumerable<string> aggs)
@@ -175,57 +185,23 @@ public sealed partial class Sicht
                     kanten.Add(new(qid, gid, t, "quelle"));
                 }
             }
-            // Ein Ablauf (ein Graph der Anwendung um einen Graphen aus einem Katalog, docs/konzept-funktionen-im-editor.md §4): seine Ausgänge sind die des
-            //   Katalog-Graphen; die Übersetzungen dahinter stehen als eigene Karten in der Spalte Übersetzungen, von dort zum Aggregat.
-            var schachtel = Alle(g["knoten"]).FirstOrDefault(k => GraphNamens(Basis(S(k, "typ"))) is { } x
-                && Abstractions.Projektstruktur.KatalogVon(S(x, "namespace")) != null);
-            var hinaus = Alle(g["uebersetzungen"]).Where(u => schachtel != null
-                && Alle(g["knoten"]).Any(k => S(k, "name") == S(u, "knoten") && L(k, "von").Contains(S(schachtel, "name")))).ToList();
-            // Die Antwort-Übersetzungen dahinter (TEin ist ein Event): sie nehmen die Antwort des Aggregats, an das eine Übersetzung schreibt — eigene Karten
-            //   in derselben Spalte, die Kante kommt vom Aggregat zurück (Rücklauf).
-            var antworten = Alle(g["uebersetzungen"]).Where(u => Sorte(S(u, "ein")) == "event"
-                && Alle(g["knoten"]).Any(k => S(k, "name") == S(u, "knoten") && L(k, "von").Any(v => hinaus.Any(h => S(h, "knoten") == v)))).ToList();
-            if (schachtel != null && hinaus.Count > 0)
-            {
-                // Was übersetzt wird, verlässt die Karte als Output des Katalog-Graphen (TEin) — der Command dahinter (TAus) gehört der Übersetzung.
-                var nachUebersetzung = hinaus.Select(u => S(u, "aus")).ToHashSet(StringComparer.Ordinal);
-                foreach (var t in L(g, "ausgaenge").Where(t => !nachUebersetzung.Contains(t))) Port(t, "aus");
-                foreach (var t in hinaus.Select(u => S(u, "ein")).Distinct()) Port(t, "aus");
-                foreach (var u in hinaus)
-                {
-                    var uid = "ue:" + S(g, "_id") + ":" + S(u, "knoten");
-                    var ein = S(u, "ein");
-                    karten.Add(new(uid, gid, "uebersetzung", S(u, "knoten"), "uebersetzungen", band, null,
-                        [new FlaechenPort(ein, "ein", Sorte(ein), false), new FlaechenPort(S(u, "aus"), "aus", Sorte(S(u, "aus")), false)]));
-                    ausdruecklich.Add((uid, ein));
-                    ausdruecklich.Add((gid, ein));
-                    kanten.Add(new(gid, uid, ein, "schreiben"));
-                }
-                foreach (var u in antworten)
-                {
-                    var uid = "ue:" + S(g, "_id") + ":" + S(u, "knoten");
-                    var (ein, aus) = (S(u, "ein"), S(u, "aus"));
-                    karten.Add(new(uid, gid, "uebersetzung", S(u, "knoten"), "uebersetzungen", band, null,
-                        [new FlaechenPort(ein, "ein", Sorte(ein), false), new FlaechenPort(aus, "aus", Sorte(aus), false)]));
-                    ausdruecklich.Add((uid, ein));
-                    // Die Antwort kommt vom Aggregat, an das die Übersetzung in ihrem [Von] schreibt.
-                    var befehl = Alle(g["knoten"]).Where(k => S(k, "name") == S(u, "knoten")).SelectMany(k => L(k, "von"))
-                        .Select(v => hinaus.FirstOrDefault(h => S(h, "knoten") == v)).FirstOrDefault(h => h != null);
-                    if (befehl != null && RecordAgg(S(befehl, "aus")) is { Length: > 0 } agg) kanten.Add(new("agg:" + agg, uid, ein, "ruecklauf"));
-                    // Nimmt ein Knoten des Graphen ihr Ergebnis (die Antwort zurück an eine Funktion), geht es an den Graphen zurück.
-                    if (Alle(g["knoten"]).Any(k => L(k, "von").Contains(S(u, "knoten"))))
-                    {
-                        Port(aus, "ein");
-                        ausdruecklich.Add((uid, aus));
-                        ausdruecklich.Add((gid, aus));
-                        kanten.Add(new(uid, gid, aus, "ruecklauf"));
-                    }
-                }
-            }
-            else foreach (var t in L(g, "ausgaenge")) Port(t, "aus");
+            foreach (var t in L(g, "ausgaenge")) Port(t, "aus");
             karten.Add(new(gid, gid, "graph", S(g, "name"), "graphen", band, null, ports));
             flaecheVon[gid] = gid;
         }
+        // ③½ Übersetzungen der Domänen (docs/plan-ohne-pipeline.md): je Record eine Karte im Band ihrer Domäne — der des Aggregats, an das sie schreibt
+        //   bzw. dessen Antwort sie nimmt, sonst der ihres Namespace. Die Kanten folgen dem Typ: von dem Graphen, der TEin ausgibt (bzw. vom Akteur, der
+        //   es gibt, vom Aggregat, das so antwortet), zu dem, der TAus nimmt.
+        foreach (var u in _uebersetzungen)
+        {
+            var uid = "ue:" + S(u, "_id");
+            var (ein, aus) = (S(u, "ein"), S(u, "aus"));
+            var band = AggDomaene(RecordAgg(aus)) ?? (Sorte(ein) == "event" ? AggDomaene(RecordAgg(ein)) : null) ?? BandVon(uid);
+            karten.Add(new(uid, uid, "uebersetzung", S(u, "name"), "uebersetzungen", band, null,
+                [new FlaechenPort(ein, "ein", Sorte(ein), false), new FlaechenPort(aus, "aus", Sorte(aus), false)]));
+            flaecheVon[uid] = uid;
+        }
+
         // Eine Funktion mit Lausche, die (noch) in keinem Graphen steht: eine Quelle ohne Graph.
         foreach (var f in _bausteinFunktionen.Where(f => L(f, "lauscht").Any() && !_graphen.Any(g => Alle(g["knoten"]).Any(k => Basis(S(k, "typ")) == S(f, "name")))))
         {
@@ -327,7 +303,7 @@ public sealed partial class Sicht
                     if (nk.Id == k.Id || nk.Karte == k.Karte) continue;
                     var a = np.Sorte is "query" or "antwort" ? "lesen"
                         : nk.Spalte == "eingang" ? "kenntnis"
-                        : k.Spalte == "aggregate" && nk.Spalte == "graphen" ? "ruecklauf"
+                        : k.Spalte == "aggregate" && nk.Spalte is "graphen" or "uebersetzungen" ? "ruecklauf"
                         : "schreiben";
                     kanten.Add(new(k.Id, nk.Id, p.Typ, a));
                 }
@@ -379,7 +355,9 @@ public sealed partial class Sicht
         return new JsonObject
         {
             ["spalten"] = Arr(Spalten),
-            ["baender"] = new JsonArray(f.Baender.Select(b => (JsonNode)new JsonObject { ["id"] = b, ["name"] = b[(b.LastIndexOf('.') + 1)..] }).ToArray()),
+            // Ein Band eines Katalogs (seine Graphen sind domänenneutral) heißt nach dem Katalog: „📚 Bildvorschau“.
+            ["baender"] = new JsonArray(f.Baender.Select(b => (JsonNode)new JsonObject { ["id"] = b, ["name"] = Abstractions.Projektstruktur.IstKatalog(b)
+                ? "📚 " + b[..b.LastIndexOf('.')] : b[(b.LastIndexOf('.') + 1)..] }).ToArray()),
             ["gruppen"] = new JsonArray(f.Gruppen.Select(g =>
             {
                 var o = new JsonObject { ["id"] = g.Id, ["name"] = g.Name };

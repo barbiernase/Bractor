@@ -37,7 +37,7 @@ public static class KartenSchluessel
     /// <summary>Die Sammlungen, die aus dem Code kommen und von Gesten geändert werden.</summary>
     public static readonly string[] Sammlungen =
     [
-        "records", "enums", "aggregate", "decider", "applier", "bausteinFunktionen", "akteure", "clients", "graphen",
+        "records", "enums", "aggregate", "decider", "applier", "bausteinFunktionen", "akteure", "clients", "graphen", "uebersetzungen",
         "readModels", "stores", "projektionen", "reader",
     ];
 
@@ -124,6 +124,7 @@ public static class Gesten
         var akt = Nach(code.Akteure, a => a.Namespace + "|" + a.Name);
         var cli = Nach(code.Clients, c => c.Namespace + "|" + c.Name);
         var gra = Nach(code.Graphen, g => g.Namespace + "|" + g.Name);
+        var ueb = Nach(code.Uebersetzungen, g => g.Namespace + "|" + g.Name);
         var lesen = code.Lesen ?? new Leseseite();
         var sto = Nach(lesen.Stores, s => s.Name);
         var kon = Nach(lesen.Konsumenten, k => k.Name);
@@ -146,6 +147,7 @@ public static class Gesten
             Akteure = soll.Akteure.Select(a => a with { Herkunft = akt.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Clients = soll.Clients.Select(c => c with { Herkunft = cli.GetValueOrDefault(c.Namespace + "|" + c.Name)?.Herkunft }).ToList(),
             Graphen = soll.Graphen.Select(g => g with { Herkunft = gra.GetValueOrDefault(g.Namespace + "|" + g.Name)?.Herkunft }).ToList(),
+            Uebersetzungen = soll.Uebersetzungen.Select(u => u with { Herkunft = ueb.GetValueOrDefault(u.Namespace + "|" + u.Name)?.Herkunft }).ToList(),
             Lesen = l == null ? null : l with
             {
                 Stores = l.Stores.Select(s =>

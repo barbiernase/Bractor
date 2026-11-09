@@ -20,6 +20,7 @@ public static class Herkunft
     public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Hoert });
     public static string Von(Client c) => Hash(new { c.Name, c.Verkoerpert });
     public static string Von(Graph g) => Hash(new { g.Name, g.Knoten });
+    public static string Von(Uebersetzung u) => Hash(new { u.Name, u.Ein, u.Aus, u.Felder });
     // Eine Funktion: ihre Form, je Eingang (Auf) Eingang und Ausgaben bzw. je gerufene Methode ihre Signatur, der Konstruktor der Klasse und je
     //   Umsetzung ihr Konstruktor — Rümpfe gehören dem Code.
     public static string Von(BausteinFunktion f) => Hash(new
@@ -51,6 +52,7 @@ public static class Herkunft
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
             Graphen = m.Graphen.Select(g => g with { Herkunft = Von(g) }).ToList(),
+            Uebersetzungen = m.Uebersetzungen.Select(u => u with { Herkunft = Von(u) }).ToList(),
             Lesen = l == null ? null : l with
             {
                 Stores = l.Stores.Select(s => s with { Fns = s.Fns.Select(f => f with { Herkunft = Von(f) }).ToList() }).ToList(),

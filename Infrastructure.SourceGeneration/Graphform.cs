@@ -19,14 +19,8 @@ namespace Infrastructure.SourceGeneration
     /// Eine Funktion darf mehrfach im Graphen stehen; die Reihenfolge der Parameter bedeutet nichts.
     /// <para>Jedes <c>Auf</c> nimmt genau eine Nachricht (<see cref="Funktionsform"/>) und rechnet je Ankunft; Zusammenführen und Einsammeln stehen
     /// im Logik-Code. Eine Kante ist gesichert, mit <c>Verlierbar = true</c> an ihrem <c>[Von]</c> verlierbar.</para>
-    /// <para>Ein Knoten kann auch eine ÜBERSETZUNG sein (<c>Uebersetze&lt;TEin, TAus&gt;</c>, <see cref="Uebersetzungsform"/>): eine Operation, die
-    /// <c>TEin</c> nimmt und genau ein <c>TAus</c> gibt; für Kanten, Köpfe und Ausgänge gelten dieselben Regeln. Ihre Zuordnung prüfen eigene Regeln
-    /// (<see cref="Form.Regelfehler"/>). Nennt eine Übersetzung eine Schachtel in <c>[Von]</c>, nimmt sie ihren Typ auch als ZWISCHENSTAND (Abgriff):
-    /// ist er kein Ausgang der Schachtel, von dem einen inneren Knoten, der ihn ausgibt (mehrere sind ein Fehler) — so lässt sich jede Nachricht eines
-    /// Graphen aus dem Katalog in die Domäne übersetzen, auch eine, die im Graphen weiterläuft.</para>
-    /// <para>Eine ANTWORT-ÜBERSETZUNG (<c>TEin</c> ist ein Event) nennt in <c>[Von]</c> genau eine Übersetzung, die einen Command an ein Aggregat erzeugt:
-    /// sie nimmt die Antwort des Aggregats darauf (eine Kante mit <see cref="Kante.Antwort"/>). Eine Antwort ist keine Kante eines Kreises — sie darf an
-    /// den Knoten zurück, der die Übersetzung speist — und zählt nicht als „zwei Übersetzungen hintereinander“.</para>
+    /// <para>Ein Graph ist domänenneutral und liegt in einem Katalog; eine ÜBERSETZUNG ist kein Knoten, sie lebt in der Domäne
+    /// (<c>IUebersetzung&lt;TEin, TAus&gt;</c>, <see cref="Uebersetzungsform"/>) und nimmt, was ein laufender Graph ausgibt, nach seinem Typ.</para>
     /// </summary>
     internal static class Graphform
     {
@@ -41,9 +35,6 @@ namespace Infrastructure.SourceGeneration
             public string Name = "";
             public INamedTypeSymbol Typ = null!;
             public Funktionsform.Form Funktion = null!;
-            /// <summary>Eine Übersetzung (<c>Uebersetze&lt;TEin, TAus&gt;</c>): ihre Zuordnung; ihre eine Operation nimmt <c>TEin</c> und gibt <c>TAus</c>.
-            /// Sie hat keine Funktion (<see cref="Funktion"/> ist eine Hülle ohne Methode) und läuft inline (docs/04 §4.4).</summary>
-            public Uebersetzungsform.Form? Uebersetzung;
             public Location Ort = Location.None;
             /// <summary>Die Graphen, in denen der Knoten liegt (Pfade, außen zuerst; leer = im Graphen selbst).</summary>
             public List<string> Bereich = new List<string>();
@@ -81,8 +72,6 @@ namespace Infrastructure.SourceGeneration
             public bool Strom;
             /// <summary>Darf eine Nachricht auf dieser Kante verloren gehen (<c>[Von(…, Verlierbar = true)]</c>)? Sonst gesichert.</summary>
             public bool Verlierbar;
-            /// <summary>Eine Antwort: von einer Übersetzung mit Aggregat-Command zur Antwort-Übersetzung; <see cref="Typ"/> ist das Event.</summary>
-            public bool Antwort;
         }
 
         /// <summary>
@@ -99,8 +88,6 @@ namespace Infrastructure.SourceGeneration
             public List<string> Von = new List<string>();
             /// <summary>Die Namen aus <c>[Von]</c>, deren Kanten verlierbar sind (<c>Verlierbar = true</c>).</summary>
             public HashSet<string> Verlierbar = new HashSet<string>();
-            /// <summary>Je Name aus <c>[Von]</c> der Knoten darin, aus dem abgegriffen wird (<c>Innen = nameof(…)</c>, Pfad mit „.“).</summary>
-            public Dictionary<string, string> Abgriff = new Dictionary<string, string>();
             public Location Ort = Location.None;
             public Knoten? Knoten;
             public Schachtel? Innen;
@@ -123,10 +110,8 @@ namespace Infrastructure.SourceGeneration
             /// <summary>Der Quellknoten (eine Funktion, die lauscht): er ist der Kopf des Graphen, jedes seiner Elemente startet einen Lauf; null = keiner.</summary>
             public Knoten? Quelle;
             public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
-            /// <summary>Die Fehler der Übersetzungen (Kennung CQRS119/CQRS121, Text, Ort) — eigene Regeln neben der Form (CQRS115).</summary>
-            public List<(string Id, string Text, Location Ort)> Regelfehler = new List<(string, string, Location)>();
-            /// <summary>Ohne Formfehler und ohne Fehler einer Übersetzung — nur so erzeugt der Generator den Graphen.</summary>
-            public bool Gueltig => Fehler.Count == 0 && Regelfehler.Count == 0;
+            /// <summary>Ohne Formfehler — nur so erzeugt der Generator den Graphen.</summary>
+            public bool Gueltig => Fehler.Count == 0;
 
             /// <summary>Der Kopf für einen Eingangstyp, oder null.</summary>
             public List<Knoten>? KopfFuer(ITypeSymbol t) => Koepfe.Where(k => Funktionsform.Voll(k.Typ) == Funktionsform.Voll(t)).Select(k => k.Knoten).FirstOrDefault();
@@ -177,14 +162,6 @@ namespace Infrastructure.SourceGeneration
                     if (da == null) g.Koepfe.Add((typ, new List<Knoten> { k }));
                     else if (!da.Contains(k)) da.Add(k);
                 }
-            // Übersetzungen: nie zwei hintereinander (eine genügt — sie hat keine Logik); am Kopf gibt sie an Knoten des Graphen oder an ein Aggregat.
-            foreach (var e in g.Kanten.Where(e => !e.Antwort && e.Von.Uebersetzung != null && e.Nach.Uebersetzung != null).GroupBy(e => e.Nach).Select(x => x.First()))
-                g.Fehler.Add(($"die Übersetzung '{e.Nach.Name}' nimmt von der Übersetzung '{e.Von.Name}' — zwei Übersetzungen hintereinander sind eine "
-                    + "(übersetze direkt)", e.Nach.Ort));
-            foreach (var (von, typ) in g.Ausgaenge.Where(a => a.Von.Uebersetzung != null && Funktionsform.IstCommandOhneZiel(a.Typ)
-                && g.Koepfe.Any(k => k.Knoten.Contains(a.Von))))
-                g.Fehler.Add(($"die Übersetzung '{von.Name}' ist Kopf und gibt {typ.Name} hinaus — eine Übersetzung am Kopf gibt an Knoten dieses Graphen "
-                    + "oder einen Command an ein Aggregat (was einen anderen Graphen anstößt, schickt der Client bzw. die Quelle dorthin)", von.Ort));
             g.SignaturEin = g.Koepfe.Select(k => k.Typ).ToList();
             g.SignaturAus = wurzel.Aus.Select(a => a.Typ).GroupBy(V).Select(x => x.First()).ToList();
             var quellen = g.Knoten.Where(k => k.Funktion.Lausche != null).ToList();
@@ -242,13 +219,10 @@ namespace Infrastructure.SourceGeneration
                 LiesAttribute(p, glied, namen, t, g);
                 if (p.Type is INamedTypeSymbol u && Uebersetzungsform.Ist(u))
                 {
-                    glied.Knoten = LiesUebersetzung(u, p, name, bereich, pOrt, g);
-                    s.Eigene.Add(glied.Knoten);
-                    s.Glieder.Add(glied);
+                    g.Fehler.Add(($"der Knoten '{p.Name}' ist eine Übersetzung ({u.Name}) — eine Übersetzung ist kein Knoten eines Graphen: der Graph bleibt "
+                        + "domänenneutral, die Übersetzung lebt in der Domäne und nimmt seine Nachricht nach ihrem Typ", pOrt));
                     continue;
                 }
-                foreach (var (_, _, fOrt) in Uebersetzungsform.Felder(p))
-                    g.Regelfehler.Add((Uebersetzungsform.Zuordnung, $"[Feld] an '{p.Name}' — [Feld] steht nur an einer Übersetzung (Uebersetze<TEin, TAus>)", fOrt));
                 if (p.Type is INamedTypeSymbol gg && IstGraph(gg))
                 {
                     var innen = Falte(gg, name, bereich.Concat(new[] { name }).ToList(), offen, g);
@@ -260,8 +234,8 @@ namespace Infrastructure.SourceGeneration
                 }
                 if (p.Type is not INamedTypeSymbol f || !Funktionsform.IstFunktion(f) || f.TypeArguments.Any(a => a.TypeKind == TypeKind.TypeParameter))
                 {
-                    g.Fehler.Add(($"der Knoten '{p.Name}' ist keine Funktion, kein Graph und keine Übersetzung ('{p.Type.ToDisplayString()}') — ein Knoten "
-                        + "ist eine Funktion (IFunktion, eine generische mit Typargument), ein anderer Graph oder Uebersetze<TEin, TAus>", pOrt));
+                    g.Fehler.Add(($"der Knoten '{p.Name}' ist keine Funktion und kein Graph ('{p.Type.ToDisplayString()}') — ein Knoten "
+                        + "ist eine Funktion (IFunktion, eine generische mit Typargument) oder ein anderer Graph", pOrt));
                     continue;
                 }
                 glied.Knoten = LiesKnoten(f, name, bereich, pOrt);
@@ -286,20 +260,11 @@ namespace Infrastructure.SourceGeneration
                 if (n != Von) continue;
                 var werte = Werte(a);
                 var verlierbar = IstVerlierbar(a);
-                var innen = InnenVon(a);
                 var syntax = a.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
                 var aOrt = syntax?.GetLocation() ?? glied.Ort;
                 if (syntax?.ArgumentList != null)
                     foreach (var arg in syntax.ArgumentList.Arguments)
                         if (arg.NameEquals?.Name.Identifier.ValueText == "Verlierbar") continue;
-                        else if (arg.NameEquals?.Name.Identifier.ValueText == "Innen")
-                        {
-                            if (!NurNameof(arg.Expression))
-                                g.Fehler.Add(($"[Von(…, Innen = …)] an '{p.Name}' nennt {arg.Expression} — der Knoten im Graphen steht als nameof "
-                                    + "(nameof(Bildaufbereitung.Verkleinern), tiefer nameof(A.B) + \".\" + nameof(B.C)), nie als String-Literal", arg.GetLocation()));
-                            if (werte.Count != 1)
-                                g.Fehler.Add(($"[Von(…, Innen = …)] an '{p.Name}' nennt {werte.Count} Quellen — Innen gilt für genau einen Graphen im Graphen", arg.GetLocation()));
-                        }
                         else if (!(arg.NameEquals == null && arg.NameColon == null
                               && arg.Expression is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } inv
                               && inv.ArgumentList.Arguments.Count == 1 && inv.ArgumentList.Arguments[0].Expression is IdentifierNameSyntax))
@@ -320,7 +285,6 @@ namespace Infrastructure.SourceGeneration
                     {
                         glied.Von.Add(w);
                         if (verlierbar) glied.Verlierbar.Add(w);
-                        if (innen != null && werte.Count == 1) glied.Abgriff[w] = innen;
                     }
                 }
             }
@@ -328,20 +292,6 @@ namespace Infrastructure.SourceGeneration
 
         private static bool IstVerlierbar(AttributeData a) =>
             a.NamedArguments.Any(x => x.Key == "Verlierbar" && x.Value.Value is true);
-
-        /// <summary>Der Pfad aus <c>Innen = nameof(…)</c> (der konstante Wert, „.“-verbunden), sonst <c>null</c>.</summary>
-        private static string? InnenVon(AttributeData a) =>
-            a.NamedArguments.Where(x => x.Key == "Innen").Select(x => x.Value.Value as string).FirstOrDefault(v => !string.IsNullOrEmpty(v));
-
-        /// <summary>Besteht der Ausdruck nur aus <c>nameof(…)</c>, verbunden mit „.“-Literalen?</summary>
-        private static bool NurNameof(ExpressionSyntax e) => e switch
-        {
-            InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } => true,
-            BinaryExpressionSyntax b when b.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.AddExpression) => NurNameof(b.Left) && NurNameof(b.Right),
-            LiteralExpressionSyntax l => l.Token.ValueText == ".",
-            ParenthesizedExpressionSyntax pe => NurNameof(pe.Expression),
-            _ => false,
-        };
 
         private static List<string?> Werte(AttributeData a) =>
             a.ConstructorArguments.Length == 1 && a.ConstructorArguments[0].Kind == TypedConstantKind.Array
@@ -354,17 +304,9 @@ namespace Infrastructure.SourceGeneration
         /// </summary>
         public static (bool Kopf, List<string> Von, List<string> Verlierbar) KopfUndVon(IParameterSymbol p)
         {
-            var (kopf, von, verlierbar, _) = KopfVonInnen(p);
-            return (kopf, von, verlierbar);
-        }
-
-        /// <summary>Wie <see cref="KopfUndVon"/>, dazu der Abgriff (<c>Innen = nameof(…)</c>, Pfad) — für Werkzeuge, die jeden Knoten zeigen.</summary>
-        public static (bool Kopf, List<string> Von, List<string> Verlierbar, string? Innen) KopfVonInnen(IParameterSymbol p)
-        {
             var kopf = false;
             var von = new List<string>();
             var verlierbar = new List<string>();
-            string? innen = null;
             foreach (var a in p.GetAttributes())
             {
                 var n = a.AttributeClass == null ? "" : Funktionsform.Name(a.AttributeClass);
@@ -374,10 +316,9 @@ namespace Infrastructure.SourceGeneration
                     var werte = Werte(a).OfType<string>().ToList();
                     von.AddRange(werte);
                     if (IstVerlierbar(a)) verlierbar.AddRange(werte);
-                    innen ??= InnenVon(a);
                 }
             }
-            return (kopf, von, verlierbar, innen);
+            return (kopf, von, verlierbar);
         }
 
         /// <summary>
@@ -405,40 +346,12 @@ namespace Infrastructure.SourceGeneration
                             + "desselben Graphen ([Von(nameof(…))]); nur eine Quelle trägt keins von beiden", glied.Ort));
                     continue;
                 }
-                if (glied.Knoten?.Uebersetzung is { IstAntwort: true } antwort)
-                {
-                    Antwortkanten(glied, antwort, ports, s, g, kanten);
-                    continue;
-                }
                 var gespeist = new HashSet<Funktionsform.Port>();
                 foreach (var name in glied.Von)
                 {
                     var quelle = s.Glieder.FirstOrDefault(x => x.Name == name);
                     if (quelle == null) continue;   // kein Knoten (gemeldet) oder einer mit Formfehler
                     var aus = Ausgaenge(quelle);
-                    // ABGRIFF (docs/konzept-funktionen-im-editor.md §4.2): eine Übersetzung, die eine Schachtel nennt, nimmt ihren Typ auch als
-                    //   Zwischenstand. Mit Innen = nameof(…) genau von diesem Knoten darin; sonst von einem Ausgang der Schachtel bzw. dem einen inneren
-                    //   Knoten, der ihn ausgibt.
-                    if (glied.Abgriff.TryGetValue(name, out var pfad))
-                    {
-                        var genau = quelle.Innen == null ? null : KnotenImPfad(quelle.Innen, pfad.Split('.'));
-                        if (genau == null)
-                            g.Fehler.Add(($"'{glied.Name}' greift mit Innen = '{pfad}' in '{name}' ab, aber dort gibt es diesen Knoten nicht"
-                                + (quelle.Innen == null ? $" ({name} ist kein Graph)" : ""), glied.Ort));
-                        aus = genau == null ? new List<(Knoten, Operation, INamedTypeSymbol)>()
-                            : genau.Operationen.SelectMany(o => o.Ausgaben.Where(Funktionsform.IstCommandOhneZiel).Select(x => (genau, o, x))).ToList();
-                    }
-                    else if (glied.Knoten?.Uebersetzung != null && quelle.Innen != null)
-                        foreach (var (pk, pop, port) in ports)
-                        {
-                            if (aus.Any(a => port.Typen.Any(y => V(y) == V(a.Typ)))) continue;
-                            var innen = AlleAusgaben(quelle.Innen).Where(a => port.Typen.Any(y => V(y) == V(a.Typ))).ToList();
-                            var erzeuger = innen.Select(a => a.Knoten).Distinct().ToList();
-                            if (erzeuger.Count > 1)
-                                g.Fehler.Add(($"'{glied.Name}' greift {Liste(port.Typen)} aus '{name}' ab, aber {erzeuger.Count} Knoten darin geben ihn aus "
-                                    + $"({string.Join(", ", erzeuger.Select(k => k.Name))}) — nenne den Knoten: [Von(nameof({name}), Innen = nameof(…))]", glied.Ort));
-                            else aus = aus.Concat(innen).ToList();
-                        }
                     var speist = false;
                     foreach (var (vk, vop, x) in aus)
                         foreach (var (nk, nop, port) in ports.Where(z => z.Port.Typen.Any(y => V(y) == V(x))))
@@ -483,53 +396,10 @@ namespace Infrastructure.SourceGeneration
                     if (!kanten.Any(e => e.VonOperation == op && V(e.Typ) == V(x))) s.Aus.Add((k, op, x));
         }
 
-        /// <summary>
-        /// Die Kante einer Antwort-Übersetzung: <c>[Von]</c> nennt genau eine Übersetzung derselben Schachtel, die einen Command an ein Aggregat erzeugt;
-        /// von ihr kommt das Event (die Antwort). Kein <c>[Kopf]</c> — eine Antwort kommt nie von außen.
-        /// </summary>
-        private static void Antwortkanten(Glied glied, Uebersetzungsform.Form antwort, List<(Knoten Knoten, Operation Op, Funktionsform.Port Port)> ports,
-            Schachtel s, Form g, List<Kante> kanten)
-        {
-            if (glied.Kopf)
-                g.Fehler.Add(($"'{glied.Name}' übersetzt die Antwort {antwort.Ein.Name} und trägt [Kopf] — eine Antwort kommt nie von außen: nenne in [Von] die "
-                    + "Übersetzung, deren Command sie beantwortet", glied.Ort));
-            if (glied.Von.Count != 1)
-            {
-                g.Fehler.Add(($"'{glied.Name}' übersetzt die Antwort {antwort.Ein.Name} und nennt in [Von] {glied.Von.Count} Knoten — eine Antwort-Übersetzung "
-                    + "nennt genau die eine Übersetzung, deren Command an ein Aggregat sie beantwortet", glied.Ort));
-                return;
-            }
-            var quelle = s.Glieder.FirstOrDefault(x => x.Name == glied.Von[0]);
-            if (quelle == null) return;   // kein Knoten (gemeldet)
-            if (quelle.Knoten?.Uebersetzung is not { } befehl || !Funktionsform.Hat(befehl.Aus, A + "IAggregatCommand"))
-            {
-                g.Fehler.Add(($"'{glied.Name}' übersetzt die Antwort {antwort.Ein.Name} von '{quelle.Name}', aber '{quelle.Name}' ist keine Übersetzung in einen "
-                    + "Command an ein Aggregat — eine Antwort kommt vom Aggregat, an das eine Übersetzung schreibt", glied.Ort));
-                return;
-            }
-            foreach (var (nk, nop, port) in ports)
-                kanten.Add(new Kante { Von = quelle.Knoten, Nach = nk, VonOperation = quelle.Knoten.Operationen[0], NachOperation = nop, Port = port,
-                    Typ = (INamedTypeSymbol)antwort.Ein, Antwort = true });
-        }
-
         /// <summary>Die Ports, an denen ein Glied nimmt: die Ports der Operationen eines Knotens bzw. die Köpfe eines inneren Graphen.</summary>
         private static List<(Knoten Knoten, Operation Op, Funktionsform.Port Port)> Eingaenge(Glied glied) =>
             glied.Innen != null ? glied.Innen.Offen
                 : glied.Knoten!.Operationen.SelectMany(o => o.Auf.Ports.Select(p => (glied.Knoten, o, p))).ToList();
-
-        /// <summary>Der Knoten einer Schachtel unter einem Pfad (<c>Verkleinern</c>, tiefer <c>Teil.Verkleinern</c>), sonst <c>null</c>.</summary>
-        private static Knoten? KnotenImPfad(Schachtel s, string[] pfad)
-        {
-            var glied = s.Glieder.FirstOrDefault(x => x.Name == pfad[0]);
-            if (glied == null) return null;
-            if (pfad.Length == 1) return glied.Innen == null ? glied.Knoten : null;
-            return glied.Innen == null ? null : KnotenImPfad(glied.Innen, pfad.Skip(1).ToArray());
-        }
-
-        /// <summary>Was alle Knoten einer Schachtel (auch tief darin) an Commands ohne Ziel ausgeben — Ausgänge wie Zwischenstände (Abgriff).</summary>
-        private static List<(Knoten Knoten, Operation Op, INamedTypeSymbol Typ)> AlleAusgaben(Schachtel s) =>
-            s.Glieder.SelectMany(gl => gl.Innen != null ? AlleAusgaben(gl.Innen)
-                : gl.Knoten!.Operationen.SelectMany(o => o.Ausgaben.Where(Funktionsform.IstCommandOhneZiel).Select(x => (gl.Knoten, o, x)))).ToList();
 
         /// <summary>Was ein Glied an Commands ohne Ziel ausgibt (je Erzeuger): die eines Knotens bzw. die Ausgänge eines inneren Graphen.</summary>
         private static List<(Knoten Knoten, Operation Op, INamedTypeSymbol Typ)> Ausgaenge(Glied glied) =>
@@ -584,25 +454,6 @@ namespace Infrastructure.SourceGeneration
             return k;
         }
 
-        /// <summary>
-        /// Ein Übersetzungs-Knoten: eine Operation, die <c>TEin</c> nimmt und <c>TAus</c> gibt (genau eins), die Zuordnung nach
-        /// <see cref="Uebersetzungsform"/>; ihre Fehler gehen als eigene Regeln an <paramref name="g"/>.
-        /// </summary>
-        private static Knoten LiesUebersetzung(INamedTypeSymbol u, IParameterSymbol p, string name, List<string> bereich, Location ort, Form g)
-        {
-            var form = Uebersetzungsform.Lies(u, p, ort);
-            g.Regelfehler.AddRange(form.Fehler);
-            var auf = new Funktionsform.Auf { Methode = null!, Command = true, Element = form.Aus };
-            if (form.Ein is INamedTypeSymbol ein) auf.Ports.Add(new Funktionsform.Port { Name = "ein", Typen = { ein }, Ort = ort });
-            if (form.Aus is INamedTypeSymbol aus) auf.Ausgaben.Add(aus);
-            var k = new Knoten { Name = name, Typ = u, Funktion = new Funktionsform.Form { Typ = u, Aufs = { auf } }, Uebersetzung = form, Ort = ort, Bereich = bereich };
-            var op = new Operation { Knoten = k, Auf = auf, Nummer = 0 };
-            op.Ausgaben.AddRange(auf.Ausgaben);
-            k.Operationen.Add(op);
-            k.Ausgaben.AddRange(auf.Ausgaben);
-            return k;
-        }
-
         private static List<Knoten>? Kreis(Form g)
         {
             var zustand = new Dictionary<Knoten, int>();
@@ -611,7 +462,7 @@ namespace Infrastructure.SourceGeneration
             {
                 zustand[k] = 1;
                 pfad.Add(k);
-                foreach (var n in g.Kanten.Where(e => e.Von == k && !e.Antwort).Select(e => e.Nach))
+                foreach (var n in g.Kanten.Where(e => e.Von == k).Select(e => e.Nach))
                 {
                     if (zustand.TryGetValue(n, out var z) && z == 1) return pfad.SkipWhile(x => x != n).Append(n).ToList();
                     if (!zustand.ContainsKey(n) && Besuche(n) is { } r) return r;

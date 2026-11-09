@@ -64,6 +64,7 @@ internal sealed class Lageart
             return Projektstruktur.Primitive.Hilfscode;
         }
         if (Hat(t, "IState")) return Projektstruktur.Primitive.Aggregat;
+        if (Infrastructure.SourceGeneration.Uebersetzungsform.Ist(t)) return Projektstruktur.Primitive.Uebersetzung;
         if (Hat(t, "IAggregatCommand")) return Projektstruktur.Primitive.Command;
         // Ein Command ohne Ziel geht an einen Knoten bzw. den Kopf eines Graphen (ein Decide gibt keinen aus, CQRS114): er liegt bei den Abläufen.
         if (Hat(t, "ICommand")) return Projektstruktur.Primitive.KnotenCommand;

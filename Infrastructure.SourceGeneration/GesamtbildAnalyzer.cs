@@ -25,8 +25,8 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS120 (GR-UEBERSETZUNG; Fehler) — ein Command eines Katalogs verlässt einen Graphen der Anwendung: jeder Fall wird übersetzt
 ///   (<c>Uebersetze&lt;TEin, TAus&gt;</c>) oder von einem Knoten genommen, so kennt die Domäne keine Funktionsnachricht (A3). Ein Graph, der als Schachtel
 ///   in einem anderen steht, gibt seine Ausgänge dem äußeren — dort wird geprüft.</item>
-/// <item>CQRS123 (GR-UEBERSETZUNG-ANTWORT; Fehler) — eine Antwort-Übersetzung nimmt ein Event, das das <c>Decide</c> des Commands, den die Übersetzung
-///   in ihrem <c>[Von]</c> erzeugt, nicht ausgeben kann: diese Antwort käme nie.</item>
+/// <item>CQRS123 (GR-UEBERSETZUNG-ANTWORT; Fehler) — eine Antwort-Übersetzung nimmt ein Event, das kein <c>Decide</c> eines Commands ausgeben kann,
+///   den eine Übersetzung erzeugt: diese Antwort käme nie.</item>
 /// <item>CQRS124 (GR-FAEHIGKEIT; Fehler) — eine Funktion in einem Graphen der Anwendung nimmt eine Lese-Fähigkeit, die kein Store der Anwendung umsetzt
 ///   (etwa eine, die ein Katalog deklariert): sie bekäme zur Laufzeit nichts.</item>
 /// </list>
@@ -55,23 +55,23 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         + "als Antwort auf einen eigenen Command; was sie aus einer Entscheidung braucht, sagt ihr das Aggregat als Folge (GR-ANTWORT)", DiagnosticSeverity.Error);
 
     private static readonly DiagnosticDescriptor UebersetzteAntwort = D(UebersetzteAntwortId, "Antwort, die nie kommt",
-        "'{0}': die Antwort-Übersetzung '{1}' nimmt {2}, aber das Decide von {3} gibt es nicht aus ({4}) — eine Antwort-Übersetzung nimmt ein Event, das "
-        + "das Aggregat auf den Command der Übersetzung in ihrem [Von] entscheiden kann (GR-UEBERSETZUNG-ANTWORT)", DiagnosticSeverity.Error);
+        "'{0}': die Antwort-Übersetzung nimmt {1}, aber kein Decide eines Commands, den eine Übersetzung erzeugt, gibt es aus ({2}) — eine "
+        + "Antwort-Übersetzung nimmt ein Event, mit dem ein Aggregat den Command einer Übersetzung beantwortet (GR-UEBERSETZUNG-ANTWORT)", DiagnosticSeverity.Error);
 
     private static readonly DiagnosticDescriptor FaehigkeitOhneStore = D(FaehigkeitOhneStoreId, "Fähigkeit ohne Store",
         "'{0}': der Knoten '{1}' liest über {2}, aber kein Store der Anwendung setzt die Fähigkeit um — deklariert ein Katalog sie, setzt ein Store im "
         + "Speicher der Anwendung sie um (er liest dafür aus seinem eigenen Read-Model) (GR-FAEHIGKEIT)", DiagnosticSeverity.Error);
 
     private static readonly DiagnosticDescriptor Empfaenger = D(EmpfaengerId, "Command ohne genau einen Empfänger",
-        "'{0}' (Command ohne Ziel, von {1}): {2} — ein Command hat genau einen Empfänger: einen Knoten desselben Graphen, den Kopf genau eines Graphen "
-        + "oder einen Akteur, der ihn hört (GR-EMPFAENGER)", DiagnosticSeverity.Error);
+        "'{0}' (Command ohne Ziel, von {1}): {2} — ein Command ohne Ziel geht an einen Knoten desselben Graphen, an die Übersetzungen der Domäne, die "
+        + "seinen Typ nehmen, oder an den Kopf genau eines Graphen (GR-EMPFAENGER)", DiagnosticSeverity.Error);
 
     private static readonly DiagnosticDescriptor OhneGraph = D(OhneGraphId, "Funktion in keinem Graphen",
         "'{0}' ist in keinem Graphen ein Knoten — sie läuft nie (ein Graph läuft als Instanz, docs/04 §4.4) (GR-GRAPH-KNOTEN)", DiagnosticSeverity.Warning);
 
     private static readonly DiagnosticDescriptor Verlaesst = D(VerlaesstId, "Katalog-Command verlässt den Graphen",
-        "'{0}': {1} aus dem Katalog {2} verlässt den Graphen (von {3}) — übersetze ihn (Uebersetze<{1}, …>) oder lass ihn einen Knoten nehmen; die Domäne "
-        + "kennt keine Funktionsnachricht (GR-UEBERSETZUNG)", DiagnosticSeverity.Error);
+        "'{0}': {1} aus dem Katalog {2} verlässt den Graphen (von {3}), und keine Übersetzung nimmt ihn — übersetze ihn in der Domäne "
+        + "(record … : IUebersetzung<{1}, …>) oder lass ihn den Kopf eines Graphen nehmen (GR-UEBERSETZUNG)", DiagnosticSeverity.Error);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(Query, AusgangOffen, EingangOffen, AntwortOhneCommand, UebersetzteAntwort, FaehigkeitOhneStore, Empfaenger, OhneGraph, Verlaesst);
@@ -163,13 +163,13 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     erzeugt.UnionWith(a.Ausgaben);
                     if (a.Command) genommen.UnionWith(a.Eingaenge);
                 }
-            // Ein Graph: seine Übersetzungen nehmen TEin und erzeugen TAus.
-            if (Graphform.IstGraph(t))
-                foreach (var u in Graphform.Lies(t).Knoten.Select(k => k.Uebersetzung).Where(u => u != null))
-                {
-                    genommen.Add(u!.Ein);
-                    erzeugt.Add(u.Aus);
-                }
+            // Eine Übersetzung der Domäne nimmt TEin und erzeugt TAus.
+            if (Uebersetzungsform.IstUebersetzung(t))
+            {
+                var u = Uebersetzungsform.Lies(t);
+                genommen.Add(u.Ein);
+                erzeugt.Add(u.Aus);
+            }
             // Ein Akteur: was er hineingibt, erzeugt er.
             if (IstT(t, iAkteur))
                 erzeugt.UnionWith(t.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => i.TypeArguments[0]));
@@ -217,54 +217,64 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                         befehle.Count == 0 ? "sie gibt keinen Command aus" : "ihre Commands: " + string.Join(", ", befehle.Select(b => b.Name))));
         }
 
-        // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf.
+        // Die Übersetzungen der Domänen (docs/plan-ohne-pipeline.md §3): sie nehmen nach Typ, was ein Graph ausgibt, was ein Client gibt, was ein Aggregat
+        //   auf den Command einer Übersetzung antwortet.
+        var uebersetzungen = typen.Where(Uebersetzungsform.IstUebersetzung).Select(Uebersetzungsform.Lies).Where(u => u.Fehler.Count == 0).ToList();
+        string V(ITypeSymbol t) => Funktionsform.Voll(t);
+        bool Uebersetzt(ITypeSymbol t) => uebersetzungen.Any(u => V(u.Ein) == V(t));
+
+        // GR-UEBERSETZUNG-ANTWORT: eine Antwort-Übersetzung nimmt ein Event, das das Decide eines Commands ausgeben kann, den eine Übersetzung erzeugt.
+        var uebersetzt = uebersetzungen.Select(u => u.Aus).Where(x => IstT(x, iAggregatCommand)).Distinct<ITypeSymbol>(SymbolEqualityComparer.Default).ToList();
+        foreach (var u in uebersetzungen.Where(u => u.IstAntwort))
+            if (!uebersetzt.Any(b => entscheidet.TryGetValue(b, out var aus) && aus.Contains(u.Ein)))
+                ctx.ReportDiagnostic(Diagnostic.Create(UebersetzteAntwort, Location.None, u.Typ.Name, u.Ein.Name,
+                    uebersetzt.Count == 0 ? "keine Übersetzung erzeugt einen Command an ein Aggregat" : "die Commands der Übersetzungen: " + string.Join(", ", uebersetzt.Select(b => b.Name))));
+
+        // Was läuft: ein Graph der Anwendung — und ein Graph aus einem Katalog, sobald die Domäne ihn anbindet: eine Übersetzung nimmt einen seiner
+        //   Ausgänge oder gibt an seinen Kopf, oder ein Akteur gibt an seinen Kopf (welche Instanzen laufen, sagt erst die Umgebung).
         var graphen = typen.Where(Graphform.IstGraph).Select(Graphform.Lies).Where(g => g.Gueltig).ToList();
-        // GR-UEBERSETZUNG-ANTWORT: die Antwort, die eine Übersetzung nimmt, kann das Decide des Commands davor ausgeben.
-        foreach (var g in graphen)
-            foreach (var e in g.Kanten.Where(e => e.Antwort))
-            {
-                var befehl = e.Von.Uebersetzung!.Aus;
-                var aus = entscheidet.TryGetValue(befehl, out var x) ? x : new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
-                if (!aus.Contains(e.Typ))
-                    ctx.ReportDiagnostic(Diagnostic.Create(UebersetzteAntwort, Location.None, g.Typ.Name, e.Nach.Name, e.Typ.Name, befehl.Name,
-                        aus.Count == 0 ? "kein Decide nimmt ihn" : "es gibt aus: " + string.Join(", ", aus.Select(a => a.Name).OrderBy(a => a))));
-            }
+        var akteurDarf = new HashSet<string>(typen.Where(t => IstT(t, iAkteur)).SelectMany(a => a.AllInterfaces
+            .Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => V(i.TypeArguments[0]))));
+        var laufen = graphen.Where(g => !Abstractions.Projektstruktur.IstKatalog(g.Typ.ContainingAssembly?.Name ?? "")
+            || g.Ausgaenge.Any(a => Uebersetzt(a.Typ))
+            || g.Koepfe.Any(k => akteurDarf.Contains(V(k.Typ)) || uebersetzungen.Any(u => V(u.Aus) == V(k.Typ)))).ToList();
+
         // GR-FAEHIGKEIT: jede Lese-Fähigkeit eines Knotens in einem laufenden Graphen setzt ein Store der Anwendung um (mehrere meldet CQRS053).
         var iReadStore = G("IReadStore");
         var stores = typen.Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract && iReadStore != null && Ist(t, iReadStore)).ToList();
-        foreach (var g in graphen.Where(g => !Abstractions.Projektstruktur.IstKatalog(g.Typ.ContainingAssembly?.Name ?? "")))
-            foreach (var k in g.Knoten.Where(k => k.Uebersetzung == null))
+        foreach (var g in laufen)
+            foreach (var k in g.Knoten)
                 foreach (var f in k.Funktion.Aufs.SelectMany(a => a.Faehigkeiten).Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default))
-                    if (!stores.Any(s => s.AllInterfaces.Any(i => Funktionsform.Voll(i) == Funktionsform.Voll(f))))
+                    if (!stores.Any(s => s.AllInterfaces.Any(i => V(i) == V(f))))
                         ctx.ReportDiagnostic(Diagnostic.Create(FaehigkeitOhneStore, Location.None, g.Typ.Name, k.Name, f.Name));
-        // Was läuft: die Graphen der Anwendung; ein Graph im Katalog ist eine Blaupause und zählt erst als Knoten eines von ihnen.
-        var laufen = graphen.Where(g => !Abstractions.Projektstruktur.IstKatalog(g.Typ.ContainingAssembly?.Name ?? "")).ToList();
+
+        // GR-EMPFAENGER (Entscheidung 2) und GR-UEBERSETZUNG (A3): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt eine Übersetzung der
+        //   Domäne (nach seinem Typ) oder der Kopf genau eines Graphen. Ohne Empfänger: kommt er aus einem Katalog, fehlt seine Übersetzung (CQRS120).
         string N(ITypeSymbol t) => Funktionsform.Name(t);
         var koepfe = new Dictionary<string, List<string>>();
         void Empfaengt(ITypeSymbol typ, string wer) => (koepfe.TryGetValue(N(typ), out var l) ? l : koepfe[N(typ)] = new List<string>()).Add(wer);
         foreach (var g in laufen)
             foreach (var (typ, _) in g.Koepfe) Empfaengt(typ, g.Typ.Name);
-        var verlassen = new List<(ITypeSymbol Typ, string Von)>();
+        var verlassen = new List<(ITypeSymbol Typ, string Von, bool AusGraph)>();
         foreach (var g in laufen)
             foreach (var (von, typ) in g.Ausgaenge.Where(a => Nachrichtenform.IstOhneZiel(a.Typ)))
-                verlassen.Add((typ, $"{g.Typ.Name}.{von.Name}"));
+                verlassen.Add((typ, $"{g.Typ.Name}.{von.Name}", true));
+        foreach (var u in uebersetzungen.Where(u => Nachrichtenform.IstOhneZiel(u.Aus)))
+            verlassen.Add((u.Aus, "Übersetzung " + u.Typ.Name, false));
         foreach (var a in typen.Where(t => IstT(t, iAkteur)))
             foreach (var d in a.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)))
-                if (Nachrichtenform.IstOhneZiel(d.TypeArguments[0])) verlassen.Add((d.TypeArguments[0], "Akteur " + a.Name));
-        foreach (var (typ, von) in verlassen.GroupBy(v => N(v.Typ) + "|" + v.Von).Select(x => x.First()))
+                if (Nachrichtenform.IstOhneZiel(d.TypeArguments[0])) verlassen.Add((d.TypeArguments[0], "Akteur " + a.Name, false));
+        foreach (var (typ, von, ausGraph) in verlassen.GroupBy(v => N(v.Typ) + "|" + v.Von).Select(x => x.First()))
         {
+            if (Uebersetzt(typ)) continue;
             var hier = koepfe.TryGetValue(N(typ), out var l) ? l.Distinct().ToList() : new List<string>();
             if (hier.Count == 1) continue;
-            ctx.ReportDiagnostic(Diagnostic.Create(Empfaenger, Location.None, typ.Name, von,
-                hier.Count == 0 ? "kein Graph nimmt ihn am Kopf" : "mehrere nehmen ihn (" + string.Join(", ", hier) + ")"));
+            if (hier.Count == 0 && ausGraph && Abstractions.Projektstruktur.IstKatalog(typ.ContainingAssembly?.Name ?? ""))
+                ctx.ReportDiagnostic(Diagnostic.Create(Verlaesst, Location.None, von.Split('.')[0], typ.Name, typ.ContainingAssembly!.Name, von));
+            else
+                ctx.ReportDiagnostic(Diagnostic.Create(Empfaenger, Location.None, typ.Name, von,
+                    hier.Count == 0 ? "keine Übersetzung nimmt ihn und kein Graph am Kopf" : "mehrere Graphen nehmen ihn am Kopf (" + string.Join(", ", hier) + ")"));
         }
-
-        // GR-UEBERSETZUNG (A3): kein Katalog-Command verlässt einen Graphen der Anwendung (ein Graph, der als Schachtel steht, gibt dem äußeren).
-        var schachteln = new HashSet<string>(graphen.SelectMany(g => g.Glieder).Where(x => x.Innen != null).Select(x => Funktionsform.Voll(x.Typ)));
-        foreach (var g in graphen.Where(g => !Abstractions.Projektstruktur.IstKatalog(g.Typ.ContainingAssembly?.Name ?? "") && !schachteln.Contains(Funktionsform.Voll(g.Typ))))
-            foreach (var (von, typ) in g.Ausgaenge.Where(a => Funktionsform.IstCommandOhneZiel(a.Typ)
-                && Abstractions.Projektstruktur.IstKatalog(a.Typ.ContainingAssembly?.Name ?? "")).GroupBy(a => Funktionsform.Voll(a.Typ)).Select(x => x.First()))
-                ctx.ReportDiagnostic(Diagnostic.Create(Verlaesst, Location.None, g.Typ.Name, typ.Name, typ.ContainingAssembly!.Name, von.Name));
 
         // GR-GRAPH-KNOTEN: eine Funktion ohne Graph läuft nie.
         var knoten = new HashSet<string>(graphen.SelectMany(g => g.Knoten).Select(k => N(k.Typ)));

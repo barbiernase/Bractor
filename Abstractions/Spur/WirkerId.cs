@@ -10,7 +10,7 @@ namespace Abstractions;
 /// <item><c>decide:&lt;Aggregat&gt;/&lt;Command&gt;</c></item>
 /// <item><c>funktion:&lt;Funktion&gt;</c> (die Rechnung — so leiten <c>Herkunft</c> und Ids ab), <c>knoten:&lt;Instanz&gt;/&lt;Knoten&gt;</c> (der Schritt eines
 /// Laufs in der Spur: Instanz eines Graphen und Pfad des Knotens, <c>linie1/Aufbereitung.Vorschau</c>), <c>projektion:&lt;Typ&gt;</c>,
-/// <c>akteur:&lt;Akteur&gt;</c></item>
+/// <c>akteur:&lt;Akteur&gt;</c>, <c>uebersetzung:&lt;Übersetzung&gt;</c> (eine Übersetzung der Domäne, docs/plan-ohne-pipeline.md)</item>
 /// </list>
 /// Alle Namen sind einfache Typ- bzw. Variablennamen (ohne Namespace).
 /// <para>In den Generatoren (netstandard2.0, per Link) ist die Klasse <c>internal</c> — sonst sähe ein Projekt, das Abstractions UND einen
@@ -28,12 +28,13 @@ static class WirkerId
     public const string Knoten = "knoten";
     public const string Projektion = "projektion";
     public const string Akteur = "akteur";
+    public const string Uebersetzung = "uebersetzung";
 
     /// <summary>Der Wirker der Uhr des Frameworks (sie sendet fällige Fristen; eine Karte hat sie nicht).</summary>
     public const string Uhr = "uhr";
 
     /// <summary>Die Arten in fester Reihenfolge.</summary>
-    public static readonly string[] Arten = { Decide, Funktion, Knoten, Projektion, Akteur };
+    public static readonly string[] Arten = { Decide, Funktion, Knoten, Projektion, Akteur, Uebersetzung };
 
     public static string FuerDecide(string aggregat, string command) => Decide + ":" + aggregat + "/" + command;
     public static string FuerFunktion(string funktion) => Funktion + ":" + funktion;
@@ -41,6 +42,7 @@ static class WirkerId
     public static string FuerKnoten(string instanz, string knoten) => Knoten + ":" + instanz + "/" + knoten;
     public static string FuerProjektion(string typ) => Projektion + ":" + typ;
     public static string FuerAkteur(string akteur) => Akteur + ":" + akteur;
+    public static string FuerUebersetzung(string uebersetzung) => Uebersetzung + ":" + uebersetzung;
 
     /// <summary>Art und Rest einer Wirker-Id (<c>funktion:Bildeingang</c> → <c>(funktion, Bildeingang)</c>); <c>null</c>, wenn sie keine ist.</summary>
     public static bool Zerlege(string? id, out string art, out string rest)

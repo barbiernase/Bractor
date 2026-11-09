@@ -163,11 +163,15 @@ public static class ModellMapper
             }).ToList(),
             Graphen = dom.Graphen.Select(x => new Graph
             {
-                Name = x.Name, Namespace = x.Namespace, Knoten = x.Knoten.Select(k => new GraphKnoten { Typ = k.Typ, Name = k.Name, Kopf = k.Kopf, Von = k.Von, Verlierbar = k.Verlierbar, Innen = k.Innen,
-                    Felder = x.Felder.GetValueOrDefault(k.Name) ?? [] }).ToList(),
+                Name = x.Name, Namespace = x.Namespace, Knoten = x.Knoten.Select(k => new GraphKnoten { Typ = k.Typ, Name = k.Name, Kopf = k.Kopf, Von = k.Von, Verlierbar = k.Verlierbar })
+                    .ToList(),
                 Koepfe = x.Koepfe, Ausgaenge = x.Ausgaenge, Kanten = x.Kanten.Select(k => new GraphKante(k.Von, k.Typ, k.Nach)).ToList(), Quelle = x.Quelle, Usings = x.Usings,
-                Uebersetzungen = x.Uebersetzungen,
                 Doku = x.Doku, Datei = Rel(x.Datei),
+            }).ToList(),
+            Uebersetzungen = dom.Uebersetzungen.Select(x => new Uebersetzung
+            {
+                Name = x.Name, Namespace = x.Namespace, Ein = x.Ein, Aus = x.Aus, Felder = x.Felder, Usings = x.Usings,
+                Quellen = x.Quellen, Ziele = x.Ziele, Fehler = x.Fehler, Doku = x.Doku, Datei = Rel(x.Datei),
             }).ToList(),
             Lesen = Leseseite(dom),
         });
@@ -608,7 +612,7 @@ public static class ModellMapper
         }
         var storeVon = dom.Stores.GroupBy(x => x.Namespace + "." + x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var bausteinVon = dom.BausteinFunktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "akteure", "clients", "graphen", "readModels", "projektionen", "reader", "stores" })
+        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "akteure", "clients", "graphen", "uebersetzungen", "readModels", "projektionen", "reader", "stores" })
             foreach (var k in Alle(root[sammlung]))
             {
                 var full = S(k, "namespace") + "." + S(k, "name");
@@ -702,6 +706,7 @@ public static class ModellMapper
         foreach (var a in Alle(root["akteure"])) a["_id"] = Abstractions.WirkerId.FuerAkteur(S(a, "name"));
         foreach (var c in Alle(root["clients"])) c["_id"] = "client:" + S(c, "name");
         foreach (var g in Alle(root["graphen"])) g["_id"] = "graph:" + S(g, "name");
+        foreach (var u in Alle(root["uebersetzungen"])) u["_id"] = Abstractions.WirkerId.FuerUebersetzung(S(u, "name"));
     }
 
     /// <summary>Stabile Id einer Store-Funktion (natürlicher Schlüssel statt Position): <c>wf:IStore.Methode</c> bzw. <c>rf:…</c>.</summary>

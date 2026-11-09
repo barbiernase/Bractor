@@ -37,6 +37,11 @@ message TaktDto {
     int64 zeitpunkt = 1;
 }
 
+message HochrechnungAngefordertDto {
+    string stelle = 1;
+    double wert = 2;
+}
+
 message FreizugebenDto {
     string rechnung = 1;
     string betrag = 2;
@@ -96,11 +101,6 @@ message NeuerWertDto {
 message UnterschrittenDto {
     string posten = 1;
     int32 fehlmenge = 2;
-}
-
-message HochrechnungAngefordertDto {
-    string stelle = 1;
-    double wert = 2;
 }
 
 message VerteilungAbzuwickelnDto {

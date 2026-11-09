@@ -23,7 +23,7 @@ public sealed record Rechnungspruefer : IAkteur,
 
 /// <summary>Fordert Hochrechnungen für Messstellen an (ein Client-Eingang: über den Katalog Rechenwerk an die Messstelle, docs/04 §4.4).</summary>
 public sealed record Messwart : IAkteur,
-    IDarf<Pruefdomaene.Pipeline.Skalierung.HochrechnungAngefordert>;
+    IDarf<Pruefdomaene.Messung.HochrechnungAngefordert>;
 
 /// <summary>
 /// Die Sachbearbeitung (Schritt 6: ein Decide gibt nur Fakten aus, was danach geschieht, stößt ein Client an): auf jedes Fakt, das einen Ablauf

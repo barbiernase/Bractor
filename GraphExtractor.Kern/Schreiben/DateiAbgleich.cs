@@ -130,6 +130,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         // Graph (docs/04 §4.4): die Knoten SIND die Parameterliste des Records — Knoten hinzu/weg/umbenannt; vorhandene Parameter bleiben Wort für Wort.
         foreach (var g in modell.Graphen.Where(g => g.Datei != null && Herkunft.Geaendert(g.Herkunft, Herkunft.Von(g))))
             Datei(g.Datei!, $"graph {g.Namespace}.{g.Name}", t => GraphKnoten(t, g));
+        foreach (var u in modell.Uebersetzungen.Where(u => u.Datei != null && Herkunft.Geaendert(u.Herkunft, Herkunft.Von(u))))
+            Datei(u.Datei!, $"uebersetzung {u.Namespace}.{u.Name}", t => UebersetzungFelder(t, u));
 
         var l = modell.Lesen;
         if (l == null) return;
@@ -634,8 +636,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         {
             if (p.Identifier.Text != k.Name || N(p.Type?.ToString()) != N(k.Typ)) return false;
             var (kopf, von, verlierbar) = KopfUndVon(p);
-            return kopf == k.Kopf && von.SequenceEqual(k.Von) && verlierbar.ToHashSet().SetEquals(k.Verlierbar) && Felder(p).SequenceEqual(k.Felder)
-                && Innen(p) == (string.IsNullOrEmpty(k.Innen) ? null : k.Innen);
+            return kopf == k.Kopf && von.SequenceEqual(k.Von) && verlierbar.ToHashSet().SetEquals(k.Verlierbar);
         }
         if (ist.Count == g.Knoten.Count && ist.Zip(g.Knoten).All(z => Gleich(z.First, z.Second))) return null;
         var teile = g.Knoten.Select(k => ist.FirstOrDefault(p => Gleich(p, k))?.ToString()
@@ -668,36 +669,37 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (attribute.Any(a => Name(a) == Scaffolder.KopfAttribut), vons.SelectMany(Namen).ToList(), vons.Where(Verlierbar).SelectMany(Namen).ToList());
     }
 
-    /// <summary>
-    /// Der Abgriff eines Parameters (<c>[Von(…, Innen = nameof(T.A) + "." + nameof(TA.B))]</c>) wie im Quelltext: je <c>nameof</c> der letzte Name, mit
-    /// „.“ verbunden; sonst <c>null</c>.
-    /// </summary>
-    internal static string? Innen(ParameterSyntax p)
+    // ── Übersetzung (docs/plan-ohne-pipeline.md): ihre [Feld] am Record gehören dem Modell; Ein und Aus stehen im Marker (eine neue Übersetzung legt
+    //    der Scaffolder an) ──
+    private (string, string)? UebersetzungFelder(string text, Uebersetzung u)
     {
-        var arg = p.AttributeLists.SelectMany(l => l.Attributes).SelectMany(a => a.ArgumentList?.Arguments ?? default)
-            .FirstOrDefault(x => x.NameEquals?.Name.Identifier.ValueText == "Innen");
-        if (arg == null) return null;
-        var namen = arg.Expression.DescendantNodesAndSelf().OfType<InvocationExpressionSyntax>()
-            .Where(i => i.Expression is IdentifierNameSyntax { Identifier.ValueText: "nameof" } && i.ArgumentList.Arguments.Count == 1)
-            .Select(i => i.ArgumentList.Arguments[0].Expression.ToString().Split('.')[^1]).ToList();
-        return namen.Count > 0 ? string.Join(".", namen) : arg.Expression.ToString().Trim('"');
+        if (Typ(Parse(text), u.Name, u.Namespace) is not TypeDeclarationSyntax decl) return (text, $"Übersetzung {u.Name} nicht gefunden");
+        if (Felder(decl).SequenceEqual(u.Felder)) return null;
+        // Die übrigen Attribut-Listen bleiben; die [Feld] stehen danach je eine Zeile über dem Record, in der Reihenfolge des Modells.
+        var andere = decl.AttributeLists.Where(l => !l.Attributes.All(IstFeld)).Select(l => l.ToString());
+        var einzug = new string(' ', decl.GetLocation().GetLineSpan().StartLinePosition.Character);
+        var vorne = string.Concat(andere.Concat(u.Felder.Select(f => Scaffolder.UebersetzungsFeldText(u, f))).Select(x => x + "\n" + einzug));
+        var start = decl.AttributeLists.Count > 0 ? decl.AttributeLists[0].SpanStart : decl.Modifiers.Count > 0 ? decl.Modifiers[0].SpanStart : decl.Keyword.SpanStart;
+        var ende = decl.Modifiers.Count > 0 ? decl.Modifiers[0].SpanStart : decl.Keyword.SpanStart;
+        return (MitNamespaces(Anwenden(text, [(start, ende, vorne)]), [u.Ein, u.Aus]), "Felder");
     }
 
+    private static bool IstFeld(AttributeSyntax a) => a.Name.ToString().Split('.')[^1] is var n && (n == Scaffolder.FeldAttribut || n == Scaffolder.FeldAttribut + "Attribute");
+
     /// <summary>
-    /// Die <c>[Feld(nameof(TAus.Ziel), nameof(TEin.Quelle))]</c> eines Parameters, wie sie im Quelltext stehen: je <c>nameof</c> der letzte Name (auch für
-    /// die Parität).
+    /// Die <c>[Feld(nameof(TAus.Ziel), nameof(TEin.Quelle))]</c> einer Übersetzung, wie sie im Quelltext stehen: je <c>nameof</c> der letzte Name (auch
+    /// für die Parität).
     /// </summary>
-    internal static List<GraphFeld> Felder(ParameterSyntax p)
+    internal static List<FeldZuordnung> Felder(MemberDeclarationSyntax p)
     {
         static string Wert(ExpressionSyntax e) => e switch
         {
             InvocationExpressionSyntax { ArgumentList.Arguments: [var a] } => a.Expression.ToString().Split('.')[^1].Trim(),
             _ => e.ToString().Trim('"'),
         };
-        return p.AttributeLists.SelectMany(l => l.Attributes)
-            .Where(a => a.Name.ToString().Split('.')[^1] is var n && (n == Scaffolder.FeldAttribut || n == Scaffolder.FeldAttribut + "Attribute"))
+        return p.AttributeLists.SelectMany(l => l.Attributes).Where(IstFeld)
             .Where(a => a.ArgumentList?.Arguments.Count == 2)
-            .Select(a => new GraphFeld(Wert(a.ArgumentList!.Arguments[0].Expression), Wert(a.ArgumentList.Arguments[1].Expression))).ToList();
+            .Select(a => new FeldZuordnung(Wert(a.ArgumentList!.Arguments[0].Expression), Wert(a.ArgumentList.Arguments[1].Expression))).ToList();
     }
 
     // ── Bausteine ──────────────────────────────────────────────────────────────────────────────

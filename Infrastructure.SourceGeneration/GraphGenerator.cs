@@ -10,10 +10,9 @@ namespace Infrastructure.SourceGeneration
     /// <summary>
     /// Graphen (docs/04 §4.4): erzeugt <c>GeneratedGraphen</c> — je Graph seine Knoten (aufgefaltet, Name → Funktion), je Knoten seine Operationen (das
     /// <c>Auf</c>, die Nachricht, die es nimmt, was es ausgibt, und die WEGTABELLE: je Ausgabetyp die Empfänger im Graphen, gesichert oder verlierbar)
-    /// und die Köpfe (Eingangstyp → Knoten). Je ÜBERSETZUNG eine Rechnung (Feld für Feld nach <see cref="Uebersetzungsform"/>) mit ihren Wegen; sie hat
-    /// keinen Knoten-Plan (kein Parent, keine Funktion), die Wege an sie stehen in der Wegtabelle der Knoten davor. Alles NUR aus dem
-    /// Record und den Signaturen seiner Funktionen (<see cref="Graphform"/>); einen Graphen mit Formfehler meldet CQRS115 (bzw. CQRS119/CQRS121) im
-    /// Pipeline-Projekt, hier fehlt er.
+    /// und die Köpfe (Eingangstyp → Knoten). Dazu <c>GeneratedUebersetzungen</c>: je ÜBERSETZUNG der Domänen eine Rechnung (Feld für Feld nach
+    /// <see cref="Uebersetzungsform"/>); wohin sie gehört, sagt nur der Typ, den sie nimmt. Alles NUR aus den Records und den Signaturen
+    /// (<see cref="Graphform"/>); einen Graphen mit Formfehler meldet CQRS115, eine Übersetzung mit Fehler CQRS119/CQRS121 — hier fehlen sie.
     /// </summary>
     [Generator]
     public class GraphGenerator : ISourceGenerator
@@ -53,7 +52,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            new GraphPlan({S(g.Typ.Name)}, typeof({T(g.Typ)}),");
                 sb.AppendLine("                new KnotenPlan[]");
                 sb.AppendLine("                {");
-                foreach (var k in g.Knoten.Where(k => k.Uebersetzung == null))
+                foreach (var k in g.Knoten)
                 {
                     sb.AppendLine($"                    new KnotenPlan({S(k.Name)}, {S(Funktionsform.Anzeigename(k.Typ))}, new OperationPlan[]");
                     sb.AppendLine("                    {");
@@ -70,20 +69,25 @@ namespace Infrastructure.SourceGeneration
                 var koepfe = g.Koepfe.OrderBy(x => T(x.Typ), System.StringComparer.Ordinal)
                     .Select(x => $"[typeof({T(x.Typ)})] = new[] {{ {string.Join(", ", x.Knoten.Select(k => S(k.Name)))} }}");
                 sb.AppendLine($"                new Dictionary<Type, string[]> {{ {string.Join(", ", koepfe)} }},");
-                sb.AppendLine($"                {Typen(g.Ausgaenge.Select(x => (ITypeSymbol)x.Typ))}, Quelle: {(g.Quelle != null ? S(g.Quelle.Name) : "null")},");
-                sb.AppendLine("                Uebersetzungen: new UebersetzungPlan[]");
-                sb.AppendLine("                {");
-                foreach (var k in g.Knoten.Where(k => k.Uebersetzung != null))
-                {
-                    var u = k.Uebersetzung!;
-                    var felder = u.Ziele.Where(z => z.Ausdruck.Length > 0).Select(z => $"@{z.Name}: {z.Ausdruck}");
-                    var wege = g.Kanten.Where(e => e.Von == k)
-                        .Select(e => $"new WegPlan(typeof({T(e.Typ)}), {S(e.Nach.Name)}, {e.NachOperation.Nummer}{(e.Verlierbar ? ", Verlierbar: true" : "")})");
-                    sb.AppendLine($"                    new UebersetzungPlan({S(k.Name)}, typeof({T(u.Ein)}), typeof({T(u.Aus)}),");
-                    sb.AppendLine($"                        x => {{ var e = ({T(u.Ein)})x; return new {T(u.Aus)}({string.Join(", ", felder)}); }},");
-                    sb.AppendLine($"                        new WegPlan[] {{ {string.Join(", ", wege)} }}),");
-                }
-                sb.AppendLine("                }),");
+                sb.AppendLine($"                {Typen(g.Ausgaenge.Select(x => (ITypeSymbol)x.Typ))}, Quelle: {(g.Quelle != null ? S(g.Quelle.Name) : "null")}),");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+            // Die ÜBERSETZUNGEN der Domänen (docs/plan-ohne-pipeline.md §2): je Record mit IUebersetzung<TEin, TAus> eine Rechnung, Feld für Feld nach
+            //   Uebersetzungsform. Wohin sie gehören, sagt nur der Typ, den sie nehmen.
+            var uebersetzungen = Vertragsassemblies.Typen(c).Where(Uebersetzungsform.IstUebersetzung).OrderBy(t => t.Name, System.StringComparer.Ordinal)
+                .Select(Uebersetzungsform.Lies).Where(u => u.Fehler.Count == 0).ToList();
+            sb.AppendLine("    public static class GeneratedUebersetzungen");
+            sb.AppendLine("    {");
+            sb.AppendLine("        /// <summary>Alle Übersetzungen der Anwendung (Name, TEin, TAus, Rechnung).</summary>");
+            sb.AppendLine("        public static readonly IReadOnlyList<UebersetzungPlan> Alle = new UebersetzungPlan[]");
+            sb.AppendLine("        {");
+            foreach (var u in uebersetzungen)
+            {
+                var felder = u.Ziele.Where(z => z.Ausdruck.Length > 0).Select(z => $"@{z.Name}: {z.Ausdruck}");
+                sb.AppendLine($"            new UebersetzungPlan({S(u.Typ.Name)}, typeof({T(u.Ein)}), typeof({T(u.Aus)}),");
+                sb.AppendLine($"                x => {{ var e = ({T(u.Ein)})x; return new {T(u.Aus)}({string.Join(", ", felder)}); }}),");
             }
             sb.AppendLine("        };");
             sb.AppendLine("    }");

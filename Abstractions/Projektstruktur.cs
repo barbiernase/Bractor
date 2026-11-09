@@ -69,6 +69,9 @@ static class Projektstruktur
         Hinweis,
         /// <summary>Ein Graph (<c>record … : IGraph</c>, Knoten als Parameter): bei den Abläufen, in <c>Graphen.cs</c>.</summary>
         Graph,
+        /// <summary>Eine Übersetzung (<c>record … : IUebersetzung&lt;TEin, TAus&gt;</c>): in der Domäne (Schreibseite), in <c>Uebersetzungen.cs</c> —
+        /// sie macht einen Graphen aus einem Katalog domänenspezifisch (docs/plan-ohne-pipeline.md).</summary>
+        Uebersetzung,
         /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — bei den Abläufen,
         /// je Typ eine eigene Datei.</summary>
         Technik,
@@ -165,10 +168,12 @@ static class Projektstruktur
     public const string AllgemeinerKatalog = "Allgemein.Katalog";
 
     /// <summary>
-    /// Die Rollen einer Anwendung, die Kataloge nutzen dürfen (alle über den Abläufen, dazu der Speicher: er setzt die Fähigkeiten um, die ein Katalog
-    /// zum Lesen deklariert); Schreib- und Leseseite kennen keine Funktionsnachricht.
+    /// Die Rollen einer Anwendung, die Kataloge nutzen dürfen: die Schreibseite (ihre Übersetzungen machen Graphen aus Katalogen domänenspezifisch —
+    /// Zustand, Decide und Events nennen trotzdem keinen Katalog-Typ), die Abläufe, der Speicher (er setzt die Fähigkeiten um, die ein Katalog zum Lesen
+    /// deklariert) und alles darüber; die Leseseite kennt keine Funktionsnachricht.
     /// </summary>
-    public static readonly IReadOnlyList<Rolle> NutzenKataloge = new[] { Rolle.Ablaeufe, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung, Rolle.Komposition };
+    public static readonly IReadOnlyList<Rolle> NutzenKataloge = new[]
+        { Rolle.Schreibseite, Rolle.Ablaeufe, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung, Rolle.Komposition };
 
     public static Eintrag Von(Rolle r) => r == Rolle.Katalog ? Katalog : Rollen.First(e => e.Rolle == r);
 
@@ -256,6 +261,8 @@ static class Projektstruktur
                 return new[] { Rolle.Schreibseite, Rolle.Katalog };
             case Primitive.Hinweis:
                 return new[] { Rolle.Schreibseite, Rolle.Ablaeufe, Rolle.Katalog };
+            case Primitive.Uebersetzung:
+                return new[] { Rolle.Schreibseite };
             case Primitive.StoreFaehigkeit:
                 // Eine Fähigkeit deklariert die Leseseite für ihre Projektionen und Reader — oder ein Katalog für seine Funktionen (mit seinen eigenen
                 //   Typen); umgesetzt wird sie im Speicher der Anwendung (docs/plan-ohne-pipeline.md §2.3).
@@ -263,7 +270,10 @@ static class Projektstruktur
             case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel:
             case Primitive.Projektion: case Primitive.Reader:
                 return new[] { Rolle.Leseseite };
-            case Primitive.Funktion: case Primitive.KnotenCommand: case Primitive.Graph:
+            case Primitive.KnotenCommand:
+                // Ein Command ohne Ziel: zwischen Knoten im Katalog — oder die Nachricht eines Clients an eine Kopf-Übersetzung in der Domäne.
+                return new[] { Rolle.Schreibseite, Rolle.Ablaeufe, Rolle.Katalog };
+            case Primitive.Funktion: case Primitive.Graph:
             case Primitive.Konfig: case Primitive.Technik:
                 return new[] { Rolle.Ablaeufe, Rolle.Katalog };
             case Primitive.Akteur: case Primitive.Client:
@@ -285,6 +295,7 @@ static class Projektstruktur
             case Primitive.Command: case Primitive.KnotenCommand: return "Commands.cs";
             case Primitive.Event: case Primitive.Hinweis: return "Events.cs";
             case Primitive.Graph: return "Graphen.cs";
+            case Primitive.Uebersetzung: return "Uebersetzungen.cs";
             case Primitive.Wertobjekt: return "ValueObjects.cs";
             case Primitive.Enum: return "Enums.cs";
             case Primitive.ReadModel: return "ReadModels.cs";
@@ -385,6 +396,7 @@ static class Projektstruktur
             case Primitive.KnotenCommand: return "ein Command zwischen Knoten";
             case Primitive.Hinweis: return "ein Hinweis";
             case Primitive.Graph: return "ein Graph";
+            case Primitive.Uebersetzung: return "eine Übersetzung";
             case Primitive.Technik: return "Technik";
             case Primitive.Konfig: return "ein Konfig-Record";
             case Primitive.Akteur: return "ein Akteur";

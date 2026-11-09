@@ -23,6 +23,8 @@ public sealed class DomainModel
     public List<ClientRaw> Clients { get; } = new();
     /// <summary><c>IGraph</c>-Records: die Graphen mit ihren Knoten (Graphform: dieselbe Lesart wie Generator und Analyzer).</summary>
     public List<GraphRaw> Graphen { get; } = new();
+    /// <summary><c>IUebersetzung&lt;TEin, TAus&gt;</c>-Records: die Übersetzungen der Domänen (Uebersetzungsform).</summary>
+    public List<UebersetzungRaw> Uebersetzungen { get; } = new();
 
     /// <summary>Records ohne Nachrichten-Marker in Domain-Assemblies (Value Objects).</summary>
     public List<RecordRaw> ValueObjects { get; } = new();
@@ -408,18 +410,29 @@ public sealed class ClientRaw
 public sealed class GraphRaw
 {
     public string Name = "", Namespace = "", Full = "";
-    public List<(string Name, string Typ, bool Kopf, List<string> Von, List<string> Verlierbar, string? Innen)> Knoten = new();
+    public List<(string Name, string Typ, bool Kopf, List<string> Von, List<string> Verlierbar)> Knoten = new();
     public List<string> Koepfe = new(), Ausgaenge = new();
     /// <summary>Die Kanten aus den <c>Von</c>: Erzeuger-Knoten, Typ, nehmender Knoten (aufgefaltete Pfade, <c>Aufbereitung.Vorschau</c>).</summary>
     public List<(string Von, string Typ, string Nach)> Kanten = new();
     public string? Quelle;
     public List<string> Fehler = new();
-    /// <summary>Je Knoten seine <c>[Feld]</c> (an einer Übersetzung), wie sie dastehen.</summary>
-    public Dictionary<string, List<DomainEditor.GraphFeld>> Felder = new(StringComparer.Ordinal);
-    /// <summary>Je Übersetzung ihre Zuordnung (Lesart Uebersetzungsform).</summary>
-    public List<DomainEditor.GraphUebersetzung> Uebersetzungen = new();
     /// <summary>Die Namespaces der Knoten-Typen (samt Typargumenten), die nicht der des Graphen sind.</summary>
     public List<string> Usings = new();
+    public string? Datei, Doku;
+}
+
+/// <summary>
+/// Eine Übersetzung der Domäne (<c>record X : IUebersetzung&lt;TEin, TAus&gt;</c>, docs/plan-ohne-pipeline.md): Ein, Aus, die <c>[Feld]</c> wie sie
+/// dastehen und abgeleitet die Zuordnung (Lesart <c>Infrastructure.SourceGeneration.Uebersetzungsform</c>).
+/// </summary>
+public sealed class UebersetzungRaw
+{
+    public string Name = "", Namespace = "", Ein = "", Aus = "";
+    public List<DomainEditor.FeldZuordnung> Felder = new();
+    public List<string> Usings = new();
+    public List<DomainEditor.UebersetzungsFeld> Quellen = new();
+    public List<DomainEditor.UebersetzungsZiel> Ziele = new();
+    public List<string> Fehler = new();
     public string? Datei, Doku;
 }
 
@@ -713,6 +726,7 @@ public sealed partial class DomainExtractor
             if (t.TypeKind != TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
             // Graph (record X(Knoten…) : IGraph): Knoten als Parameter, Kanten aus [Von], Köpfe aus [Kopf].
             if (Infrastructure.SourceGeneration.Graphform.IstGraph(t)) { m.Graphen.Add(ReadGraph(t)); continue; }
+            if (Infrastructure.SourceGeneration.Uebersetzungsform.IstUebersetzung(t)) { m.Uebersetzungen.Add(ReadUebersetzung(t)); continue; }
             // Geschachtelte Typen gehören zum Handcode ihres Containers (Zusatz), keine eigenen Bausteine.
             if (t.ContainingType != null || t.TypeKind is not (TypeKind.Class or TypeKind.Struct) || t.IsStatic || t.IsAbstract) continue;
 
@@ -955,38 +969,42 @@ public sealed partial class DomainExtractor
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
             Knoten = (ctor?.Parameters ?? []).Select(p =>
             {
-                var (kopf, von, verlierbar, innen) = Infrastructure.SourceGeneration.Graphform.KopfVonInnen(p);
+                var (kopf, von, verlierbar) = Infrastructure.SourceGeneration.Graphform.KopfUndVon(p);
                 return (p.Name, geschrieben.GetValueOrDefault(p.Name) is { Length: > 0 } w ? w : p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), kopf, von,
-                    verlierbar, innen);
+                    verlierbar);
             }).ToList(),
             Koepfe = g.Koepfe.Select(k => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(k.Typ)).Distinct(StringComparer.Ordinal).ToList(),
             Ausgaenge = g.Ausgaenge.Select(a => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(a.Typ)).Distinct(StringComparer.Ordinal).ToList(),
             Quelle = g.Quelle?.Name,
-            Fehler = g.Fehler.Select(f => f.Text).Concat(g.Regelfehler.Select(f => f.Text)).ToList(),
+            Fehler = g.Fehler.Select(f => f.Text).ToList(),
         };
         IEnumerable<ITypeSymbol> MitArgumenten(ITypeSymbol x) => x is INamedTypeSymbol n ? new[] { x }.Concat(n.TypeArguments.SelectMany(MitArgumenten)) : [x];
         raw.Usings = (ctor?.Parameters ?? []).SelectMany(p => MitArgumenten(p.Type)).Select(x => x.ContainingNamespace?.Fq() ?? "")
             .Where(n => n.Length > 0 && n != raw.Namespace).Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal).ToList();
         raw.Kanten = g.Kanten.Select(k => (k.Von.Name, Infrastructure.SourceGeneration.Funktionsform.Anzeigename(k.Typ), k.Nach.Name)).Distinct().ToList();
-        foreach (var p in ctor?.Parameters ?? [])
-            if (Infrastructure.SourceGeneration.Uebersetzungsform.Felder(p) is { Count: > 0 } felder)
-                raw.Felder[p.Name] = felder.Select(f => new DomainEditor.GraphFeld(f.Ziel, f.Quelle)).ToList();
-        // Die Übersetzungen dieses Graphen (nicht die seiner Schachteln): je Ziel die Quelle samt Regel, und welche Felder ausdrücklich passen.
-        static string T(ITypeSymbol x) => x.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-        foreach (var k in g.Knoten.Where(k => k.Uebersetzung != null && k.Bereich.Count == 0))
-        {
-            var u = k.Uebersetzung!;
-            raw.Uebersetzungen.Add(new DomainEditor.GraphUebersetzung
-            {
-                Knoten = k.Name, Ein = Infrastructure.SourceGeneration.Funktionsform.Anzeigename(u.Ein), Aus = Infrastructure.SourceGeneration.Funktionsform.Anzeigename(u.Aus),
-                Quellen = u.Felder.Select(f => new DomainEditor.UebersetzungsFeld(f.Name, T(f.Type))).ToList(),
-                Ziele = u.Ziele.Select(z => new DomainEditor.UebersetzungsZiel(z.Name, T(z.Typ), z.Quelle, z.Regel,
-                    u.Felder.Where(f => Infrastructure.SourceGeneration.Uebersetzungsform.Ausdruck(f.Type, z.Typ, "e", ausdruecklich: true) != null)
-                        .Select(f => f.Name).ToList())).ToList(),
-                Fehler = u.Fehler.Select(f => f.Text).ToList(),
-            });
-        }
         return raw;
+    }
+
+    // ── Übersetzungen: ein Record der Domäne mit IUebersetzung<TEin, TAus> und seinen [Feld] (Uebersetzungsform, eine Lesart mit Generator) ──────
+    private UebersetzungRaw ReadUebersetzung(INamedTypeSymbol t)
+    {
+        var decl = QuellDeklarationen(t).FirstOrDefault();
+        var u = Infrastructure.SourceGeneration.Uebersetzungsform.Lies(t);
+        static string T(ITypeSymbol x) => x.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+        var ns = t.ContainingNamespace.Fq();
+        return new UebersetzungRaw
+        {
+            Name = t.Name, Namespace = ns, Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
+            Ein = Infrastructure.SourceGeneration.Funktionsform.Anzeigename(u.Ein), Aus = Infrastructure.SourceGeneration.Funktionsform.Anzeigename(u.Aus),
+            Felder = Infrastructure.SourceGeneration.Uebersetzungsform.Felder(t).Select(f => new DomainEditor.FeldZuordnung(f.Ziel, f.Quelle)).ToList(),
+            Usings = new[] { u.Ein, u.Aus }.Select(x => x.ContainingNamespace?.Fq() ?? "").Where(n => n.Length > 0 && n != ns)
+                .Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal).ToList(),
+            Quellen = u.Felder.Select(f => new DomainEditor.UebersetzungsFeld(f.Name, T(f.Type))).ToList(),
+            Ziele = u.Ziele.Select(z => new DomainEditor.UebersetzungsZiel(z.Name, T(z.Typ), z.Quelle, z.Regel,
+                u.Felder.Where(f => Infrastructure.SourceGeneration.Uebersetzungsform.Ausdruck(f.Type, z.Typ, "e", ausdruecklich: true) != null)
+                    .Select(f => f.Name).ToList())).ToList(),
+            Fehler = u.Fehler.Select(f => f.Text).ToList(),
+        };
     }
 
     // ── Akteure: IAkteur + IDarf<T> in der Basisliste (Code-Fakt; Reihenfolge = Deklaration, Geerbtes danach) ───────

@@ -37,8 +37,8 @@ public static class Nachrichtenform
 }
 
 /// <summary>
-/// Ein Command ohne Ziel eines Clients als offene Eingänge (<see cref="EingangOffen"/>): je Instanz, deren Graph ihn am Kopf nimmt, einer mit der Kennung
-/// aus Command-Id und Instanz (<see cref="Eingangsvertrag"/>) — derselbe Command ergibt dieselben Kennungen.
+/// Ein Command ohne Ziel eines Clients als offene Eingänge (<see cref="EingangOffen"/>): je Instanz, deren Graph ihn (oder seine Übersetzung) am Kopf
+/// nimmt, einer mit der Kennung aus Command-Id und Instanz (<see cref="Eingangsvertrag"/>) — derselbe Command ergibt dieselben Kennungen.
 /// </summary>
 public static class Folgenbeilagen
 {
@@ -49,11 +49,13 @@ public static class Folgenbeilagen
     public static IReadOnlyList<(EingangOffen Eingang, object Folge)> VonAkteur(ICommand command, Infrastructure.Funktionen.Verkettung plan, Guid commandId,
         string? akteur, string? korrelation, int version = 0)
     {
-        var hoerer = plan.Hoerer(command.GetType());
-        if (hoerer.Count == 0) return Array.Empty<(EingangOffen, object)>();
-        var (typ, daten) = Nachrichtenform.Schreibe(command);
-        return hoerer.Select(f => (new EingangOffen(Eingangsvertrag.Eingang(commandId, f), f, typ, daten, version, ImAuftrag.IstAkteur(akteur) ? akteur : null,
-            korrelation), (object)command)).ToList();
+        // Nimmt kein Graph ihn am Kopf, übersetzt eine Kopf-Übersetzung der Domäne ihn in den Eingang eines Graphen (Verkettung.Ziele).
+        return plan.Ziele(command).Select(z =>
+        {
+            var (typ, daten) = Nachrichtenform.Schreibe(z.Nachricht);
+            return (new EingangOffen(Eingangsvertrag.Eingang(commandId, z.Instanz), z.Instanz, typ, daten, version, ImAuftrag.IstAkteur(akteur) ? akteur : null,
+                korrelation), z.Nachricht);
+        }).ToList();
     }
 
     /// <summary>

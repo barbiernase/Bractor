@@ -106,6 +106,12 @@ public static class Scaffolder
             dateien.Add(new(g.Key.Pfad, GraphDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
                 !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
 
+        // ── Übersetzungen (docs/plan-ohne-pipeline.md) → ihre echte Datei; sonst die (eine) Datei der Übersetzungen ihres Namespace; sonst
+        //    Uebersetzungen.cs im Verzeichnis ──
+        foreach (var g in modell.Uebersetzungen.GroupBy(x => (Pfad: x.Datei ?? UebersetzungsZiel(modell, x.Namespace), x.Namespace)))
+            dateien.Add(new(g.Key.Pfad, UebersetzungsDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
+                !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
+
         // ── Aggregate → State; Decider/Applier je Aggregat aus den eigenständigen Regeln ──
         foreach (var agg in modell.Aggregate)
         {
@@ -267,6 +273,15 @@ public static class Scaffolder
     // ── Graphen ─────────────────────────────────────────────────────────────────────────────────
     private static readonly string IGraph = nameof(Abstractions.IGraph);
 
+    private static string UebersetzungsZiel(EditorModell m, string ns)
+    {
+        var dateien = m.Uebersetzungen.Where(u => u.Namespace == ns && u.Datei != null).Select(u => u.Datei!).Distinct(StringComparer.Ordinal).ToList();
+        if (dateien.Count == 1) return dateien[0];
+        var v = Verzeichnis(m, ns);
+        var name = Abstractions.Projektstruktur.Sammeldatei(Abstractions.Projektstruktur.Primitive.Uebersetzung)!;
+        return v != null ? $"{v}/{name}" : $"{Unplatziert}{name}";
+    }
+
     private static string GraphZiel(EditorModell m, string ns)
     {
         var dateien = m.Graphen.Where(g => g.Namespace == ns && g.Datei != null).Select(g => g.Datei!).Distinct(StringComparer.Ordinal).ToList();
@@ -302,51 +317,27 @@ public static class Scaffolder
     /// </summary>
     public static string GraphKnotenText(GraphKnoten k, Graph? g = null, Func<string, Graph?>? graphNamens = null)
     {
-        var innen = InnenAusdruck(k, g, graphNamens);
         string Von(IEnumerable<string> namen, bool verlierbar) =>
-            $"[{VonAttribut}({string.Join(", ", namen.Select(v => $"nameof({v})"))}{(verlierbar ? ", Verlierbar = true" : "")}{innen})] ";
+            $"[{VonAttribut}({string.Join(", ", namen.Select(v => $"nameof({v})"))}{(verlierbar ? ", Verlierbar = true" : "")})] ";
         var gesichert = k.Von.Where(v => !k.Verlierbar.Contains(v)).ToList();
         var verlierbar = k.Von.Where(v => k.Verlierbar.Contains(v)).ToList();
-        var u = UebersetzungTypen(k.Typ);
-        var felder = string.Concat(k.Felder.Select(f => u is var (ein, aus)
-            ? $"[{FeldAttribut}(nameof({aus}.{f.Ziel}), nameof({ein}.{f.Quelle}))] " : $"[{FeldAttribut}(\"{f.Ziel}\", \"{f.Quelle}\")] "));
         return (k.Kopf ? $"[{KopfAttribut}] " : "") + (gesichert.Count > 0 ? Von(gesichert, false) : "") + (verlierbar.Count > 0 ? Von(verlierbar, true) : "")
-            + felder + $"{k.Typ} {k.Name}";
+            + $"{k.Typ} {k.Name}";
     }
 
     /// <summary>
-    /// Der Abgriff eines Knotens als <c>, Innen = nameof(T.X)</c> (tiefer <c>nameof(T.A) + "." + nameof(TA.X)</c>): je Glied des Pfads der Typ, in dem
-    /// es steht — der Typ der genannten Quelle, dann der Typ des Knotens darin. Ohne Abgriff (oder ohne eindeutige Quelle) leer.
+    /// Eine ÜBERSETZUNG (docs/plan-ohne-pipeline.md): je Abweichung ein <c>[Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))]</c> über dem Record, dann
+    /// <c>public sealed record Name : IUebersetzung&lt;Ein, Aus&gt;;</c>.
     /// </summary>
-    private static string InnenAusdruck(GraphKnoten k, Graph? g, Func<string, Graph?>? graphNamens)
-    {
-        if (string.IsNullOrEmpty(k.Innen) || k.Von.Count != 1 || g?.Knoten.FirstOrDefault(x => x.Name == k.Von[0]) is not { } quelle) return "";
-        var teile = new List<string>();
-        var typ = quelle.Typ;
-        foreach (var glied in k.Innen.Split('.'))
-        {
-            teile.Add($"nameof({typ}.{glied})");
-            typ = graphNamens?.Invoke(typ)?.Knoten.FirstOrDefault(x => x.Name == glied)?.Typ ?? typ;
-        }
-        return ", Innen = " + string.Join(" + \".\" + ", teile);
-    }
+    public static string UebersetzungRecord(Uebersetzung u) =>
+        string.Concat(u.Felder.Select(f => UebersetzungsFeldText(u, f) + "\n"))
+        + $"public sealed record {u.Name} : {nameof(Abstractions.IUebersetzung<object, object>)}<{u.Ein}, {u.Aus}>;";
 
-    /// <summary>Die Typargumente einer Übersetzung, wie geschrieben (<c>Uebersetze&lt;A, B&gt;</c> → (A, B)); sonst null.</summary>
-    public static (string Ein, string Aus)? UebersetzungTypen(string typ)
-    {
-        var t = typ.Trim();
-        const string kopf = nameof(Abstractions.Uebersetze<object, object>);
-        if (!t.StartsWith(kopf + "<", StringComparison.Ordinal) || !t.EndsWith('>')) return null;
-        var innen = t[(kopf.Length + 1)..^1];
-        var tiefe = 0;
-        for (var i = 0; i < innen.Length; i++)
-        {
-            if (innen[i] == '<') tiefe++;
-            else if (innen[i] == '>') tiefe--;
-            else if (innen[i] == ',' && tiefe == 0) return (innen[..i].Trim(), innen[(i + 1)..].Trim());
-        }
-        return null;
-    }
+    /// <summary>Ein <c>[Feld]</c> einer Übersetzung, wie man es schreibt — die Namen als <c>nameof</c> über die Typen (der Compiler benennt mit um).</summary>
+    public static string UebersetzungsFeldText(Uebersetzung u, FeldZuordnung f) =>
+        $"[{FeldAttribut}(nameof({Basis(u.Aus)}.{f.Ziel}), nameof({Basis(u.Ein)}.{f.Quelle}))]";
+
+    private static string Basis(string typ) => typ.IndexOf('<') is > 0 and var i ? typ[..i] : typ;
 
     /// <summary>Die Attribute eines Graph-Knotens, wie man sie schreibt (<c>[Kopf]</c>, <c>[Von(…)]</c>).</summary>
     public static readonly string KopfAttribut = nameof(Abstractions.KopfAttribute)[..^"Attribute".Length];
@@ -364,6 +355,19 @@ public static class Scaffolder
             Doku(b, graphen[i].Doku, "");
             b.AppendLine(GraphRecord(graphen[i], n => modell.Graphen.FirstOrDefault(x => x.Name == n)));
             if (i < graphen.Count - 1) b.AppendLine();
+        }
+        return b.ToString();
+    }
+
+    private static string UebersetzungsDatei(string ns, List<Uebersetzung> uebersetzungen, EditorModell modell)
+    {
+        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace], uebersetzungen.SelectMany(u => new[] { u.Ein, u.Aus }),
+            uebersetzungen.SelectMany(u => u.Usings)));
+        for (var i = 0; i < uebersetzungen.Count; i++)
+        {
+            Doku(b, uebersetzungen[i].Doku, "");
+            b.AppendLine(UebersetzungRecord(uebersetzungen[i]));
+            if (i < uebersetzungen.Count - 1) b.AppendLine();
         }
         return b.ToString();
     }

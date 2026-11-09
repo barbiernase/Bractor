@@ -140,7 +140,7 @@ public sealed class FunktionsKindActor(
         await foreach (var x in strom.WithCancellation(ct))
         {
             var i = stelle++;
-            if (traeger.Uebersetzungen.TryGetValue(x.GetType(), out var uebersetzungen))
+            if (traeger.Uebersetzungen.Fuer(x.GetType()) is { Length: > 0 } uebersetzungen)
             {
                 foreach (var u in uebersetzungen) await UebersetzeAsync(a, u, x, i, kennung, ursache, ausgaben, warten, ct);
                 if (!traeger.ImGraphen.Contains(x.GetType())) continue;   // sonst nimmt ihn auch eine Funktion des Graphen
@@ -178,31 +178,26 @@ public sealed class FunktionsKindActor(
     }
 
     /// <summary>
-    /// Eine Übersetzung inline (docs/04 §4.4): aus der Ausgabe <paramref name="x"/> genau eine Nachricht, Feld für Feld. Ein Command an ein Aggregat geht
-    /// sofort über den Emitter (Id aus Aufruf, Ort der Übersetzung und Stelle); jedes Event der Antwort, das eine Antwort-Übersetzung nimmt, rechnet sie
-    /// gleich weiter (Kennung aus Aufruf, Ort, Stelle und Nummer, Ursache das Event). Einer an Knoten des Graphen geht mit dem Erfolg an den Parent (die
-    /// Wege der Übersetzung gelten), ein anderer an den Kopf der Instanz, die ihn nimmt. Die Spur nennt die Übersetzung als Wirker.
+    /// Eine Übersetzung der Domäne inline (docs/plan-ohne-pipeline.md §3): aus der Ausgabe <paramref name="x"/> genau eine Nachricht, Feld für Feld. Ein
+    /// Command an ein Aggregat geht sofort über den Emitter (Id aus Aufruf, Ort der Übersetzung und Stelle); jedes Event der Antwort, das eine Übersetzung
+    /// nimmt, rechnet sie gleich weiter (eine Antwort-Übersetzung; Kennung aus Aufruf, Ort, Stelle und Nummer, Ursache das Event). Ein Command ohne Ziel
+    /// geht an den Kopf der Instanz, die ihn nimmt. Die Spur nennt die Übersetzung als Wirker.
     /// </summary>
     private async Task UebersetzeAsync(KnotenAufruf a, UebersetzungPlan u, object x, int i, Guid kennung, string ursache, List<KnotenAusgabe> ausgaben,
         List<Task> warten, CancellationToken ct)
     {
         var ort = traeger.Instanz + "/" + u.Name;
-        using var spur = Spur.Von(ursache, WirkerId.FuerKnoten(traeger.Instanz, u.Name));
+        using var spur = Spur.Von(ursache, WirkerId.FuerUebersetzung(u.Name));
         switch (u.Rechne(x))
         {
             case IAggregatCommand c:
                 var antwort = await SendeAsync(c, Kettenvertrag.Befehl(kennung, ort, i, c), a, ct);
-                if (!traeger.AntwortUebersetzungen.TryGetValue(u.Name, out var antworten) || antworten.Count == 0) break;
                 for (var j = 0; j < antwort.Events.Count; j++)
                 {
                     var (ev, version) = (antwort.Events[j].Event, antwort.Events[j].Version);
-                    if (!antworten.TryGetValue(ev.GetType(), out var plaene)) continue;
-                    foreach (var p in plaene)
+                    foreach (var p in traeger.Uebersetzungen.Fuer(ev.GetType()))
                         await UebersetzeAsync(a, p, ev, 0, Kettenvertrag.Antwort(kennung, ort, i, j), Spur.Ursache(c.Ziel, version), ausgaben, warten, ct);
                 }
-                break;
-            case ICommand weiter when u.Wege.Any(w => w.Typ == weiter.GetType()):
-                ausgaben.Add(new KnotenAusgabe(ausgaben.Count, weiter, u.Name));
                 break;
             case ICommand weiter:
                 ZuFremdemKopf(a, weiter, Kettenvertrag.Ausgabe(kennung, ort, i), warten, ct);

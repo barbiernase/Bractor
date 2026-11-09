@@ -51,6 +51,8 @@ public sealed record EditorModell
     /// Graph, dazu <c>[Kopf]</c> und <c>[Von(…)]</c>). Köpfe, Ausgänge und Kanten folgen aus den Attributen — abgeleitet, nicht Modell.
     /// </summary>
     public IReadOnlyList<Graph> Graphen { get; init; } = [];
+    /// <summary>Die Übersetzungen der Domänen (docs/plan-ohne-pipeline.md): je Record mit <c>IUebersetzung&lt;TEin, TAus&gt;</c> einer.</summary>
+    public IReadOnlyList<Uebersetzung> Uebersetzungen { get; init; } = [];
     /// <summary>
     /// Die LESESEITE als Signatur-Fakten: Stores (Fähigkeiten + Bündel + Impl-Klasse), Projektionen und Reader.
     /// ReadModels/Queries/Responses sind <see cref="Record"/>s (eigene Arten).
@@ -639,8 +641,6 @@ public sealed record Graph
     public string? Quelle { get; init; }
     /// <summary>Die Namespaces der Knoten-Typen außerhalb der Domäne (z. B. <c>Core.Katalog</c> für eine Quellfunktion) — wie geschrieben.</summary>
     public IReadOnlyList<string> Usings { get; init; } = [];
-    /// <summary>Abgeleitet: je Übersetzung (<c>Uebersetze&lt;TEin, TAus&gt;</c>) ihre Zuordnung — was die ↦-Karte zeigt (Lesart Uebersetzungsform).</summary>
-    public IReadOnlyList<GraphUebersetzung> Uebersetzungen { get; init; } = [];
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
     public string? Datei { get; init; }
@@ -648,18 +648,29 @@ public sealed record Graph
 }
 
 /// <summary>
-/// Eine Übersetzung eines Graphen, abgeleitet (docs/04 §4.4): ihr Knoten, was sie nimmt (<see cref="Ein"/>) und erzeugt (<see cref="Aus"/>), die Felder
-/// von <c>TEin</c> und je Parameter von <c>TAus</c> seine Quelle mit Regel (<c>feld</c>, <c>name</c>, <c>standard</c>, leer = offen) und den Feldern von
-/// <c>TEin</c>, die ausdrücklich passen (für „＋“ an einem Ziel); dazu die Fehler (CQRS119/CQRS121).
+/// Eine ÜBERSETZUNG (docs/plan-ohne-pipeline.md): ein Record der Domäne, <c>public sealed record {Name} : IUebersetzung&lt;{Ein}, {Aus}&gt;;</c>, mit den
+/// Abweichungen der Feldzuordnung als <c>[Feld(nameof({Aus}.Ziel), nameof({Ein}.Quelle))]</c>. Sie macht einen Graphen aus einem Katalog
+/// domänenspezifisch; wohin sie gehört, sagt nur der Typ <see cref="Ein"/>. Abgeleitet (nicht editierbar): die Felder von <c>TEin</c>, je Parameter von
+/// <c>TAus</c> seine Quelle mit Regel (<c>feld</c>, <c>name</c>, <c>standard</c>, leer = offen) und den Feldern von <c>TEin</c>, die ausdrücklich passen
+/// (für die Wahl im Modal), und die Fehler (CQRS119/CQRS121).
 /// </summary>
-public sealed record GraphUebersetzung
+public sealed record Uebersetzung
 {
-    public string Knoten { get; init; } = "";
+    public string Name { get; init; } = "";
+    public string Namespace { get; init; } = "";
     public string Ein { get; init; } = "";
     public string Aus { get; init; } = "";
+    /// <summary>Die Abweichungen der Feldzuordnung (<c>[Feld]</c> am Record).</summary>
+    public IReadOnlyList<FeldZuordnung> Felder { get; init; } = [];
+    /// <summary>Die Namespaces von <see cref="Ein"/> und <see cref="Aus"/>, die nicht der der Übersetzung sind — wie geschrieben.</summary>
+    public IReadOnlyList<string> Usings { get; init; } = [];
     public IReadOnlyList<UebersetzungsFeld> Quellen { get; init; } = [];
     public IReadOnlyList<UebersetzungsZiel> Ziele { get; init; } = [];
     public IReadOnlyList<string> Fehler { get; init; } = [];
+    public string? Doku { get; init; }
+    /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
+    public string? Datei { get; init; }
+    public string? Herkunft { get; init; }
 }
 
 /// <summary>Ein Feld von <c>TEin</c>: Name und Typ.</summary>
@@ -681,17 +692,10 @@ public sealed record GraphKnoten
     public IReadOnlyList<string> Von { get; init; } = [];
     /// <summary>Die Namen aus <see cref="Von"/>, deren Kanten verlierbar sind.</summary>
     public IReadOnlyList<string> Verlierbar { get; init; } = [];
-    /// <summary>
-    /// An einer Übersetzung, die einen Graphen im Graphen nennt: der Knoten darin, aus dem sie abgreift (<c>[Von(nameof(A), Innen = nameof(T.X))]</c>),
-    /// als Pfad mit „.“ (<c>Verkleinern</c>, tiefer <c>Teil.Verkleinern</c>); sonst <c>null</c>.
-    /// </summary>
-    public string? Innen { get; init; }
-    /// <summary>An einer Übersetzung: die Abweichungen der Feldzuordnung (<c>[Feld(nameof(TAus.Ziel), nameof(TEin.Quelle))]</c>).</summary>
-    public IReadOnlyList<GraphFeld> Felder { get; init; } = [];
 }
 
 /// <summary>Ein <c>[Feld]</c> an einer Übersetzung: der Parameter <see cref="Ziel"/> von <c>TAus</c> bekommt die Eigenschaft <see cref="Quelle"/> von <c>TEin</c>.</summary>
-public sealed record GraphFeld(string Ziel, string Quelle);
+public sealed record FeldZuordnung(string Ziel, string Quelle);
 
 /// <summary>Eine Kante eines Graphen (aus einem <c>Von</c>): vom Knoten <see cref="Von"/> über den Typ <see cref="Typ"/> zum Knoten <see cref="Nach"/>.</summary>
 public sealed record GraphKante(string Von, string Typ, string Nach);

@@ -32,65 +32,58 @@ public sealed record KnotenPlan(string Name, string Funktion, IReadOnlyList<Oper
 }
 
 /// <summary>
-/// Eine ÜBERSETZUNG eines Graphen (generiert aus <c>Uebersetze&lt;TEin, TAus&gt;</c>): ihr Knoten (Pfad), was sie nimmt und erzeugt, die Rechnung
-/// (Feld für Feld, ohne Logik) und ihre Wege an Knoten desselben Graphen — leer: ihr Command verlässt den Graphen (an ein Aggregat, an den Kopf eines
-/// anderen Graphen). Sie läuft inline, wo die Nachricht gerade ist: im Kind des Knotens davor, am Kopf im Graph-Actor (docs/04 §4.4). Erzeugt sie einen
-/// Command an ein Aggregat, nennen ihre Wege mit einem Event-Typ die Antwort-Übersetzungen (<see cref="GraphPlan.AntwortenAuf"/>).
+/// Eine ÜBERSETZUNG der Domäne (generiert aus einem Record mit <c>IUebersetzung&lt;TEin, TAus&gt;</c>, <c>GeneratedUebersetzungen</c>): ihr Name, was
+/// sie nimmt und erzeugt, die Rechnung (Feld für Feld, ohne Logik). Sie hängt an keinem Graphen — wohin sie gehört, sagt der Typ, den sie nimmt
+/// (<see cref="Uebersetzungen"/>, docs/plan-ohne-pipeline.md §3).
 /// </summary>
-public sealed record UebersetzungPlan(string Name, Type Ein, Type Aus, Func<object, object> Rechne, WegPlan[] Wege);
+public sealed record UebersetzungPlan(string Name, Type Ein, Type Aus, Func<object, object> Rechne);
+
+/// <summary>
+/// Die Übersetzungen der Anwendung nach dem Typ, den sie nehmen (Invariante 3: Routing über Typen). Eine Ausgabe eines Knotens, ein Event als Antwort auf
+/// den Command einer Übersetzung und die Nachricht eines Clients am Kopf schlagen hier nach; mehrere Übersetzungen desselben Typs sind eine Gabel.
+/// </summary>
+public sealed class Uebersetzungen(IReadOnlyList<UebersetzungPlan> alle)
+{
+    private static readonly UebersetzungPlan[] Keine = [];
+    private readonly IReadOnlyDictionary<Type, UebersetzungPlan[]> _nachTyp = alle.GroupBy(u => u.Ein).ToDictionary(g => g.Key, g => g.ToArray());
+
+    public IReadOnlyList<UebersetzungPlan> Alle { get; } = alle;
+
+    /// <summary>Die Übersetzungen, die eine Nachricht dieses Typs nehmen (leer: keine).</summary>
+    public UebersetzungPlan[] Fuer(Type typ) => _nachTyp.TryGetValue(typ, out var u) ? u : Keine;
+
+    /// <summary>Ohne Übersetzungen (Prüfstände, Anwendungen ohne Kataloge).</summary>
+    public static readonly Uebersetzungen Leer = new([]);
+}
 
 /// <summary>
 /// Ein Graph (generiert, <c>GeneratedGraphen</c>): Knoten mit ihrer Wegtabelle, Köpfe (Eingangstyp → Knoten, die ihn von außen nehmen) und was ihn
-/// verlässt. Zur Laufzeit wird nur nachgeschlagen: wohin geht eine Ausgabe dieses Typs von diesem Knoten?
+/// verlässt. Zur Laufzeit wird nur nachgeschlagen: wohin geht eine Ausgabe dieses Typs von diesem Knoten? Ein Graph kennt keine Übersetzung.
 /// </summary>
 /// <param name="Quelle">Der Quellknoten (eine Funktion, die lauscht): er ist der Kopf, jedes seiner Elemente startet eine Kette; null = keiner.</param>
-/// <param name="Uebersetzungen">Die Übersetzungen des Graphen (Knoten ohne Funktion, inline gerechnet); ein Kopf oder ein Weg kann eine nennen.</param>
 public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> Knoten, IReadOnlyDictionary<Type, string[]> Koepfe,
-    IReadOnlyList<Type> Ausgaenge, string? Quelle = null, IReadOnlyList<UebersetzungPlan>? Uebersetzungen = null)
+    IReadOnlyList<Type> Ausgaenge, string? Quelle = null)
 {
     private IReadOnlyDictionary<(string, int, Type), WegPlan[]>? _wege;
     private IReadOnlyDictionary<string, IReadOnlySet<Type>>? _imGraphen;
-    private IReadOnlyDictionary<string, IReadOnlyDictionary<Type, UebersetzungPlan[]>>? _uebersetzt, _antworten;
-    private static readonly IReadOnlyDictionary<Type, UebersetzungPlan[]> KeineUebersetzung = new Dictionary<Type, UebersetzungPlan[]>();
 
     public KnotenPlan? KnotenNamens(string name) => Knoten.FirstOrDefault(k => k.Name == name);
-
-    /// <summary>Die Übersetzung namens <paramref name="name"/> (ein Knoten ohne Funktion), oder null.</summary>
-    public UebersetzungPlan? Uebersetzung(string name) => Uebersetzungen?.FirstOrDefault(u => u.Name == name);
 
     /// <summary>Hat der Graph einen Command-Kopf (einen Command ohne Ziel als Eingang)? Dann läuft er je Umgebung genau einmal.</summary>
     public bool MitCommandKopf => Koepfe.Keys.Any(t => typeof(ICommand).IsAssignableFrom(t));
 
     /// <summary>
     /// Die Wege einer Ausgabe <paramref name="typ"/> der Operation <paramref name="auf"/> von <paramref name="knoten"/> an die Parents anderer Knoten
-    /// (leer: sie verlässt den Graphen oder geht nur in Übersetzungen); <paramref name="knoten"/> darf eine Übersetzung sein (ihre Operation 0).
+    /// (leer: sie verlässt den Graphen).
     /// </summary>
     public IReadOnlyList<WegPlan> Wege(string knoten, int auf, Type typ) =>
-        (_wege ??= (from k in Knoten from o in k.Operationen from w in o.Wege where Uebersetzung(w.Knoten) is null group w by (k.Name, o.Auf, w.Typ))
-            .Concat(from u in Uebersetzungen ?? [] from w in u.Wege where Uebersetzung(w.Knoten) is null group w by (u.Name, 0, w.Typ))
+        (_wege ??= (from k in Knoten from o in k.Operationen from w in o.Wege group w by (k.Name, o.Auf, w.Typ))
             .ToDictionary(g => g.Key, g => g.ToArray())).TryGetValue((knoten, auf, typ), out var wege) ? wege : Array.Empty<WegPlan>();
 
-    /// <summary>Die Typen, die <paramref name="knoten"/> an Funktionen dieses Graphen gibt (über den Parent; alles andere verlässt ihn oder wird übersetzt).</summary>
+    /// <summary>Die Typen, die <paramref name="knoten"/> an Funktionen dieses Graphen gibt (über den Parent; alles andere verlässt ihn).</summary>
     public IReadOnlySet<Type> ImGraphen(string knoten) =>
-        (_imGraphen ??= Knoten.ToDictionary(k => k.Name,
-            k => (IReadOnlySet<Type>)k.Operationen.SelectMany(o => o.Wege).Where(w => Uebersetzung(w.Knoten) is null).Select(w => w.Typ).ToHashSet()))
+        (_imGraphen ??= Knoten.ToDictionary(k => k.Name, k => (IReadOnlySet<Type>)k.Operationen.SelectMany(o => o.Wege).Select(w => w.Typ).ToHashSet()))
         .TryGetValue(knoten, out var t) ? t : new HashSet<Type>();
-
-    /// <summary>Je Ausgabetyp von <paramref name="knoten"/> die Übersetzungen, an die er geht (das Kind rechnet sie inline).</summary>
-    public IReadOnlyDictionary<Type, UebersetzungPlan[]> UebersetzungenVon(string knoten) =>
-        (_uebersetzt ??= Knoten.ToDictionary(k => k.Name, k => (IReadOnlyDictionary<Type, UebersetzungPlan[]>)k.Operationen.SelectMany(o => o.Wege)
-            .Select(w => (w.Typ, U: Uebersetzung(w.Knoten))).Where(x => x.U is not null).GroupBy(x => x.Typ)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.U!).Distinct().ToArray())))
-        .TryGetValue(knoten, out var u) ? u : KeineUebersetzung;
-
-    /// <summary>
-    /// Je Übersetzung mit Command an ein Aggregat ihre Antwort-Übersetzungen, nach dem Event, das sie nehmen — gerechnet gleich nach dem Senden, wo die
-    /// Übersetzung lief (im Kind, am Kopf im Graph-Actor).
-    /// </summary>
-    public IReadOnlyDictionary<string, IReadOnlyDictionary<Type, UebersetzungPlan[]>> AntwortenAuf =>
-        _antworten ??= (Uebersetzungen ?? []).ToDictionary(u => u.Name, u => (IReadOnlyDictionary<Type, UebersetzungPlan[]>)u.Wege
-            .Select(w => (w.Typ, A: Uebersetzung(w.Knoten))).Where(x => x.A is not null && typeof(IEvent).IsAssignableFrom(x.Typ)).GroupBy(x => x.Typ)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.A!).Distinct().ToArray()));
 }
 
 /// <summary>
@@ -129,8 +122,8 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmg
     public GraphInstanz? Von(string name) => Alle.FirstOrDefault(i => i.Name == name);
 
     /// <summary>Eingangstyp → die Instanzen, deren Graph ihn am Kopf nimmt (Commands ohne Ziel, Quell-Nachrichten, Hinweise).</summary>
-    public Verkettung Koepfe() => new(Alle.SelectMany(i => i.Graph.Koepfe.Keys.Select(t => (t, i.Name)))
-        .GroupBy(x => x.t).ToDictionary(g => g.Key, g => g.Select(x => x.Name).ToArray()));
+    public Verkettung Koepfe(Uebersetzungen? uebersetzungen = null) => new(Alle.SelectMany(i => i.Graph.Koepfe.Keys.Select(t => (t, i.Name)))
+        .GroupBy(x => x.t).ToDictionary(g => g.Key, g => g.Select(x => x.Name).ToArray()), uebersetzungen);
 
     /// <summary>
     /// Je Graph eine Instanz unter seinem Namen — für Prüfstände ohne Umgebung (Tests); jeder Knoten mit den Standards bzw. der Konfig, die
@@ -145,10 +138,11 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmg
 
     /// <summary>
     /// Die Instanzen aus der Umgebung, geprüft; ein Fehler ist ein Boot-Fehler mit der Datei als Karte. Mit <paramref name="akteure"/> wird der Akteur
-    /// einer Instanz geprüft: er darf, was sie verlässt.
+    /// einer Instanz geprüft: er darf, was sie verlässt — nach der Übersetzung (<paramref name="uebersetzungen"/>): die Commands an Aggregate, die aus
+    /// ihren Ausgängen werden.
     /// </summary>
     public static GraphInstanzen Aus(IReadOnlyDictionary<string, GraphInstanzKonfig> konfig, IReadOnlyList<GraphPlan> graphen,
-        IReadOnlyDictionary<string, Infrastructure.Akteure.AkteurRechte>? akteure = null)
+        IReadOnlyDictionary<string, Infrastructure.Akteure.AkteurRechte>? akteure = null, Uebersetzungen? uebersetzungen = null)
     {
         var alle = new List<GraphInstanz>();
         foreach (var (name, k) in konfig.OrderBy(x => x.Key, StringComparer.Ordinal))
@@ -163,7 +157,8 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmg
             {
                 if (!akteure.TryGetValue(akteur, out var rechte))
                     throw new BootFehler($"Instanz {name}: Akteur '{akteur}' gibt es nicht.", Karte());
-                foreach (var aus in g.Ausgaenge.Where(t => typeof(IAggregatCommand).IsAssignableFrom(t) && !rechte.Commands.Contains(t)))
+                var verlassen = g.Ausgaenge.SelectMany(t => (uebersetzungen ?? Uebersetzungen.Leer).Fuer(t) is { Length: > 0 } u ? u.Select(x => x.Aus) : [t]);
+                foreach (var aus in verlassen.Distinct().Where(t => typeof(IAggregatCommand).IsAssignableFrom(t) && !rechte.Commands.Contains(t)))
                     throw new BootFehler($"Instanz {name}: der Akteur {akteur} darf {aus.Name} nicht (kein IDarf<{aus.Name}>) — was den Graphen verlässt, gibt "
                         + "er hinein.", Karte());
             }

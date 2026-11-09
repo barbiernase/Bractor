@@ -183,12 +183,14 @@ public static class ParitaetsPruefung
             var istKnoten = (k.Ref["knoten"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
                 .Select(x => $"{full}|{GraphKnotenSchluessel((string?)x["name"] ?? "", (string?)x["typ"] ?? "", (bool?)x["kopf"] == true,
                     (x["von"]?.AsArray() ?? new JsonArray()).Select(v => (string?)v ?? "").ToList(),
-                    (x["verlierbar"]?.AsArray() ?? new JsonArray()).Select(v => (string?)v ?? "").ToList(),
-                    (x["felder"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>().Select(f => new GraphFeld((string?)f["ziel"] ?? "", (string?)f["quelle"] ?? "")).ToList(),
-                    (string?)x["innen"])}")
+                    (x["verlierbar"]?.AsArray() ?? new JsonArray()).Select(v => (string?)v ?? "").ToList())}")
                 .ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Knoten ({k.Name})", sollKnoten.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istKnoten, befunde);
         }
+        // Übersetzungen (docs/plan-ohne-pipeline.md): je Record Ein, Aus und seine [Feld].
+        Vergleiche("Übersetzung", soll.Uebersetzungen, Arten("uebersetzung").Select(k => $"{Voll(k)}|{UebersetzungsSchluessel((string?)k.Ref["ein"] ?? "",
+            (string?)k.Ref["aus"] ?? "", (k.Ref["felder"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
+                .Select(f => new FeldZuordnung((string?)f["ziel"] ?? "", (string?)f["quelle"] ?? "")).ToList())}").ToHashSet(StringComparer.Ordinal), befunde);
         Vergleiche("Projektion", soll.Projektionen, BoardListe("projektion"), befunde);
 
         // Decide-/Apply-Methoden je Aggregat: Soll = Methoden im Quelltext, Ist = Decider-/Applier-Karten.
@@ -249,6 +251,8 @@ public static class ParitaetsPruefung
         public Dictionary<string, HashSet<string>> Clients = new(StringComparer.Ordinal);
         /// <summary>Graph (Record mit IGraph) → seine Knoten „Name:Typ“ (Parameter des Records, Typ wie geschrieben).</summary>
         public Dictionary<string, HashSet<string>> Graphen = new(StringComparer.Ordinal);
+        /// <summary>Die Übersetzungen: je Record <c>Namespace.Name|Ein→Aus|Feld(…)</c>.</summary>
+        public HashSet<string> Uebersetzungen = new(StringComparer.Ordinal);
         public List<string> AlleRecordNamen = new();
         /// <summary>Jede handgeschriebene Typ-Deklaration oberster Ebene (partial: je Teil) — das Soll der Vollständigkeit.</summary>
         public List<(string Full, string Datei, int Start, int Ende, int Zeile)> Deklarationen = new();
@@ -315,8 +319,16 @@ public static class ParitaetsPruefung
                                 .Select(p =>
                                 {
                                     var (kopf, von, verlierbar) = Abgleich.KopfUndVon(p);
-                                    return GraphKnotenSchluessel(p.Identifier.Text, p.Type?.ToString() ?? "", kopf, von, verlierbar, Abgleich.Felder(p), Abgleich.Innen(p));
+                                    return GraphKnotenSchluessel(p.Identifier.Text, p.Type?.ToString() ?? "", kopf, von, verlierbar);
                                 }).ToHashSet(StringComparer.Ordinal);
+                            continue;
+                        }
+                        // Übersetzung (Record mit IUebersetzung<TEin, TAus>): Ein und Aus wie geschrieben, ihre [Feld].
+                        if (t.ContainingType == null && Infrastructure.SourceGeneration.Uebersetzungsform.IstUebersetzung(t)
+                            && Infrastructure.SourceGeneration.Uebersetzungsform.Marker(t) is { } um)
+                        {
+                            inv.Uebersetzungen.Add($"{full}|{UebersetzungsSchluessel(Infrastructure.SourceGeneration.Funktionsform.Anzeigename(um.TypeArguments[0]),
+                                Infrastructure.SourceGeneration.Funktionsform.Anzeigename(um.TypeArguments[1]), Abgleich.Felder((MemberDeclarationSyntax)decl))}");
                             continue;
                         }
                         if (decl is InterfaceDeclarationSyntax)
@@ -571,12 +583,13 @@ public static class ParitaetsPruefung
     private static string Json<T>(T x) => JsonSerializer.Serialize(x, EditorModell.JsonOptionen);
 
     /// <summary>Ein Knoten eines Graphen als Vergleichsschlüssel: <c>Name:Typ</c>, dazu <c>|Kopf</c> und <c>|Von(A,B)</c>.</summary>
-    private static string GraphKnotenSchluessel(string name, string typ, bool kopf, IReadOnlyList<string> von, IReadOnlyList<string> verlierbar,
-        IReadOnlyList<GraphFeld> felder, string? innen) =>
+    private static string GraphKnotenSchluessel(string name, string typ, bool kopf, IReadOnlyList<string> von, IReadOnlyList<string> verlierbar) =>
         $"{name}:{BoardLeseseite.Norm(typ)}{(kopf ? "|Kopf" : "")}{(von.Count > 0 ? "|Von(" + string.Join(",", von) + ")" : "")}"
-        + (verlierbar.Count > 0 ? "|Verlierbar(" + string.Join(",", verlierbar.OrderBy(v => v, StringComparer.Ordinal)) + ")" : "")
-        + (felder.Count > 0 ? "|Feld(" + string.Join(",", felder.Select(f => f.Ziel + "=" + f.Quelle)) + ")" : "")
-        + (string.IsNullOrEmpty(innen) ? "" : "|Innen(" + innen + ")");
+        + (verlierbar.Count > 0 ? "|Verlierbar(" + string.Join(",", verlierbar.OrderBy(v => v, StringComparer.Ordinal)) + ")" : "");
+
+    /// <summary>Eine Übersetzung als Vergleichsschlüssel: <c>Ein→Aus</c>, dazu <c>|Feld(Ziel=Quelle,…)</c>.</summary>
+    private static string UebersetzungsSchluessel(string ein, string aus, IReadOnlyList<FeldZuordnung> felder) =>
+        $"{BoardLeseseite.Norm(ein)}→{BoardLeseseite.Norm(aus)}" + (felder.Count > 0 ? "|Feld(" + string.Join(",", felder.Select(f => f.Ziel + "=" + f.Quelle)) + ")" : "");
 
     /// <summary>Kompakter Zeilen-Diff (erste abweichende Zeilen) für lesbare Befunde.</summary>
     private static string Diff(string a, string b)

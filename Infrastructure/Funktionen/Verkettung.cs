@@ -29,12 +29,11 @@ public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, Funkti
     /// <summary>Die Commands ohne Ziel, die der Knoten an Knoten desselben Graphen gibt (der Graph-Actor bringt sie hin; alles andere verlässt den Graphen).</summary>
     public IReadOnlySet<Type> ImGraphen { get; init; } = KeineKanten;
 
-    /// <summary>Je Ausgabetyp die Übersetzungen, an die der Knoten ihn gibt — das Kind rechnet sie inline, bevor es ihr Ergebnis hinausbringt.</summary>
-    public IReadOnlyDictionary<Type, UebersetzungPlan[]> Uebersetzungen { get; init; } = new Dictionary<Type, UebersetzungPlan[]>();
-
-    /// <summary>Je Übersetzung mit Command an ein Aggregat ihre Antwort-Übersetzungen nach Event-Typ (<see cref="GraphPlan.AntwortenAuf"/>).</summary>
-    public IReadOnlyDictionary<string, IReadOnlyDictionary<Type, UebersetzungPlan[]>> AntwortUebersetzungen { get; init; }
-        = new Dictionary<string, IReadOnlyDictionary<Type, UebersetzungPlan[]>>();
+    /// <summary>
+    /// Die Übersetzungen der Domänen nach Typ (docs/plan-ohne-pipeline.md §3): jede Ausgabe, die eine nimmt, rechnet das Kind inline — ein Ausgang wie
+    /// ein Zwischenstand; ebenso jedes Event, mit dem ein Aggregat den Command einer Übersetzung beantwortet.
+    /// </summary>
+    public Uebersetzungen Uebersetzungen { get; init; } = Uebersetzungen.Leer;
 
     /// <summary>So lange darf eine Rechnung dauern (<see cref="TimeSpan.Zero"/> = ohne Grenze).</summary>
     public TimeSpan Zeitlimit { get; init; }
@@ -60,9 +59,27 @@ public sealed record FunktionsOrtKonfig(int Parallel = FunktionsOrtKonfig.Standa
 /// die Instanzen, deren Graph ihn am Kopf nimmt — ein Command ohne Ziel (genau eine), eine Quell-Nachricht, ein Hinweis. Der Bote schickt direkt; nimmt
 /// niemand, geht nichts hinaus.
 /// </summary>
-public sealed class Verkettung(IReadOnlyDictionary<Type, string[]> hoerer)
+public sealed class Verkettung(IReadOnlyDictionary<Type, string[]> hoerer, Uebersetzungen? uebersetzungen = null)
 {
     public static readonly Verkettung Leer = new(new Dictionary<Type, string[]>());
 
+    public Uebersetzungen Uebersetzungen { get; } = uebersetzungen ?? Uebersetzungen.Leer;
+
     public IReadOnlyList<string> Hoerer(Type nachricht) => hoerer.TryGetValue(nachricht, out var f) ? f : Array.Empty<string>();
+
+    /// <summary>
+    /// Wohin die Nachricht eines Clients am Kopf geht: an die Instanzen, deren Graph sie am Kopf nimmt — sonst übersetzt (eine Kopf-Übersetzung der
+    /// Domäne, docs/plan-ohne-pipeline.md §3.4) an die Instanzen, deren Graph das Ergebnis nimmt. Je Ziel die Nachricht, die dort ankommt.
+    /// </summary>
+    public IReadOnlyList<(string Instanz, object Nachricht)> Ziele(object nachricht)
+    {
+        if (Hoerer(nachricht.GetType()) is { Count: > 0 } direkt) return direkt.Select(i => (i, nachricht)).ToList();
+        var ziele = new List<(string, object)>();
+        foreach (var u in Uebersetzungen.Fuer(nachricht.GetType()))
+        {
+            var y = u.Rechne(nachricht);
+            ziele.AddRange(Hoerer(y.GetType()).Select(i => (i, y)));
+        }
+        return ziele;
+    }
 }

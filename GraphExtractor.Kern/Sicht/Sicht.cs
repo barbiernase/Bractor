@@ -26,7 +26,7 @@ public sealed partial class Sicht
 
     private readonly JsonObject _board;
     private readonly List<JsonObject> _records, _enums, _aggregate, _decider, _applier, _states,
-        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _codeKarten, _bausteinFunktionen, _graphen;
+        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _codeKarten, _bausteinFunktionen, _graphen, _uebersetzungen;
     private readonly Dictionary<string, (HashSet<string> Direkt, HashSet<string> Kette)> _mengen = new(StringComparer.Ordinal);
 
     public IReadOnlyList<SichtKarte> Karten { get; }
@@ -42,7 +42,7 @@ public sealed partial class Sicht
         _applier = Liste("applier");
         _akteure = Liste("akteure"); _clients = Liste("clients"); _readModels = Liste("readModels"); _stores = Liste("stores");
         _projektionen = Liste("projektionen"); _reader = Liste("reader"); _codeKarten = Liste("codeKarten");
-        _bausteinFunktionen = Liste("bausteinFunktionen"); _graphen = Liste("graphen");
+        _bausteinFunktionen = Liste("bausteinFunktionen"); _graphen = Liste("graphen"); _uebersetzungen = Liste("uebersetzungen");
         // Wie der Editor das Board liest: je Aggregat mit State eine State-Karte.
         _states = _aggregate.Where(a => Alle(a["state"]).Any()).Select(a => new JsonObject { ["_id"] = "state:" + S(a, "name"), ["aggregat"] = S(a, "name") }).ToList();
         foreach (var (n, m) in Eintraege(board["rahmen"]?["akteurMengen"] as JsonObject))
@@ -144,6 +144,8 @@ public sealed partial class Sicht
         foreach (var f in _bausteinFunktionen) k.Add(new("fb:" + S(f, "_id"), "bausteinfunktion", S(f, "name"), f));
         // Graphen (docs/04 §4.4): eine Karte je Graph-Record — seine Knoten sind Funktionen oder Graphen.
         foreach (var g in _graphen) k.Add(new("gr:" + S(g, "_id"), "graph", S(g, "name"), g));
+        // Übersetzungen (docs/plan-ohne-pipeline.md): eine Karte je Record der Domäne — sie nimmt TEin und erzeugt TAus.
+        foreach (var u in _uebersetzungen) k.Add(new("ue:" + S(u, "_id"), "uebersetzung", S(u, "name"), u));
         foreach (var rm in _readModels) k.Add(new("rm:" + S(rm, "_id"), "readmodel", S(rm, "name"), rm));
         foreach (var s in _stores) k.Add(new("sto:" + S(s, "_id"), "store", S(s, "name"), s));
         foreach (var p in _projektionen) k.Add(new("prj:" + S(p, "_id"), "projektion", S(p, "name"), p));
@@ -278,6 +280,12 @@ public sealed partial class Sicht
                 if (BausteinFunktion(basis) is { } fb) P("gr:" + S(g, "_id"), "fb:" + S(fb, "_id"));
                 else if (_graphen.FirstOrDefault(x => S(x, "name") == basis) is { } inner) P("gr:" + S(g, "_id"), "gr:" + S(inner, "_id"));
             }
+        // Eine Übersetzung nimmt TEin und erzeugt TAus.
+        foreach (var u in _uebersetzungen)
+        {
+            if (IstRec(Basis(S(u, "ein")))) P(Rec(Basis(S(u, "ein"))), "ue:" + S(u, "_id"));
+            if (IstRec(Basis(S(u, "aus")))) P("ue:" + S(u, "_id"), Rec(Basis(S(u, "aus"))));
+        }
         foreach (var d in _decider)
         {
             var did = "dec:" + S(d, "_id");

@@ -150,9 +150,9 @@ public class UmgebungLaderTests
     {
         FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
-                ["a"] = new() { Graph = "Bildaufnahme" }, ["b"] = new() { Graph = "Bildaufnahme" },
+                ["a"] = new() { Graph = "Bildaufbereitung" }, ["b"] = new() { Graph = "Bildaufbereitung" },
             }, Graphen))
-            .Should().Throw<BootFehler>().WithMessage("*Bildaufnahme hat einen Command-Kopf*genau einmal*a, b*");
+            .Should().Throw<BootFehler>().WithMessage("*Bildaufbereitung hat einen Command-Kopf*genau einmal*a, b*");
         GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
                 ["linie1"] = new() { Graph = "Linienimport" }, ["linie2"] = new() { Graph = "Linienimport" },

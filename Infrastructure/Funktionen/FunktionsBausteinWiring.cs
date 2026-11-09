@@ -25,7 +25,7 @@ public static class FunktionsBausteinWiring
     public static IServiceCollection AddFunktionsBausteine(this IServiceCollection services)
     {
         services.TryAddSingleton(_ => GraphInstanzen.JeGraphEine(Anwendung.Funktionen.Graphen));
-        services.TryAddSingleton(sp => sp.GetRequiredService<GraphInstanzen>().Koepfe());
+        services.TryAddSingleton(sp => sp.GetRequiredService<GraphInstanzen>().Koepfe(new Uebersetzungen(Anwendung.Funktionen.Uebersetzungen)));
         FunktionsLaufzeitWiring.AddFunktionsLaufzeit(services);
         return services;
     }
