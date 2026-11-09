@@ -164,8 +164,11 @@ static class Projektstruktur
     /// </summary>
     public const string AllgemeinerKatalog = "Allgemein.Katalog";
 
-    /// <summary>Die Rollen einer Anwendung, die Kataloge nutzen dürfen (alle über den Abläufen); Schreib- und Leseseite kennen keine Funktionsnachricht.</summary>
-    public static readonly IReadOnlyList<Rolle> NutzenKataloge = new[] { Rolle.Ablaeufe, Rolle.Akteure, Rolle.Leitung, Rolle.Komposition };
+    /// <summary>
+    /// Die Rollen einer Anwendung, die Kataloge nutzen dürfen (alle über den Abläufen, dazu der Speicher: er setzt die Fähigkeiten um, die ein Katalog
+    /// zum Lesen deklariert); Schreib- und Leseseite kennen keine Funktionsnachricht.
+    /// </summary>
+    public static readonly IReadOnlyList<Rolle> NutzenKataloge = new[] { Rolle.Ablaeufe, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung, Rolle.Komposition };
 
     public static Eintrag Von(Rolle r) => r == Rolle.Katalog ? Katalog : Rollen.First(e => e.Rolle == r);
 
@@ -253,7 +256,11 @@ static class Projektstruktur
                 return new[] { Rolle.Schreibseite, Rolle.Katalog };
             case Primitive.Hinweis:
                 return new[] { Rolle.Schreibseite, Rolle.Ablaeufe, Rolle.Katalog };
-            case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel: case Primitive.StoreFaehigkeit:
+            case Primitive.StoreFaehigkeit:
+                // Eine Fähigkeit deklariert die Leseseite für ihre Projektionen und Reader — oder ein Katalog für seine Funktionen (mit seinen eigenen
+                //   Typen); umgesetzt wird sie im Speicher der Anwendung (docs/plan-ohne-pipeline.md §2.3).
+                return new[] { Rolle.Leseseite, Rolle.Katalog };
+            case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel:
             case Primitive.Projektion: case Primitive.Reader:
                 return new[] { Rolle.Leseseite };
             case Primitive.Funktion: case Primitive.KnotenCommand: case Primitive.Graph:

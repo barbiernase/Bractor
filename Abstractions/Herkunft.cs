@@ -56,6 +56,13 @@ public sealed class Herkunft
     /// <inheritdoc cref="NeueId{T}(string)"/>
     public Id<T> NeueId<T>(long nummer) where T : IState => NeueId<T>(nummer.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
+    /// <summary>
+    /// Eine neue Id ohne Aggregat-Typ — für eine Funktion im Katalog, die keine Domäne kennt: abgeleitet aus Baustein, Eingang und
+    /// <paramref name="zweck"/> wie <see cref="NeueId{T}(string)"/>; die Übersetzung macht daraus ausdrücklich ein <c>Id&lt;T&gt;</c>
+    /// (<c>[Feld]</c>, <c>Guid</c> → <c>Id&lt;T&gt;</c>).
+    /// </summary>
+    public Guid NeueId(string zweck) => Ableite($"neueid:{_bereich}:{Stream:N}:{Version}::{zweck}");
+
     public override string ToString() => $"{Stream}:{Version}";
 
     /// <summary>Eine deterministische Id aus einem Text (MD5, wie die übrigen abgeleiteten Ids des Frameworks).</summary>

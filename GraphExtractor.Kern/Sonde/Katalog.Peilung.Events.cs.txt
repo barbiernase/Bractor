@@ -8,5 +8,8 @@ public record PeilungUnmoeglich(double FrequenzMhz, string Grund) : ITransientEv
 /// <summary>Ein Hinweis aus dem Katalog: das Ergebnis einer Peilung, für die Anzeige.</summary>
 public record Peilbericht(double FrequenzMhz, double RichtungGrad) : ITransientEvent;
 
+/// <summary>Ein Hinweis aus dem Katalog: wie weit eine bestätigte Peilung von der letzten abweicht.</summary>
+public record Peilabweichung(double Grad) : ITransientEvent;
+
 // Absichtlich falsch (die Lage-Prüfung muss anschlagen): ein FAKT im Log entscheidet nur ein Aggregat — ein Katalog kennt keine Domäne.
 public record Peilprotokoll(double FrequenzMhz) : IEvent;

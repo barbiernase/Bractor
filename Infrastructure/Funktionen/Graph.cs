@@ -34,7 +34,8 @@ public sealed record KnotenPlan(string Name, string Funktion, IReadOnlyList<Oper
 /// <summary>
 /// Eine ÜBERSETZUNG eines Graphen (generiert aus <c>Uebersetze&lt;TEin, TAus&gt;</c>): ihr Knoten (Pfad), was sie nimmt und erzeugt, die Rechnung
 /// (Feld für Feld, ohne Logik) und ihre Wege an Knoten desselben Graphen — leer: ihr Command verlässt den Graphen (an ein Aggregat, an den Kopf eines
-/// anderen Graphen). Sie läuft inline, wo die Nachricht gerade ist: im Kind des Knotens davor, am Kopf im Graph-Actor (docs/04 §4.4).
+/// anderen Graphen). Sie läuft inline, wo die Nachricht gerade ist: im Kind des Knotens davor, am Kopf im Graph-Actor (docs/04 §4.4). Erzeugt sie einen
+/// Command an ein Aggregat, nennen ihre Wege mit einem Event-Typ die Antwort-Übersetzungen (<see cref="GraphPlan.AntwortenAuf"/>).
 /// </summary>
 public sealed record UebersetzungPlan(string Name, Type Ein, Type Aus, Func<object, object> Rechne, WegPlan[] Wege);
 
@@ -49,7 +50,7 @@ public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> 
 {
     private IReadOnlyDictionary<(string, int, Type), WegPlan[]>? _wege;
     private IReadOnlyDictionary<string, IReadOnlySet<Type>>? _imGraphen;
-    private IReadOnlyDictionary<string, IReadOnlyDictionary<Type, UebersetzungPlan[]>>? _uebersetzt;
+    private IReadOnlyDictionary<string, IReadOnlyDictionary<Type, UebersetzungPlan[]>>? _uebersetzt, _antworten;
     private static readonly IReadOnlyDictionary<Type, UebersetzungPlan[]> KeineUebersetzung = new Dictionary<Type, UebersetzungPlan[]>();
 
     public KnotenPlan? KnotenNamens(string name) => Knoten.FirstOrDefault(k => k.Name == name);
@@ -66,7 +67,7 @@ public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> 
     /// </summary>
     public IReadOnlyList<WegPlan> Wege(string knoten, int auf, Type typ) =>
         (_wege ??= (from k in Knoten from o in k.Operationen from w in o.Wege where Uebersetzung(w.Knoten) is null group w by (k.Name, o.Auf, w.Typ))
-            .Concat(from u in Uebersetzungen ?? [] from w in u.Wege group w by (u.Name, 0, w.Typ))
+            .Concat(from u in Uebersetzungen ?? [] from w in u.Wege where Uebersetzung(w.Knoten) is null group w by (u.Name, 0, w.Typ))
             .ToDictionary(g => g.Key, g => g.ToArray())).TryGetValue((knoten, auf, typ), out var wege) ? wege : Array.Empty<WegPlan>();
 
     /// <summary>Die Typen, die <paramref name="knoten"/> an Funktionen dieses Graphen gibt (über den Parent; alles andere verlässt ihn oder wird übersetzt).</summary>
@@ -81,6 +82,15 @@ public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> 
             .Select(w => (w.Typ, U: Uebersetzung(w.Knoten))).Where(x => x.U is not null).GroupBy(x => x.Typ)
             .ToDictionary(g => g.Key, g => g.Select(x => x.U!).Distinct().ToArray())))
         .TryGetValue(knoten, out var u) ? u : KeineUebersetzung;
+
+    /// <summary>
+    /// Je Übersetzung mit Command an ein Aggregat ihre Antwort-Übersetzungen, nach dem Event, das sie nehmen — gerechnet gleich nach dem Senden, wo die
+    /// Übersetzung lief (im Kind, am Kopf im Graph-Actor).
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<Type, UebersetzungPlan[]>> AntwortenAuf =>
+        _antworten ??= (Uebersetzungen ?? []).ToDictionary(u => u.Name, u => (IReadOnlyDictionary<Type, UebersetzungPlan[]>)u.Wege
+            .Select(w => (w.Typ, A: Uebersetzung(w.Knoten))).Where(x => x.A is not null && typeof(IEvent).IsAssignableFrom(x.Typ)).GroupBy(x => x.Typ)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.A!).Distinct().ToArray()));
 }
 
 /// <summary>

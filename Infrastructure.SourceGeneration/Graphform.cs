@@ -24,6 +24,9 @@ namespace Infrastructure.SourceGeneration
     /// (<see cref="Form.Regelfehler"/>). Nennt eine Übersetzung eine Schachtel in <c>[Von]</c>, nimmt sie ihren Typ auch als ZWISCHENSTAND (Abgriff):
     /// ist er kein Ausgang der Schachtel, von dem einen inneren Knoten, der ihn ausgibt (mehrere sind ein Fehler) — so lässt sich jede Nachricht eines
     /// Graphen aus dem Katalog in die Domäne übersetzen, auch eine, die im Graphen weiterläuft.</para>
+    /// <para>Eine ANTWORT-ÜBERSETZUNG (<c>TEin</c> ist ein Event) nennt in <c>[Von]</c> genau eine Übersetzung, die einen Command an ein Aggregat erzeugt:
+    /// sie nimmt die Antwort des Aggregats darauf (eine Kante mit <see cref="Kante.Antwort"/>). Eine Antwort ist keine Kante eines Kreises — sie darf an
+    /// den Knoten zurück, der die Übersetzung speist — und zählt nicht als „zwei Übersetzungen hintereinander“.</para>
     /// </summary>
     internal static class Graphform
     {
@@ -78,6 +81,8 @@ namespace Infrastructure.SourceGeneration
             public bool Strom;
             /// <summary>Darf eine Nachricht auf dieser Kante verloren gehen (<c>[Von(…, Verlierbar = true)]</c>)? Sonst gesichert.</summary>
             public bool Verlierbar;
+            /// <summary>Eine Antwort: von einer Übersetzung mit Aggregat-Command zur Antwort-Übersetzung; <see cref="Typ"/> ist das Event.</summary>
+            public bool Antwort;
         }
 
         /// <summary>
@@ -173,7 +178,7 @@ namespace Infrastructure.SourceGeneration
                     else if (!da.Contains(k)) da.Add(k);
                 }
             // Übersetzungen: nie zwei hintereinander (eine genügt — sie hat keine Logik); am Kopf gibt sie an Knoten des Graphen oder an ein Aggregat.
-            foreach (var e in g.Kanten.Where(e => e.Von.Uebersetzung != null && e.Nach.Uebersetzung != null).GroupBy(e => e.Nach).Select(x => x.First()))
+            foreach (var e in g.Kanten.Where(e => !e.Antwort && e.Von.Uebersetzung != null && e.Nach.Uebersetzung != null).GroupBy(e => e.Nach).Select(x => x.First()))
                 g.Fehler.Add(($"die Übersetzung '{e.Nach.Name}' nimmt von der Übersetzung '{e.Von.Name}' — zwei Übersetzungen hintereinander sind eine "
                     + "(übersetze direkt)", e.Nach.Ort));
             foreach (var (von, typ) in g.Ausgaenge.Where(a => a.Von.Uebersetzung != null && Funktionsform.IstCommandOhneZiel(a.Typ)
@@ -400,6 +405,11 @@ namespace Infrastructure.SourceGeneration
                             + "desselben Graphen ([Von(nameof(…))]); nur eine Quelle trägt keins von beiden", glied.Ort));
                     continue;
                 }
+                if (glied.Knoten?.Uebersetzung is { IstAntwort: true } antwort)
+                {
+                    Antwortkanten(glied, antwort, ports, s, g, kanten);
+                    continue;
+                }
                 var gespeist = new HashSet<Funktionsform.Port>();
                 foreach (var name in glied.Von)
                 {
@@ -471,6 +481,35 @@ namespace Infrastructure.SourceGeneration
             foreach (var glied in s.Glieder)
                 foreach (var (k, op, x) in Ausgaenge(glied))
                     if (!kanten.Any(e => e.VonOperation == op && V(e.Typ) == V(x))) s.Aus.Add((k, op, x));
+        }
+
+        /// <summary>
+        /// Die Kante einer Antwort-Übersetzung: <c>[Von]</c> nennt genau eine Übersetzung derselben Schachtel, die einen Command an ein Aggregat erzeugt;
+        /// von ihr kommt das Event (die Antwort). Kein <c>[Kopf]</c> — eine Antwort kommt nie von außen.
+        /// </summary>
+        private static void Antwortkanten(Glied glied, Uebersetzungsform.Form antwort, List<(Knoten Knoten, Operation Op, Funktionsform.Port Port)> ports,
+            Schachtel s, Form g, List<Kante> kanten)
+        {
+            if (glied.Kopf)
+                g.Fehler.Add(($"'{glied.Name}' übersetzt die Antwort {antwort.Ein.Name} und trägt [Kopf] — eine Antwort kommt nie von außen: nenne in [Von] die "
+                    + "Übersetzung, deren Command sie beantwortet", glied.Ort));
+            if (glied.Von.Count != 1)
+            {
+                g.Fehler.Add(($"'{glied.Name}' übersetzt die Antwort {antwort.Ein.Name} und nennt in [Von] {glied.Von.Count} Knoten — eine Antwort-Übersetzung "
+                    + "nennt genau die eine Übersetzung, deren Command an ein Aggregat sie beantwortet", glied.Ort));
+                return;
+            }
+            var quelle = s.Glieder.FirstOrDefault(x => x.Name == glied.Von[0]);
+            if (quelle == null) return;   // kein Knoten (gemeldet)
+            if (quelle.Knoten?.Uebersetzung is not { } befehl || !Funktionsform.Hat(befehl.Aus, A + "IAggregatCommand"))
+            {
+                g.Fehler.Add(($"'{glied.Name}' übersetzt die Antwort {antwort.Ein.Name} von '{quelle.Name}', aber '{quelle.Name}' ist keine Übersetzung in einen "
+                    + "Command an ein Aggregat — eine Antwort kommt vom Aggregat, an das eine Übersetzung schreibt", glied.Ort));
+                return;
+            }
+            foreach (var (nk, nop, port) in ports)
+                kanten.Add(new Kante { Von = quelle.Knoten, Nach = nk, VonOperation = quelle.Knoten.Operationen[0], NachOperation = nop, Port = port,
+                    Typ = (INamedTypeSymbol)antwort.Ein, Antwort = true });
         }
 
         /// <summary>Die Ports, an denen ein Glied nimmt: die Ports der Operationen eines Knotens bzw. die Köpfe eines inneren Graphen.</summary>
@@ -572,7 +611,7 @@ namespace Infrastructure.SourceGeneration
             {
                 zustand[k] = 1;
                 pfad.Add(k);
-                foreach (var n in g.Kanten.Where(e => e.Von == k).Select(e => e.Nach))
+                foreach (var n in g.Kanten.Where(e => e.Von == k && !e.Antwort).Select(e => e.Nach))
                 {
                     if (zustand.TryGetValue(n, out var z) && z == 1) return pfad.SkipWhile(x => x != n).Append(n).ToList();
                     if (!zustand.ContainsKey(n) && Besuche(n) is { } r) return r;

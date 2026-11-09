@@ -32,6 +32,10 @@ public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, Funkti
     /// <summary>Je Ausgabetyp die Übersetzungen, an die der Knoten ihn gibt — das Kind rechnet sie inline, bevor es ihr Ergebnis hinausbringt.</summary>
     public IReadOnlyDictionary<Type, UebersetzungPlan[]> Uebersetzungen { get; init; } = new Dictionary<Type, UebersetzungPlan[]>();
 
+    /// <summary>Je Übersetzung mit Command an ein Aggregat ihre Antwort-Übersetzungen nach Event-Typ (<see cref="GraphPlan.AntwortenAuf"/>).</summary>
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<Type, UebersetzungPlan[]>> AntwortUebersetzungen { get; init; }
+        = new Dictionary<string, IReadOnlyDictionary<Type, UebersetzungPlan[]>>();
+
     /// <summary>So lange darf eine Rechnung dauern (<see cref="TimeSpan.Zero"/> = ohne Grenze).</summary>
     public TimeSpan Zeitlimit { get; init; }
 

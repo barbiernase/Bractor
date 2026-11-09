@@ -25,6 +25,10 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS120 (GR-UEBERSETZUNG; Fehler) — ein Command eines Katalogs verlässt einen Graphen der Anwendung: jeder Fall wird übersetzt
 ///   (<c>Uebersetze&lt;TEin, TAus&gt;</c>) oder von einem Knoten genommen, so kennt die Domäne keine Funktionsnachricht (A3). Ein Graph, der als Schachtel
 ///   in einem anderen steht, gibt seine Ausgänge dem äußeren — dort wird geprüft.</item>
+/// <item>CQRS123 (GR-UEBERSETZUNG-ANTWORT; Fehler) — eine Antwort-Übersetzung nimmt ein Event, das das <c>Decide</c> des Commands, den die Übersetzung
+///   in ihrem <c>[Von]</c> erzeugt, nicht ausgeben kann: diese Antwort käme nie.</item>
+/// <item>CQRS124 (GR-FAEHIGKEIT; Fehler) — eine Funktion in einem Graphen der Anwendung nimmt eine Lese-Fähigkeit, die kein Store der Anwendung umsetzt
+///   (etwa eine, die ein Katalog deklariert): sie bekäme zur Laufzeit nichts.</item>
 /// </list>
 /// Die Befunde haben keinen Quell-Ort in dieser Compilation (die Typen liegen in den Domänen-Projekten); jede Meldung beginnt deshalb mit dem
 /// einfachen Namen des Typs in Anführungszeichen — daran hängt die Werkbank sie an die Karte.
@@ -33,7 +37,8 @@ namespace Infrastructure.SourceGeneration;
 public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 {
     public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086",
-        AntwortOhneCommandId = "CQRS108", EmpfaengerId = "CQRS116", OhneGraphId = "CQRS117", VerlaesstId = Uebersetzungsform.Verlassen;
+        AntwortOhneCommandId = "CQRS108", EmpfaengerId = "CQRS116", OhneGraphId = "CQRS117", VerlaesstId = Uebersetzungsform.Verlassen,
+        UebersetzteAntwortId = Uebersetzungsform.Antwort, FaehigkeitOhneStoreId = "CQRS124";
 
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
         new(id, titel, text, "CQRS.Gesamtbild", s, isEnabledByDefault: true);
@@ -49,6 +54,14 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         "Die Funktion '{0}' hört '{1}', aber keiner ihrer Commands kann es entscheiden ({2}) — eine Funktion liest nie das Log, ein Event erreicht sie nur "
         + "als Antwort auf einen eigenen Command; was sie aus einer Entscheidung braucht, sagt ihr das Aggregat als Folge (GR-ANTWORT)", DiagnosticSeverity.Error);
 
+    private static readonly DiagnosticDescriptor UebersetzteAntwort = D(UebersetzteAntwortId, "Antwort, die nie kommt",
+        "'{0}': die Antwort-Übersetzung '{1}' nimmt {2}, aber das Decide von {3} gibt es nicht aus ({4}) — eine Antwort-Übersetzung nimmt ein Event, das "
+        + "das Aggregat auf den Command der Übersetzung in ihrem [Von] entscheiden kann (GR-UEBERSETZUNG-ANTWORT)", DiagnosticSeverity.Error);
+
+    private static readonly DiagnosticDescriptor FaehigkeitOhneStore = D(FaehigkeitOhneStoreId, "Fähigkeit ohne Store",
+        "'{0}': der Knoten '{1}' liest über {2}, aber kein Store der Anwendung setzt die Fähigkeit um — deklariert ein Katalog sie, setzt ein Store im "
+        + "Speicher der Anwendung sie um (er liest dafür aus seinem eigenen Read-Model) (GR-FAEHIGKEIT)", DiagnosticSeverity.Error);
+
     private static readonly DiagnosticDescriptor Empfaenger = D(EmpfaengerId, "Command ohne genau einen Empfänger",
         "'{0}' (Command ohne Ziel, von {1}): {2} — ein Command hat genau einen Empfänger: einen Knoten desselben Graphen, den Kopf genau eines Graphen "
         + "oder einen Akteur, der ihn hört (GR-EMPFAENGER)", DiagnosticSeverity.Error);
@@ -61,7 +74,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         + "kennt keine Funktionsnachricht (GR-UEBERSETZUNG)", DiagnosticSeverity.Error);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, AntwortOhneCommand, Empfaenger, OhneGraph, Verlaesst);
+        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, AntwortOhneCommand, UebersetzteAntwort, FaehigkeitOhneStore, Empfaenger, OhneGraph, Verlaesst);
 
     /// <summary>Die Rollen-Marker, deren Implementierung eine Assembly zur Domäne macht (wie die Projektlage des Extractors).</summary>
     private static readonly string[] DomaenenRollen =
@@ -206,6 +219,24 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 
         // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf.
         var graphen = typen.Where(Graphform.IstGraph).Select(Graphform.Lies).Where(g => g.Gueltig).ToList();
+        // GR-UEBERSETZUNG-ANTWORT: die Antwort, die eine Übersetzung nimmt, kann das Decide des Commands davor ausgeben.
+        foreach (var g in graphen)
+            foreach (var e in g.Kanten.Where(e => e.Antwort))
+            {
+                var befehl = e.Von.Uebersetzung!.Aus;
+                var aus = entscheidet.TryGetValue(befehl, out var x) ? x : new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+                if (!aus.Contains(e.Typ))
+                    ctx.ReportDiagnostic(Diagnostic.Create(UebersetzteAntwort, Location.None, g.Typ.Name, e.Nach.Name, e.Typ.Name, befehl.Name,
+                        aus.Count == 0 ? "kein Decide nimmt ihn" : "es gibt aus: " + string.Join(", ", aus.Select(a => a.Name).OrderBy(a => a))));
+            }
+        // GR-FAEHIGKEIT: jede Lese-Fähigkeit eines Knotens in einem laufenden Graphen setzt ein Store der Anwendung um (mehrere meldet CQRS053).
+        var iReadStore = G("IReadStore");
+        var stores = typen.Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract && iReadStore != null && Ist(t, iReadStore)).ToList();
+        foreach (var g in graphen.Where(g => !Abstractions.Projektstruktur.IstKatalog(g.Typ.ContainingAssembly?.Name ?? "")))
+            foreach (var k in g.Knoten.Where(k => k.Uebersetzung == null))
+                foreach (var f in k.Funktion.Aufs.SelectMany(a => a.Faehigkeiten).Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default))
+                    if (!stores.Any(s => s.AllInterfaces.Any(i => Funktionsform.Voll(i) == Funktionsform.Voll(f))))
+                        ctx.ReportDiagnostic(Diagnostic.Create(FaehigkeitOhneStore, Location.None, g.Typ.Name, k.Name, f.Name));
         // Was läuft: die Graphen der Anwendung; ein Graph im Katalog ist eine Blaupause und zählt erst als Knoten eines von ihnen.
         var laufen = graphen.Where(g => !Abstractions.Projektstruktur.IstKatalog(g.Typ.ContainingAssembly?.Name ?? "")).ToList();
         string N(ITypeSymbol t) => Funktionsform.Name(t);

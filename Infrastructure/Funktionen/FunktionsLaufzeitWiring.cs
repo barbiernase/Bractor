@@ -117,7 +117,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, b.Baue!, b.Zustand, b.Name, technikZustand, bereich, ablage,
                     quelle: b.Lausche is not null), b.Rechne, b.Liest, antworten)
                 { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Uebersetzungen = instanz.Graph.UebersetzungenVon(k.Name),
-                    Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
+                    AntwortUebersetzungen = instanz.Graph.AntwortenAuf, Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
                 // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Rechner der Instanz (der Zustand ist ein Cache und soll alles sehen).
                 if (mitZustand && (b.Zustand is not null || technikZustand))
                 {

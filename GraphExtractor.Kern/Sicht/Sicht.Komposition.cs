@@ -164,6 +164,13 @@ public sealed partial class Sicht
         foreach (var kn in knoten)
         {
             var n = S(kn, "name");
+            // Eine Antwort-Übersetzung (TEin ist ein Event) nimmt die Antwort des Aggregats auf den Command der Übersetzung in ihrem [Von] (Graphform).
+            if (uebersetzungen.TryGetValue(n, out var un) && Sorte(S(un, "ein")) == "event")
+            {
+                foreach (var v in L(kn, "von").Where(v => ports.TryGetValue(v, out var pv) && pv.Art == "uebersetzung"))
+                    kanten.Add(new JsonObject { ["von"] = v, ["nach"] = n, ["typ"] = S(un, "ein"), ["verlierbar"] = false, ["antwort"] = true });
+                continue;
+            }
             // Eine Übersetzung, die einen Graphen nennt, greift auch seine Zwischenstände ab (Abgriff, Graphform): alles, was seine Funktionen ausgeben.
             var abgriff = uebersetzungen.ContainsKey(n);
             foreach (var v in L(kn, "von").Where(ports.ContainsKey))

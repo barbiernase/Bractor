@@ -181,6 +181,10 @@ public sealed partial class Sicht
                 && Abstractions.Projektstruktur.KatalogVon(S(x, "namespace")) != null);
             var hinaus = Alle(g["uebersetzungen"]).Where(u => schachtel != null
                 && Alle(g["knoten"]).Any(k => S(k, "name") == S(u, "knoten") && L(k, "von").Contains(S(schachtel, "name")))).ToList();
+            // Die Antwort-Übersetzungen dahinter (TEin ist ein Event): sie nehmen die Antwort des Aggregats, an das eine Übersetzung schreibt — eigene Karten
+            //   in derselben Spalte, die Kante kommt vom Aggregat zurück (Rücklauf).
+            var antworten = Alle(g["uebersetzungen"]).Where(u => Sorte(S(u, "ein")) == "event"
+                && Alle(g["knoten"]).Any(k => S(k, "name") == S(u, "knoten") && L(k, "von").Any(v => hinaus.Any(h => S(h, "knoten") == v)))).ToList();
             if (schachtel != null && hinaus.Count > 0)
             {
                 // Was übersetzt wird, verlässt die Karte als Output des Katalog-Graphen (TEin) — der Command dahinter (TAus) gehört der Übersetzung.
@@ -196,6 +200,26 @@ public sealed partial class Sicht
                     ausdruecklich.Add((uid, ein));
                     ausdruecklich.Add((gid, ein));
                     kanten.Add(new(gid, uid, ein, "schreiben"));
+                }
+                foreach (var u in antworten)
+                {
+                    var uid = "ue:" + S(g, "_id") + ":" + S(u, "knoten");
+                    var (ein, aus) = (S(u, "ein"), S(u, "aus"));
+                    karten.Add(new(uid, gid, "uebersetzung", S(u, "knoten"), "uebersetzungen", band, null,
+                        [new FlaechenPort(ein, "ein", Sorte(ein), false), new FlaechenPort(aus, "aus", Sorte(aus), false)]));
+                    ausdruecklich.Add((uid, ein));
+                    // Die Antwort kommt vom Aggregat, an das die Übersetzung in ihrem [Von] schreibt.
+                    var befehl = Alle(g["knoten"]).Where(k => S(k, "name") == S(u, "knoten")).SelectMany(k => L(k, "von"))
+                        .Select(v => hinaus.FirstOrDefault(h => S(h, "knoten") == v)).FirstOrDefault(h => h != null);
+                    if (befehl != null && RecordAgg(S(befehl, "aus")) is { Length: > 0 } agg) kanten.Add(new("agg:" + agg, uid, ein, "ruecklauf"));
+                    // Nimmt ein Knoten des Graphen ihr Ergebnis (die Antwort zurück an eine Funktion), geht es an den Graphen zurück.
+                    if (Alle(g["knoten"]).Any(k => L(k, "von").Contains(S(u, "knoten"))))
+                    {
+                        Port(aus, "ein");
+                        ausdruecklich.Add((uid, aus));
+                        ausdruecklich.Add((gid, aus));
+                        kanten.Add(new(uid, gid, aus, "ruecklauf"));
+                    }
                 }
             }
             else foreach (var t in L(g, "ausgaenge")) Port(t, "aus");

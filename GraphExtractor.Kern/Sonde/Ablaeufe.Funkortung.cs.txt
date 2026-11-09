@@ -1,4 +1,6 @@
 using Abstractions;
+using Core;
+using Marten;
 using Funkortung.Ortung;
 using Sondenkatalog.Katalog.Peilung;
 
@@ -6,7 +8,9 @@ using Sondenkatalog.Katalog.Peilung;
 // den Eingang des fremden Katalogs übersetzt (Frequenz nach Namen, die Stelle als Auftrag und die Messdauer als DauerMs ausdrücklich), die Peilung des
 // Katalogs rechnet, und ihr Ergebnis wird ein Command an die Peilstelle — der Auftrag wird wieder ihre Id (Guid → Id ausdrücklich), die Güte kommt
 // nach Namen, die Quelle aus dem Standardwert. Den Ausgang setzt eine Geste (Gezeichnet.gesten.json), samt [Feld]. Was der Katalog sonst meldet (ein
-// Hinweis), darf hinaus. Der Funker liegt absichtlich hier statt bei den Akteuren.
+// Hinweis), darf hinaus. Der Funker liegt absichtlich hier statt bei den Akteuren. Dieselbe Geste übersetzt die ANTWORT der Peilstelle zurück in den
+// Katalog (Uebersetze<PeilungVermerkt, PeilungBestaetigt>, an die Peilung zurück — eine Antwort, kein Kreis); die Peilung liest dann über die Fähigkeit
+// des Katalogs, die der Peilbuch-Speicher hier umsetzt (bis die Pipeline-Schicht aufgeht, liegt er bei den Abläufen).
 
 namespace Funkortung.Ablauf;
 
@@ -18,3 +22,10 @@ public sealed record Ortung(
     [Von(nameof(Hinein))] Peilung Peilen) : IGraph;
 
 public sealed record Funker : IAkteur, IDarf<OrtungAngefordert>, IHoert<PeilungVermerkt>;
+
+public sealed class PeilbuchSpeicher : MartenStore, IHoleLetzteRichtung
+{
+    public PeilbuchSpeicher(IDocumentStore store) : base(store) { }
+
+    public Task<double> LetzteAsync() => Task.FromResult(0.0);
+}

@@ -133,10 +133,13 @@ public static class Grammatik
             + "Funktion in deren Kind, am Kopf beim Annehmen), nie zwei hintereinander; am Kopf gibt sie an Knoten des Graphen oder an ein Aggregat. Kein "
             + "Command eines Katalogs verlässt einen Graphen der Anwendung (docs/04 §4.4). Nennt sie einen Graphen im Graphen, greift sie jede seiner "
             + "Nachrichten ab, auch einen Zwischenstand: [Von(nameof(A), Innen = nameof(T.X))] genau die Nachricht des Knotens X; ohne Innen einen "
-            + "Ausgang bzw. den einen inneren Knoten, der TEin ausgibt (mehrere: nenne den Knoten).", "error",
+            + "Ausgang bzw. den einen inneren Knoten, der TEin ausgibt (mehrere: nenne den Knoten). Eine Antwort-Übersetzung nimmt statt eines Commands "
+            + "das Event, mit dem ein Aggregat den Command der Übersetzung in ihrem [Von] beantwortet (eines, das sein Decide ausgeben kann); sie läuft gleich "
+            + "nach dem Senden, und eine Antwort zählt nicht als Kante eines Kreises.", "error",
             [An("CQRS119", "Domain.SourceGeneration/GraphAnalyzer.cs (Zuordnung unvollständig, Typ nicht zuweisbar, [Feld] ohne Ziel bzw. Quelle; Lesart Uebersetzungsform)"),
              An("CQRS120", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Katalog-Command verlässt einen Graphen der Anwendung)"),
-             An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TEin kein Command ohne Ziel, TAus kein Command)"),
+             An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TEin weder Command ohne Ziel noch Antwort-Event, TAus kein Command)"),
+             An("CQRS123", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Antwort-Übersetzung nimmt ein Event, das das Decide nicht ausgibt)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (zwei Übersetzungen hintereinander, Kopf-Übersetzung gibt hinaus)"),
              new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedGraphen: je Übersetzung eine Methode, ihre Wege)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (hinter einer Funktion inline gerechnet), GraphActor.cs (am Kopf)")]),
@@ -183,8 +186,10 @@ public static class Grammatik
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (kein Reader, kein Aggregat)"),
              An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Frage an ein Aggregat: eine Query, synchron, genau ein Glied Id<TAggregat>)")]),
         new("GR-FAEHIGKEIT", "Fähigkeit → genau ein Store", "Eine Fähigkeit (Interface mit genau einer Funktion) gehört zu genau einem Store "
-            + "(eine Implementierung); Auf und Frage nehmen sie als Parameter.", "error",
-            [Gen("CQRS053", "Projections.SourceGeneration/ProjectionServicesGenerator.cs"), An("CQRS051", "Domain.SourceGeneration (FaehigkeitAnalyzer)")]),
+            + "(eine Implementierung); Auf und Frage nehmen sie als Parameter. Eine Lese-Fähigkeit darf auch ein Katalog für seine Funktionen deklarieren "
+            + "(mit seinen eigenen Typen); umgesetzt wird sie im Speicher der Anwendung.", "error",
+            [Gen("CQRS053", "Projections.SourceGeneration/ProjectionServicesGenerator.cs"), An("CQRS051", "Domain.SourceGeneration (FaehigkeitAnalyzer)"),
+             An("CQRS124", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (eine Fähigkeit eines Knotens, die kein Store umsetzt)")]),
         // Erzeugung: Baustein-Ausgang → Sorte
         new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt Events, Hinweise und Fristen — nie einen Command, weder an "
             + "ein Aggregat noch ohne Ziel (CQRS114): was nach einem Fakt geschehen soll, stößt ein Client an, der es hört (Aggregate reden über Graphen und "

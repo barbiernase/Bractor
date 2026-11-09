@@ -1,0 +1,10 @@
+using System.Threading.Tasks;
+using Abstractions;
+
+// SONDE — eine FÄHIGKEIT AUS DEM KATALOG (docs/plan-ohne-pipeline.md §2.3): der Katalog sagt mit seinen eigenen Typen, was er lesen will; umgesetzt
+// wird sie im Speicher der Anwendung, die ihn nutzt (Ablaeufe.Funkortung.cs.txt).
+
+namespace Sondenkatalog.Katalog.Peilung;
+
+/// <summary>Die zuletzt bestätigte Richtung in Grad (0, solange keine bestätigt ist).</summary>
+public interface IHoleLetzteRichtung : IReadStore { Task<double> LetzteAsync(); }

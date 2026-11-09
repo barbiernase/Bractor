@@ -110,7 +110,8 @@ public sealed class GraphActor(
 
     /// <summary>
     /// Die Übersetzung am Kopf, inline: ihr Ergebnis an die Knoten, die sie nennen (Kennung aus Kopf und Übersetzung), oder — verlässt es den Graphen —
-    /// als Command an sein Aggregat; die Kette wartet, bis das Ziel entschieden hat (eine Wiederholung verwirft seine Inbox).
+    /// als Command an sein Aggregat; die Kette wartet, bis das Ziel entschieden hat (eine Wiederholung verwirft seine Inbox). Die Antwort darauf rechnen
+    /// die Antwort-Übersetzungen gleich weiter (<see cref="SendeMitAntwortenAsync"/>); was sie an Knoten geben, ruft der Actor danach.
     /// </summary>
     private void Uebersetze(IContext context, Offen o, UebersetzungPlan u, KettenKontext kontext)
     {
@@ -131,24 +132,57 @@ public sealed class GraphActor(
         var kopf = o.Kopf.Kennung;
         var id = Kettenvertrag.Befehl(kopf, ort, 0, c);
         var korrelation = Guid.TryParse(kontext.Korrelation, out var k) ? k : kopf;
+        var weiter = new List<(string Von, object Nachricht, Guid Kennung)>();
         Neben(context, async ct =>
         {
             using var akteur = Akteure.AkteurHerkunft.Aus(kontext.Akteur);
-            using var spur = Spur.Von(kontext.Ursache ?? Spur.Ursache(kontext.Stream, kontext.Version), WirkerId.FuerKnoten(instanz.Name, u.Name));
+            await SendeMitAntwortenAsync(u, c, id, ort, kopf, kontext.Ursache ?? Spur.Ursache(kontext.Stream, kontext.Version), korrelation, weiter, ct);
+        }, t =>
+        {
+            if (!_ketten.TryGetValue(kopf, out var offen)) return Task.CompletedTask;
+            if (!t.IsCompletedSuccessfully) { Beende(context, offen, (ort, t.Exception?.GetBaseException().Message ?? "abgebrochen")); return Task.CompletedTask; }
+            foreach (var (von, y, kennung) in weiter)
+                foreach (var w in instanz.Graph.Wege(von, 0, y.GetType())) Rufe(context, offen, w.Knoten, w.Operation, y, kennung, kontext, w.Verlierbar);
+            if (--offen.Ausstehend == 0) Beende(context, offen, null);
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>
+    /// Sendet den Command einer Übersetzung am Kopf, bis das Ziel entschieden hat, und rechnet die Antwort-Übersetzungen auf jedes Event der Antwort
+    /// (Kennung aus Eingang, Ort und Nummer des Events, Ursache das Event): einen Command an ein Aggregat sendet sie ebenso weiter, was Knoten des
+    /// Graphen nehmen, sammelt <paramref name="weiter"/> für den Actor. Läuft neben dem Actor (Neben), liest nur den unveränderlichen Plan.
+    /// </summary>
+    private async Task SendeMitAntwortenAsync(UebersetzungPlan u, IAggregatCommand c, Guid id, string ort, Guid eingang, string ursache, Guid korrelation,
+        List<(string Von, object Nachricht, Guid Kennung)> weiter, CancellationToken ct)
+    {
+        Infrastructure.Emit.EmitAntwort antwort;
+        using (Spur.Von(ursache, WirkerId.FuerKnoten(instanz.Name, u.Name)))
             for (var versuch = 1; ; versuch++)
             {
-                if ((await sende(c, id, korrelation, ct)).Ausgang.IstEntschieden()) return;
+                antwort = await sende!(c, id, korrelation, ct);
+                if (antwort.Ausgang.IstEntschieden()) break;
                 if (versuch >= FunktionsKindActor.Versuche)
                     throw new InvalidOperationException($"{ort}: Command {c.GetType().Name} an {c.Ziel} bleibt nach {versuch} Versuchen unbekannt.");
                 await Task.Delay(FunktionsKindActor.Pause(versuch), ct);
             }
-        }, t =>
+        if (!instanz.Graph.AntwortenAuf.TryGetValue(u.Name, out var antworten) || antworten.Count == 0) return;
+        for (var j = 0; j < antwort.Events.Count; j++)
         {
-            if (!_ketten.TryGetValue(kopf, out var offen)) return Task.CompletedTask;
-            if (!t.IsCompletedSuccessfully) Beende(context, offen, (ort, t.Exception?.GetBaseException().Message ?? "abgebrochen"));
-            else if (--offen.Ausstehend == 0) Beende(context, offen, null);
-            return Task.CompletedTask;
-        });
+            var (ev, version) = (antwort.Events[j].Event, antwort.Events[j].Version);
+            if (!antworten.TryGetValue(ev.GetType(), out var plaene)) continue;
+            var ak = Kettenvertrag.Antwort(eingang, ort, 0, j);
+            foreach (var p in plaene)
+            {
+                var y = p.Rechne(ev);
+                var ortP = instanz.Ort(p.Name);
+                if (instanz.Graph.Wege(p.Name, 0, y.GetType()).Count > 0) weiter.Add((p.Name, y, Kettenvertrag.Weiter(ak, ortP, 0)));
+                else if (y is IAggregatCommand c2)
+                    await SendeMitAntwortenAsync(p, c2, Kettenvertrag.Befehl(ak, ortP, 0, c2), ortP, ak, Spur.Ursache(c.Ziel, version), korrelation, weiter, ct);
+                else
+                    throw new InvalidOperationException($"{ortP}: die Antwort-Übersetzung gab {y.GetType().Name} aus, und kein Knoten nimmt es");
+            }
+        }
     }
 
     /// <summary>So viele Ketten nimmt die Quelle zugleich (die Warteschlange ihres Knotens); darüber wartet sie (Gegendruck).</summary>

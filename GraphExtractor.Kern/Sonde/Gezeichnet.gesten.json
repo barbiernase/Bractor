@@ -1,5 +1,5 @@
 {
-  "_zweck": "Im Editor GEZEICHNET, als Gesten-Skript (Werkbank P7.3): jede Geste ist ein Karten-Delta wie aus dem Browser; die Sonde schreibt sie über den Gesten-Motor (GraphExtractor.Kern/Schreiben/Gesten) in den Fork und liest nach jeder Geste neu — spätere Gesten verweisen auf die Ids, die der Code-Stand vergibt (wf:/rf: der Store-Funktionen). Leseseite: neuer Store mit einer im Panel benannten und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel. Ein Akteur, der hineingibt (IDarf) und hört (IHoert), und ein Client als Record, der ihn verkörpert. Eine neue Funktion (Klasse mit Technik im Konstruktor) samt ihrem Command; ein Knoten kommt an einen geschriebenen Graphen (ein Parameter mehr am Record); ein neuer Graph mit einer generischen Funktion als Knoten (Typargument wie geschrieben). Eine Übersetzung kommt als Ausgang an einen geschriebenen Graphen (Uebersetze<Gepeilt, VermerkePeilung> mit [Feld]: der Auftrag wird die Id der Peilstelle).",
+  "_zweck": "Im Editor GEZEICHNET, als Gesten-Skript (Werkbank P7.3): jede Geste ist ein Karten-Delta wie aus dem Browser; die Sonde schreibt sie über den Gesten-Motor (GraphExtractor.Kern/Schreiben/Gesten) in den Fork und liest nach jeder Geste neu — spätere Gesten verweisen auf die Ids, die der Code-Stand vergibt (wf:/rf: der Store-Funktionen). Leseseite: neuer Store mit einer im Panel benannten und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel. Ein Akteur, der hineingibt (IDarf) und hört (IHoert), und ein Client als Record, der ihn verkörpert. Eine neue Funktion (Klasse mit Technik im Konstruktor) samt ihrem Command; ein Knoten kommt an einen geschriebenen Graphen (ein Parameter mehr am Record); ein neuer Graph mit einer generischen Funktion als Knoten (Typargument wie geschrieben). Eine Übersetzung kommt als Ausgang an einen geschriebenen Graphen (Uebersetze<Gepeilt, VermerkePeilung> mit [Feld]: der Auftrag wird die Id der Peilstelle); ihre Antwort (PeilungVermerkt) kommt über eine Antwort-Übersetzung an die Peilung zurück.",
   "gesten": [
     {
       "titel": "Leseseite: Query, Antwort, Read Model, Store",
@@ -226,7 +226,7 @@
       }
     },
     {
-      "titel": "Graph: Übersetzung als Ausgang mit [Feld]",
+      "titel": "Graph: Übersetzung als Ausgang mit [Feld] und ihre Antwort zurück",
       "karten": {
         "graphen": [
           {
@@ -252,7 +252,8 @@
                 "typ": "Peilung",
                 "name": "Peilen",
                 "von": [
-                  "Hinein"
+                  "Hinein",
+                  "Bestaetigen"
                 ]
               },
               {
@@ -266,6 +267,13 @@
                     "ziel": "AggregateId",
                     "quelle": "Auftrag"
                   }
+                ]
+              },
+              {
+                "typ": "Uebersetze<PeilungVermerkt, PeilungBestaetigt>",
+                "name": "Bestaetigen",
+                "von": [
+                  "Vermerken"
                 ]
               }
             ]

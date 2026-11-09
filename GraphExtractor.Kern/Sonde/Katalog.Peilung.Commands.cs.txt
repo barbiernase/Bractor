@@ -11,3 +11,6 @@ public record Peile(Guid Auftrag, double FrequenzMhz, int DauerMs) : ICommand;
 
 /// <summary>Die Peilung ist gelungen: der Auftrag, aus dem sie kam, Richtung in Grad und Güte.</summary>
 public record Gepeilt(Guid Auftrag, double FrequenzMhz, double RichtungGrad, double Guete) : ICommand;
+
+/// <summary>Die Anwendung hat die Peilung bestätigt (aus der Antwort ihres Aggregats übersetzt): Richtung und Güte, wie sie vermerkt wurden.</summary>
+public record PeilungBestaetigt(double RichtungGrad, double Guete) : ICommand;

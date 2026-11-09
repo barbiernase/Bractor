@@ -13,13 +13,16 @@ namespace Infrastructure.SourceGeneration
     /// <c>TAus</c> eine Quelle, in dieser Reihenfolge: <c>[Feld]</c> am Knoten (ausdrücklich darf ein <c>Guid</c> ein <c>Id&lt;T&gt;</c> füllen und
     /// umgekehrt), eine Eigenschaft von <c>TEin</c> mit gleichem Namen und implizit zuweisbarem Typ, der Standardwert des Parameters — sonst CQRS119.
     /// <c>TEin</c> ist ein Command ohne Ziel, <c>TAus</c> ein Command (ohne Ziel oder an ein Aggregat), sonst CQRS121.
+    /// <para>Eine ANTWORT-ÜBERSETZUNG nimmt statt eines Commands ein Event: die Antwort des Aggregats auf den Command, den die Übersetzung erzeugt, die
+    /// sie in <c>[Von]</c> nennt (<see cref="Graphform"/>; ob das <c>Decide</c> dieses Commands das Event ausgeben kann, prüft CQRS123 im Gesamtbild).
+    /// So kommt die Antwort eines Aggregats zurück in den Graphen, ohne dass eine Funktion ein Event der Domäne kennt.</para>
     /// </summary>
     internal static class Uebersetzungsform
     {
         public const string Feld = "Abstractions.FeldAttribute";
 
         /// <summary>Die Regeln einer Übersetzung (Analyzer-Kennungen).</summary>
-        public const string Zuordnung = "CQRS119", Verlassen = "CQRS120", Nachricht = "CQRS121";
+        public const string Zuordnung = "CQRS119", Verlassen = "CQRS120", Nachricht = "CQRS121", Antwort = "CQRS123";
 
         /// <summary>Woher ein Parameter von <c>TAus</c> kommt.</summary>
         public const string AusFeld = "feld", AusName = "name", AusStandard = "standard";
@@ -47,6 +50,8 @@ namespace Infrastructure.SourceGeneration
             /// <summary>Die <c>[Feld]</c>, wie sie dastehen (Ziel, Quelle).</summary>
             public List<(string Ziel, string Quelle)> Abweichungen = new List<(string, string)>();
             public List<(string Id, string Text, Location Ort)> Fehler = new List<(string, string, Location)>();
+            /// <summary>Eine Antwort-Übersetzung: <c>TEin</c> ist ein Event (die Antwort eines Aggregats), kein Command ohne Ziel.</summary>
+            public bool IstAntwort;
         }
 
         /// <summary>Ist <paramref name="t"/> eine Übersetzung — <c>Abstractions.Uebersetze&lt;TEin, TAus&gt;</c>?</summary>
@@ -69,9 +74,11 @@ namespace Infrastructure.SourceGeneration
             f.Abweichungen = felder.Select(x => (x.Ziel, x.Quelle)).ToList();
             var ein = f.Ein as INamedTypeSymbol;
             var aus = f.Aus as INamedTypeSymbol;
-            if (ein == null || !Funktionsform.IstCommandOhneZiel(ein))
+            f.IstAntwort = ein != null && Funktionsform.Hat(ein, "Abstractions.IEvent") && !Funktionsform.Hat(ein, "Abstractions.ITransientEvent");
+            if (ein == null || !f.IstAntwort && !Funktionsform.IstCommandOhneZiel(ein))
                 f.Fehler.Add((Nachricht, $"die Übersetzung '{p.Name}' nimmt {f.Ein.ToDisplayString()} — sie nimmt einen Command ohne Ziel (die Ausgabe "
-                    + "einer Funktion oder die Nachricht eines Clients)", ort));
+                    + "einer Funktion oder die Nachricht eines Clients) oder die Antwort eines Aggregats (ein Event) auf den Command der Übersetzung, die "
+                    + "sie in [Von] nennt", ort));
             if (aus == null || aus.TypeKind != TypeKind.Class || aus.IsAbstract || aus.IsGenericType && aus.TypeArguments.Any(a => a.TypeKind == TypeKind.TypeParameter)
                 || !Funktionsform.Hat(aus, "Abstractions.ICommand"))
                 f.Fehler.Add((Nachricht, $"die Übersetzung '{p.Name}' erzeugt {f.Aus.ToDisplayString()} — sie erzeugt einen Command (ohne Ziel an einen "
