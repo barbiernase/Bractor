@@ -8,7 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Proto;
 using Proto.Cluster;
 using Pruefdomaene.Messung;
-using Pruefdomaene.Pipeline.Messung;
+using Pruefwerk.Katalog.Messung;
 using static Pruefdomaene.Integration.Tests.Pruefstand;
 
 namespace Pruefdomaene.Integration.Tests.Garantien;
@@ -89,10 +89,10 @@ public class FunktionsZustandGarantieTests
         public int Offen, Geschlossen;
     }
 
-    private sealed class Versand(Verbindungen v) : Pruefdomaene.Pipeline.Abrechnung.IMahnversand, IAsyncDisposable
+    private sealed class Versand(Verbindungen v) : Pruefwerk.Katalog.Abrechnung.IMahnversand, IAsyncDisposable
     {
         private readonly int _ = Interlocked.Increment(ref v.Offen);
-        public Task<string> VersendeAsync(Id<Pruefdomaene.Abrechnung.Kundenkonto> konto, Id<Pruefdomaene.Abrechnung.Rechnung> rechnung, int stufe) =>
+        public Task<string> VersendeAsync(Guid empfaenger, Guid vorgang, int stufe) =>
             Task.FromResult("brief-" + Guid.NewGuid().ToString("N"));
         public ValueTask DisposeAsync() { Interlocked.Increment(ref v.Geschlossen); return ValueTask.CompletedTask; }
     }
@@ -101,7 +101,7 @@ public class FunktionsZustandGarantieTests
     public async Task Eine_Ressource_der_Aktivierung_wird_beim_Stoppen_geschlossen()
     {
         var v = new Verbindungen();
-        using var host = Cluster("garantie-ressource", dienste: s => s.AddScoped<Pruefdomaene.Pipeline.Abrechnung.IMahnversand>(_ => new Versand(v)));
+        using var host = Cluster("garantie-ressource", dienste: s => s.AddScoped<Pruefwerk.Katalog.Abrechnung.IMahnversand>(_ => new Versand(v)));
         await host.StartAsync();
         try
         {

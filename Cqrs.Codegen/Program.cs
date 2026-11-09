@@ -95,12 +95,16 @@ int Erzeuge(string wurzel)
     // Nur die Rollen-Projekte, die es in dieser Anwendung gibt (eine Test-Anwendung hat z. B. nur die Schreibseite).
     // Ein Projekt ist, was eine .csproj hat — ein liegengebliebener bin-Ordner eines gelöschten Projekts (Checkout ohne git clean -x) ist keins.
     var targetProjects = Struktur.CodegenProjekte(wurzel).Where(p => File.Exists(Path.Combine(solutionDir, p, p + ".csproj"))).ToArray();
-    // Die Kataloge, die die Abläufe der Anwendung nutzen (docs/plan-katalog-und-graphen.md): ihre Nachrichten gehören in Leitung und Kontexte wie die der
-    //   Rollen-Projekte, und eine Änderung an ihnen muss den Codegen neu auslösen (Stand-Hash).
-    var ablaeufe = Path.Combine(solutionDir, Struktur.Projekt(wurzel, Struktur.Rolle.Ablaeufe), Struktur.Projekt(wurzel, Struktur.Rolle.Ablaeufe) + ".csproj");
-    if (File.Exists(ablaeufe))
-        targetProjects = targetProjects.Concat(Struktur.KatalogeIn(File.ReadAllText(ablaeufe))
-            .Where(k => File.Exists(Path.Combine(solutionDir, k, k + ".csproj")))).ToArray();
+    // Die Kataloge, die die Anwendung nutzt (docs/plan-ohne-pipeline.md: ihre Domäne übersetzt sie, ihr Speicher setzt ihre Fähigkeiten um): ihre
+    //   Nachrichten und Zustände gehören in Leitung und Kontexte wie die der Rollen-Projekte, und eine Änderung an ihnen muss den Codegen neu auslösen
+    //   (Stand-Hash). Gesucht wird in jedem Rollen-Projekt, das Kataloge nutzen darf.
+    foreach (var rolle in Struktur.NutzenKataloge)
+    {
+        var projekt = Path.Combine(solutionDir, Struktur.Projekt(wurzel, rolle), Struktur.Projekt(wurzel, rolle) + ".csproj");
+        if (File.Exists(projekt))
+            targetProjects = targetProjects.Concat(Struktur.KatalogeIn(File.ReadAllText(projekt))
+                .Where(k => File.Exists(Path.Combine(solutionDir, k, k + ".csproj")))).Distinct(StringComparer.Ordinal).ToArray();
+    }
     var artefakte = Artefakte(solutionDir, wurzel);
     string Pfad(Art art) => Path.Combine(solutionDir, artefakte.Single(a => a.Art == art).Pfad);
     bool Hat(Art art) => artefakte.Any(a => a.Art == art);

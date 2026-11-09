@@ -5,7 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Pruefdomaene.Abrechnung;
 using Pruefdomaene.Import;
-using Pruefdomaene.Pipeline.Abrechnung;
+using Pruefwerk.Katalog.Abrechnung;
+using Pruefwerk.Katalog.Import;
 using Xunit;
 using static Pruefdomaene.Integration.Tests.Pruefstand;
 
@@ -26,7 +27,7 @@ public class FunktionsBausteinE2ETests
     {
         private int _n;
         public int Aufrufe => _n;
-        public Task<string> VersendeAsync(Id<Kundenkonto> konto, Id<Rechnung> rechnung, int stufe) =>
+        public Task<string> VersendeAsync(Guid empfaenger, Guid vorgang, int stufe) =>
             Task.FromResult($"brief-{Interlocked.Increment(ref _n)}-{Guid.NewGuid():N}");
     }
 
@@ -87,13 +88,14 @@ public class FunktionsBausteinE2ETests
             (await FrageAsync(host, new StarteImport(import, zeilen), Guid.NewGuid()))!.Success.Should().BeTrue();
 
             await Warte(async () => (await Zustand<Importauftrag>(host.Services, import.Wert)).Stand == zeilen, Frist, "der Import wird nicht fertig");
-            var herkunft = new Herkunft(import.Wert, 1, default, null, WirkerId.FuerFunktion("Importlauf"));
+            // Die Ids der Posten leitet der Zeilenlauf (Katalog Pruefwerk) aus seinem Eingang und der Zeile ab, die Übersetzung macht sie zu Posten-Ids.
+            var herkunft = new Herkunft(import.Wert, 1, default, null, WirkerId.FuerFunktion(nameof(Zeilenlauf)));
             for (var i = 0; i < zeilen; i += 23)
-                (await Zustand<Posten.Posten>(host.Services, herkunft.NeueId<Posten.Posten>(i).Wert)).Existiert.Should().BeTrue($"Posten der Zeile {i}");
+                (await Zustand<Posten.Posten>(host.Services, herkunft.NeueId("zeile:" + i))).Existiert.Should().BeTrue($"Posten der Zeile {i}");
 
             await Task.Delay(TimeSpan.FromSeconds(2));
             (await Log(host, import.Wert)).Count(e => e.Payload is ImportStandGemeldet)
-                .Should().Be((zeilen + Pipeline.Import.Importlauf.StandAlle - 1) / Pipeline.Import.Importlauf.StandAlle, "jeder Stand genau einmal");
+                .Should().Be((zeilen + Zeilenlauf.StandAlle - 1) / Zeilenlauf.StandAlle, "jeder Stand genau einmal");
         }
         finally { await host.StopAsync(); }
     }

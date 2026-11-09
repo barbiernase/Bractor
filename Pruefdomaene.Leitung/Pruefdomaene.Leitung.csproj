@@ -28,7 +28,6 @@
     <ProjectReference Include="..\Cqrs.Leitung\Cqrs.Leitung.csproj" />
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
-    <ProjectReference Include="..\Pruefdomaene.Pipeline\Pruefdomaene.Pipeline.csproj" />
     <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 

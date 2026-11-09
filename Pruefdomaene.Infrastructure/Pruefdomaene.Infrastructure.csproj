@@ -12,6 +12,8 @@
     <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
+    <!-- Der Speicher setzt die Lese-Fähigkeit um, die der Katalog Pruefwerk deklariert (docs/plan-ohne-pipeline.md §2.3). -->
+    <ProjectReference Include="..\Pruefwerk.Katalog\Pruefwerk.Katalog.csproj" />
     <ProjectReference Include="..\Projections.SourceGeneration\Projections.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 

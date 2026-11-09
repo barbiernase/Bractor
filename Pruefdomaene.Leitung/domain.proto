@@ -37,20 +37,9 @@ message TaktDto {
     int64 zeitpunkt = 1;
 }
 
-message HochrechnungAngefordertDto {
-    string stelle = 1;
-    double wert = 2;
-}
-
 message FreizugebenDto {
     string rechnung = 1;
     string betrag = 2;
-}
-
-message GutschreibungDto {
-    string konto = 1;
-    string rechnung = 2;
-    string betrag = 3;
 }
 
 message MahnfallDto {
@@ -58,25 +47,6 @@ message MahnfallDto {
     string konto = 2;
     string betrag = 3;
     int32 mahnstufe = 4;
-}
-
-message AuftragAbzuwickelnDto {
-    string auftrag_id = 1;
-    string posten_id = 2;
-    string kontingent_id = 3;
-    int32 menge = 4;
-}
-
-message KontingentZuEntlastenDto {
-    string auftrag_id = 1;
-    string kontingent_id = 2;
-    int32 menge = 3;
-}
-
-message PostenFreizugebenDto {
-    string auftrag_id = 1;
-    string posten_id = 2;
-    int32 menge = 3;
 }
 
 message ImportAngefordertDto {
@@ -88,7 +58,7 @@ message ImportZuLaufenDto {
     int32 zeilen = 2;
 }
 
-message MerkmalDto {
+message HochrechnungAngefordertDto {
     string stelle = 1;
     double wert = 2;
 }
@@ -98,28 +68,76 @@ message NeuerWertDto {
     double wert = 2;
 }
 
-message UnterschrittenDto {
-    string posten = 1;
-    int32 fehlmenge = 2;
+message FreigegebenDto {
+    string vorgang = 1;
 }
 
-message VerteilungAbzuwickelnDto {
-    string verteilung_id = 1;
-    string quelle_id = 2;
-    repeated string ziele = 3;
-    int32 menge_je_ziel = 4;
+message GemahntDto {
+    string vorgang = 1;
+    string empfaenger = 2;
+    string versand = 3;
+    int32 stufe = 4;
 }
 
-message ZielZubuchenDto {
-    string verteilung_id = 1;
-    string ziel = 2;
-    int32 menge = 3;
+message MahneDto {
+    string vorgang = 1;
+    string empfaenger = 2;
+    string betrag = 3;
+    int32 stufe = 4;
 }
 
-message ZubuchenDto {
-    string verteilung_id = 1;
-    repeated string ziele = 2;
-    int32 menge_je_ziel = 3;
+message PruefeDto {
+    string vorgang = 1;
+    string betrag = 2;
+}
+
+message ZurPruefungVorzulegenDto {
+    string vorgang = 1;
+}
+
+message AnfordernDto {
+    int32 menge = 1;
+}
+
+message AngenommenDto {
+    string vorgang = 1;
+    int32 menge = 2;
+}
+
+message GelesenDto {
+    string id = 1;
+    int32 wert = 2;
+}
+
+message LaufenDto {
+    string vorgang = 1;
+    int32 menge = 2;
+}
+
+message StandDto {
+    string vorgang = 1;
+    int32 gelesen = 2;
+}
+
+message AusreisserDto {
+    string stelle = 1;
+    double wert = 2;
+}
+
+message GeschaetztDto {
+    string stelle = 1;
+    double erwartet = 2;
+    int32 anzahl = 3;
+}
+
+message MerkmalDto {
+    string stelle = 1;
+    double wert = 2;
+}
+
+message MesswertDto {
+    string stelle = 1;
+    double wert = 2;
 }
 
 message SkalierenDto {
@@ -312,10 +330,6 @@ message LaufGescheitertDto {
 message GutschriftGebuchtDto {
     string rechnung = 1;
     string betrag = 2;
-}
-
-message MahnungUnnoetigDto {
-    string rechnung = 1;
 }
 
 message MahnungVermerktDto {
@@ -523,6 +537,10 @@ message VerteilungNichtGefundenDto {
 
 message ZielZugebuchtDto {
     int32 menge = 1;
+}
+
+message NichtZuMahnenDto {
+    string vorgang = 1;
 }
 
 // ============================================================================

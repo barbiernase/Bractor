@@ -1,4 +1,5 @@
 using Abstractions;
+using Pruefwerk.Katalog.Messung;
 using Rechenwerk.Katalog.Skalierung;
 
 namespace Pruefdomaene.Messung;
@@ -13,3 +14,15 @@ public sealed record Hinein : IUebersetzung<HochrechnungAngefordert, Skalieren>;
 /// <summary>Das Ergebnis wird ein Ausreißer an die Messstelle: der Bezug wird wieder ihre Id.</summary>
 [Feld(nameof(MeldeAusreisser.AggregateId), nameof(Skaliert.Bezug))]
 public sealed record Melden : IUebersetzung<Skaliert, MeldeAusreisser>;
+
+/// <summary>Ein neuer Wert wird der Eingang der Merkmalbildung: die Id der Messstelle als Stelle.</summary>
+[Feld(nameof(Messwert.Stelle), nameof(NeuerWert.Stelle))]
+public sealed record Messen : IUebersetzung<NeuerWert, Messwert>;
+
+/// <summary>Ein Ausreißer der Merkmalbildung wird ein Ausreißer an die Messstelle.</summary>
+[Feld(nameof(MeldeAusreisser.AggregateId), nameof(Ausreisser.Stelle))]
+public sealed record AusreisserMelden : IUebersetzung<Ausreisser, MeldeAusreisser>;
+
+/// <summary>Die Schätzung des Schätzers wird an der Messstelle vermerkt.</summary>
+[Feld(nameof(VermerkeSchaetzung.AggregateId), nameof(Geschaetzt.Stelle))]
+public sealed record SchaetzungVermerken : IUebersetzung<Geschaetzt, VermerkeSchaetzung>;

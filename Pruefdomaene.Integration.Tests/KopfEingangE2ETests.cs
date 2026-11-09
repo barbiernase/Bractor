@@ -5,7 +5,6 @@ using Infrastructure.Funktionen;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Pruefdomaene.Import;
-using Pruefdomaene.Pipeline.Import;
 using Xunit;
 using static Pruefdomaene.Integration.Tests.Pruefstand;
 

@@ -2,15 +2,10 @@ using Abstractions;
 using Pruefdomaene.Abrechnung;
 using Pruefdomaene.Auftrag;
 using Pruefdomaene.Import;
+using Pruefdomaene.Kontingent;
 using Pruefdomaene.Messung;
 using Pruefdomaene.Posten;
 using Pruefdomaene.Verteilung;
-using Pruefdomaene.Pipeline.Abrechnung;
-using Pruefdomaene.Pipeline.Auftrag;
-using Pruefdomaene.Pipeline.Import;
-using Pruefdomaene.Pipeline.Messung;
-using Pruefdomaene.Pipeline.Posten;
-using Pruefdomaene.Pipeline.Verteilung;
 
 namespace Pruefdomaene.Akteure;
 
@@ -26,21 +21,21 @@ public sealed record Messwart : IAkteur,
     IDarf<Pruefdomaene.Messung.HochrechnungAngefordert>;
 
 /// <summary>
-/// Die Sachbearbeitung (Schritt 6: ein Decide gibt nur Fakten aus, was danach geschieht, stößt ein Client an): auf jedes Fakt, das einen Ablauf
-/// beginnt oder fortsetzt, gibt sie den Command an den Kopf seines Graphen — die Rechnung zur Freigabe, Gutschrift und Mahnung, den Auftrag zur
-/// Abwicklung samt Gegenzügen, die Verteilung zur Abwicklung und Zubuchung, den unterschrittenen Posten zum Nachschub, den Messwert zur
-/// Merkmalsbildung, den Import zum Lauf.
+/// Die Sachbearbeitung (docs/plan-ohne-pipeline.md: ein Decide gibt nur Fakten aus, was danach geschieht, stößt ein Client an): auf jedes Fakt, das einen
+/// Ablauf beginnt oder fortsetzt, gibt sie die Nachricht der Domäne an einen Graphen des Katalogs (Freigabe, Mahnung, Messwert, Import) oder die
+/// Commands an die Aggregate selbst (Gutschrift, Auftrag samt Gegenzügen, Verteilung und Zubuchung, Nachschub, und die Vermerke der Antworten).
 /// </summary>
 public sealed record Sachbearbeitung : IAkteur,
     IHoert<RechnungGestellt>, IHoert<RechnungBezahlt>, IHoert<ZahlungUeberfaellig>,
     IHoert<AuftragGestartet>, IHoert<PostenfreigabeAngefordert>, IHoert<KontingententlastungAngefordert>,
-    IHoert<VerteilungGestartet>, IHoert<QuelleReserviert>,
-    IHoert<PostenReserviert>,
+    IHoert<KontingentBelegt>, IHoert<BelegungAbgelehnt>,
+    IHoert<VerteilungGestartet>, IHoert<QuelleReserviert>, IHoert<PostenZugebucht>,
+    IHoert<PostenReserviert>, IHoert<ReservierungAbgelehnt>,
     IHoert<MesswertErfasst>,
     IHoert<ImportGestartet>,
-    IDarf<Freizugeben>, IDarf<Gutschreibung>, IDarf<Mahnfall>,
-    IDarf<AuftragAbzuwickeln>, IDarf<PostenFreizugeben>, IDarf<KontingentZuEntlasten>,
-    IDarf<VerteilungAbzuwickeln>, IDarf<Zubuchen>,
-    IDarf<Unterschritten>,
+    IDarf<Freizugeben>, IDarf<BucheGutschrift>, IDarf<Mahnfall>,
+    IDarf<ReservierePosten>, IDarf<BelegeKontingent>, IDarf<GibPostenFrei>, IDarf<EntlasteKontingent>,
+    IDarf<VermerkeReservierung>, IDarf<VermerkeBelegung>, IDarf<VermerkeAbsage>,
+    IDarf<VermerkeQuellreservierung>, IDarf<VermerkeQuellabsage>, IDarf<BuchePostenZu>, IDarf<VermerkeZubuchung>,
     IDarf<NeuerWert>,
     IDarf<ImportZuLaufen>;

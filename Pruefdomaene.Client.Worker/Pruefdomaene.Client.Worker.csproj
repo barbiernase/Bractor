@@ -11,7 +11,6 @@
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
-    <ProjectReference Include="..\Pruefdomaene.Pipeline\Pruefdomaene.Pipeline.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Akteure\Pruefdomaene.Akteure.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Leitung\Pruefdomaene.Leitung.csproj" />
     <ProjectReference Include="..\Client.SourceGeneration\Client.SourceGeneration.csproj"

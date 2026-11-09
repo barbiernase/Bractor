@@ -7,7 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Proto;
 using Proto.Cluster;
 using Pruefdomaene.Abrechnung;
-using Pruefdomaene.Pipeline.Abrechnung;
+using Pruefwerk.Katalog.Abrechnung;
 using static Pruefdomaene.Integration.Tests.Pruefstand;
 
 namespace Pruefdomaene.Integration.Tests.Garantien;
@@ -29,7 +29,7 @@ public class FunktionsGarantieTests
         private readonly TaskCompletionSource _alle = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _n;
         public int Aufrufe => Volatile.Read(ref _n);
-        public async Task<string> VersendeAsync(Id<Kundenkonto> konto, Id<Rechnung> rechnung, int stufe)
+        public async Task<string> VersendeAsync(Guid empfaenger, Guid vorgang, int stufe)
         {
             var n = Interlocked.Increment(ref _n);
             if (n >= zusammen) _alle.TrySetResult();
@@ -57,7 +57,7 @@ public class FunktionsGarantieTests
     private sealed class ErstScheiternd : IMahnversand
     {
         public int Aufrufe;
-        public Task<string> VersendeAsync(Id<Kundenkonto> konto, Id<Rechnung> rechnung, int stufe) =>
+        public Task<string> VersendeAsync(Guid empfaenger, Guid vorgang, int stufe) =>
             Interlocked.Increment(ref Aufrufe) == 1 ? throw new InvalidOperationException("der Versand ist kurz weg")
                 : Task.FromResult($"brief-{Guid.NewGuid():N}");
     }
@@ -121,7 +121,7 @@ public class FunktionsGarantieTests
             var konto = Id<Kundenkonto>.Neu();
             var rechnung = Id<Rechnung>.Neu();
             var kennung = Guid.NewGuid();
-            var eingang = new EingangZustellen(kennung, nameof(Abrechnungsablauf), new Mahnfall(rechnung, konto, 99m, 1),
+            var eingang = new EingangZustellen(kennung, nameof(Abrechnungsablauf), new Mahne(rechnung.Wert, konto.Wert, 99m, 1),
                 Eingangsart.Kette, rechnung.Wert, 2,
                 DateTimeOffset.UtcNow, null, null, null);
             foreach (var h in new[] { a, b })

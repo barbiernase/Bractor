@@ -16,5 +16,9 @@ public record PruefeZahlung(Id<Rechnung> AggregateId) : ICommand<Rechnung>;
 public record BucheGutschrift(Id<Kundenkonto> AggregateId, Id<Rechnung> Rechnung, decimal Betrag) : ICommand<Kundenkonto>;
 public record VermerkeMahnung(Id<Kundenkonto> AggregateId, Id<Rechnung> Rechnung, string Versand, int Stufe) : ICommand<Kundenkonto>;
 
+/// <summary>Eine gestellte Rechnung ist zur Freigabe zu prüfen — die Nachricht der Sachbearbeitung, die eine Kopf-Übersetzung in den Eingang der
+/// Freigabeprüfung (Katalog Pruefwerk) macht.</summary>
+public record Freizugeben(Id<Rechnung> Rechnung, decimal Betrag) : ICommand;
 
-
+/// <summary>Eine überfällige Rechnung ist anzumahnen — übersetzt in den Eingang des Mahnlaufs (Katalog Pruefwerk).</summary>
+public record Mahnfall(Id<Rechnung> Rechnung, Id<Kundenkonto> Konto, decimal Betrag, int Mahnstufe) : ICommand;

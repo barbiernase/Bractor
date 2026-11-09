@@ -17,3 +17,6 @@ public record MeldeAusreisser(Id<Messstelle> AggregateId, double Wert) : IComman
 /// Graphen <c>Hochrechnung</c> aus dem Katalog Rechenwerk übersetzt; das Ergebnis kommt als Ausreißer an die Messstelle (docs/plan-ohne-pipeline.md §3).
 /// </summary>
 public sealed record HochrechnungAngefordert(Id<Messstelle> Stelle, double Wert) : ICommand;
+
+/// <summary>Ein neuer Wert einer Messstelle — die Nachricht der Sachbearbeitung, übersetzt in den Eingang der Merkmalbildung (Katalog Pruefwerk).</summary>
+public record NeuerWert(Id<Messstelle> Stelle, double Wert) : ICommand;
