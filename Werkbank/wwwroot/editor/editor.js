@@ -2084,7 +2084,12 @@
     // Eingang: was die Köpfe speist — eine Übersetzung aus der Nachricht eines Clients (mit den Akteuren, die sie dürfen), eine Quelle, sonst offen.
     const eing=h("div",{class:"fl-ab-ein"});
     d.koepfe.forEach(k=>k.knoten.forEach(n=>{const kn=d.knoten.find(x=>x.name===n)||{},akt=MODEL.akteure.filter(a=>(a.darf||[]).includes(komBasis(k.typ))).map(a=>"👤 "+a.name);
-      eing.append(h("div",{class:"fl-ab-z"},"◀ "+k.typ+(kn.art==="uebersetzung"?" ↦ "+komBasis(kn.aus[0]||""):"")+(akt.length?" · "+akt.join(", "):kn.art==="uebersetzung"?" · ⚠ kein Akteur":" · offen")));}));
+      const wer=akt.length?" · "+akt.join(", "):kn.art==="uebersetzung"?" · ⚠ kein Akteur":" · offen";
+      if(kn.art!=="uebersetzung"||!kn.uebersetzung){eing.append(h("div",{class:"fl-ab-z"},"◀ "+k.typ+wer));return;}
+      // Die Übersetzung am Kopf: ein eigener Knoten mit ihrer Zuordnung; Klick öffnet das Modal.
+      const oe=()=>ueOeffne({karte:ab.id,name:n});
+      eing.append(h("div",{class:"fl-ab-z"},"◀ "+k.typ+wer),h("div",{class:"fl-ab-ue",title:"↦ "+n+" — Klick: die Feldzuordnung",onclick:oe},
+        h("div",{class:"fl-ab-ue-t"},"↦ "+n+" · "+k.typ+" ↦ "+komBasis(kn.aus[0]||"")),ueZuordnungEl(kn.uebersetzung,oe,true)));}));
     d.knoten.filter(k=>k.quelle).forEach(k=>eing.append(h("div",{class:"fl-ab-z"},"⚡ "+k.name+" ("+k.typ+")")));
     eing.append(h("button",{class:"fl-ab-plus",title:"Wer stößt den Graphen an: ein Client (Akteur, Nachricht der Anwendung, Übersetzung in den Input) oder eine Quelle",
       onclick:e=>flEingang(ab,e)},"＋ Eingang"));
@@ -2152,9 +2157,7 @@
         onclick:e=>{e.stopPropagation();komKarte("host:inst:"+i);}},"⬡ "+i))));}
     if(fk.art==="graph"){const inn=flAblaufInnen(fk);if(inn){el.classList.add("fk-ablauf");el.append(inn);}}
     if(fk.art==="uebersetzung"){const k=((komDaten(fk.karte)||{}).knoten||[]).find(x=>x.name===fk.name),u=k&&k.uebersetzung;
-      if(u){const offen=(u.ziele||[]).filter(z=>!["feld","name","standard"].includes(z.regel)).length||(u.fehler||[]).length;
-        el.append(h("div",{class:"fl-ue-z"+(offen?" offen":""),title:"Doppelklick: die Feldzuordnung",ondblclick:e=>{e.stopPropagation();ueOeffne(fk);}},
-          offen?"⚠ "+offen+" Feld"+(offen>1?"er":"")+" offen":"✓ alle Felder zugeordnet"));}}
+      if(u)el.append(ueZuordnungEl(u,()=>ueOeffne(fk)));}
     const ports=h("div",{class:"fk-ports"});
     const zeile=p=>{const rid="rec:"+String(p.typ).split("<")[0],hat=NODEBY.has(rid);
       const r=h("div",{class:"fk-port "+p.richtung+" s-"+p.sorte+(p.eigen?" eigen":""),
@@ -2192,7 +2195,7 @@
     const zellen=new Map(),zk=(b,s)=>(s==="ausgang"||s==="eingang"?"§akt":String(b))+"|"+s;
     ks.forEach(k=>{const key=zk(k.band,k.spalte);let l=zellen.get(key);if(!l)zellen.set(key,l=[]);l.push(k);});
     const Y=new Map(),setze=(k,x,y)=>{const e=els.get(k.id);if(e){e.style.left=x+"px";e.style.top=y+"px";}Y.set(k.id,y+sz(k.id).h/2);};
-    const MITTE=["quellen","graphen","aggregate","projektionen"];
+    const MITTE=["quellen","graphen","uebersetzungen","aggregate","projektionen"];
     const lege=()=>{let y=FL_KOPF;FLGEO.baender=[];FLGEO.gruppen=new Map();
       baender.forEach(b=>{const y0=y;let hmax=0;
         MITTE.forEach(s=>{let cy=y0+FL_BAND_PAD;const zelle=zellen.get(zk(b,s))||[],sx=FLGEO.spalten[s].x;
@@ -2315,7 +2318,7 @@
   const ueTeile=id=>{const i=id.indexOf("|");return {gid:id.slice(3,i),knoten:id.slice(i+1)};};
   function ueOeffne(fk){const id="ue:"+fk.karte+"|"+fk.name;if(KOM)KOM.pfad.push(id);else KOM={pfad:[id],reiter:"komposition",wahl:null};KOM.port=null;KOM.feld=null;komZeige();}
   function ueZeige(de,id){const {gid,knoten}=ueTeile(id),d=komDaten(gid),k=d&&d.knoten.find(x=>x.name===knoten);if(!k||!k.uebersetzung){KOM.pfad.pop();if(!KOM.pfad.length)KOM=null;return;}
-    const m=komRahmen("Feld für Feld, ohne Logik: „=“ nach Namen, „⇐“ ausdrücklich ([Feld]), „∅“ Standardwert, „⚠“ offen — ＋ an einem offenen Ziel hebt passende Felder hervor");
+    const m=komRahmen("Feld für Feld, ohne Logik: „=“ nach Namen, „⇐“ ausdrücklich ([Feld]), „∅“ Standardwert, „⚠“ offen — ein Ziel (rechts) oder eine Quelle (links) wählen, dann das Gegenstück: das schreibt [Feld]");
     m.append(h("div",{class:"kom-leib form"},h("div",{class:"ue-modal"},h("div",{class:"ue-modal-k"},"↦ "+knoten+" im Ablauf ⬡ "+d.name),komUebersetzungEl(gid,k),
       h("div",{class:"kom-akte"},h("button",{class:"kom-akt gm-gefahr",title:"Die Übersetzung aus dem Ablauf nehmen — der Output ist danach wieder offen",
         onclick:()=>{komKnotenEntfernen(gid,knoten);KOM.pfad.pop();if(!KOM.pfad.length)komSchliesse();else komZeige();}},"✕ Übersetzung entfernen")))));
@@ -2452,22 +2455,54 @@
   // Die ↦-KARTE einer Übersetzung (docs/04 §4.4): links die Felder von TEin, rechts die Parameter von TAus mit ihrer Regel — „=“ nach Namen,
   //   „⇐“ ausdrücklich ([Feld]), „∅“ Standardwert, „⚠“ offen. ＋ an einem Ziel hebt die Felder hervor, die passen (der Server rechnet sie), ein Klick
   //   schreibt [Feld]; ✕ nimmt es zurück.
-  function komUebersetzungEl(id,k){const u=k.uebersetzung,F=KOM.feld&&KOM.feld.knoten===k.name?KOM.feld:null,ziel=F&&(u.ziele||[]).find(z=>z.name===F.ziel);
-    const links=h("div",{class:"kom-ue-sp"},h("div",{class:"kom-ue-t",title:u.ein},u.ein));
-    (u.quellen||[]).forEach(q=>{const passt=!!ziel&&(ziel.passend||[]).includes(q.name);
-      links.append(h("div",{class:"kom-ue-f"+(passt?" kand":"")+(F&&!passt?" leise":""),title:q.typ+(passt?" — Klick: "+F.ziel+" ← "+q.name:""),
-        onclick:e=>{e.stopPropagation();if(passt)komFeldSetze(id,k.name,F.ziel,q.name);}},q.name+" ",h("span",{class:"gn"},q.typ)));});
+  // Die Zuordnung einer Übersetzung auf ihrer Karte (Fläche): je Parameter von TAus seine Quelle — „⇐“ ausdrücklich, „=“ nach Namen, „∅“ Standard,
+  //   „⚠“ offen. Nur Anzeige; Doppelklick (bzw. Klick bei klein) öffnet das Modal, in dem zugeordnet wird.
+  const UE_REGEL={feld:["⇐","ausdrücklich ([Feld])"],name:["=","nach Namen"],standard:["∅","Standardwert des Parameters"]};
+  const ueQuelle=z=>z.quelle||(z.regel==="name"?z.name:"");
+  function ueZuordnungEl(u,oeffne,klein){const zs=u.ziele||[],offen=zs.filter(z=>!UE_REGEL[z.regel]).length,MAX=klein?4:8;
+    const box=h("div",{class:"fl-ue-map"+(klein?" klein":""),title:"Doppelklick: Felder zuordnen",ondblclick:e=>{e.stopPropagation();oeffne();}});
+    zs.slice(0,MAX).forEach(z=>{const [sym,txt]=UE_REGEL[z.regel]||["⚠","offen"],q=ueQuelle(z);
+      box.append(h("div",{class:"fl-ue-r r-"+(z.regel||"offen"),title:z.name+" ("+z.typ+") — "+txt+(q?" aus "+q:"")},
+        h("span",{class:"fl-ue-q"},q||(z.regel==="standard"?"Standard":"—")),h("span",{class:"fl-ue-s"},sym),h("span",{class:"fl-ue-n"},z.name)));});
+    if(zs.length>MAX)box.append(h("div",{class:"fl-ue-mehr"},"… "+(zs.length-MAX)+" weitere"));
+    if(!zs.length&&!(u.fehler||[]).length)box.append(h("div",{class:"fl-ue-mehr"},"keine Felder"));
+    box.append(h("div",{class:"fl-ue-z"+(offen||(u.fehler||[]).length?" offen":"")},
+      (u.fehler||[]).length?"⚠ "+u.fehler.length+" Befund"+(u.fehler.length>1?"e":""):offen?"⚠ "+offen+" Feld"+(offen>1?"er":"")+" offen":"✓ alle Felder zugeordnet"));
+    return box;}
+  // Die ↦-KARTE einer Übersetzung im Modal (docs/04 §4.4): links die Felder von TEin, rechts die Parameter von TAus mit ihrer Regel, dazwischen
+  //   je Zuordnung eine Linie. Zuordnen von beiden Seiten: ein Ziel wählen hebt die passenden Quellen hervor (der Server rechnet sie), eine Quelle
+  //   wählen die Ziele, die sie nehmen können; der zweite Klick schreibt [Feld]. ✕ nimmt es zurück; Esc bricht die Wahl ab.
+  function komUebersetzungEl(id,k){const u=k.uebersetzung,F=KOM.feld&&KOM.feld.knoten===k.name?KOM.feld:null,zs=u.ziele||[];
+    const ziel=F&&F.ziel?zs.find(z=>z.name===F.ziel):null,quelle=F&&F.quelle?F.quelle:null;
+    const nimmt=z=>(z.passend||[]).includes(quelle);
+    const waehle=w=>{KOM.feld=w&&F&&F.ziel===w.ziel&&F.quelle===w.quelle?null:w&&{knoten:k.name,...w};KOM.port=null;komZeige();};
+    const links=h("div",{class:"kom-ue-sp"},h("div",{class:"kom-ue-t",title:u.ein},u.ein)),L=new Map(),R=new Map();
+    (u.quellen||[]).forEach(q=>{const passt=!!ziel&&(ziel.passend||[]).includes(q.name),an=quelle===q.name,genutzt=zs.some(z=>ueQuelle(z)===q.name);
+      const kann=zs.some(z=>(z.passend||[]).includes(q.name));
+      const el=h("div",{class:"kom-ue-f"+(passt?" kand":"")+(an?" aktiv":"")+(genutzt?" genutzt":"")+(F&&!passt&&!an?" leise":""),
+        title:q.typ+(passt?" — Klick: "+F.ziel+" ← "+q.name:kann?" — Klick: wählen, dann das Ziel":" — kein Ziel nimmt "+q.typ),
+        onclick:e=>{e.stopPropagation();if(passt)komFeldSetze(id,k.name,F.ziel,q.name);else if(kann)waehle({quelle:q.name});}},q.name+" ",h("span",{class:"gn"},q.typ));
+      L.set(q.name,el);links.append(el);});
     if(!(u.quellen||[]).length)links.append(h("div",{class:"kom-ue-f leise"},"— keine Felder"));
     const rechts=h("div",{class:"kom-ue-sp"},h("div",{class:"kom-ue-t",title:u.aus},u.aus));
-    const R={feld:["⇐","ausdrücklich ([Feld])"],name:["=","nach Namen"],standard:["∅","Standardwert des Parameters"]};
-    (u.ziele||[]).forEach(z=>{const [sym,txt]=R[z.regel]||["⚠","offen — ＋ nennt die Quelle"],an=!!F&&F.ziel===z.name;
-      rechts.append(h("div",{class:"kom-ue-f r-"+(z.regel||"offen")+(an?" aktiv":"")},h("span",{class:"kom-ue-r",title:txt},sym),
-        z.name+(z.quelle?" ← "+z.quelle:"")+" ",h("span",{class:"gn"},z.typ),
-        z.regel==="feld"?h("span",{class:"gx",title:"[Feld] lösen",onclick:e=>{e.stopPropagation();komFeldLoese(id,k.name,z.name);}},"✕")
-          :h("button",{class:"ag-plus kom-einplus"+(an?" aktiv":""),title:(z.passend||[]).length?"Quelle nennen: "+z.passend.join(", "):"kein Feld von "+u.ein+" passt",
-            onclick:e=>{e.stopPropagation();KOM.feld=an?null:{knoten:k.name,ziel:z.name};KOM.port=null;komZeige();}},"＋")));});
-    const box=h("div",{class:"kom-ue"},links,h("div",{class:"kom-ue-pfeil"},"↦"),rechts);
-    return h("div",{},box,(u.fehler||[]).length?h("div",{class:"kom-ue-fehler"},...u.fehler.map(f=>h("div",{},"⚠ "+f))):null);}
+    zs.forEach(z=>{const [sym,txt]=UE_REGEL[z.regel]||["⚠","offen — Quelle wählen"],an=!!ziel&&ziel.name===z.name,passt=!!quelle&&nimmt(z);
+      const el=h("div",{class:"kom-ue-f r-"+(z.regel||"offen")+(an?" aktiv":"")+(passt?" kand":"")+(F&&!an&&!passt?" leise":""),
+        title:txt+(passt?" — Klick: "+z.name+" ← "+quelle:(z.passend||[]).length?" — Klick: Quelle wählen ("+z.passend.join(", ")+")":" — kein Feld von "+u.ein+" passt"),
+        onclick:e=>{e.stopPropagation();if(passt)komFeldSetze(id,k.name,z.name,quelle);else if((z.passend||[]).length)waehle({ziel:z.name});}},
+        h("span",{class:"kom-ue-r",title:txt},sym),z.name+" ",h("span",{class:"gn"},z.typ),
+        z.regel==="feld"?h("span",{class:"gx",title:"[Feld] lösen",onclick:e=>{e.stopPropagation();komFeldLoese(id,k.name,z.name);}},"✕"):null);
+      R.set(z.name,el);rechts.append(el);});
+    const svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","kom-ue-linien");
+    const box=h("div",{class:"kom-ue"},links,h("div",{class:"kom-ue-pfeil"},"↦"),rechts);box.append(svg);
+    // Die Linien nach dem Layout, in Koordinaten der Box (offset*, unabhängig vom Zoom der Leinwand).
+    const zeichne=()=>{if(!box.isConnected)return;svg.replaceChildren();svg.setAttribute("width",box.offsetWidth);svg.setAttribute("height",box.offsetHeight);
+      zs.forEach(z=>{const a=L.get(ueQuelle(z)),b=R.get(z.name);if(!a||!b)return;
+        const ax=a.offsetLeft+a.offsetWidth,ay=a.offsetTop+a.offsetHeight/2,bx=b.offsetLeft,by=b.offsetTop+b.offsetHeight/2,c=Math.max(16,(bx-ax)/2);
+        const p=document.createElementNS(SVGNS,"path");p.setAttribute("d","M"+ax+","+ay+" C"+(ax+c)+","+ay+" "+(bx-c)+","+by+" "+bx+","+by);
+        p.setAttribute("class","r-"+z.regel);svg.append(p);});};
+    requestAnimationFrame(()=>requestAnimationFrame(zeichne));
+    const hilfe=F?h("div",{class:"kom-ue-hilfe"},ziel?"Quelle für "+ziel.name+" wählen — Esc bricht ab":"Ziel für "+quelle+" wählen — Esc bricht ab"):null;
+    return h("div",{},box,hilfe,(u.fehler||[]).length?h("div",{class:"kom-ue-fehler"},...u.fehler.map(f=>h("div",{},"⚠ "+f))):null);}
   function komFeldSetze(id,knoten,ziel,quelle){const g=komModell(id),k=g&&(g.knoten||[]).find(x=>x.name===knoten);if(!k)return;
     k.felder=[...(k.felder||[]).filter(f=>f.ziel!==ziel),{ziel,quelle}];KOM.feld=null;gTitel(g.name+": "+knoten+" ["+ziel+" ← "+quelle+"]");render();}
   function komFeldLoese(id,knoten,ziel){const g=komModell(id),k=g&&(g.knoten||[]).find(x=>x.name===knoten);if(!k)return;
