@@ -1,0 +1,11 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog.Gebuehren;
+
+// Die Graphen: Knoten als Parameter, jede Kante als Von am nehmenden Knoten (Aufnahme → Schätzung → Gutachten → Mahnung).
+public sealed record Rueckgabepruefung([Kopf] SchadenBeiRueckgabe Pruefung) : IGraph;
+public sealed record Schadensbewertung(
+    [Kopf] Schadensaufnahme Aufnahme,
+    [Von(nameof(Aufnahme))] Schadensschaetzer Schaetzung,
+    [Von(nameof(Schaetzung))] Gutachtenanfrage Gutachten,
+    [Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;

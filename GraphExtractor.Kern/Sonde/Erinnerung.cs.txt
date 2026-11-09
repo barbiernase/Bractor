@@ -1,0 +1,16 @@
+using Abstractions;
+
+// SONDE — ABSICHTLICH FALSCH (docs/plan-ohne-pipeline.md): eine Funktion und ihr Graph in der Anwendung. Eine Anwendung hat keine Funktionen und
+// Graphen — sie nutzt sie aus einem Katalog und übersetzt sie; die Lage-Prüfung muss beide nach <Name>.Katalog weisen (lage-Zeilen im Soll).
+
+namespace Leihwesen.Erinnerung;
+
+public record Erinnere(Guid LeserId) : ICommand;
+public record Erinnert(Guid LeserId) : ITransientEvent;
+
+public sealed class Erinnerungsdienst : IFunktion
+{
+    public Erinnert Auf(Erinnere e) => new(e.LeserId);
+}
+
+public sealed record Erinnerungslauf([Kopf] Erinnerungsdienst Dienst) : IGraph;

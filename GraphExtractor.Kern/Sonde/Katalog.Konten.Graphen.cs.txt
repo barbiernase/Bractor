@@ -1,0 +1,5 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog.Konten;
+
+public sealed record Adresspruefung([Kopf] Registrierung Reservierung) : IGraph;

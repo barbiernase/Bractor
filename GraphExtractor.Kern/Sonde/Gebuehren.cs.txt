@@ -1,12 +1,12 @@
 using Abstractions;
 using Leihwesen.Ausleihe;
 
-// SONDE — ZWEI Aggregate im SELBEN Namespace, Decider in eigener Datei (Mahnvorgang.Decider.cs.txt), dazu der Ablauf zwischen ihnen aus
-//         GRAPHEN (Entscheidungen 4–6; früher eine Saga mit expliziter Interface-Implementierung):
-//         · FOLGE mit leerem Strom: die Rückgabeprüfung ist ein Graph mit EINEM Knoten; sein Kopf nimmt einen Command ohne Ziel eines Clients
-//           (PruefeRueckgabe) und gibt auf einem Teil der Fälle nichts aus (ein leerer Strom); die neue Id kommt aus der Herkunft (R13);
-//         · WAHL: die Schadensaufnahme gibt genau einen von drei Fällen aus — einen Command an den nächsten Knoten, einen Command an den
-//           Schadensfall (die Begutachtung vor Ort; auf das Fakt reagiert das Archiv) oder einen Hinweis (flüchtig, an die Akteure, die ihn hören);
+// SONDE — ZWEI Aggregate im SELBEN Namespace, Decider in eigener Datei (Mahnvorgang.Decider.cs.txt). Die Domäne ist rein: der Ablauf zwischen
+//         ihnen sind GRAPHEN des fremden Katalogs (Katalog.Gebuehren.*), die Übersetzungen (Uebersetzungen.Leihwesen.cs.txt) binden sie:
+//         · FOLGE mit leerem Strom: die Rückgabeprüfung ist ein Graph mit EINEM Knoten; sein Kopf nimmt die Prüfung eines Clients (PruefeRueckgabe,
+//           übersetzt) und gibt auf einem Teil der Fälle nichts aus (ein leerer Strom); die neue Id kommt aus der Herkunft (R13);
+//         · WAHL: die Schadensaufnahme gibt genau einen von drei Fällen aus — einen Command an den nächsten Knoten, die Begutachtung vor Ort (übersetzt
+//           an den Schadensfall; auf das Fakt reagiert das Archiv) oder einen Hinweis (flüchtig, an die Akteure, die ihn hören);
 //         · KETTE, DIE MITTRÄGT: die Schätzung (TECHNIK im Konstruktor) gibt ihren Betrag an das Gutachten (KONFIG-Record), das Gutachten trägt
 //           Betrag und Zuschlag zur Mahnung — jedes Auf nimmt genau eine Nachricht, keiner muss zusammenführen.
 
@@ -20,93 +20,12 @@ public record EroeffneMahnung(Id<Mahnvorgang> AggregateId, decimal Betrag) : ICo
 public record MahnungEroeffnet(decimal Betrag) : IEvent;
 public record MahnungExistiert(Id<Mahnvorgang> Id) : ITransientEvent;
 
-// Gleichbleibend: nur ein beschädigt zurückgegebenes Medium ist ein Schadensfall — je Rückgabe genau einer (Id aus der Herkunft).
-public sealed class SchadenBeiRueckgabe : IFunktion
-{
-    public IEnumerable<MeldeSchaden> Auf(PruefeRueckgabe p, Herkunft h)
-    {
-        if (p.Zustand == Zustand.Beschaedigt) yield return new MeldeSchaden(h.NeueId<Schadensfall>(), p.LeserId);
-    }
-}
-
-// Der Kopf der Schadensbewertung: der Schaden ist zu schätzen — die Gutachterin gibt ihn hinein, sie reagiert auf das gemeldete Fakt.
+/// <summary>Der Kopf der Schadensbewertung: der Schaden ist zu schätzen — die Gutachterin gibt ihn hinein, sie reagiert auf das gemeldete Fakt.</summary>
 public record SchaetzeSchaden(Id<Schadensfall> Fall, Guid LeserId) : ICommand;
 
-// Was nur Knoten einander geben (Commands ohne Ziel, nie im Log) — und was den Graphen verlässt: ein Command an den Schadensfall, ein Hinweis.
-public record SchadenErfasst(Guid LeserId, decimal Neuwert, int AlterJahre) : ICommand;
-public record SchadenGeschaetzt(Guid LeserId, decimal Betrag) : ICommand;
-public record GutachtenErhalten(Guid LeserId, decimal Betrag, decimal Zuschlag) : ICommand;
+/// <summary>Die Begutachtung vor Ort (einer der drei Fälle der Schadensaufnahme, übersetzt an den Schadensfall).</summary>
 public record BegutachteVorOrt(Id<Schadensfall> AggregateId, Guid LeserId) : ICommand<Schadensfall>;
 public record BegutachtungAngefordert(Guid LeserId) : IEvent;
-public record NichtSchaetzbar(string Grund) : ITransientEvent;
-
-// WAHL: genau einer der drei Fälle je Lauf.
-public sealed class Schadensaufnahme : IFunktion
-{
-    public OneOf<SchadenErfasst, BegutachteVorOrt, NichtSchaetzbar> Auf(SchaetzeSchaden s)
-    {
-        if (s.LeserId == Guid.Empty) return new NichtSchaetzbar("unbekannter Leser");
-        if (s.Fall.Wert.ToByteArray()[0] % 2 == 0) return new BegutachteVorOrt(s.Fall, s.LeserId);   // an den Schadensfall
-        return new SchadenErfasst(s.LeserId, 25m, 2);
-    }
-}
-
-// Technik hinter der Schätzung — eine Schnittstelle ohne Marker (der Schätzer nimmt sie im Konstruktor), eine Umsetzung mit Konfig-Record
-// (Werte am Knoten der Instanz).
-public interface IWertTabelle
-{
-    /// <summary>Der Restwert nach linearer Abschreibung.</summary>
-    decimal Restwert(decimal neuwert, int alterJahre);
-    Task<bool> IstSchaetzbarAsync(Guid leserId);
-}
-
-public record WertTabellenKonfig(decimal Mindestwert, int Abschreibungsjahre = 5);
-
-public sealed class LineareWertTabelle(WertTabellenKonfig konfig) : IWertTabelle
-{
-    public decimal Restwert(decimal neuwert, int alterJahre) => Math.Max(konfig.Mindestwert, neuwert * (1 - alterJahre / (decimal)konfig.Abschreibungsjahre));
-
-    public Task<bool> IstSchaetzbarAsync(Guid leserId)
-    {
-        return Task.FromResult(leserId != Guid.Empty);
-    }
-}
-
-// KETTE, Schritt 1: die Schätzung mit Technik.
-public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion
-{
-    public async Task<SchadenGeschaetzt> Auf(SchadenErfasst e)
-    {
-        var faktor = await tabelle.IstSchaetzbarAsync(e.LeserId) ? 1m : 0m;
-        return new SchadenGeschaetzt(e.LeserId, faktor * tabelle.Restwert(e.Neuwert, e.AlterJahre));
-    }
-}
-
-// KETTE, Schritt 2: ein Gutachten, das dauern kann — sein Zuschlag aus dem Konfig-Record des Knotens; den Betrag der Schätzung trägt es weiter.
-public record GutachtenKonfig(decimal Zuschlag, TimeSpan Bedenkzeit);
-
-public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion
-{
-    public async Task<GutachtenErhalten> Auf(SchadenGeschaetzt g)
-    {
-        await Task.Delay(konfig.Bedenkzeit);
-        return new GutachtenErhalten(g.LeserId, g.Betrag, konfig.Zuschlag);
-    }
-}
-
-// KETTE, Schritt 3: die Mahnung aus dem, was das Gutachten mitträgt.
-public sealed class MahnungNachSchaetzung : IFunktion
-{
-    public EroeffneMahnung Auf(GutachtenErhalten g, Herkunft h) => new(h.NeueId<Mahnvorgang>(), g.Betrag + g.Zuschlag);
-}
-
-// Die Graphen: Knoten als Parameter, jede Kante als Von am nehmenden Knoten (Aufnahme → Schätzung → Gutachten → Mahnung).
-public sealed record Rueckgabepruefung([Kopf] SchadenBeiRueckgabe Pruefung) : IGraph;
-public sealed record Schadensbewertung(
-    [Kopf] Schadensaufnahme Aufnahme,
-    [Von(nameof(Aufnahme))] Schadensschaetzer Schaetzung,
-    [Von(nameof(Schaetzung))] Gutachtenanfrage Gutachten,
-    [Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;
 
 public partial class Schadensfall : IState
 {

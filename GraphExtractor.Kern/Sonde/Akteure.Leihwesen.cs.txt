@@ -1,0 +1,21 @@
+using Abstractions;
+using Leihwesen.Ausleihe;
+using Leihwesen.Ausleihe.Befehle;
+using Leihwesen.Pruefung;
+using Leihwesen.Lesen;
+using Sondenkatalog.Katalog.Gebuehren;
+
+// SONDE — Akteure des Leihwesens, die Nachrichten des fremden Katalogs hören: darum bei den Akteuren (die Domäne bleibt rein). Der Lesesaal verkörpert
+// ZWEI Akteure — die Theke hier und das Archiv in der Domäne (die Akteure sehen die Schreibseite).
+
+namespace Leihwesen.Rand;
+
+// Akteure: frei benannt; was einer HINEINGIBT, steht als IDarf<T> in der Basisliste, was zu ihm KOMMT als IHoert<T> — Reihenfolge = Deklaration.
+// Kein Name verrät die Rolle (keine *Akteur-/*Rolle-Endung); eine Query zu dürfen ist dasselbe Wort wie ein Command; ein Command ohne Ziel
+// (die gescannte Rückgabe) geht an den Kopf eines Graphen. KENNTNIS: ein Hinweis aus einem Decide (NichtAusgeliehen), einer aus einem Knoten
+// (NichtSchaetzbar, aus dem Katalog) und einer des Frameworks (LaufGescheitert).
+public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>, IDarf<RueckgabeGescannt>,
+    IHoert<NichtAusgeliehen>, IHoert<NichtSchaetzbar>, IHoert<LaufGescheitert>;
+
+// EIN Client verkörpert ZWEI Akteure (die Theke und das Archiv, das reagiert).
+public sealed record Lesesaal : IClient, IVerkoerpert<Theke>, IVerkoerpert<Archiv>;

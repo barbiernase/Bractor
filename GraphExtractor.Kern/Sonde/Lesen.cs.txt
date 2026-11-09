@@ -94,13 +94,6 @@ public sealed class LeihAuskunftLeser : IReader
     }
 }
 
-// Akteure: frei benannt; was einer HINEINGIBT, steht als IDarf<T> in der Basisliste, was zu ihm KOMMT als IHoert<T> — Reihenfolge = Deklaration.
-// Kein Name verrät die Rolle (keine *Akteur-/*Rolle-Endung); eine Query zu dürfen ist dasselbe Wort wie ein Command; ein Command ohne Ziel
-// (die gescannte Rückgabe) geht an den Kopf eines Graphen. KENNTNIS: ein Hinweis aus einem Decide (NichtAusgeliehen), einer aus einem Knoten
-// (NichtSchaetzbar) und einer des Frameworks (LaufGescheitert).
-public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>, IDarf<RueckgabeGescannt>,
-    IHoert<NichtAusgeliehen>, IHoert<NichtSchaetzbar>, IHoert<LaufGescheitert>;
-
 // Eine KI als Akteur (frei benannt, keine Art mehr): darf eine Mahnung eröffnen und hört, wenn eine eröffnet ist (ein Event: Kenntnis); auf einen
 // gemeldeten Schaden REAGIERT sie mit dem Kopf der Schadensbewertung (Schritt 6: ein Decide gibt nur Fakten aus, die Folge stößt ein Client an).
 public sealed record Gutachterin : IAkteur, IDarf<EroeffneMahnung>, IHoert<MahnungEroeffnet>, IHoert<SchadenGemeldet>, IDarf<SchaetzeSchaden>;
@@ -110,8 +103,7 @@ public sealed record Gutachterin : IAkteur, IDarf<EroeffneMahnung>, IHoert<Mahnu
 public sealed record Archiv : IAkteur, IHoert<BegutachtungAngefordert>, IDarf<EroeffneMahnung>, IHoert<Ausgeliehen>,
     IHoert<Zurueckgegeben>, IDarf<PruefeRueckgabe>, IHoert<RueckgabeAngemahnt>, IDarf<BemesseMahnung>;
 
-// Clients (docs/konzept-akteure.md §4): frei benannt — ein Record mit IClient, der nur nennt, wen er verkörpert. EIN Client verkörpert ZWEI Akteure
-// (die Theke und das Archiv, das reagiert), und ein Akteur läuft über ZWEI Clients (das Archiv: Lesesaal + Depot). Was über die
-// Leitung geht, sind das IDarf und IHoert der Akteure.
-public sealed record Lesesaal : IClient, IVerkoerpert<Theke>, IVerkoerpert<Archiv>;
+// Clients (docs/konzept-akteure.md §4): frei benannt — ein Record mit IClient, der nur nennt, wen er verkörpert. Ein Akteur läuft über ZWEI Clients
+// (das Archiv: Lesesaal + Depot; der Lesesaal liegt bei den Akteuren, Akteure.Leihwesen.cs.txt). Was über die Leitung geht, sind das IDarf und IHoert
+// der Akteure.
 public sealed record Depot : IClient, IVerkoerpert<Archiv>;

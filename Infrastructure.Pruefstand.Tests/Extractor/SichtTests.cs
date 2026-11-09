@@ -29,7 +29,7 @@ public class SichtTests
         var projekt = ws.AddProject(ProjectInfo.Create(ProjectId.CreateNewId(), VersionStamp.Create(), "Leihwesen", "Leihwesen", LanguageNames.CSharp,
             filePath: "/sonde/Leihwesen.csproj", metadataReferences: refs,
             compilationOptions: new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)));
-        foreach (var (name, text) in Sonde.Quelltexte().Append(("GlobalUsings.cs",
+        foreach (var (name, text) in Sonde.Alle().Append(("GlobalUsings.cs",
                      "global using System;\nglobal using System.Collections.Generic;\nglobal using System.Linq;\nglobal using System.Threading;\nglobal using System.Threading.Tasks;\n")))
             ws.AddDocument(DocumentInfo.Create(DocumentId.CreateNewId(projekt.Id), name,
                 loader: TextLoader.From(TextAndVersion.Create(SourceText.From(text), VersionStamp.Create())), filePath: "/sonde/" + name));
@@ -56,7 +56,7 @@ public class SichtTests
         // Eine Funktion ist eine Karte zwischen Eingang und Ausgaben (nur aus der Signatur ihres Auf).
         var fb = "fb:" + Id(board, "bausteinFunktionen", "name", "SchadenBeiRueckgabe");
         s["karten"]!.AsObject().ContainsKey(fb).Should().BeTrue();
-        kanten.Should().Contain(["rec:PruefeRueckgabe→" + fb, fb + "→rec:MeldeSchaden"]);
+        kanten.Should().Contain(["rec:Rueckgabe→" + fb, fb + "→rec:Schaden"]);
     }
 
     [Fact]
@@ -182,8 +182,8 @@ public class SichtTests
             .Equal("Aufnahme:Schadensaufnahme", "Schaetzung:Schadensschaetzer", "Gutachten:Gutachtenanfrage", "Mahnung:MahnungNachSchaetzung");
         g["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(bool?)k["kopf"]}:{string.Join("+", k["von"]!.AsArray().Select(v => (string?)v))}").Should()
             .Equal("Aufnahme:True:", "Schaetzung:False:Aufnahme", "Gutachten:False:Schaetzung", "Mahnung:False:Gutachten");
-        g["koepfe"]!.AsArray().Select(x => (string?)x).Should().Equal("SchaetzeSchaden");
-        g["ausgaenge"]!.AsArray().Select(x => (string?)x).Should().BeEquivalentTo(["BegutachteVorOrt", "NichtSchaetzbar", "EroeffneMahnung"]);
+        g["koepfe"]!.AsArray().Select(x => (string?)x).Should().Equal("Schaetze");
+        g["ausgaenge"]!.AsArray().Select(x => (string?)x).Should().BeEquivalentTo(["VorOrt", "NichtSchaetzbar", "Mahnbetrag"]);
         g["kanten"]!.AsArray().Select(k => $"{(string?)k!["von"]} -{(string?)k["typ"]}-> {(string?)k["nach"]}").Should().BeEquivalentTo([
             "Aufnahme -SchadenErfasst-> Schaetzung", "Schaetzung -SchadenGeschaetzt-> Gutachten", "Gutachten -GutachtenErhalten-> Mahnung"]);
         // Die Karte der Sicht nennt ihre Knoten (Funktionen) als Kanten; ein Graph im Graphen ist ein Knoten wie eine Funktion.
@@ -209,7 +209,7 @@ public class SichtTests
         Ports(F("MahnungNachSchaetzung")).Should().Be("GutachtenErhalten", "ein Auf, eine Nachricht");
         Ports(F("Alarmquittung")).Should().Be("PerAnrufErreicht || PerFunkErreicht", "zwei Wege, je einer ein Auf");
         Ports(F("Prognosemodell")).Should().Be("Geglaettet<Kurzfenster> || Geglaettet<Langfenster>", "zusammengeführt im Zustand, je Glättung ein Auf");
-        Ports(F("Pruefungsstart")).Should().Be("RueckgabeGescannt || PruefungGestartet", "ein Command und die Antwort auf den eigenen Command");
+        Ports(F("Pruefungsstart")).Should().Be("Scan || Gestartet", "ein Command und die Antwort auf den eigenen Command (aus dem Event übersetzt)");
         F("Sensorabfrage")["lauscht"]!.AsArray().Select(x => (string?)x).Should().Equal("Rohwert");
         F("Sensorabfrage")["eingaenge"]!.AsArray().Should().BeEmpty("eine Quelle lauscht und nimmt nichts");
     }
@@ -240,10 +240,10 @@ public class SichtTests
         var messkette = "gr:" + Id(board, "graphen", "name", "Messkette");
         ((string?)K(messkette)["spalte"]).Should().Be("graphen");
         karten.Should().NotContain(k => (string?)k["id"] == "gr:" + Id(board, "graphen", "name", "Messwertaufbereitung"));
-        // Quellen: der Dateiwächter am Kopf des Katalogimports (Katalog) und die eigene Quellfunktion der Messkette (Lausche) — sie meldet ihren
-        //   Command und deklariert ihn.
-        var katalogimport = "gr:" + Id(board, "graphen", "name", "Katalogimport");
-        var dateiwaechter = karten.Single(k => (string?)k["spalte"] == "quellen" && ((string?)k["id"])!.StartsWith("q:" + Id(board, "graphen", "name", "Katalogimport") + ":"));
+        // Quellen: der Dateiwächter am Kopf der Dateiannahme (Katalog des Frameworks) und die eigene Quellfunktion der Messkette (Lausche) — sie
+        //   meldet ihren Command und deklariert ihn.
+        var dateiannahme = "gr:" + Id(board, "graphen", "name", "Dateiannahme");
+        var dateiwaechter = karten.Single(k => (string?)k["spalte"] == "quellen" && ((string?)k["id"])!.StartsWith("q:" + Id(board, "graphen", "name", "Dateiannahme") + ":"));
         ((string?)dateiwaechter["name"]).Should().Be("Dateiwaechter");
         var abfrage = karten.Single(k => (string?)k["karte"] == "fb:" + Id(board, "bausteinFunktionen", "name", "Sensorabfrage"));
         ((string?)abfrage["spalte"]).Should().Be("quellen");
@@ -251,25 +251,29 @@ public class SichtTests
         ((string?)K(messkette)["band"]).Should().NotBeNull();
 
         var kanten = FlaechenKanten(board);
-        kanten.Should().Contain($"{(string?)dateiwaechter["id"]} -DateiGefunden/quelle-> {katalogimport}");
+        kanten.Should().Contain($"{(string?)dateiwaechter["id"]} -DateiGefunden/quelle-> {dateiannahme}");
         kanten.Should().Contain($"{(string?)abfrage["id"]} -Rohwert/quelle-> {messkette}");
         kanten.Should().Contain($"{theke}|aus -LeiheAus/schreiben-> agg:Leihvorgang");
-        // Rücklauf: die Antwort (Event) an die Funktion, die den Command gab. Ein Decide gibt keinen Command aus: den Kopf der Mahnbemessung
-        //   gibt das Archiv hinein, es reagiert auf die Mahnung.
+        // Ein Decide gibt keinen Command aus: den Kopf der Mahnbemessung gibt das Archiv hinein (es reagiert auf die Mahnung) — über die Übersetzung,
+        //   die aus seiner Nachricht den Eingang des Katalogs macht (docs/plan-ohne-pipeline.md).
         var archiv = "akt:" + Id(board, "akteure", "name", "Archiv");
-        kanten.Should().Contain($"{archiv}|aus -BemesseMahnung/schreiben-> gr:{Id(board, "graphen", "name", "Mahnbemessung")}");
+        string Ue(string name) => "ue:" + Id(board, "uebersetzungen", "name", name);
+        kanten.Should().Contain($"{archiv}|aus -BemesseMahnung/schreiben-> {Ue("MahnungBemessen")}");
+        kanten.Should().Contain($"{Ue("MahnungBemessen")} -Bemesse/schreiben-> gr:{Id(board, "graphen", "name", "Mahnbemessung")}");
         kanten.Should().NotContain(k => k.StartsWith("agg:Leihvorgang -BemesseMahnung"));
-        Ports(K(katalogimport)).Should().Contain("◀ImportGestartet");
-        kanten.Should().Contain($"agg:Importlauf -ImportGestartet/ruecklauf-> {katalogimport}");
-        // Fakten gehen an die Eingangsseite der Akteure, Antworten als Lesefluss; die Begutachtung vor Ort geht an den Schadensfall, sein Fakt an
-        //   das Archiv.
-        kanten.Should().Contain($"gr:{Id(board, "graphen", "name", "Schadensbewertung")} -BegutachteVorOrt/schreiben-> agg:Schadensfall");
+        // Rücklauf: die Antwort (Event) an die Antwort-Übersetzung, die daraus den Kopf des Zeilenimports macht.
+        kanten.Should().Contain($"agg:Importlauf -ImportGestartet/ruecklauf-> {Ue("ImportBereit")}");
+        kanten.Should().Contain($"{Ue("ImportBereit")} -KatalogBereit/schreiben-> gr:{Id(board, "graphen", "name", "Zeilenimport")}");
+        // Fakten gehen an die Eingangsseite der Akteure, Antworten als Lesefluss; die Begutachtung vor Ort geht über ihre Übersetzung an den
+        //   Schadensfall, sein Fakt an das Archiv.
+        kanten.Should().Contain($"gr:{Id(board, "graphen", "name", "Schadensbewertung")} -VorOrt/schreiben-> {Ue("VorOrtBegutachten")}");
+        kanten.Should().Contain($"{Ue("VorOrtBegutachten")} -BegutachteVorOrt/schreiben-> agg:Schadensfall");
         kanten.Should().Contain($"agg:Schadensfall -BegutachtungAngefordert/kenntnis-> {archiv}|ein");
         kanten.Should().Contain($"agg:Leihvorgang -Ausgeliehen/kenntnis-> {archiv}|ein");
         kanten.Should().Contain(k => k.StartsWith("rdr:") && k.EndsWith($"-OffeneAusleihenAntwort/lesen-> {theke}|ein"));
         kanten.Should().Contain(k => k.StartsWith($"{theke}|aus -OffeneAusleihen/lesen-> rdr:"));
-        // liest: die Offenzählung der Mahnbemessung liest über eine Lese-Fähigkeit den Store dahinter.
-        kanten.Should().Contain(k => k.StartsWith($"gr:{Id(board, "graphen", "name", "Mahnbemessung")} -IZaehleOffene/liest-> sto:"));
+        // liest: die Offenzählung der Mahnbemessung liest über eine Lese-Fähigkeit des Katalogs den Store dahinter.
+        kanten.Should().Contain(k => k.StartsWith($"gr:{Id(board, "graphen", "name", "Mahnbemessung")} -IZaehleOffeneAusleihen/liest-> sto:"));
 
         Sicht.Aus(board).FlaechenBefunde().Where(b => b.Schweregrad == "error").Should().BeEmpty();
     }
@@ -303,7 +307,7 @@ public class SichtTests
         var leser = pruefer["konstruktor"]!.AsArray().OfType<JsonObject>().Single(c => (string?)c["typ"] == "ISeitenleser");
         ((string?)leser["art"]).Should().Be("technik");
         leser["umsetzungen"]!.AsArray().Select(x => (string?)x).Should().BeEquivalentTo(["Lichtpruefung", "Handpruefung"]);
-        Knoten(Kompo("Mahnbemessung")).Single()["liest"]!.AsArray().Select(x => (string?)x).Should().Equal("IZaehleOffene");
+        Knoten(Kompo("Mahnbemessung")).Single()["liest"]!.AsArray().Select(x => (string?)x).Should().Equal("IZaehleOffeneAusleihen");
 
         // Der Baukasten: Funktionen mit Verwendung und Typargumenten, Technik, Konfig und die Nachrichten, die nur Funktionen ausgeben.
         var bk = board["sicht"]!["baukasten"]!.AsObject();

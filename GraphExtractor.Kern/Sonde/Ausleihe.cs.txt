@@ -38,7 +38,7 @@ namespace Leihwesen.Ausleihe
     public record RueckgabeAngemahnt(Guid LeserId) : IEvent;
 
     /// <summary>Ein Command ohne Ziel: die Rückgabe ist zu prüfen (der Graph der Rückgabeprüfung nimmt ihn am Kopf; das Archiv reagiert damit auf die Rückgabe).</summary>
-    public record PruefeRueckgabe(Guid LeserId, Zustand Zustand) : ICommand;
+    public record PruefeRueckgabe(Guid LeserId, bool Beschaedigt) : ICommand;
 
     /// <summary>Ein Command ohne Ziel: die Mahnung ist zu bemessen (der Graph der Mahnbemessung nimmt ihn am Kopf; das Archiv reagiert damit auf die Mahnung).</summary>
     public record BemesseMahnung(Guid LeserId) : ICommand;

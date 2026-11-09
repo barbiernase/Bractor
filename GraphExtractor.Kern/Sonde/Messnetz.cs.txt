@@ -1,15 +1,12 @@
-using System.Runtime.CompilerServices;
 using Abstractions;
 
-// SONDE — fremdes Szenario 2 (docs/12 §12.6): SENSOR-STROM MIT ALARM.
+// SONDE — fremdes Szenario 2 (docs/12 §12.6): SENSOR-STROM MIT ALARM — die Domäne.
 //
 // Viele Messwerte, wenige Fakten: ein Sensor zählt Überschreitungen seines Grenzwerts hintereinander (Zähl-Aggregat) und löst nach N den
-// Alarm aus; ein Messwert im Rahmen ändert nichts. Die Werte holt eine EIGENE QUELLFUNKTION (Lausche statt Auf, Entscheidung 8) am Kopf eines
-// Graphen — mit Konfig, gesichertem Zustand und Technik; dahinter liegt ein GRAPH IM GRAPHEN (die Aufbereitung, eine Schachtel mit Signatur).
-// Ein Decide gibt nur Fakten aus (Schritt 6): auf den Alarm öffnet die Schichtleitung die Störung desselben Sensors über einen Graphen am Kopf,
-// auf die geöffnete Störung alarmiert sie die Bereitschaft (sie hört die Fakten und gibt die Commands an die Köpfe):
-// zwei Wege nebeneinander (Anruf und Funk) — jeder meldet für sich, die Quittung nimmt beide in je einem Auf, und die Störung vermerkt jede
-// Alarmierung (wer nur die erste gelten lassen will, entscheidet es im Decide, nicht im Graphen).
+// Alarm aus; ein Messwert im Rahmen ändert nichts. Die Domäne ist rein: die Messkette (eine EIGENE QUELLFUNKTION am Kopf, ein Graph im Graphen),
+// die Störungsöffnung und die Alarmierung sind Graphen des fremden Katalogs (Katalog.Messung.*); die Übersetzungen (Uebersetzungen.Messnetz.cs.txt)
+// machen aus ihren Ergebnissen Commands an Sensor und Störungsfall und aus den Nachrichten der Schichtleitung ihre Köpfe. Ein Decide gibt nur Fakten
+// aus (Schritt 6): auf den Alarm öffnet die Schichtleitung die Störung desselben Sensors, auf die geöffnete Störung alarmiert sie die Bereitschaft.
 
 namespace Anlagen.Messung;
 
@@ -109,118 +106,6 @@ public partial class Stoerungsfall : IState
         public void Apply(AlarmierungVermerkt e) { }
     }
 }
-
-// ── Die Quelle: eine eigene Quellfunktion (Lausche) mit Konfig, gesichertem Zustand und Technik ─────────────────────────────────────────────
-public record Rohwert(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
-public record Plausibel(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
-
-public record SensorabfrageKonfig(string[] Sensoren, TimeSpan Intervall);
-
-/// <summary>Der Zustand der Abfrage: wie oft sie gelesen hat (gesichert mit dem Lauf; nach einem Neustart zählt sie weiter).</summary>
-public sealed class Abfragestand
-{
-    public long Abfragen { get; set; }
-}
-
-public interface ISensorbus
-{
-    Task<double?> LiesAsync(Guid sensor, CancellationToken ct);
-}
-
-public sealed class Feldbus : ISensorbus
-{
-    public Task<double?> LiesAsync(Guid sensor, CancellationToken ct) => Task.FromResult<double?>(null);
-}
-
-public sealed class Sensorabfrage(SensorabfrageKonfig konfig, IZustand<Abfragestand> stand, ISensorbus bus) : IFunktion
-{
-    public async IAsyncEnumerable<Rohwert> Lausche([EnumeratorCancellation] CancellationToken ct)
-    {
-        while (!ct.IsCancellationRequested)
-        {
-            foreach (var s in konfig.Sensoren)
-                if (await bus.LiesAsync(Guid.Parse(s), ct) is { } wert)
-                {
-                    stand.Wert.Abfragen++;
-                    yield return new Rohwert(Guid.Parse(s), wert, DateTimeOffset.UtcNow);
-                }
-            await Task.Delay(konfig.Intervall, ct);
-        }
-    }
-}
-
-// Die Aufbereitung: ein unlesbarer Wert ergibt nichts (ein leerer Strom), ein lesbarer den Command an den Sensor.
-public sealed class Plausibilisierung : IFunktion
-{
-    public IEnumerable<Plausibel> Auf(Rohwert r)
-    {
-        if (!double.IsNaN(r.Wert) && !double.IsInfinity(r.Wert)) yield return new Plausibel(r.Sensor, r.Wert, r.GemessenAm);
-    }
-}
-
-public sealed class Messwertpruefung : IFunktion
-{
-    public MeldeMesswert Auf(Plausibel p) => new(new Id<Sensor>(p.Sensor), p.Wert, p.GemessenAm);
-}
-
-// GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → MeldeMesswert), die Messkette setzt die Quelle davor.
-public sealed record Messwertaufbereitung([Kopf] Plausibilisierung Plausi, [Von(nameof(Plausi))] Messwertpruefung Pruefung) : IGraph;
-public sealed record Messkette(Sensorabfrage Abfrage, [Von(nameof(Abfrage))] Messwertaufbereitung Aufbereitung) : IGraph;
-
-// Der Alarm öffnet die Störung desselben Sensors (dieselbe Id wie der Sensor).
-public sealed class StoerungBeiAlarm : IFunktion
-{
-    public OeffneStoerung Auf(OeffneStoerungFuer a) => new(new Id<Stoerungsfall>(a.Sensor.Wert), a.Wert);
-}
-
-public sealed record Stoerungsoeffnung([Kopf] StoerungBeiAlarm Oeffnung) : IGraph;
-
-// ── RENNEN: die Bereitschaft wird über zwei Wege gesucht; wer zuerst erreicht ist, gewinnt (der andere Zweig wird abgebrochen) ──────────────
-public record AlarmVerteilt(Id<Stoerungsfall> Fall) : ICommand;
-public record PerAnrufErreicht(Id<Stoerungsfall> Fall, string Nummer) : ICommand;
-public record PerFunkErreicht(Id<Stoerungsfall> Fall, string Kanal) : ICommand;
-
-public sealed class Alarmverteilung : IFunktion
-{
-    public AlarmVerteilt Auf(AlarmiereBereitschaft a) => new(a.Fall);
-}
-
-public interface ITelefonie
-{
-    Task<string> RufeAsync(Guid fall);
-}
-
-public sealed class Telefonanlage : ITelefonie
-{
-    public Task<string> RufeAsync(Guid fall) => Task.FromResult("110");
-}
-
-public sealed class Anrufkette(ITelefonie telefonie) : IFunktion
-{
-    public async Task<PerAnrufErreicht> Auf(AlarmVerteilt a) => new(a.Fall, await telefonie.RufeAsync(a.Fall.Wert));
-}
-
-public sealed class Funkruf : IFunktion
-{
-    public async Task<PerFunkErreicht> Auf(AlarmVerteilt a, CancellationToken ct)
-    {
-        await Task.Delay(TimeSpan.FromSeconds(5), ct);
-        return new PerFunkErreicht(a.Fall, "Kanal 2");
-    }
-}
-
-public sealed class Alarmquittung : IFunktion
-{
-    public VermerkeAlarmierung Auf(PerAnrufErreicht anruf) => new(anruf.Fall, "Anruf " + anruf.Nummer);
-
-    public VermerkeAlarmierung Auf(PerFunkErreicht funk) => new(funk.Fall, "Funk " + funk.Kanal);
-}
-
-public sealed record Alarmierung(
-    [Kopf] Alarmverteilung Verteilung,
-    [Von(nameof(Verteilung))] Anrufkette Anruf,
-    [Von(nameof(Verteilung))] Funkruf Funk,
-    [Von(nameof(Anruf), nameof(Funk))] Alarmquittung Quittung) : IGraph;
 
 // Wer hineingibt: das Sensornetz (Akteur der Instanz der Messkette — es darf, was sie verlässt); die Schichtleitung richtet ein und quittiert;
 // sie REAGIERT auf Alarm und Störung mit den Köpfen der Störungsöffnung und der Alarmierung.

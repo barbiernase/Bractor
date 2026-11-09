@@ -4,9 +4,10 @@ using Abstractions;
 //
 // „Keine zwei Benutzer mit derselben Adresse“ ist eine Invariante über viele Benutzer — sie gehört in EIN Aggregat: die Adresse selbst
 // (Eindeutigkeits-Aggregat, Id aus der normalisierten Adresse abgeleitet). Der Benutzer beantragt; auf das Fakt gibt die Adressprüfung (ein Client)
-// die Prüfung der Adresse als Command ohne Ziel an den Kopf eines Graphen. Dessen einziger Knoten reserviert die Adresse und hört die ANTWORTEN darauf (zwei Events des
-// fremden Aggregats, je eines ein Auf — R2): reserviert → bestätigen, vergeben → ablehnen. Die Absage ist ein FAKT (der Modellierer entscheidet über
-// den Typ), weil der Ablauf an ihr weitergeht. Die Zugehörigkeit zum Benutzer ist ein fachliches Feld im Event (docs/10 A2).
+// die Prüfung der Adresse als Command ohne Ziel hinein. Die Domäne ist rein: die Registrierung ist ein Graph des fremden Katalogs
+// (Katalog.Konten.*) — sein einziger Knoten reserviert die Adresse und hört die ANTWORTEN darauf, die ANTWORT-ÜBERSETZUNGEN aus den zwei Events des
+// Adress-Aggregats machen (Uebersetzungen.Konten.cs.txt): reserviert → bestätigen, vergeben → ablehnen. Die Absage ist ein FAKT (der Modellierer
+// entscheidet über den Typ), weil der Ablauf an ihr weitergeht. Die Zugehörigkeit zum Benutzer ist ein fachliches Feld im Event (docs/10 A2).
 
 namespace Kundenportal.Konten;
 
@@ -85,32 +86,11 @@ public partial class Adresse : IState
     }
 }
 
-// Hilfscode ohne Baustein-Rolle: die Id der Adresse folgt deterministisch aus der normalisierten Adresse.
+// Hilfscode ohne Baustein-Rolle: die Adresse wird normalisiert, bevor sie ins Fakt geht.
 public static class Adressschluessel
 {
     public static string Normalisiere(string email) => email.Trim().ToLowerInvariant();
-
-    public static Id<Adresse> Id(string email)
-    {
-        // Zwei FNV-1a-Läufe mit verschiedenem Start ergeben 128 Bit — stabil über Prozesse und Plattformen (string.GetHashCode wäre es nicht).
-        ulong a = 14695981039346656037, b = 0x9E3779B97F4A7C15;
-        foreach (var c in "adresse:" + Normalisiere(email)) { a = (a ^ c) * 1099511628211; b = (b ^ c) * 1099511628211; }
-        var bytes = new byte[16];
-        BitConverter.TryWriteBytes(bytes.AsSpan(0, 8), a);
-        BitConverter.TryWriteBytes(bytes.AsSpan(8, 8), b);
-        return new Id<Adresse>(new Guid(bytes));
-    }
 }
-
-// Ein Knoten, drei Auf: der Command am Kopf und die zwei Antworten des Aggregats auf den eigenen Command.
-public sealed class Registrierung : IFunktion
-{
-    public ReserviereAdresse Auf(PruefeAdresse p) => new(Adressschluessel.Id(p.Email), p.Email, p.BenutzerId);
-    public BestaetigeBenutzer Auf(AdresseReserviert a) => new(a.BenutzerId);
-    public LehneRegistrierungAb Auf(AdresseVergeben v) => new(v.BenutzerId, "Adresse vergeben");
-}
-
-public sealed record Adresspruefung([Kopf] Registrierung Reservierung) : IGraph;
 
 // Wer hineingibt: ein Mensch am Registrierungs-Formular; er hört, wie es ausgeht (Kenntnis zweier Events). Der Client nennt nur ihn.
 public sealed record Besucher : IAkteur, IDarf<RegistriereBenutzer>, IHoert<BenutzerBestaetigt>, IHoert<RegistrierungAbgelehnt>;

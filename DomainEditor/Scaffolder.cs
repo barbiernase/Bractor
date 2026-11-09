@@ -125,12 +125,12 @@ public static class Scaffolder
         }
 
         // ── Funktionen (IFunktion, docs/04 §4.4) → je NEUE Funktion ihre Klasse (im Host, throw-Stubs; eigene Datei) bzw. ihre Schnittstelle
-        //    (draußen oder mit Umsetzung; Sammeldatei Funktionen.cs) — mit Eingängen (Auf) oder gerufen (Methoden); je NEUE Umsetzung einer
+        //    (draußen oder mit Umsetzung; auch sie in eigener Datei, wie die Lage es will: Technik je Typ eine Datei) — mit Eingängen (Auf) oder gerufen (Methoden); je NEUE Umsetzung einer
         //    Schnittstelle ihre Klasse mit throw-Stubs. Eine bestehende gehört dem Code, ihre Signaturen gleicht der Abgleich ab ──
         foreach (var f in modell.BausteinFunktionen)
         {
             if (f.Datei == null)
-                dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), f.Klasse ? $"{f.Name}.cs" : "Funktionen.cs", FunktionsDatei(f, modell), DateiArt.Typen));
+                dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{f.Name}.cs", FunktionsDatei(f, modell), DateiArt.Typen));
             foreach (var u in f.Umsetzungen.Where(u => u.Datei == null && !f.Klasse))
                 dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{u.Name}.cs", UmsetzungsDatei(f, u, modell), DateiArt.Typen));
         }

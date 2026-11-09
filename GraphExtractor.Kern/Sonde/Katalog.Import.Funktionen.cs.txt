@@ -1,0 +1,43 @@
+using System.IO;
+using Abstractions;
+using Core.Katalog;
+
+namespace Sondenkatalog.Katalog.Import;
+
+// Der Eingang: aus der gefundenen Datei der Import (Id aus der Herkunft).
+public sealed class Katalogeingang : IFunktion
+{
+    public Importieren Auf(DateiGefunden d, Herkunft h) => new(h.NeueId("import:" + d.RelativerPfad), d.Pfad);
+}
+
+// Technik als Klasse (ohne Schnittstelle, ohne Marker) mit Konfig-Record.
+public sealed class CsvZerleger(CsvKonfig konfig)
+{
+    public string[] Zerlege(string zeile) => zeile.Split(konfig.Trenner);
+}
+
+// JE: je Zeile ein Unterlauf; je hundert Zeilen der Fortschritt, am Ende die Bilanz (beide verlassen den Graphen).
+public sealed class Zeilenleser(CsvZerleger zerleger) : IFunktion
+{
+    public async IAsyncEnumerable<OneOf<Zeile, Fortschritt, Bilanz>> Auf(KatalogBereit k)
+    {
+        var nummer = 0;
+        var fehler = 0;
+        await foreach (var text in File.ReadLinesAsync(k.Pfad))
+        {
+            nummer++;
+            var felder = zerleger.Zerlege(text);
+            if (felder.Length < 3) fehler++;
+            yield return new Zeile(k.Import, nummer, felder);
+            if (nummer % 100 == 0) yield return new Fortschritt(k.Import, nummer);
+        }
+        yield return new Bilanz(k.Import, nummer, fehler);
+    }
+}
+
+// Im Unterlauf je Zeile: der Artikel (Id aus der Herkunft und der Artikelnummer).
+public sealed class Artikelanlage : IFunktion
+{
+    public Artikeldaten Auf(Zeile z, Herkunft h) =>
+        new(h.NeueId("artikel:" + z.Felder[0]), z.Felder[0], z.Felder.ElementAtOrDefault(1) ?? "", decimal.Parse(z.Felder.ElementAtOrDefault(2) ?? "0"));
+}

@@ -1,8 +1,8 @@
 using Abstractions;
 
 // SONDE — ein fremder FUNKTIONSKATALOG (docs/plan-katalog-und-graphen.md): ein eigenes Projekt Sondenkatalog.Katalog, das nur Abstractions kennt,
-// mit Funktionen, ihren Nachrichten (Commands ohne Ziel, Hinweise), Konfig, Technik und einem Graphen — domänenneutral. Die Abläufe der Anwendung
-// nutzen ihn per Referenz; keine Anwendung liegt darunter.
+// mit Funktionen, ihren Nachrichten (Commands ohne Ziel, Hinweise), Konfig, Technik und einem Graphen — domänenneutral. Die Übersetzungen der
+// Anwendung nutzen ihn per Referenz; keine Anwendung liegt darunter.
 
 namespace Sondenkatalog.Katalog.Peilung;
 

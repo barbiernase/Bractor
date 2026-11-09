@@ -1,0 +1,8 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog.Vorhersage;
+
+// Hinweise des Katalogs: flüchtig, nur an Akteure draußen (keine Funktion hört einen).
+public record Unwetter(Guid Station, string Stufe) : ITransientEvent;
+public record KarteBereit(Guid Station, int Breite) : ITransientEvent;
+public record KarteGeloescht(Guid Station) : ITransientEvent;

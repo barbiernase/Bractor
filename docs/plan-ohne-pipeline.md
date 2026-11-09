@@ -98,7 +98,10 @@ Der **Akteur einer Instanz** (Graph mit Quelle) muss dürfen, was aus seinen Aus
    rein); Codegen und Werkbank lesen die Kataloge aus allen Rollen, die sie nutzen dürfen, „neuer Katalog“ setzt die Referenz der Übersetzungen;
    `Domain.Pipeline` weg. Die Sonde legt ihren
    Store in den Speicher; ihre Domänen mit Funktionen bleiben absichtlich falsch liegend (die Lage weist sie nach `<Name>.Katalog`).
-5. **Sonde:** Graphen in Sonden-Kataloge, Übersetzungen in die Domänen der Sonde, Gesten-Skript, `soll.txt`.
+5. **Sonde** (umgesetzt): alle Funktionen und Graphen der sechs Szenarien im Sonden-Katalog (je Szenario ein Bereich, Guid statt Id), die Domänen
+   rein; Übersetzungen, Akteure mit Katalog-Nachrichten und der Store einer Katalog-Fähigkeit in ihren Rollen-Projekten (`Uebersetzungen.*`,
+   `Akteure.*`, `Speicher.*`); Antworten als Antwort-Übersetzungen (der Katalogimport teilt sich: eine Quelle hat keinen Kopf); eine absichtlich falsch
+   liegende Funktion hält die Lage-Prüfung nach `<Name>.Katalog` im Soll; Gesten-Skript und `soll.txt` nachgezogen.
 6. **Sicht und Editor:** Die Spalte Graphen zeigt die Katalog-Graphen, die laufen (ohne Band, sie gehören keiner Domäne); die Spalte Übersetzungen die
    Übersetzungen im Band ihrer Domäne; Kanten nach Typ. „＋ ↦“ an einem Ausgang legt eine Übersetzung in einer Domäne an, das Modal ordnet die Felder zu.
 7. **Doku und Abnahme** (docs/04, 05, 07, 10, 11, 13, konzept-funktionen-im-editor, README, CLAUDE.md).

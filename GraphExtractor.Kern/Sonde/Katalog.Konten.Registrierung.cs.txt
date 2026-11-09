@@ -1,0 +1,26 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog.Konten;
+
+// Hilfscode ohne Baustein-Rolle: die Kennung der Adresse folgt deterministisch aus der normalisierten Adresse.
+public static class Adresskennung
+{
+    public static Guid Von(string email)
+    {
+        // Zwei FNV-1a-Läufe mit verschiedenem Start ergeben 128 Bit — stabil über Prozesse und Plattformen (string.GetHashCode wäre es nicht).
+        ulong a = 14695981039346656037, b = 0x9E3779B97F4A7C15;
+        foreach (var c in "adresse:" + email.Trim().ToLowerInvariant()) { a = (a ^ c) * 1099511628211; b = (b ^ c) * 1099511628211; }
+        var bytes = new byte[16];
+        BitConverter.TryWriteBytes(bytes.AsSpan(0, 8), a);
+        BitConverter.TryWriteBytes(bytes.AsSpan(8, 8), b);
+        return new Guid(bytes);
+    }
+}
+
+// Ein Knoten, drei Auf: der Command am Kopf und die zwei Antworten der Anwendung auf den eigenen Command.
+public sealed class Registrierung : IFunktion
+{
+    public Reservierung Auf(Reserviere p) => new(Adresskennung.Von(p.Email), p.Email, p.Benutzer);
+    public Bestaetige Auf(Reserviert a) => new(a.Benutzer);
+    public Ablehnen Auf(Vergeben v) => new(v.Benutzer, "Adresse vergeben");
+}

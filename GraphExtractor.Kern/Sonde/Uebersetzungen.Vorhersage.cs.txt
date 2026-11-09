@@ -1,0 +1,13 @@
+using Abstractions;
+using Sondenkatalog.Katalog.Vorhersage;
+
+// SONDE — die Übersetzungen des Wetterdiensts (docs/plan-ohne-pipeline.md): der Kopf der Prognose aus der Nachricht des Warndiensts (die Station als
+// Guid ausdrücklich, die Temperatur nach Namen), die Prognose des Katalogs als Command an die Station.
+
+namespace Wetterdienst.Vorhersage;
+
+[Feld(nameof(Bilde.Station), nameof(BildePrognose.Station))]
+public sealed record PrognoseBilden : IUebersetzung<BildePrognose, Bilde>;
+
+[Feld(nameof(VermerkePrognose.AggregateId), nameof(Prognostiziert.Station))]
+public sealed record PrognoseVermerken : IUebersetzung<Prognostiziert, VermerkePrognose>;

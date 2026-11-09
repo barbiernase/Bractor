@@ -1,0 +1,68 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog.Gebuehren;
+
+// Gleichbleibend: nur ein beschädigt zurückgegebenes Medium ist ein Schadensfall — je Rückgabe genau einer (Id aus der Herkunft).
+public sealed class SchadenBeiRueckgabe : IFunktion
+{
+    public IEnumerable<Schaden> Auf(Rueckgabe p, Herkunft h)
+    {
+        if (p.Beschaedigt) yield return new Schaden(h.NeueId("schaden"), p.LeserId);
+    }
+}
+
+// WAHL: genau einer der drei Fälle je Lauf.
+public sealed class Schadensaufnahme : IFunktion
+{
+    public OneOf<SchadenErfasst, VorOrt, NichtSchaetzbar> Auf(Schaetze s)
+    {
+        if (s.LeserId == Guid.Empty) return new NichtSchaetzbar("unbekannter Leser");
+        if (s.Fall.ToByteArray()[0] % 2 == 0) return new VorOrt(s.Fall, s.LeserId);   // an den Schadensfall
+        return new SchadenErfasst(s.LeserId, 25m, 2);
+    }
+}
+
+// Technik hinter der Schätzung — eine Schnittstelle ohne Marker (der Schätzer nimmt sie im Konstruktor), eine Umsetzung mit Konfig-Record
+// (Werte am Knoten der Instanz).
+public interface IWertTabelle
+{
+    /// <summary>Der Restwert nach linearer Abschreibung.</summary>
+    decimal Restwert(decimal neuwert, int alterJahre);
+    Task<bool> IstSchaetzbarAsync(Guid leserId);
+}
+
+public sealed class LineareWertTabelle(WertTabellenKonfig konfig) : IWertTabelle
+{
+    public decimal Restwert(decimal neuwert, int alterJahre) => Math.Max(konfig.Mindestwert, neuwert * (1 - alterJahre / (decimal)konfig.Abschreibungsjahre));
+
+    public Task<bool> IstSchaetzbarAsync(Guid leserId)
+    {
+        return Task.FromResult(leserId != Guid.Empty);
+    }
+}
+
+// KETTE, Schritt 1: die Schätzung mit Technik.
+public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion
+{
+    public async Task<SchadenGeschaetzt> Auf(SchadenErfasst e)
+    {
+        var faktor = await tabelle.IstSchaetzbarAsync(e.LeserId) ? 1m : 0m;
+        return new SchadenGeschaetzt(e.LeserId, faktor * tabelle.Restwert(e.Neuwert, e.AlterJahre));
+    }
+}
+
+// KETTE, Schritt 2: ein Gutachten, das dauern kann — sein Zuschlag aus dem Konfig-Record des Knotens; den Betrag der Schätzung trägt es weiter.
+public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion
+{
+    public async Task<GutachtenErhalten> Auf(SchadenGeschaetzt g)
+    {
+        await Task.Delay(konfig.Bedenkzeit);
+        return new GutachtenErhalten(g.LeserId, g.Betrag, konfig.Zuschlag);
+    }
+}
+
+// KETTE, Schritt 3: die Mahnung aus dem, was das Gutachten mitträgt.
+public sealed class MahnungNachSchaetzung : IFunktion
+{
+    public Mahnbetrag Auf(GutachtenErhalten g, Herkunft h) => new(h.NeueId("mahnung"), g.Betrag + g.Zuschlag);
+}

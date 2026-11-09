@@ -125,7 +125,7 @@
             ],
             "hoert": [
               "MahnungEroeffnet",
-              "NichtSchaetzbar"
+              "SchadenGemeldet"
             ]
           }
         ],
@@ -147,7 +147,7 @@
           {
             "name": "PruefeVormerkung",
             "kind": "command",
-            "namespace": "Leihwesen.Gebuehren",
+            "namespace": "Sondenkatalog.Katalog.Gebuehren",
             "felder": [
               {
                 "name": "LeserId",
@@ -163,7 +163,7 @@
         "bausteinFunktionen": [
           {
             "name": "Vormerkpruefung",
-            "namespace": "Leihwesen.Gebuehren",
+            "namespace": "Sondenkatalog.Katalog.Gebuehren",
             "klasse": true,
             "konstruktor": [
               {
@@ -176,7 +176,7 @@
                 "eingang": "PruefeVormerkung",
                 "herkunft": true,
                 "ausgaben": [
-                  "EroeffneMahnung"
+                  "Mahnbetrag"
                 ]
               }
             ]
@@ -190,7 +190,7 @@
         "graphen": [
           {
             "name": "Mahnbemessung",
-            "namespace": "Leihwesen.Pruefung",
+            "namespace": "Sondenkatalog.Katalog.Pruefung",
             "knoten": [
               {
                 "typ": "Offenzaehlung",
@@ -213,7 +213,7 @@
         "graphen": [
           {
             "name": "Kurzglaettung",
-            "namespace": "Wetterdienst.Vorhersage",
+            "namespace": "Sondenkatalog.Katalog.Vorhersage",
             "knoten": [
               {
                 "typ": "Glaettung<Kurzfenster>",

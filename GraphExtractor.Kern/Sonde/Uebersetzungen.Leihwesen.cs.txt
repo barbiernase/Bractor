@@ -1,0 +1,39 @@
+using Abstractions;
+using Leihwesen.Ausleihe;
+using Leihwesen.Gebuehren;
+using Leihwesen.Pruefung;
+using Sondenkatalog.Katalog.Gebuehren;
+using Sondenkatalog.Katalog.Pruefung;
+
+// SONDE — die Übersetzungen des Leihwesens (docs/plan-ohne-pipeline.md): die Köpfe der Graphen aus den Nachrichten der Clients, ihre Ergebnisse an
+// Schadensfall, Mahnvorgang und Seitenprüfung, die ANTWORT der Seitenprüfung auf den Start zurück in den Katalog — Guid ⇄ Id ausdrücklich. Die
+// Mahnung kommt aus zwei Graphen (Schätzung und Bemessung): EINE Übersetzung für den Typ.
+
+namespace Leihwesen.Uebersetzungen;
+
+public sealed record RueckgabePruefen : IUebersetzung<PruefeRueckgabe, Rueckgabe>;
+
+[Feld(nameof(MeldeSchaden.AggregateId), nameof(Schaden.Fall))]
+public sealed record SchadenMelden : IUebersetzung<Schaden, MeldeSchaden>;
+
+[Feld(nameof(Schaetze.Fall), nameof(SchaetzeSchaden.Fall))]
+public sealed record SchadenSchaetzen : IUebersetzung<SchaetzeSchaden, Schaetze>;
+
+[Feld(nameof(BegutachteVorOrt.AggregateId), nameof(VorOrt.Fall))]
+public sealed record VorOrtBegutachten : IUebersetzung<VorOrt, BegutachteVorOrt>;
+
+[Feld(nameof(EroeffneMahnung.AggregateId), nameof(Mahnbetrag.Vorgang))]
+public sealed record MahnungEroeffnen : IUebersetzung<Mahnbetrag, EroeffneMahnung>;
+
+public sealed record MahnungBemessen : IUebersetzung<BemesseMahnung, Bemesse>;
+
+public sealed record PruefungAusScan : IUebersetzung<RueckgabeGescannt, Scan>;
+
+[Feld(nameof(StartePruefung.AggregateId), nameof(Starte.Pruefung))]
+public sealed record PruefungStarten : IUebersetzung<Starte, StartePruefung>;
+
+[Feld(nameof(Gestartet.Pruefung), nameof(PruefungGestartet.PruefungId))]
+public sealed record PruefungGestartetMelden : IUebersetzung<PruefungGestartet, Gestartet>;
+
+[Feld(nameof(VermerkeSeite.AggregateId), nameof(Seitenbefund.Pruefung))]
+public sealed record SeiteVermerken : IUebersetzung<Seitenbefund, VermerkeSeite>;

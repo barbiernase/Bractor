@@ -1,16 +1,16 @@
-using System.IO;
 using System.Text;
 using Abstractions;
 using Core;
-using Core.Katalog;
 
-// SONDE — fremdes Szenario 3 (docs/12 §12.6): MASSEN-IMPORT MIT FORTSCHRITT.
+// SONDE — fremdes Szenario 3 (docs/12 §12.6): MASSEN-IMPORT MIT FORTSCHRITT — die Domäne.
 //
-// EINE abgelegte Katalog-Datei wird zu vielen Fakten. Am Kopf des Graphen steht eine QUELLFUNKTION AUS DEM KATALOG des Frameworks (der
-// Dateiwächter, Core.Katalog): je gefundene Datei ein Lauf. Der Eingang startet den Import-Vorgang (ein Aggregat) und hört dessen Event als Antwort;
-// ein Zeilenleser (Technik als KLASSE, ohne Schnittstelle, mit Konfig-Record) gibt als STROM je Zeile einen Unterlauf (JE) und zwischendurch den
-// Fortschritt an den Vorgang; je Zeile wird ein Artikel angelegt; am Ende des Stroms schließt der Zeilenleser den Vorgang mit seiner Bilanz ab (er
-// hat alle Zeilen gesehen — kein Einsammeln im Graphen). Die Ids leiten die Knoten aus der Herkunft ab (R13). Der Akteur der Instanz (die Ablage) darf, was den Graphen verlässt.
+// EINE abgelegte Katalog-Datei wird zu vielen Fakten. Die Domäne ist rein: die Abläufe sind zwei Graphen des fremden Katalogs (Katalog.Import.*) — die
+// Dateiannahme mit einer QUELLFUNKTION AUS DEM KATALOG des Frameworks am Kopf (der Dateiwächter, Core.Katalog: je gefundene Datei ein Lauf) und
+// der Zeilenimport: ein Zeilenleser (Technik als KLASSE, ohne Schnittstelle, mit Konfig-Record) gibt als STROM je Zeile einen Unterlauf (JE) und
+// zwischendurch den Fortschritt; je Zeile wird ein Artikel angelegt; am Ende des Stroms die Bilanz. Die Übersetzungen (Uebersetzungen.Warenkatalog
+// .cs.txt) machen daraus Commands an Import-Vorgang und Artikel, und die ANTWORT des Vorgangs auf seinen Start in den Kopf des Zeilenimports (eine
+// Quelle hat keinen Kopf: was als Antwort zurückkommt, nimmt ein eigener Graph). Die Ids leiten die Knoten aus der Herkunft ab (R13). Der Akteur der
+// Instanz (die Ablage) darf, was nach der Übersetzung entsteht.
 //
 // Die Leseseite zeigt die beiden Store-Klassen ohne Transaktion (docs/04 §4.3, docs/10 R14): der Stand liegt in Dateien (Klasse 2, wiederholungsfest — jede
 // Schreib-Fähigkeit nimmt die Herkunft und schreibt bedingt), und eine Metrik zählt angelegte Artikel (Klasse 3, mindestens einmal — nur mit
@@ -86,59 +86,6 @@ public partial class Artikel : IState
         public void Apply(ArtikelAngelegt e) { this.State.Nummer = e.Nummer; this.State.Preis = e.Preis; }
     }
 }
-
-// ── Der Graph: Dateiwächter (Katalog) → Eingang → Zeilen (Je) → Artikel; Bilanz (Sammeln + Join) ───────────────────────────────────────────────
-public record KatalogBereit(Id<Importlauf> Import, string Pfad) : ICommand;
-public record Zeile(Id<Importlauf> Import, int Nummer, string[] Felder) : ICommand;
-
-// Der Eingang: aus der gefundenen Datei der Import-Vorgang (Id aus der Herkunft); seine Antwort macht den Katalog bereit.
-public sealed class Katalogeingang : IFunktion
-{
-    public StarteImport Auf(DateiGefunden d, Herkunft h) => new(h.NeueId<Importlauf>(d.RelativerPfad), d.Pfad);
-
-    public KatalogBereit Auf(ImportGestartet e) => new(e.ImportId, e.Pfad);
-}
-
-// Technik als Klasse (ohne Schnittstelle, ohne Marker) mit Konfig-Record.
-public record CsvKonfig(string Trenner = ";");
-
-public sealed class CsvZerleger(CsvKonfig konfig)
-{
-    public string[] Zerlege(string zeile) => zeile.Split(konfig.Trenner);
-}
-
-// JE: je Zeile ein Unterlauf; je hundert Zeilen der Fortschritt an den Vorgang, am Ende die Bilanz (beide verlassen den Graphen).
-public sealed class Zeilenleser(CsvZerleger zerleger) : IFunktion
-{
-    public async IAsyncEnumerable<OneOf<Zeile, MeldeImportFortschritt, SchliesseImportAb>> Auf(KatalogBereit k)
-    {
-        var nummer = 0;
-        var fehler = 0;
-        await foreach (var text in File.ReadLinesAsync(k.Pfad))
-        {
-            nummer++;
-            var felder = zerleger.Zerlege(text);
-            if (felder.Length < 3) fehler++;
-            yield return new Zeile(k.Import, nummer, felder);
-            if (nummer % 100 == 0) yield return new MeldeImportFortschritt(k.Import, nummer);
-        }
-        yield return new SchliesseImportAb(k.Import, nummer, fehler);
-    }
-}
-
-// Im Unterlauf je Zeile: der Artikel (Id aus der Herkunft und der Artikelnummer).
-public sealed class Artikelanlage : IFunktion
-{
-    public LegeArtikelAn Auf(Zeile z, Herkunft h) =>
-        new(h.NeueId<Artikel>(z.Felder[0]), z.Felder[0], z.Felder.ElementAtOrDefault(1) ?? "", decimal.Parse(z.Felder.ElementAtOrDefault(2) ?? "0"));
-}
-
-
-public sealed record Katalogimport(
-    Dateiwaechter Eingang,
-    [Von(nameof(Eingang))] Katalogeingang Annahme,
-    [Von(nameof(Annahme))] Zeilenleser Lesen,
-    [Von(nameof(Lesen))] Artikelanlage Anlage) : IGraph;
 
 // Leseseite: der Stand je Import.
 public class Importstand : IReadModel

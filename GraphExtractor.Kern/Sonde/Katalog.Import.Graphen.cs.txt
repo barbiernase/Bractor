@@ -1,0 +1,13 @@
+using Abstractions;
+using Core.Katalog;
+
+namespace Sondenkatalog.Katalog.Import;
+
+// Die Quelle am Kopf (Dateiwächter, Katalog des Frameworks) → der Eingang; was zurückkommt, nimmt der Zeilenimport am Kopf.
+public sealed record Dateiannahme(
+    Dateiwaechter Eingang,
+    [Von(nameof(Eingang))] Katalogeingang Annahme) : IGraph;
+
+public sealed record Zeilenimport(
+    [Kopf] Zeilenleser Lesen,
+    [Von(nameof(Lesen))] Artikelanlage Anlage) : IGraph;

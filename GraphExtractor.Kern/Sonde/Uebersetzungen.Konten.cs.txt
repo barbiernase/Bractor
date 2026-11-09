@@ -1,0 +1,25 @@
+using Abstractions;
+using Sondenkatalog.Katalog.Konten;
+
+// SONDE — die Übersetzungen des Kundenportals (docs/plan-ohne-pipeline.md): die Prüfung hinein, die Reservierung an die Adresse, die zwei ANTWORTEN
+// der Adresse zurück in den Katalog (Antwort-Übersetzungen, Event als Eingang), Bestätigung und Absage an den Benutzer — Guid ⇄ Id ausdrücklich.
+
+namespace Kundenportal.Konten;
+
+[Feld(nameof(Reserviere.Benutzer), nameof(PruefeAdresse.BenutzerId))]
+public sealed record AdresspruefungStarten : IUebersetzung<PruefeAdresse, Reserviere>;
+
+[Feld(nameof(ReserviereAdresse.AggregateId), nameof(Reservierung.Adresse)), Feld(nameof(ReserviereAdresse.BenutzerId), nameof(Reservierung.Benutzer))]
+public sealed record AdresseReservieren : IUebersetzung<Reservierung, ReserviereAdresse>;
+
+[Feld(nameof(Reserviert.Benutzer), nameof(AdresseReserviert.BenutzerId))]
+public sealed record ReservierungMelden : IUebersetzung<AdresseReserviert, Reserviert>;
+
+[Feld(nameof(Vergeben.Benutzer), nameof(AdresseVergeben.BenutzerId))]
+public sealed record VergabeMelden : IUebersetzung<AdresseVergeben, Vergeben>;
+
+[Feld(nameof(BestaetigeBenutzer.AggregateId), nameof(Bestaetige.Benutzer))]
+public sealed record BenutzerBestaetigen : IUebersetzung<Bestaetige, BestaetigeBenutzer>;
+
+[Feld(nameof(LehneRegistrierungAb.AggregateId), nameof(Ablehnen.Benutzer))]
+public sealed record RegistrierungAblehnen : IUebersetzung<Ablehnen, LehneRegistrierungAb>;

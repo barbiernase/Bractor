@@ -1,0 +1,15 @@
+using Abstractions;
+using Core;
+using Marten;
+using Sondenkatalog.Katalog.Pruefung;
+
+// SONDE — im Speicher der Anwendung: der Store, der die Lese-Fähigkeit der Mahnbemessung (Katalog) umsetzt (CQRS124).
+
+namespace Leihwesen.Speicher;
+
+public sealed class Offenzaehler : MartenStore, IZaehleOffeneAusleihen
+{
+    public Offenzaehler(IDocumentStore store) : base(store) { }
+
+    public Task<int> AnzahlAsync(Guid leserId) => Task.FromResult(0);
+}

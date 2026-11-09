@@ -1,0 +1,13 @@
+using Abstractions;
+using Sondenkatalog.Katalog.Vorhersage;
+
+// SONDE — draußen beim Wetterdienst: der Warndienst meldet Temperaturen, bestellt und löscht Karten beim Katalog und hört die Warnung, die Stilllegung
+// und die Karten (Hinweise: Kenntnis); auf eine gemeldete Temperatur reagiert er mit dem Kopf der Prognose; die Wetter-App verkörpert ihn. Er nennt
+// Nachrichten des Katalogs, darum liegt er bei den Akteuren (die Domäne bleibt rein).
+
+namespace Wetterdienst.Vorhersage;
+
+public sealed record Warndienst : IAkteur, IDarf<MeldeTemperatur>, IDarf<ZeichneKarte>, IDarf<LoescheKarte>, IHoert<Unwetter>,
+    IHoert<StationStillgelegt>, IHoert<KarteBereit>, IHoert<KarteGeloescht>, IHoert<TemperaturGemeldet>, IDarf<BildePrognose>;
+
+public sealed record WetterApp : IClient, IVerkoerpert<Warndienst>;

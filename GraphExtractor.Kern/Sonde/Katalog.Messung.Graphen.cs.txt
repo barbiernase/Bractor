@@ -1,0 +1,15 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog.Messung;
+
+// GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → Geprueft), die Messkette setzt die Quelle davor.
+public sealed record Messwertaufbereitung([Kopf] Plausibilisierung Plausi, [Von(nameof(Plausi))] Messwertpruefung Pruefung) : IGraph;
+public sealed record Messkette(Sensorabfrage Abfrage, [Von(nameof(Abfrage))] Messwertaufbereitung Aufbereitung) : IGraph;
+
+public sealed record Stoerungsoeffnung([Kopf] StoerungBeiAlarm Oeffnung) : IGraph;
+
+public sealed record Alarmierung(
+    [Kopf] Alarmverteilung Verteilung,
+    [Von(nameof(Verteilung))] Anrufkette Anruf,
+    [Von(nameof(Verteilung))] Funkruf Funk,
+    [Von(nameof(Anruf), nameof(Funk))] Alarmquittung Quittung) : IGraph;

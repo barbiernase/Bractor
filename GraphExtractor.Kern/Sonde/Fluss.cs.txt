@@ -1,16 +1,15 @@
 using Abstractions;
-using Leihwesen.Ausleihe;
-using Leihwesen.Gebuehren;
-using Leihwesen.Lesen;
 
-// SONDE — ein ABLAUF als Graph (docs/04 §4.4; früher ein Fluss mit Je/Sammle, ∧/∨, ⏳ und ✕, dann ein Zähl-Aggregat mit einer Funktion draußen):
-//         · ein Command ohne Ziel VON EINEM AKTEUR am Kopf des Graphen (die Theke gibt die gescannte Rückgabe hinein);
-//         · der Start gibt einen Command an ein Aggregat aus und hört dessen Event als ANTWORT auf seinen eigenen Command (eine Stufe tief);
+// SONDE — ein ABLAUF als Graph (docs/04 §4.4; früher ein Fluss mit Je/Sammle, ∧/∨, ⏳ und ✕, dann ein Zähl-Aggregat mit einer Funktion draußen).
+// Die Domäne ist rein: die Seitenprüfung und die Mahnbemessung sind Graphen des fremden Katalogs (Katalog.Pruefung.*), die Übersetzungen
+// (Uebersetzungen.Leihwesen.cs.txt) binden sie:
+//         · ein Command ohne Ziel VON EINEM AKTEUR am Kopf (die Theke gibt die gescannte Rückgabe hinein, übersetzt in den Eingang des Katalogs);
+//         · der Start gibt einen Command an ein Aggregat aus (übersetzt) und hört dessen Event als ANTWORT (eine Antwort-Übersetzung);
 //         · JE: die Antwort öffnet als Strom je Seite einen Unterlauf; der Prüfer rechnet mit TECHNIK (zwei Umsetzungen, die Instanz wählt);
 //         · ZÄHLEN im Aggregat: jeder Prüfer meldet seine Seite der Prüfung, die mitzählt und nach der letzten abschließt (kein Einsammeln
 //           im Graphen); das Rennen gegen die Zeit bleibt eine FRIST des Aggregats;
-//         · eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen, ihr Eingang ein Command ohne Ziel, mit dem ein Client auf die Mahnung der Ausleihe reagiert,
-//           ihre Ausgabe ein Strom (0 oder 1 Mahnung).
+//         · eine Funktion mit LESE-Fähigkeit des Katalogs (ein Store im Speicher setzt sie um) am Kopf eines eigenen Graphen, ihr Eingang ein Command
+//           ohne Ziel, mit dem ein Client auf die Mahnung der Ausleihe reagiert, ihre Ausgabe ein Strom (0 oder 1 Mahnung).
 
 namespace Leihwesen.Pruefung;
 
@@ -67,50 +66,3 @@ public partial class Seitenpruefung : IState
         public void Apply(PruefungAbgebrochen e) { this.State.Fertig = true; }
     }
 }
-
-// Was nur Knoten einander geben: je Seite ein Unterlauf.
-public record SeiteZuPruefen(Id<Seitenpruefung> PruefungId, int Nummer, string Seite) : ICommand;
-
-// Der Start: je gescannter Rückgabe ein Vorgang (Id aus der Herkunft); seine Antwort öffnet JE Seite einen Unterlauf.
-public sealed class Pruefungsstart : IFunktion
-{
-    public StartePruefung Auf(RueckgabeGescannt e, Herkunft h) => new(h.NeueId<Seitenpruefung>(), e.LeserId, e.Seiten);
-
-    public IEnumerable<SeiteZuPruefen> Auf(PruefungGestartet g) =>
-        g.Seiten.Select((seite, i) => new SeiteZuPruefen(g.PruefungId, i + 1, seite));
-}
-
-// Technik ohne Marker mit zwei Umsetzungen — welche, sagt die Instanz (Technik am Knoten).
-public interface ISeitenleser
-{
-    bool IstBeschaedigt(string seite);
-}
-
-public sealed class Lichtpruefung : ISeitenleser
-{
-    public bool IstBeschaedigt(string seite) => seite.Contains('#');
-}
-
-public sealed class Handpruefung : ISeitenleser
-{
-    public bool IstBeschaedigt(string seite) => seite.Length == 0;
-}
-
-// Im Unterlauf je Seite.
-public sealed class Seitenpruefer(ISeitenleser leser) : IFunktion
-{
-    public VermerkeSeite Auf(SeiteZuPruefen s) => new(s.PruefungId, s.Nummer, leser.IstBeschaedigt(s.Seite));
-}
-
-// Lese-Fähigkeit: die Mahnung nach Ablauf der Leihfrist richtet sich nach der Zahl offener Ausleihen des Lesers.
-public sealed class Offenzaehlung : IFunktion
-{
-    public async IAsyncEnumerable<EroeffneMahnung> Auf(BemesseMahnung b, Herkunft h, IZaehleOffene offene)
-    {
-        var anzahl = (await offene.OffeneAsync(b.LeserId)).Count;
-        if (anzahl > 0) yield return new EroeffneMahnung(h.NeueId<Mahnvorgang>(), anzahl * 2m);
-    }
-}
-
-public sealed record Seitenpruefungslauf([Kopf] Pruefungsstart Start, [Von(nameof(Start))] Seitenpruefer Pruefer) : IGraph;
-public sealed record Mahnbemessung([Kopf] Offenzaehlung Zaehlung) : IGraph;

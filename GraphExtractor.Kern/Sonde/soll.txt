@@ -27,7 +27,6 @@ record Leihwesen.Ausleihe.Signatur valueobject | Regal:string, Nummer:int
 record Leihwesen.Ausleihe.Ausgeliehen event aggregat=Leihvorgang | Medium:Signatur, LeserId:Guid, Tage:int
 record Leihwesen.Ausleihe.Zurueckgegeben event aggregat=Leihvorgang | LeserId:Guid { get; init; }, Zustand:Zustand { get; init; }
 record Leihwesen.Ausleihe.RueckgabeAngemahnt event aggregat=Leihvorgang | LeserId:Guid
-record Leihwesen.Ausleihe.PruefeRueckgabe command | LeserId:Guid, Zustand:Zustand
 record Leihwesen.Ausleihe.BemesseMahnung command | LeserId:Guid
 record Leihwesen.Ausleihe.BereitsAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
 record Leihwesen.Ausleihe.NichtAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
@@ -37,7 +36,55 @@ record Leihwesen.Ausleihe.NichtVerliehen queryresponse aggregat=Leihvorgang | Vo
 # Code-Karte (Werkbank P7.4): Fristrechnung ist kein Baustein — roh gezeigt, beide partial-Teile an einer Karte, Domäne aus dem Namespace
 code Leihwesen.Ausleihe.Fristrechnung class teile=2 domaene=Leihwesen.Ausleihe block=§geteilt
 
-# ── Gebuehren: ZWEI Aggregate in einem Namespace, Decider in eigener Datei; der Ablauf zwischen ihnen aus GRAPHEN ──
+# ── Gebuehren: ZWEI Aggregate in einem Namespace, Decider in eigener Datei; der Ablauf zwischen ihnen aus GRAPHEN des Katalogs (Katalog.Gebuehren.*),
+#    die Domäne ist rein; die Übersetzungen (Uebersetzungen.Leihwesen.cs.txt, Namespace Leihwesen.Uebersetzungen) binden Köpfe und Ergebnisse; der
+#    Hinweis des Katalogs geht an die Theke (bei den Akteuren, Akteure.Leihwesen.cs.txt) ──
+akteur Leihwesen.Gebuehren.Mahnstelle | darf EroeffneMahnung, Vormerkungen | hoert MahnungEroeffnet, SchadenGemeldet
+akteur Leihwesen.Rand.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen, RueckgabeGescannt | hoert NichtAusgeliehen, NichtSchaetzbar, LaufGescheitert
+besitz Leihwesen.Ausleihe.Zustand enum -> aggregate:Leihvorgang
+besitz Sondenkatalog.Katalog.Gebuehren.GutachtenErhalten command -> bausteinfunktion:Gutachtenanfrage
+besitz Sondenkatalog.Katalog.Gebuehren.GutachtenKonfig konfig -> bausteinfunktion:Gutachtenanfrage
+besitz Sondenkatalog.Katalog.Gebuehren.Mahnbetrag command -> §begriffe mehrdeutig
+besitz Sondenkatalog.Katalog.Gebuehren.NichtSchaetzbar rejection -> bausteinfunktion:Schadensaufnahme
+besitz Sondenkatalog.Katalog.Gebuehren.PruefeVormerkung command -> §begriffe
+besitz Sondenkatalog.Katalog.Gebuehren.Rueckgabe command -> §begriffe
+besitz Sondenkatalog.Katalog.Gebuehren.Schaden command -> bausteinfunktion:SchadenBeiRueckgabe
+besitz Sondenkatalog.Katalog.Gebuehren.SchadenErfasst command -> bausteinfunktion:Schadensaufnahme
+besitz Sondenkatalog.Katalog.Gebuehren.SchadenGeschaetzt command -> bausteinfunktion:Schadensschaetzer
+besitz Sondenkatalog.Katalog.Gebuehren.Schaetze command -> §begriffe
+besitz Sondenkatalog.Katalog.Gebuehren.VorOrt command -> bausteinfunktion:Schadensaufnahme
+besitz Sondenkatalog.Katalog.Gebuehren.WertTabellenKonfig konfig -> bausteinfunktion:IWertTabelle
+client Leihwesen.Rand.Lesesaal | verkoerpert Theke, Archiv
+funktion Sondenkatalog.Katalog.Gebuehren.Gutachtenanfrage(konfig:GutachtenKonfig) | Auf(SchadenGeschaetzt) -> GutachtenErhalten
+funktion Sondenkatalog.Katalog.Gebuehren.MahnungNachSchaetzung() | Auf(GutachtenErhalten) herkunft -> Mahnbetrag
+funktion Sondenkatalog.Katalog.Gebuehren.SchadenBeiRueckgabe() | Auf(Rueckgabe) herkunft -> strom Schaden
+funktion Sondenkatalog.Katalog.Gebuehren.Schadensaufnahme() | Auf(Schaetze) -> SchadenErfasst; VorOrt; NichtSchaetzbar
+funktion Sondenkatalog.Katalog.Gebuehren.Schadensschaetzer(tabelle:IWertTabelle) | Auf(SchadenErfasst) -> SchadenGeschaetzt
+funktion Sondenkatalog.Katalog.Gebuehren.Vormerkpruefung(tabelle:IWertTabelle) | Auf(PruefeVormerkung) herkunft -> Mahnbetrag
+graph Sondenkatalog.Katalog.Gebuehren.Rueckgabepruefung | knoten Pruefung:SchadenBeiRueckgabe [Kopf] | koepfe Rueckgabe | aus Schaden
+graph Sondenkatalog.Katalog.Gebuehren.Schadensbewertung | knoten Aufnahme:Schadensaufnahme [Kopf], Schaetzung:Schadensschaetzer [Von Aufnahme], Gutachten:Gutachtenanfrage [Von Schaetzung], Mahnung:MahnungNachSchaetzung [Von Gutachten] | koepfe Schaetze | aus VorOrt, NichtSchaetzbar, Mahnbetrag
+record Leihwesen.Ausleihe.PruefeRueckgabe command | LeserId:Guid, Beschaedigt:bool
+record Sondenkatalog.Katalog.Gebuehren.GutachtenErhalten command | LeserId:Guid, Betrag:decimal, Zuschlag:decimal
+record Sondenkatalog.Katalog.Gebuehren.GutachtenKonfig konfig | Zuschlag:decimal, Bedenkzeit:TimeSpan
+record Sondenkatalog.Katalog.Gebuehren.Mahnbetrag command | Vorgang:Guid, Betrag:decimal
+record Sondenkatalog.Katalog.Gebuehren.NichtSchaetzbar rejection | Grund:string
+record Sondenkatalog.Katalog.Gebuehren.PruefeVormerkung command | LeserId:Guid, Neuwert:decimal
+record Sondenkatalog.Katalog.Gebuehren.Rueckgabe command | LeserId:Guid, Beschaedigt:bool
+record Sondenkatalog.Katalog.Gebuehren.Schaden command | Fall:Guid, LeserId:Guid
+record Sondenkatalog.Katalog.Gebuehren.SchadenErfasst command | LeserId:Guid, Neuwert:decimal, AlterJahre:int
+record Sondenkatalog.Katalog.Gebuehren.SchadenGeschaetzt command | LeserId:Guid, Betrag:decimal
+record Sondenkatalog.Katalog.Gebuehren.Schaetze command | Fall:Guid, LeserId:Guid
+record Sondenkatalog.Katalog.Gebuehren.VorOrt command | Fall:Guid, LeserId:Guid
+record Sondenkatalog.Katalog.Gebuehren.WertTabellenKonfig konfig | Mindestwert:decimal, Abschreibungsjahre:int=5
+sicht Leihwesen.Ausleihe.Zustand enum domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Gebuehren block=§akteure
+sicht Leihwesen.Rand.Theke akteur domaene=Leihwesen.Ausleihe block=§akteure
+technik Sondenkatalog.Katalog.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
+uebersetzung Leihwesen.Uebersetzungen.MahnungEroeffnen | Mahnbetrag -> EroeffneMahnung [Feld AggregateId=Vorgang] | AggregateId=Vorgang(feld), Betrag=Betrag(name)
+uebersetzung Leihwesen.Uebersetzungen.RueckgabePruefen | PruefeRueckgabe -> Rueckgabe | LeserId=LeserId(name), Beschaedigt=Beschaedigt(name)
+uebersetzung Leihwesen.Uebersetzungen.SchadenMelden | Schaden -> MeldeSchaden [Feld AggregateId=Fall] | AggregateId=Fall(feld), LeserId=LeserId(name)
+uebersetzung Leihwesen.Uebersetzungen.SchadenSchaetzen | SchaetzeSchaden -> Schaetze [Feld Fall=Fall] | Fall=Fall(feld), LeserId=LeserId(name)
+uebersetzung Leihwesen.Uebersetzungen.VorOrtBegutachten | VorOrt -> BegutachteVorOrt [Feld AggregateId=Fall] | AggregateId=Fall(feld), LeserId=LeserId(name)
 aggregat Leihwesen.Gebuehren.Schadensfall | Gemeldet:bool, Begutachtet:bool
 aggregat Leihwesen.Gebuehren.Mahnvorgang | Betrag:decimal
 decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchadenExistiert
@@ -55,36 +102,50 @@ record Leihwesen.Gebuehren.MahnungExistiert rejection aggregat=Mahnvorgang | Id:
 # Den Kopf der Schadensbewertung gibt die Gutachterin hinein (sie reagiert auf das gemeldete Fakt); was nur Knoten einander geben, gehört dem
 #    Knoten, der es ausgibt; die Begutachtung vor Ort ist ein Command an den Schadensfall; der Hinweis aus einem Knoten gehört seiner Funktion
 record Leihwesen.Gebuehren.SchaetzeSchaden command | Fall:Id<Schadensfall>, LeserId:Guid
-record Leihwesen.Gebuehren.SchadenErfasst command | LeserId:Guid, Neuwert:decimal, AlterJahre:int
-record Leihwesen.Gebuehren.SchadenGeschaetzt command | LeserId:Guid, Betrag:decimal
-record Leihwesen.Gebuehren.GutachtenErhalten command | LeserId:Guid, Betrag:decimal, Zuschlag:decimal
 record Leihwesen.Gebuehren.BegutachteVorOrt command aggregat=Schadensfall | AggregateId:Id<Schadensfall>, LeserId:Guid
 record Leihwesen.Gebuehren.BegutachtungAngefordert event aggregat=Schadensfall | LeserId:Guid
-record Leihwesen.Gebuehren.NichtSchaetzbar rejection | Grund:string
 # Konfig-Records (Werte am Knoten der Instanz): einer im Konstruktor einer Technik-Umsetzung, einer im Konstruktor einer Funktion
-record Leihwesen.Gebuehren.WertTabellenKonfig konfig | Mindestwert:decimal, Abschreibungsjahre:int=5
-record Leihwesen.Gebuehren.GutachtenKonfig konfig | Zuschlag:decimal, Bedenkzeit:TimeSpan
 # FOLGE mit leerem Strom (0 oder 1 Schadensfall), Id aus der Herkunft (R13)
-funktion Leihwesen.Gebuehren.SchadenBeiRueckgabe() | Auf(PruefeRueckgabe) herkunft -> strom MeldeSchaden
 # WAHL: genau einer von drei Fällen — an den nächsten Knoten, ein Command an den Schadensfall, ein Hinweis
-funktion Leihwesen.Gebuehren.Schadensaufnahme() | Auf(SchaetzeSchaden) -> SchadenErfasst; BegutachteVorOrt; NichtSchaetzbar
 # KETTE: die Schätzung mit Technik, das Gutachten mit Konfig trägt den Betrag weiter
-funktion Leihwesen.Gebuehren.Schadensschaetzer(tabelle:IWertTabelle) | Auf(SchadenErfasst) -> SchadenGeschaetzt
-funktion Leihwesen.Gebuehren.Gutachtenanfrage(konfig:GutachtenKonfig) | Auf(SchadenGeschaetzt) -> GutachtenErhalten
 # die Mahnung aus dem, was das Gutachten mitträgt (ein Auf, eine Nachricht)
-funktion Leihwesen.Gebuehren.MahnungNachSchaetzung() | Auf(GutachtenErhalten) herkunft -> EroeffneMahnung
 # Technik (ohne Marker): Schnittstelle im Konstruktor einer Funktion (Methoden, Typen wie geschrieben) + Umsetzung mit Konfig-Record
-technik Leihwesen.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
 # Die Graphen: ein Knoten (Kopf von einem Client, Ausgang ein Aggregat-Command); Wahl + Kette — jede Kante als Von am nehmenden Knoten
-graph Leihwesen.Gebuehren.Rueckgabepruefung | knoten Pruefung:SchadenBeiRueckgabe [Kopf] | koepfe PruefeRueckgabe | aus MeldeSchaden
-graph Leihwesen.Gebuehren.Schadensbewertung | knoten Aufnahme:Schadensaufnahme [Kopf], Schaetzung:Schadensschaetzer [Von Aufnahme], Gutachten:Gutachtenanfrage [Von Schaetzung], Mahnung:MahnungNachSchaetzung [Von Gutachten] | koepfe SchaetzeSchaden | aus BegutachteVorOrt, NichtSchaetzbar, EroeffneMahnung
 kante Schadensbewertung | Aufnahme -SchadenErfasst-> Schaetzung
 kante Schadensbewertung | Schaetzung -SchadenGeschaetzt-> Gutachten
 kante Schadensbewertung | Gutachten -GutachtenErhalten-> Mahnung
 
 # ── Prüfung (Fluss.cs.txt): der Ablauf als Graph — ein Command von einem Akteur am Kopf; der Start gibt einen Aggregat-Command aus und hört
 #    dessen Event als ANTWORT; die Antwort öffnet JE Seite einen Unterlauf (Strom); der Prüfer mit Technik (zwei Umsetzungen) meldet seine Seite der Prüfung, die ZÄHLT;
-#    die Frist bleibt beim Aggregat. Dazu eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen (Kopf von einem Client, der auf die Mahnung reagiert) ──
+#    die Frist bleibt beim Aggregat. Dazu eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen (Kopf von einem Client, der auf die Mahnung reagiert).
+#    Beide Graphen im Katalog (Katalog.Pruefung.*); die Antwort ist eine Antwort-Übersetzung, die Lese-Fähigkeit des Katalogs setzt ein Store im Speicher
+#    um (Speicher.Leihwesen.cs.txt) ──
+besitz Sondenkatalog.Katalog.Pruefung.Bemesse command -> §begriffe
+besitz Sondenkatalog.Katalog.Pruefung.Gestartet command -> §begriffe
+besitz Sondenkatalog.Katalog.Pruefung.Scan command -> §begriffe
+besitz Sondenkatalog.Katalog.Pruefung.SeiteZuPruefen command -> bausteinfunktion:Pruefungsstart
+besitz Sondenkatalog.Katalog.Pruefung.Seitenbefund command -> bausteinfunktion:Seitenpruefer
+besitz Sondenkatalog.Katalog.Pruefung.Starte command -> bausteinfunktion:Pruefungsstart
+faehigkeit Sondenkatalog.Katalog.Pruefung.IZaehleOffeneAusleihen liest IZaehleOffeneAusleihen.AnzahlAsync
+funktion Sondenkatalog.Katalog.Pruefung.Offenzaehlung() | Auf(Bemesse) herkunft liest IZaehleOffeneAusleihen offene -> strom Mahnbetrag
+funktion Sondenkatalog.Katalog.Pruefung.Pruefungsstart() | Auf(Scan) herkunft -> Starte || Auf(Gestartet) -> strom SeiteZuPruefen
+funktion Sondenkatalog.Katalog.Pruefung.Seitenpruefer(leser:ISeitenleser) | Auf(SeiteZuPruefen) -> Seitenbefund
+graph Sondenkatalog.Katalog.Pruefung.Mahnbemessung | knoten Zaehlung:Offenzaehlung [Kopf], Vormerkung:Vormerkpruefung [Kopf] | koepfe Bemesse, PruefeVormerkung | aus Mahnbetrag
+graph Sondenkatalog.Katalog.Pruefung.Seitenpruefungslauf | knoten Start:Pruefungsstart [Kopf], Pruefer:Seitenpruefer [Von Start] | koepfe Scan, Gestartet | aus Starte, Seitenbefund
+record Sondenkatalog.Katalog.Pruefung.Bemesse command | LeserId:Guid
+record Sondenkatalog.Katalog.Pruefung.Gestartet command | Pruefung:Guid, Seiten:IReadOnlyList<string>
+record Sondenkatalog.Katalog.Pruefung.Scan command | LeserId:Guid, Seiten:IReadOnlyList<string>
+record Sondenkatalog.Katalog.Pruefung.SeiteZuPruefen command | Pruefung:Guid, Nummer:int, Seite:string
+record Sondenkatalog.Katalog.Pruefung.Seitenbefund command | Pruefung:Guid, Nummer:int, Beschaedigt:bool
+record Sondenkatalog.Katalog.Pruefung.Starte command | Pruefung:Guid, LeserId:Guid, Seiten:IReadOnlyList<string>
+sicht Sondenkatalog.Katalog.Pruefung.IZaehleOffeneAusleihen store domaene=Leihwesen.Gebuehren block=§geteilt
+store Sondenkatalog.Katalog.Pruefung.IZaehleOffeneAusleihen klasse=1 | schreibt  | liest AnzahlAsync(leserId:Guid):int
+technik Sondenkatalog.Katalog.Pruefung.ISeitenleser schnittstelle | IstBeschaedigt(seite:string):bool | umsetzung Handpruefung(); umsetzung Lichtpruefung()
+uebersetzung Leihwesen.Uebersetzungen.MahnungBemessen | BemesseMahnung -> Bemesse | LeserId=LeserId(name)
+uebersetzung Leihwesen.Uebersetzungen.PruefungAusScan | RueckgabeGescannt -> Scan | LeserId=LeserId(name), Seiten=Seiten(name)
+uebersetzung Leihwesen.Uebersetzungen.PruefungGestartetMelden | PruefungGestartet -> Gestartet [Feld Pruefung=PruefungId] | Pruefung=PruefungId(feld), Seiten=Seiten(name)
+uebersetzung Leihwesen.Uebersetzungen.PruefungStarten | Starte -> StartePruefung [Feld AggregateId=Pruefung] | AggregateId=Pruefung(feld), LeserId=LeserId(name), Seiten=Seiten(name)
+uebersetzung Leihwesen.Uebersetzungen.SeiteVermerken | Seitenbefund -> VermerkeSeite [Feld AggregateId=Pruefung] | AggregateId=Pruefung(feld), Nummer=Nummer(name), Beschaedigt=Beschaedigt(name)
 aggregat Leihwesen.Pruefung.Seitenpruefung | LeserId:Guid, Seiten:int, Geprueft:int, Beschaedigte:int, Fertig:bool
 decide Seitenpruefung.StartePruefung -> PruefungGestartet; PruefungLaeuftSchon; Frist<BrichPruefungAb>
 decide Seitenpruefung.BrichPruefungAb -> PruefungAbgebrochen
@@ -100,17 +161,10 @@ record Leihwesen.Pruefung.PruefungLaeuftSchon rejection aggregat=Seitenpruefung 
 record Leihwesen.Pruefung.PruefungAbgeschlossen event aggregat=Seitenpruefung | LeserId:Guid, Beschaedigte:int
 record Leihwesen.Pruefung.BrichPruefungAb command aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>
 record Leihwesen.Pruefung.PruefungAbgebrochen event aggregat=Seitenpruefung | LeserId:Guid
-record Leihwesen.Pruefung.SeiteZuPruefen command | PruefungId:Id<Seitenpruefung>, Nummer:int, Seite:string
 record Leihwesen.Pruefung.SeiteVermerkt event aggregat=Seitenpruefung | Nummer:int, Beschaedigt:bool
 record Leihwesen.Pruefung.VermerkeSeite command aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>, Nummer:int, Beschaedigt:bool
-funktion Leihwesen.Pruefung.Pruefungsstart() | Auf(RueckgabeGescannt) herkunft -> StartePruefung || Auf(PruefungGestartet) -> strom SeiteZuPruefen
-funktion Leihwesen.Pruefung.Seitenpruefer(leser:ISeitenleser) | Auf(SeiteZuPruefen) -> VermerkeSeite
-funktion Leihwesen.Pruefung.Offenzaehlung() | Auf(BemesseMahnung) herkunft liest IZaehleOffene offene -> strom EroeffneMahnung
-technik Leihwesen.Pruefung.ISeitenleser schnittstelle | IstBeschaedigt(seite:string):bool | umsetzung Handpruefung(); umsetzung Lichtpruefung()
-graph Leihwesen.Pruefung.Seitenpruefungslauf | knoten Start:Pruefungsstart [Kopf], Pruefer:Seitenpruefer [Von Start] | koepfe RueckgabeGescannt | aus StartePruefung, VermerkeSeite
 kante Seitenpruefungslauf | Start -SeiteZuPruefen-> Pruefer
 # Die Mahnbemessung bekommt im Editor einen zweiten Knoten (Geste „Graph: Knoten hinzufügen“) — ein zweiter Kopf
-graph Leihwesen.Pruefung.Mahnbemessung | knoten Zaehlung:Offenzaehlung [Kopf], Vormerkung:Vormerkpruefung [Kopf] | koepfe BemesseMahnung, PruefeVormerkung | aus EroeffneMahnung
 
 # ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf; Kennung = Typname; der Store hat Klasse 1
 #    (Basis MartenStore); jedes Auf nimmt die Herkunft; hinter dem Reader steht, wer in denselben Store schreibt (aus den Fähigkeiten) ──
@@ -136,12 +190,10 @@ ausgang LeihAuskunftLeser.OffeneAusleihen einzeln | response:OffeneAusleihenAntw
 # ── Akteure (Entscheidung 13): IAkteur + IDarf<T> (was er hineingibt) + IHoert<T> (was zu ihm kommt) in der Basisliste — frei benannt, keine Art.
 #    Die Theke gibt auch einen Command ohne Ziel an einen Graph-Kopf und hört Hinweise (aus einem Decide, aus einem Knoten, des Frameworks);
 #    die KI-Gutachterin hört ein Event und reagiert auf ein zweites; das Archiv reagiert auf Fakten mit Commands über sein IDarf ──
-akteur Leihwesen.Lesen.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen, RueckgabeGescannt | hoert NichtAusgeliehen, NichtSchaetzbar, LaufGescheitert
 akteur Leihwesen.Lesen.Gutachterin | darf EroeffneMahnung, SchaetzeSchaden | hoert MahnungEroeffnet, SchadenGemeldet
 akteur Leihwesen.Lesen.Archiv | darf EroeffneMahnung, PruefeRueckgabe, BemesseMahnung | hoert BegutachtungAngefordert, Ausgeliehen, Zurueckgegeben, RueckgabeAngemahnt
 # ── Clients (Entscheidung 13): ein Record mit IClient, der nur nennt, wen er verkörpert. Lesesaal verkörpert zwei Akteure, das Archiv läuft über
 #    zwei Clients (Lesesaal + Depot) ──
-client Leihwesen.Lesen.Lesesaal | verkoerpert Theke, Archiv
 client Leihwesen.Lesen.Depot | verkoerpert Archiv
 
 # ── Im Editor GEZEICHNET (Sonde/Gezeichnet.gesten.json → Gesten-Motor → Fork → neu eingelesen) ──
@@ -158,18 +210,14 @@ record Leihwesen.Lesen.VormerkungenAntwort queryresponse | Anzahl:int
 ausgang Vormerkliste.Ausgeliehen nichts | storefn:IVormerkbuch.MerkeVorAsync
 ausgang VormerkAuskunft.Vormerkungen einzeln | response:VormerkungenAntwort; storefn:IVormerkbuch.ZaehleAsync
 #    Akteur mit darf und hoert, Client als Record (die Geste schreibt Akteure.cs und Clients.cs neu)
-akteur Leihwesen.Gebuehren.Mahnstelle | darf EroeffneMahnung, Vormerkungen | hoert MahnungEroeffnet, NichtSchaetzbar
 client Leihwesen.Gebuehren.Mahnportal | verkoerpert Mahnstelle
 #    Eine neue Funktion (Klasse mit Technik im Konstruktor) und ihr Command (ohne Ziel, nur ein Knoten nimmt ihn); danach ein Knoten an einem
 #    geschriebenen Graphen (Mahnbemessung, oben) und ein neuer Graph mit einer generischen Funktion als Knoten (Kurzglaettung, unten)
-record Leihwesen.Gebuehren.PruefeVormerkung command | LeserId:Guid, Neuwert:decimal
-funktion Leihwesen.Gebuehren.Vormerkpruefung(tabelle:IWertTabelle) | Auf(PruefeVormerkung) herkunft -> EroeffneMahnung
 
 # ── Sicht (Werkbank P7.3): Domäne und Block aus dem GRAPH, nie aus dem Namespace. Die Leseseite in Leihwesen.Lesen gehört zum Leihvorgang,
 #    dessen Events sie liest; Wert-Typen zum Aggregat ihrer Records; ein Akteur in der ersten Domäne, in der er wirkt (was er hineingibt: die
 #    Mahnstelle fragt die Vormerkungen des Leihvorgangs). Der geteilte Zähler hat keinen Store und keine Nachbarn: eine Insel in seinem Namespace. ──
 sicht Leihwesen.Ausleihe.Signatur valueobject domaene=Leihwesen.Ausleihe block=Leihvorgang
-sicht Leihwesen.Ausleihe.Zustand enum domaene=Leihwesen.Ausleihe block=§geteilt
 sicht Leihwesen.Ausleihe.HoleLeihstand query domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.Leihstand queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.NichtVerliehen queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
@@ -187,9 +235,7 @@ sicht Leihwesen.Lesen.VormerkAuskunft reader domaene=Leihwesen.Ausleihe block=Le
 sicht Leihwesen.Lesen.Vormerkungen query domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.VormerkungenAntwort queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.Ausleihzaehler readmodel domaene=Leihwesen.Lesen block=§geteilt insel
-sicht Leihwesen.Lesen.Theke akteur domaene=Leihwesen.Ausleihe block=§akteure
 sicht Leihwesen.Lesen.Gutachterin akteur domaene=Leihwesen.Gebuehren block=§akteure
-sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Ausleihe block=§akteure
 sicht Leihwesen.Gebuehren.Mahnstelle akteur domaene=Leihwesen.Ausleihe block=§akteure
 
 # ── Besitz (Hierarchie Anwendung → Blöcke → Glieder), nur aus den Signaturen: ein Command gehört seinem Aggregat — auch ein Command ohne Ziel,
@@ -211,7 +257,6 @@ besitz Leihwesen.Ausleihe.HoleLeihstand query -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.Leihstand queryresponse -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.NichtVerliehen queryresponse -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.Signatur valueobject -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Zustand enum -> §begriffe
 besitz Leihwesen.Ausleihe.Fristrechnung code -> §begriffe
 besitz Leihwesen.Gebuehren.MeldeSchaden command -> aggregate:Schadensfall
 besitz Leihwesen.Gebuehren.SchadenGemeldet event -> aggregate:Schadensfall
@@ -220,16 +265,9 @@ besitz Leihwesen.Gebuehren.SchaetzeSchaden command -> §rand
 besitz Leihwesen.Gebuehren.EroeffneMahnung command -> aggregate:Mahnvorgang
 besitz Leihwesen.Gebuehren.MahnungEroeffnet event -> aggregate:Mahnvorgang
 besitz Leihwesen.Gebuehren.MahnungExistiert rejection -> aggregate:Mahnvorgang
-besitz Leihwesen.Gebuehren.SchadenErfasst command -> bausteinfunktion:Schadensaufnahme
 besitz Leihwesen.Gebuehren.BegutachteVorOrt command -> aggregate:Schadensfall
 besitz Leihwesen.Gebuehren.BegutachtungAngefordert event -> aggregate:Schadensfall
-besitz Leihwesen.Gebuehren.NichtSchaetzbar rejection -> bausteinfunktion:Schadensaufnahme
-besitz Leihwesen.Gebuehren.SchadenGeschaetzt command -> bausteinfunktion:Schadensschaetzer
-besitz Leihwesen.Gebuehren.GutachtenErhalten command -> bausteinfunktion:Gutachtenanfrage
-besitz Leihwesen.Gebuehren.GutachtenKonfig konfig -> bausteinfunktion:Gutachtenanfrage
-besitz Leihwesen.Gebuehren.WertTabellenKonfig konfig -> bausteinfunktion:IWertTabelle
 # der gezeichnete Command: kein Erzeuger, kein Akteur darf ihn — niemandes
-besitz Leihwesen.Gebuehren.PruefeVormerkung command -> §begriffe
 besitz Leihwesen.Pruefung.RueckgabeGescannt command -> §rand
 besitz Leihwesen.Pruefung.StartePruefung command -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.PruefungGestartet event -> aggregate:Seitenpruefung
@@ -237,7 +275,6 @@ besitz Leihwesen.Pruefung.PruefungLaeuftSchon rejection -> aggregate:Seitenpruef
 besitz Leihwesen.Pruefung.PruefungAbgeschlossen event -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.BrichPruefungAb command -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.PruefungAbgebrochen event -> aggregate:Seitenpruefung
-besitz Leihwesen.Pruefung.SeiteZuPruefen command -> bausteinfunktion:Pruefungsstart
 besitz Leihwesen.Pruefung.SeiteVermerkt event -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.VermerkeSeite command -> aggregate:Seitenpruefung
 besitz Leihwesen.Lesen.LeihEintrag readmodel -> store:ILeihBuch
@@ -255,9 +292,31 @@ besitz Leihwesen.Lesen.VormerkungenAntwort queryresponse -> reader:VormerkAuskun
 
 # ══ FREMDE SZENARIEN (docs/12 §12.6) — eigene Wurzeln neben „Leihwesen“, damit das Modell nicht auf eine Beispieldomäne passt ══════════════
 
-# ── Kundenportal (Konten.cs.txt): Benutzer mit EINDEUTIGER E-Mail — die Adresse ist das Eindeutigkeits-Aggregat; das Decide des Benutzers gibt die
-#    Prüfung als Command ohne Ziel an den Kopf eines Graphen; dessen einziger Knoten reserviert und hört die zwei ANTWORTEN des fremden Aggregats
-#    (je ein Auf, R2); Hilfscode leitet die Id ab ──
+# ── Kundenportal (Konten.cs.txt, Katalog.Konten.*, Uebersetzungen.Konten.cs.txt): Benutzer mit EINDEUTIGER E-Mail — die Adresse ist das
+#    Eindeutigkeits-Aggregat; die Adressprüfung (ein Client) gibt die Prüfung hinein; der Graph im Katalog hat einen Knoten, der reserviert und die zwei
+#    ANTWORTEN der Adresse hört (je ein Auf, R2) — ANTWORT-ÜBERSETZUNGEN machen aus den Events seine Commands; Hilfscode leitet die Kennung ab ──
+besitz Sondenkatalog.Katalog.Konten.Ablehnen command -> bausteinfunktion:Registrierung
+besitz Sondenkatalog.Katalog.Konten.Adresskennung code -> §begriffe
+besitz Sondenkatalog.Katalog.Konten.Bestaetige command -> bausteinfunktion:Registrierung
+besitz Sondenkatalog.Katalog.Konten.Reserviere command -> §begriffe
+besitz Sondenkatalog.Katalog.Konten.Reserviert command -> §begriffe
+besitz Sondenkatalog.Katalog.Konten.Reservierung command -> bausteinfunktion:Registrierung
+besitz Sondenkatalog.Katalog.Konten.Vergeben command -> §begriffe
+code Sondenkatalog.Katalog.Konten.Adresskennung class teile=1 domaene=Sondenkatalog.Katalog.Konten block=§geteilt
+funktion Sondenkatalog.Katalog.Konten.Registrierung() | Auf(Reserviere) -> Reservierung || Auf(Reserviert) -> Bestaetige || Auf(Vergeben) -> Ablehnen
+graph Sondenkatalog.Katalog.Konten.Adresspruefung | knoten Reservierung:Registrierung [Kopf] | koepfe Reserviere, Reserviert, Vergeben | aus Reservierung, Bestaetige, Ablehnen
+record Sondenkatalog.Katalog.Konten.Ablehnen command | Benutzer:Guid, Grund:string
+record Sondenkatalog.Katalog.Konten.Bestaetige command | Benutzer:Guid
+record Sondenkatalog.Katalog.Konten.Reserviere command | Benutzer:Guid, Email:string
+record Sondenkatalog.Katalog.Konten.Reserviert command | Benutzer:Guid
+record Sondenkatalog.Katalog.Konten.Reservierung command | Adresse:Guid, Email:string, Benutzer:Guid
+record Sondenkatalog.Katalog.Konten.Vergeben command | Benutzer:Guid
+uebersetzung Kundenportal.Konten.AdresseReservieren | Reservierung -> ReserviereAdresse [Feld AggregateId=Adresse+BenutzerId=Benutzer] | AggregateId=Adresse(feld), Email=Email(name), BenutzerId=Benutzer(feld)
+uebersetzung Kundenportal.Konten.AdresspruefungStarten | PruefeAdresse -> Reserviere [Feld Benutzer=BenutzerId] | Benutzer=BenutzerId(feld), Email=Email(name)
+uebersetzung Kundenportal.Konten.BenutzerBestaetigen | Bestaetige -> BestaetigeBenutzer [Feld AggregateId=Benutzer] | AggregateId=Benutzer(feld)
+uebersetzung Kundenportal.Konten.RegistrierungAblehnen | Ablehnen -> LehneRegistrierungAb [Feld AggregateId=Benutzer] | AggregateId=Benutzer(feld), Grund=Grund(name)
+uebersetzung Kundenportal.Konten.ReservierungMelden | AdresseReserviert -> Reserviert [Feld Benutzer=BenutzerId] | Benutzer=BenutzerId(feld)
+uebersetzung Kundenportal.Konten.VergabeMelden | AdresseVergeben -> Vergeben [Feld Benutzer=BenutzerId] | Benutzer=BenutzerId(feld)
 enum Kundenportal.Konten.Kontostatus | Beantragt = 1, Aktiv = 2, Abgelehnt = 3
 aggregat Kundenportal.Konten.Benutzer | Email:string="", Status:Kontostatus
 aggregat Kundenportal.Konten.Adresse | Inhaber:Id<Benutzer>
@@ -281,8 +340,6 @@ record Kundenportal.Konten.ReserviereAdresse command aggregat=Adresse | Aggregat
 record Kundenportal.Konten.AdresseReserviert event aggregat=Adresse | Email:string, BenutzerId:Id<Benutzer>
 record Kundenportal.Konten.AdresseVergeben event aggregat=Adresse | BenutzerId:Id<Benutzer>, Inhaber:Id<Benutzer>
 record Kundenportal.Konten.PruefeAdresse command | BenutzerId:Id<Benutzer>, Email:string
-funktion Kundenportal.Konten.Registrierung() | Auf(PruefeAdresse) -> ReserviereAdresse || Auf(AdresseReserviert) -> BestaetigeBenutzer || Auf(AdresseVergeben) -> LehneRegistrierungAb
-graph Kundenportal.Konten.Adresspruefung | knoten Reservierung:Registrierung [Kopf] | koepfe PruefeAdresse | aus ReserviereAdresse, BestaetigeBenutzer, LehneRegistrierungAb
 akteur Kundenportal.Konten.Besucher | darf RegistriereBenutzer | hoert BenutzerBestaetigt, RegistrierungAbgelehnt
 akteur Kundenportal.Konten.Adresspruefer | darf PruefeAdresse | hoert RegistrierungBeantragt
 client Kundenportal.Konten.Registrierungsseite | verkoerpert Besucher
@@ -306,7 +363,51 @@ besitz Kundenportal.Konten.Adressschluessel code -> §begriffe
 
 # ── Anlagen (Messnetz.cs.txt): SENSOR-STROM MIT ALARM — Zähl-Aggregat; eine EIGENE QUELLFUNKTION (Lausche) mit Konfig, gesichertem Zustand und
 #    Technik am Kopf der Messkette, dahinter ein GRAPH IM GRAPHEN (aufgefaltete Kanten Aufbereitung.Plausi …); der Alarm öffnet die Störung über einen
-#    Graphen, auf die Störung alarmiert die Schichtleitung (sie reagiert auf beide Fakten) über zwei Wege nebeneinander ──
+#    Graphen, auf die Störung alarmiert die Schichtleitung (sie reagiert auf beide Fakten) über zwei Wege nebeneinander. Die Domäne ist rein: die drei
+#    Graphen liegen im Katalog (Katalog.Messung.*, Guid statt Id), fünf Übersetzungen binden sie an Sensor, Störungsfall und Schichtleitung ──
+besitz Sondenkatalog.Katalog.Messung.Abfragestand code -> bausteinfunktion:Sensorabfrage
+besitz Sondenkatalog.Katalog.Messung.Alarm command -> §begriffe
+besitz Sondenkatalog.Katalog.Messung.AlarmVerteilt command -> bausteinfunktion:Alarmverteilung
+besitz Sondenkatalog.Katalog.Messung.Alarmiere command -> §begriffe
+besitz Sondenkatalog.Katalog.Messung.Erreicht command -> bausteinfunktion:Alarmquittung
+besitz Sondenkatalog.Katalog.Messung.Geprueft command -> bausteinfunktion:Messwertpruefung
+besitz Sondenkatalog.Katalog.Messung.PerAnrufErreicht command -> bausteinfunktion:Anrufkette
+besitz Sondenkatalog.Katalog.Messung.PerFunkErreicht command -> bausteinfunktion:Funkruf
+besitz Sondenkatalog.Katalog.Messung.Plausibel command -> bausteinfunktion:Plausibilisierung
+besitz Sondenkatalog.Katalog.Messung.Rohwert command -> bausteinfunktion:Sensorabfrage
+besitz Sondenkatalog.Katalog.Messung.SensorabfrageKonfig konfig -> bausteinfunktion:Sensorabfrage
+besitz Sondenkatalog.Katalog.Messung.Stoerung command -> bausteinfunktion:StoerungBeiAlarm
+code Sondenkatalog.Katalog.Messung.Abfragestand class teile=1 domaene=Sondenkatalog.Katalog.Messung block=§geteilt
+funktion Sondenkatalog.Katalog.Messung.Alarmquittung() | Auf(PerAnrufErreicht) -> Erreicht || Auf(PerFunkErreicht) -> Erreicht
+funktion Sondenkatalog.Katalog.Messung.Alarmverteilung() | Auf(Alarmiere) -> AlarmVerteilt
+funktion Sondenkatalog.Katalog.Messung.Anrufkette(telefonie:ITelefonie) | Auf(AlarmVerteilt) -> PerAnrufErreicht
+funktion Sondenkatalog.Katalog.Messung.Funkruf() | Auf(AlarmVerteilt) -> PerFunkErreicht
+funktion Sondenkatalog.Katalog.Messung.Messwertpruefung() | Auf(Plausibel) -> Geprueft
+funktion Sondenkatalog.Katalog.Messung.Plausibilisierung() | Auf(Rohwert) -> strom Plausibel
+funktion Sondenkatalog.Katalog.Messung.Sensorabfrage(konfig:SensorabfrageKonfig, stand:IZustand<Abfragestand>, bus:ISensorbus) zustand=Abfragestand | Lausche -> strom Rohwert
+funktion Sondenkatalog.Katalog.Messung.StoerungBeiAlarm() | Auf(Alarm) -> Stoerung
+graph Sondenkatalog.Katalog.Messung.Alarmierung | knoten Verteilung:Alarmverteilung [Kopf], Anruf:Anrufkette [Von Verteilung], Funk:Funkruf [Von Verteilung], Quittung:Alarmquittung [Von Anruf+Funk] | koepfe Alarmiere | aus Erreicht
+graph Sondenkatalog.Katalog.Messung.Messkette | knoten Abfrage:Sensorabfrage, Aufbereitung:Messwertaufbereitung [Von Abfrage] | koepfe - | aus Geprueft | quelle Abfrage
+graph Sondenkatalog.Katalog.Messung.Messwertaufbereitung | knoten Plausi:Plausibilisierung [Kopf], Pruefung:Messwertpruefung [Von Plausi] | koepfe Rohwert | aus Geprueft
+graph Sondenkatalog.Katalog.Messung.Stoerungsoeffnung | knoten Oeffnung:StoerungBeiAlarm [Kopf] | koepfe Alarm | aus Stoerung
+record Sondenkatalog.Katalog.Messung.Alarm command | Sensor:Guid, Wert:double
+record Sondenkatalog.Katalog.Messung.AlarmVerteilt command | Fall:Guid
+record Sondenkatalog.Katalog.Messung.Alarmiere command | Fall:Guid
+record Sondenkatalog.Katalog.Messung.Erreicht command | Fall:Guid, Weg:string
+record Sondenkatalog.Katalog.Messung.Geprueft command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Sondenkatalog.Katalog.Messung.PerAnrufErreicht command | Fall:Guid, Nummer:string
+record Sondenkatalog.Katalog.Messung.PerFunkErreicht command | Fall:Guid, Kanal:string
+record Sondenkatalog.Katalog.Messung.Plausibel command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Sondenkatalog.Katalog.Messung.Rohwert command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Sondenkatalog.Katalog.Messung.SensorabfrageKonfig konfig | Sensoren:string[], Intervall:TimeSpan
+record Sondenkatalog.Katalog.Messung.Stoerung command | Fall:Guid, Wert:double
+technik Sondenkatalog.Katalog.Messung.ISensorbus schnittstelle | LiesAsync(sensor:Guid, ct:CancellationToken):Task<double?> | umsetzung Feldbus()
+technik Sondenkatalog.Katalog.Messung.ITelefonie schnittstelle | RufeAsync(fall:Guid):Task<string> | umsetzung Telefonanlage()
+uebersetzung Anlagen.Messung.AlarmierungVermerken | Erreicht -> VermerkeAlarmierung [Feld AggregateId=Fall] | AggregateId=Fall(feld), Weg=Weg(name)
+uebersetzung Anlagen.Messung.BereitschaftAlarmieren | AlarmiereBereitschaft -> Alarmiere [Feld Fall=Fall] | Fall=Fall(feld)
+uebersetzung Anlagen.Messung.MesswertMelden | Geprueft -> MeldeMesswert [Feld AggregateId=Sensor] | AggregateId=Sensor(feld), Wert=Wert(name), GemessenAm=GemessenAm(name)
+uebersetzung Anlagen.Messung.StoerungAusAlarm | OeffneStoerungFuer -> Alarm [Feld Sensor=Sensor] | Sensor=Sensor(feld), Wert=Wert(name)
+uebersetzung Anlagen.Messung.StoerungOeffnen | Stoerung -> OeffneStoerung [Feld AggregateId=Fall] | AggregateId=Fall(feld), Wert=Wert(name)
 aggregat Anlagen.Messung.Sensor | Grenzwert:double, AlarmNach:int, Hintereinander:int, Alarm:bool
 aggregat Anlagen.Messung.Stoerungsfall | Offen:bool
 decide Sensor.RichteSensorEin -> SensorEingerichtet
@@ -338,33 +439,12 @@ record Anlagen.Messung.KeineStoerung rejection aggregat=Stoerungsfall | SensorId
 record Anlagen.Messung.VermerkeAlarmierung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Weg:string
 record Anlagen.Messung.AlarmierungVermerkt event aggregat=Stoerungsfall | Weg:string
 record Anlagen.Messung.AlarmiereBereitschaft command | Fall:Id<Stoerungsfall>
-record Anlagen.Messung.Rohwert command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
-record Anlagen.Messung.Plausibel command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
-record Anlagen.Messung.SensorabfrageKonfig konfig | Sensoren:string[], Intervall:TimeSpan
-record Anlagen.Messung.AlarmVerteilt command | Fall:Id<Stoerungsfall>
-record Anlagen.Messung.PerAnrufErreicht command | Fall:Id<Stoerungsfall>, Nummer:string
-record Anlagen.Messung.PerFunkErreicht command | Fall:Id<Stoerungsfall>, Kanal:string
 # Die Quelle: Konstruktor mit Konfig, Zustand (gesichert mit dem Lauf; eine Code-Karte) und Technik; sie lauscht statt Auf
-funktion Anlagen.Messung.Sensorabfrage(konfig:SensorabfrageKonfig, stand:IZustand<Abfragestand>, bus:ISensorbus) zustand=Abfragestand | Lausche -> strom Rohwert
-code Anlagen.Messung.Abfragestand class teile=1 domaene=Anlagen.Messung block=§geteilt
-technik Anlagen.Messung.ISensorbus schnittstelle | LiesAsync(sensor:Guid, ct:CancellationToken):Task<double?> | umsetzung Feldbus()
-funktion Anlagen.Messung.Plausibilisierung() | Auf(Rohwert) -> strom Plausibel
-funktion Anlagen.Messung.Messwertpruefung() | Auf(Plausibel) -> MeldeMesswert
-funktion Anlagen.Messung.StoerungBeiAlarm() | Auf(OeffneStoerungFuer) -> OeffneStoerung
 # ZWEI WEGE: beide nehmen AlarmVerteilt; die Quittung nimmt jeden in einem eigenen Auf
-funktion Anlagen.Messung.Alarmverteilung() | Auf(AlarmiereBereitschaft) -> AlarmVerteilt
-funktion Anlagen.Messung.Anrufkette(telefonie:ITelefonie) | Auf(AlarmVerteilt) -> PerAnrufErreicht
-funktion Anlagen.Messung.Funkruf() | Auf(AlarmVerteilt) -> PerFunkErreicht
-funktion Anlagen.Messung.Alarmquittung() | Auf(PerAnrufErreicht) -> VermerkeAlarmierung || Auf(PerFunkErreicht) -> VermerkeAlarmierung
-technik Anlagen.Messung.ITelefonie schnittstelle | RufeAsync(fall:Guid):Task<string> | umsetzung Telefonanlage()
 # GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → MeldeMesswert); in der Messkette hinter der Quelle aufgefaltet
-graph Anlagen.Messung.Messwertaufbereitung | knoten Plausi:Plausibilisierung [Kopf], Pruefung:Messwertpruefung [Von Plausi] | koepfe Rohwert | aus MeldeMesswert
 kante Messwertaufbereitung | Plausi -Plausibel-> Pruefung
-graph Anlagen.Messung.Messkette | knoten Abfrage:Sensorabfrage, Aufbereitung:Messwertaufbereitung [Von Abfrage] | koepfe - | aus MeldeMesswert | quelle Abfrage
 kante Messkette | Abfrage -Rohwert-> Aufbereitung.Plausi
 kante Messkette | Aufbereitung.Plausi -Plausibel-> Aufbereitung.Pruefung
-graph Anlagen.Messung.Stoerungsoeffnung | knoten Oeffnung:StoerungBeiAlarm [Kopf] | koepfe OeffneStoerungFuer | aus OeffneStoerung
-graph Anlagen.Messung.Alarmierung | knoten Verteilung:Alarmverteilung [Kopf], Anruf:Anrufkette [Von Verteilung], Funk:Funkruf [Von Verteilung], Quittung:Alarmquittung [Von Anruf+Funk] | koepfe AlarmiereBereitschaft | aus VermerkeAlarmierung
 kante Alarmierung | Verteilung -AlarmVerteilt-> Anruf
 kante Alarmierung | Verteilung -AlarmVerteilt-> Funk
 kante Alarmierung | Anruf -PerAnrufErreicht-> Quittung
@@ -394,18 +474,39 @@ besitz Anlagen.Messung.KeineStoerung rejection -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.VermerkeAlarmierung command -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.AlarmierungVermerkt event -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.AlarmiereBereitschaft command -> §rand
-besitz Anlagen.Messung.Rohwert command -> bausteinfunktion:Sensorabfrage
-besitz Anlagen.Messung.Plausibel command -> bausteinfunktion:Plausibilisierung
-besitz Anlagen.Messung.AlarmVerteilt command -> bausteinfunktion:Alarmverteilung
-besitz Anlagen.Messung.PerAnrufErreicht command -> bausteinfunktion:Anrufkette
-besitz Anlagen.Messung.PerFunkErreicht command -> bausteinfunktion:Funkruf
-besitz Anlagen.Messung.SensorabfrageKonfig konfig -> bausteinfunktion:Sensorabfrage
-besitz Anlagen.Messung.Abfragestand code -> bausteinfunktion:Sensorabfrage
 
-# ── Warenkatalog (Katalogimport.cs.txt): MASSEN-IMPORT MIT FORTSCHRITT — am Kopf eine QUELLFUNKTION AUS DEM KATALOG (Dateiwächter, Core.Katalog);
-#    der Eingang startet den Vorgang und hört die Antwort; ein Zeilenleser mit Technik als KLASSE gibt JE Zeile einen Unterlauf und zwischendurch
+# ── Warenkatalog (Katalogimport.cs.txt, Katalog.Import.*, Uebersetzungen.Warenkatalog.cs.txt): MASSEN-IMPORT MIT FORTSCHRITT — zwei Graphen im Katalog:
+#    die Dateiannahme mit einer QUELLFUNKTION AUS DEM KATALOG des Frameworks am Kopf (Dateiwächter, Core.Katalog) startet den Vorgang (übersetzt);
+#    seine ANTWORT wird der Kopf des Zeilenimports (eine Quelle hat keinen Kopf); ein Zeilenleser mit Technik als KLASSE gibt JE Zeile einen Unterlauf und zwischendurch
 #    den Fortschritt (eine Wahl im Strom); am Ende des Stroms schließt der Leser mit seiner Bilanz ab. Leseseite: Store der Klasse 2 (Dateien, jede
 #    Schreib-Fähigkeit nimmt die Herkunft) und der Klasse 3 (nur mit [MindestensEinmal]; ohne Herkunft, mit Abbruch) ──
+besitz Sondenkatalog.Katalog.Import.Artikeldaten command -> bausteinfunktion:Artikelanlage
+besitz Sondenkatalog.Katalog.Import.Bilanz command -> bausteinfunktion:Zeilenleser
+besitz Sondenkatalog.Katalog.Import.CsvKonfig konfig -> bausteinfunktion:CsvZerleger
+besitz Sondenkatalog.Katalog.Import.Fortschritt command -> bausteinfunktion:Zeilenleser
+besitz Sondenkatalog.Katalog.Import.Importieren command -> bausteinfunktion:Katalogeingang
+besitz Sondenkatalog.Katalog.Import.KatalogBereit command -> §begriffe
+besitz Sondenkatalog.Katalog.Import.Zeile command -> bausteinfunktion:Zeilenleser
+funktion Sondenkatalog.Katalog.Import.Artikelanlage() | Auf(Zeile) herkunft -> Artikeldaten
+funktion Sondenkatalog.Katalog.Import.Katalogeingang() | Auf(DateiGefunden) herkunft -> Importieren
+funktion Sondenkatalog.Katalog.Import.Zeilenleser(zerleger:CsvZerleger) | Auf(KatalogBereit) -> strom Zeile; Fortschritt; Bilanz
+graph Sondenkatalog.Katalog.Import.Dateiannahme | knoten Eingang:Dateiwaechter, Annahme:Katalogeingang [Von Eingang] | koepfe - | aus Importieren | quelle Eingang
+graph Sondenkatalog.Katalog.Import.Zeilenimport | knoten Lesen:Zeilenleser [Kopf], Anlage:Artikelanlage [Von Lesen] | koepfe KatalogBereit | aus Fortschritt, Bilanz, Artikeldaten
+kante Dateiannahme | Eingang -DateiGefunden-> Annahme
+kante Zeilenimport | Lesen -Zeile-> Anlage
+record Sondenkatalog.Katalog.Import.Artikeldaten command | Artikel:Guid, Nummer:string, Bezeichnung:string, Preis:decimal
+record Sondenkatalog.Katalog.Import.Bilanz command | Import:Guid, Zeilen:int, Fehler:int
+record Sondenkatalog.Katalog.Import.CsvKonfig konfig | Trenner:string=";"
+record Sondenkatalog.Katalog.Import.Fortschritt command | Import:Guid, Zeilen:int
+record Sondenkatalog.Katalog.Import.Importieren command | Import:Guid, Pfad:string
+record Sondenkatalog.Katalog.Import.KatalogBereit command | Import:Guid, Pfad:string
+record Sondenkatalog.Katalog.Import.Zeile command | Import:Guid, Nummer:int, Felder:string[]
+technik Sondenkatalog.Katalog.Import.CsvZerleger klasse(konfig:CsvKonfig) | Zerlege(zeile:string):string[]
+uebersetzung Warenkatalog.Uebersetzungen.ArtikelAnlegen | Artikeldaten -> LegeArtikelAn [Feld AggregateId=Artikel] | AggregateId=Artikel(feld), Nummer=Nummer(name), Bezeichnung=Bezeichnung(name), Preis=Preis(name)
+uebersetzung Warenkatalog.Uebersetzungen.FortschrittMelden | Fortschritt -> MeldeImportFortschritt [Feld AggregateId=Import] | AggregateId=Import(feld), Zeilen=Zeilen(name)
+uebersetzung Warenkatalog.Uebersetzungen.ImportAbschliessen | Bilanz -> SchliesseImportAb [Feld AggregateId=Import] | AggregateId=Import(feld), Zeilen=Zeilen(name), Fehler=Fehler(name)
+uebersetzung Warenkatalog.Uebersetzungen.ImportBereit | ImportGestartet -> KatalogBereit [Feld Import=ImportId] | Import=ImportId(feld), Pfad=Pfad(name)
+uebersetzung Warenkatalog.Uebersetzungen.ImportStarten | Importieren -> StarteImport [Feld AggregateId=Import] | AggregateId=Import(feld), Pfad=Pfad(name)
 aggregat Warenkatalog.Import.Importlauf | Zeilen:int, Fertig:bool
 aggregat Warenkatalog.Import.Artikel | Nummer:string="", Preis:decimal
 decide Importlauf.StarteImport -> ImportGestartet; ImportLaeuftSchon
@@ -426,18 +527,7 @@ record Warenkatalog.Import.ImportAbgeschlossen event aggregat=Importlauf | Zeile
 record Warenkatalog.Import.LegeArtikelAn command erzeugung aggregat=Artikel | AggregateId:Id<Artikel>, Nummer:string, Bezeichnung:string, Preis:decimal
 record Warenkatalog.Import.ArtikelAngelegt event aggregat=Artikel | Nummer:string, Bezeichnung:string, Preis:decimal
 record Warenkatalog.Import.ArtikelExistiert rejection aggregat=Artikel | ArtikelId:Id<Artikel>
-record Warenkatalog.Import.KatalogBereit command | Import:Id<Importlauf>, Pfad:string
-record Warenkatalog.Import.Zeile command | Import:Id<Importlauf>, Nummer:int, Felder:string[]
-record Warenkatalog.Import.CsvKonfig konfig | Trenner:string=";"
-funktion Warenkatalog.Import.Katalogeingang() | Auf(DateiGefunden) herkunft -> StarteImport || Auf(ImportGestartet) -> KatalogBereit
-funktion Warenkatalog.Import.Zeilenleser(zerleger:CsvZerleger) | Auf(KatalogBereit) -> strom Zeile; MeldeImportFortschritt; SchliesseImportAb
-funktion Warenkatalog.Import.Artikelanlage() | Auf(Zeile) herkunft -> LegeArtikelAn
 # Technik als Klasse (ohne Schnittstelle): ihre Methoden, ihr Konstruktor mit Konfig-Record
-technik Warenkatalog.Import.CsvZerleger klasse(konfig:CsvKonfig) | Zerlege(zeile:string):string[]
-graph Warenkatalog.Import.Katalogimport | knoten Eingang:Dateiwaechter, Annahme:Katalogeingang [Von Eingang], Lesen:Zeilenleser [Von Annahme], Anlage:Artikelanlage [Von Lesen] | koepfe - | aus StarteImport, MeldeImportFortschritt, SchliesseImportAb, LegeArtikelAn | quelle Eingang
-kante Katalogimport | Eingang -DateiGefunden-> Annahme
-kante Katalogimport | Annahme -KatalogBereit-> Lesen
-kante Katalogimport | Lesen -Zeile-> Anlage
 akteur Warenkatalog.Import.Ablage | darf StarteImport, LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb | hoert -
 akteur Warenkatalog.Import.Katalogpflege | darf HoleImportstand | hoert ImportFortgeschritten, ImportAbgeschlossen
 client Warenkatalog.Import.KatalogpflegeOberflaeche | verkoerpert Katalogpflege
@@ -480,9 +570,6 @@ besitz Warenkatalog.Import.ImportAbgeschlossen event -> aggregate:Importlauf
 besitz Warenkatalog.Import.LegeArtikelAn command -> aggregate:Artikel
 besitz Warenkatalog.Import.ArtikelAngelegt event -> aggregate:Artikel
 besitz Warenkatalog.Import.ArtikelExistiert rejection -> aggregate:Artikel
-besitz Warenkatalog.Import.KatalogBereit command -> bausteinfunktion:Katalogeingang
-besitz Warenkatalog.Import.Zeile command -> bausteinfunktion:Zeilenleser
-besitz Warenkatalog.Import.CsvKonfig konfig -> bausteinfunktion:CsvZerleger
 besitz Warenkatalog.Import.Importstand readmodel -> store:IImportUebersicht
 besitz Warenkatalog.Import.Importfortschritt projektion -> store:IImportUebersicht
 besitz Warenkatalog.Import.Importauskunft reader -> store:IImportUebersicht
@@ -491,9 +578,65 @@ besitz Warenkatalog.Import.ImportstandAntwort queryresponse -> reader:Importausk
 besitz Warenkatalog.Import.ImportUnbekannt queryresponse -> reader:Importauskunft
 besitz Warenkatalog.Import.Artikelzaehlung projektion -> store:IArtikelprotokoll
 
-# ── Wetterdienst (Vorhersage.cs.txt): GENERISCHE FUNKTION, ZUSTAND, HINWEISE — das Decide gibt einen Command ohne Ziel an den Kopf der Prognose; die
-#    Tendenz GABELT an zwei Knoten derselben generischen Funktion (je Typargument ein Baustein; die Karte ist die offene Definition); das Modell FÜHRT
-#    beide im Zustand ZUSAMMEN (je Glättung ein Auf), nimmt Technik mit eigenem Zustand und WÄHLT zwischen Prognose (Command) und Warnung (Hinweis an den Warndienst) ──
+# ── Wetterdienst (Vorhersage.cs.txt, Katalog.Vorhersage.*, Uebersetzungen.Vorhersage.cs.txt, Akteure.Vorhersage.cs.txt): GENERISCHE FUNKTION, ZUSTAND,
+#    HINWEISE — die Domäne ist rein; die Prognose ist ein Graph des Katalogs (Guid statt Id): die Tendenz GABELT an zwei Knoten derselben generischen
+#    Funktion (je Typargument ein Baustein; die Karte ist die offene Definition); das Modell FÜHRT beide im Zustand ZUSAMMEN (je Glättung ein Auf),
+#    nimmt Technik mit eigenem Zustand und WÄHLT zwischen Prognose (Command) und Warnung (Hinweis an den Warndienst). Zwei Übersetzungen binden sie:
+#    am Kopf die Nachricht des Warndiensts, am Ausgang die Prognose an die Station; der Warndienst gibt und hört Nachrichten des Katalogs (bei den Akteuren) ──
+besitz Sondenkatalog.Katalog.Vorhersage.Bilde command -> §begriffe
+besitz Sondenkatalog.Katalog.Vorhersage.Geglaettet command -> bausteinfunktion:Glaettung
+besitz Sondenkatalog.Katalog.Vorhersage.Gewichte code -> bausteinfunktion:Prognosemodell
+besitz Sondenkatalog.Katalog.Vorhersage.GlaettungsKonfig konfig -> bausteinfunktion:Glaettung
+besitz Sondenkatalog.Katalog.Vorhersage.IFenster code -> §begriffe
+besitz Sondenkatalog.Katalog.Vorhersage.KarteBereit rejection -> §begriffe mehrdeutig
+besitz Sondenkatalog.Katalog.Vorhersage.KarteGeloescht rejection -> bausteinfunktion:Kartenablage
+besitz Sondenkatalog.Katalog.Vorhersage.KarteGezeichnet command -> §begriffe mehrdeutig
+besitz Sondenkatalog.Katalog.Vorhersage.KarteSkaliert command -> bausteinfunktion:Kartenskalierung
+besitz Sondenkatalog.Katalog.Vorhersage.Kurzfenster valueobject -> §begriffe
+besitz Sondenkatalog.Katalog.Vorhersage.Langfenster valueobject -> §begriffe
+besitz Sondenkatalog.Katalog.Vorhersage.LoescheKarte command -> §rand
+besitz Sondenkatalog.Katalog.Vorhersage.Prognostiziert command -> bausteinfunktion:Prognosemodell
+besitz Sondenkatalog.Katalog.Vorhersage.SkalierungsKonfig konfig -> bausteinfunktion:Kartenskalierung
+besitz Sondenkatalog.Katalog.Vorhersage.Tendenz command -> bausteinfunktion:Tendenzbildung
+besitz Sondenkatalog.Katalog.Vorhersage.Unwetter rejection -> bausteinfunktion:Prognosemodell
+besitz Sondenkatalog.Katalog.Vorhersage.Zaehlung code -> bausteinfunktion:IStatistik
+besitz Sondenkatalog.Katalog.Vorhersage.ZeichneKarte command -> §rand
+code Sondenkatalog.Katalog.Vorhersage.Gewichte class teile=1 domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt
+code Sondenkatalog.Katalog.Vorhersage.IFenster interface teile=1 domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt
+code Sondenkatalog.Katalog.Vorhersage.Zaehlung class teile=1 domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt
+funktion Sondenkatalog.Katalog.Vorhersage.Daumenmeldung() | Auf(KarteSkaliert) -> KarteBereit
+funktion Sondenkatalog.Katalog.Vorhersage.Glaettung(konfig:GlaettungsKonfig) | Auf(Tendenz) -> Geglaettet<TFenster>
+funktion Sondenkatalog.Katalog.Vorhersage.Kantenglaettung() | Auf(KarteGezeichnet) -> KarteGezeichnet
+funktion Sondenkatalog.Katalog.Vorhersage.Kartenablage() | Auf(KarteSkaliert) -> KarteBereit || Auf(LoescheKarte) -> KarteGeloescht
+funktion Sondenkatalog.Katalog.Vorhersage.Kartenschaerfung() | Auf(KarteGezeichnet) -> KarteGezeichnet
+funktion Sondenkatalog.Katalog.Vorhersage.Kartenskalierung(konfig:SkalierungsKonfig) | Auf(KarteGezeichnet) -> KarteSkaliert
+funktion Sondenkatalog.Katalog.Vorhersage.Kartenzeichnung() | Auf(ZeichneKarte) -> KarteGezeichnet
+funktion Sondenkatalog.Katalog.Vorhersage.Prognosemodell(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte | Auf(Geglaettet<Kurzfenster>) -> strom Prognostiziert; Unwetter || Auf(Geglaettet<Langfenster>) -> strom Prognostiziert; Unwetter
+funktion Sondenkatalog.Katalog.Vorhersage.Tendenzbildung() | Auf(Bilde) -> Tendenz
+graph Sondenkatalog.Katalog.Vorhersage.Kartenausgabe | knoten Zeichnung:Kartenzeichnung [Kopf], Filter:Kartenfilter [Von Zeichnung], Vorschau:Kartenskalierung [Von Filter], Daumen:Kartenskalierung [Von Filter] [Verlierbar Filter], Ablage:Kartenablage [Kopf] [Von Vorschau], Meldung:Daumenmeldung [Von Daumen] | koepfe ZeichneKarte, LoescheKarte | aus KarteBereit, KarteGeloescht
+graph Sondenkatalog.Katalog.Vorhersage.Kartenfilter | knoten Glaetten:Kantenglaettung [Kopf], Schaerfen:Kartenschaerfung [Von Glaetten], Nachglaetten:Kantenglaettung [Von Schaerfen] | koepfe KarteGezeichnet | aus KarteGezeichnet
+graph Sondenkatalog.Katalog.Vorhersage.Kurzglaettung | knoten Glaettung:Glaettung<Kurzfenster> [Kopf] | koepfe Tendenz | aus Geglaettet<Kurzfenster>
+graph Sondenkatalog.Katalog.Vorhersage.Prognose | knoten Tendenz:Tendenzbildung [Kopf], Kurz:Glaettung<Kurzfenster> [Von Tendenz], Lang:Glaettung<Langfenster> [Von Tendenz], Modell:Prognosemodell [Von Kurz+Lang] | koepfe Bilde | aus Prognostiziert, Unwetter
+record Sondenkatalog.Katalog.Vorhersage.Bilde command | Station:Guid, Grad:double
+record Sondenkatalog.Katalog.Vorhersage.Geglaettet command | Station:Guid, Grad:double
+record Sondenkatalog.Katalog.Vorhersage.GlaettungsKonfig konfig | Gewicht:double
+record Sondenkatalog.Katalog.Vorhersage.KarteBereit rejection | Station:Guid, Breite:int
+record Sondenkatalog.Katalog.Vorhersage.KarteGeloescht rejection | Station:Guid
+record Sondenkatalog.Katalog.Vorhersage.KarteGezeichnet command | Station:Guid, Breite:int
+record Sondenkatalog.Katalog.Vorhersage.KarteSkaliert command | Station:Guid, Breite:int
+record Sondenkatalog.Katalog.Vorhersage.Kurzfenster valueobject typart=public sealed record |
+record Sondenkatalog.Katalog.Vorhersage.Langfenster valueobject typart=public sealed record |
+record Sondenkatalog.Katalog.Vorhersage.LoescheKarte command | Station:Guid
+record Sondenkatalog.Katalog.Vorhersage.Prognostiziert command | Station:Guid, Grad:double, Gelernt:int
+record Sondenkatalog.Katalog.Vorhersage.SkalierungsKonfig konfig | Breite:int
+record Sondenkatalog.Katalog.Vorhersage.Tendenz command | Station:Guid, Grad:double
+record Sondenkatalog.Katalog.Vorhersage.Unwetter rejection | Station:Guid, Stufe:string
+record Sondenkatalog.Katalog.Vorhersage.ZeichneKarte command | Station:Guid, Grad:double
+sicht Sondenkatalog.Katalog.Vorhersage.Kurzfenster valueobject domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt insel
+sicht Sondenkatalog.Katalog.Vorhersage.Langfenster valueobject domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt insel
+technik Sondenkatalog.Katalog.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
+uebersetzung Wetterdienst.Vorhersage.PrognoseBilden | BildePrognose -> Bilde [Feld Station=Station] | Station=Station(feld), Grad=Grad(name)
+uebersetzung Wetterdienst.Vorhersage.PrognoseVermerken | Prognostiziert -> VermerkePrognose [Feld AggregateId=Station] | AggregateId=Station(feld), Grad=Grad(name), Gelernt=Gelernt(name)
 aggregat Wetterdienst.Vorhersage.Station | Stillgelegt:bool, Letzte:double
 decide Station.MeldeTemperatur -> TemperaturGemeldet; StationStillgelegt
 decide Station.VermerkePrognose -> PrognoseVermerkt
@@ -505,47 +648,20 @@ record Wetterdienst.Vorhersage.StationStillgelegt rejection aggregat=Station | S
 record Wetterdienst.Vorhersage.VermerkePrognose command aggregat=Station | AggregateId:Id<Station>, Grad:double, Gelernt:int
 record Wetterdienst.Vorhersage.PrognoseVermerkt event aggregat=Station | Grad:double, Gelernt:int
 record Wetterdienst.Vorhersage.BildePrognose command | Station:Id<Station>, Grad:double
-record Wetterdienst.Vorhersage.Tendenz command | Station:Id<Station>, Grad:double
 # Der generische Command heißt auf der Karte ohne Typparameter; die Typargumente sind leere Records (Wert-Typen ohne Nutzer im Feld: eine Insel)
-record Wetterdienst.Vorhersage.Geglaettet command | Station:Id<Station>, Grad:double
-record Wetterdienst.Vorhersage.Kurzfenster valueobject typart=public sealed record |
-record Wetterdienst.Vorhersage.Langfenster valueobject typart=public sealed record |
-record Wetterdienst.Vorhersage.GlaettungsKonfig konfig | Gewicht:double
-record Wetterdienst.Vorhersage.Unwetter rejection | Station:Id<Station>, Stufe:string
-funktion Wetterdienst.Vorhersage.Tendenzbildung() | Auf(BildePrognose) -> Tendenz
-funktion Wetterdienst.Vorhersage.Glaettung(konfig:GlaettungsKonfig) | Auf(Tendenz) -> Geglaettet<TFenster>
-funktion Wetterdienst.Vorhersage.Prognosemodell(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte | Auf(Geglaettet<Kurzfenster>) -> strom VermerkePrognose; Unwetter || Auf(Geglaettet<Langfenster>) -> strom VermerkePrognose; Unwetter
 # Technik mit eigenem Zustand (IZustand in der Umsetzung): gehört dem Knoten des Prognosemodells
-technik Wetterdienst.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
 # Die Knoten nennen die generische Funktion mit Typargument; Kanten und Ausgänge tragen es
-graph Wetterdienst.Vorhersage.Prognose | knoten Tendenz:Tendenzbildung [Kopf], Kurz:Glaettung<Kurzfenster> [Von Tendenz], Lang:Glaettung<Langfenster> [Von Tendenz], Modell:Prognosemodell [Von Kurz+Lang] | koepfe BildePrognose | aus VermerkePrognose, Unwetter
 kante Prognose | Tendenz -Tendenz-> Kurz
 kante Prognose | Tendenz -Tendenz-> Lang
 kante Prognose | Kurz -Geglaettet<Kurzfenster>-> Modell
 kante Prognose | Lang -Geglaettet<Langfenster>-> Modell
 # gezeichnet (Geste „Graph: neuer Graph mit generischem Knoten“)
-graph Wetterdienst.Vorhersage.Kurzglaettung | knoten Glaettung:Glaettung<Kurzfenster> [Kopf] | koepfe Tendenz | aus Geglaettet<Kurzfenster>
 
 # ── Kartenausgabe (Vorhersage.cs.txt): AUSDRÜCKLICHE KANTEN — dieselbe Funktion zweimal (Skalierung als Vorschau und Daumen, Kantenglättung vor
 #    und nach der Schärfung), eine Kette Karte → Karte → Karte (kein Kreis), ein Graph im Graphen mit Von hinein und Von(nameof(Filter)) heraus,
 #    das Daumenbild verlierbar, die Ablage mit [Kopf] und [Von] (Vorschau von innen, Löschen von außen) ──
-record Wetterdienst.Vorhersage.KarteBereit rejection | Station:Id<Station>, Breite:int
-record Wetterdienst.Vorhersage.KarteGeloescht rejection | Station:Id<Station>
-record Wetterdienst.Vorhersage.KarteGezeichnet command | Station:Id<Station>, Breite:int
-record Wetterdienst.Vorhersage.KarteSkaliert command | Station:Id<Station>, Breite:int
-record Wetterdienst.Vorhersage.LoescheKarte command | Station:Id<Station>
-record Wetterdienst.Vorhersage.SkalierungsKonfig konfig | Breite:int
-record Wetterdienst.Vorhersage.ZeichneKarte command | Station:Id<Station>, Grad:double
-funktion Wetterdienst.Vorhersage.Daumenmeldung() | Auf(KarteSkaliert) -> KarteBereit
-funktion Wetterdienst.Vorhersage.Kantenglaettung() | Auf(KarteGezeichnet) -> KarteGezeichnet
-funktion Wetterdienst.Vorhersage.Kartenablage() | Auf(KarteSkaliert) -> KarteBereit || Auf(LoescheKarte) -> KarteGeloescht
-funktion Wetterdienst.Vorhersage.Kartenschaerfung() | Auf(KarteGezeichnet) -> KarteGezeichnet
-funktion Wetterdienst.Vorhersage.Kartenskalierung(konfig:SkalierungsKonfig) | Auf(KarteGezeichnet) -> KarteSkaliert
-funktion Wetterdienst.Vorhersage.Kartenzeichnung() | Auf(ZeichneKarte) -> KarteGezeichnet
-graph Wetterdienst.Vorhersage.Kartenfilter | knoten Glaetten:Kantenglaettung [Kopf], Schaerfen:Kartenschaerfung [Von Glaetten], Nachglaetten:Kantenglaettung [Von Schaerfen] | koepfe KarteGezeichnet | aus KarteGezeichnet
 kante Kartenfilter | Glaetten -KarteGezeichnet-> Schaerfen
 kante Kartenfilter | Schaerfen -KarteGezeichnet-> Nachglaetten
-graph Wetterdienst.Vorhersage.Kartenausgabe | knoten Zeichnung:Kartenzeichnung [Kopf], Filter:Kartenfilter [Von Zeichnung], Vorschau:Kartenskalierung [Von Filter], Daumen:Kartenskalierung [Von Filter] [Verlierbar Filter], Ablage:Kartenablage [Kopf] [Von Vorschau], Meldung:Daumenmeldung [Von Daumen] | koepfe ZeichneKarte, LoescheKarte | aus KarteBereit, KarteGeloescht
 kante Kartenausgabe | Daumen -KarteSkaliert-> Meldung
 kante Kartenausgabe | Filter.Glaetten -KarteGezeichnet-> Filter.Schaerfen
 kante Kartenausgabe | Filter.Nachglaetten -KarteGezeichnet-> Daumen
@@ -553,21 +669,9 @@ kante Kartenausgabe | Filter.Nachglaetten -KarteGezeichnet-> Vorschau
 kante Kartenausgabe | Filter.Schaerfen -KarteGezeichnet-> Filter.Nachglaetten
 kante Kartenausgabe | Vorschau -KarteSkaliert-> Ablage
 kante Kartenausgabe | Zeichnung -KarteGezeichnet-> Filter.Glaetten
-besitz Wetterdienst.Vorhersage.KarteBereit rejection -> §begriffe mehrdeutig
-besitz Wetterdienst.Vorhersage.KarteGeloescht rejection -> bausteinfunktion:Kartenablage
-besitz Wetterdienst.Vorhersage.KarteGezeichnet command -> §begriffe mehrdeutig
-besitz Wetterdienst.Vorhersage.KarteSkaliert command -> bausteinfunktion:Kartenskalierung
-besitz Wetterdienst.Vorhersage.LoescheKarte command -> §rand
-besitz Wetterdienst.Vorhersage.SkalierungsKonfig konfig -> bausteinfunktion:Kartenskalierung
-besitz Wetterdienst.Vorhersage.ZeichneKarte command -> §rand
 akteur Wetterdienst.Vorhersage.Warndienst | darf MeldeTemperatur, ZeichneKarte, LoescheKarte, BildePrognose | hoert Unwetter, StationStillgelegt, KarteBereit, KarteGeloescht, TemperaturGemeldet
 client Wetterdienst.Vorhersage.WetterApp | verkoerpert Warndienst
 # Zustand und Marker-Schnittstelle der Typargumente sind eigene Typen ohne Marker — Code-Karten
-code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
-code Wetterdienst.Vorhersage.Zaehlung class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
-code Wetterdienst.Vorhersage.IFenster interface teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
-sicht Wetterdienst.Vorhersage.Kurzfenster valueobject domaene=Wetterdienst.Vorhersage block=§geteilt insel
-sicht Wetterdienst.Vorhersage.Langfenster valueobject domaene=Wetterdienst.Vorhersage block=§geteilt insel
 sicht Wetterdienst.Vorhersage.Warndienst akteur domaene=Wetterdienst.Vorhersage block=§akteure
 besitz Wetterdienst.Vorhersage.MeldeTemperatur command -> aggregate:Station
 besitz Wetterdienst.Vorhersage.TemperaturGemeldet event -> aggregate:Station
@@ -575,24 +679,13 @@ besitz Wetterdienst.Vorhersage.StationStillgelegt rejection -> aggregate:Station
 besitz Wetterdienst.Vorhersage.VermerkePrognose command -> aggregate:Station
 besitz Wetterdienst.Vorhersage.PrognoseVermerkt event -> aggregate:Station
 besitz Wetterdienst.Vorhersage.BildePrognose command -> §rand
-besitz Wetterdienst.Vorhersage.Tendenz command -> bausteinfunktion:Tendenzbildung
-besitz Wetterdienst.Vorhersage.Geglaettet command -> bausteinfunktion:Glaettung
-besitz Wetterdienst.Vorhersage.GlaettungsKonfig konfig -> bausteinfunktion:Glaettung
-besitz Wetterdienst.Vorhersage.Unwetter rejection -> bausteinfunktion:Prognosemodell
-besitz Wetterdienst.Vorhersage.Kurzfenster valueobject -> §begriffe
-besitz Wetterdienst.Vorhersage.Langfenster valueobject -> §begriffe
-besitz Wetterdienst.Vorhersage.Gewichte code -> bausteinfunktion:Prognosemodell
-besitz Wetterdienst.Vorhersage.Zaehlung code -> bausteinfunktion:IStatistik
-besitz Wetterdienst.Vorhersage.IFenster code -> §begriffe
 
 # ══ LAGE (docs/07): die Sonde liegt ABSICHTLICH in einem Projekt (der Schreibseite) — die Lage-Prüfung muss jede Primitive in ihr Rollen-Projekt
 #    weisen (Typ -> Zielprojekt). Wurzel der Tabelle ist die der Solution; Ordner/Namespace/Datei prüft LageAnalyzerTests. Hinweise (auch aus
 #    Funktionen) und Commands, die ein Decide abgibt, bleiben bei der Schreibseite; Zustands-Klassen und Hilfscode haben keine Rolle. ══
 # Akteure und Clients → Akteure
-lage Theke -> Domain.Akteure
 lage Gutachterin -> Domain.Akteure
 lage Archiv -> Domain.Akteure
-lage Lesesaal -> Domain.Akteure
 lage Depot -> Domain.Akteure
 lage Mahnstelle -> Domain.Akteure
 lage Mahnportal -> Domain.Akteure
@@ -606,72 +699,6 @@ lage Leitstand -> Domain.Akteure
 lage Ablage -> Domain.Akteure
 lage Katalogpflege -> Domain.Akteure
 lage KatalogpflegeOberflaeche -> Domain.Akteure
-lage Warndienst -> Domain.Akteure
-lage WetterApp -> Domain.Akteure
-# Funktionen, Graphen, Technik (Schnittstellen und Umsetzungen), Konfig-Records und Commands, die nur Knoten einander geben (auch an einen
-#   Akteur oder von einem Akteur an einen Graph-Kopf) → Abläufe
-lage SchadenBeiRueckgabe -> <Name>.Katalog
-lage Schadensaufnahme -> <Name>.Katalog
-lage Schadensschaetzer -> <Name>.Katalog
-lage Gutachtenanfrage -> <Name>.Katalog
-lage MahnungNachSchaetzung -> <Name>.Katalog
-lage Vormerkpruefung -> <Name>.Katalog
-lage Rueckgabepruefung -> <Name>.Katalog
-lage Schadensbewertung -> <Name>.Katalog
-lage IWertTabelle -> <Name>.Katalog
-lage LineareWertTabelle -> <Name>.Katalog
-lage WertTabellenKonfig -> <Name>.Katalog
-lage GutachtenKonfig -> <Name>.Katalog
-lage Pruefungsstart -> <Name>.Katalog
-lage Seitenpruefer -> <Name>.Katalog
-lage Offenzaehlung -> <Name>.Katalog
-lage Seitenpruefungslauf -> <Name>.Katalog
-lage Mahnbemessung -> <Name>.Katalog
-lage ISeitenleser -> <Name>.Katalog
-lage Lichtpruefung -> <Name>.Katalog
-lage Handpruefung -> <Name>.Katalog
-lage Registrierung -> <Name>.Katalog
-lage Adresspruefung -> <Name>.Katalog
-lage Sensorabfrage -> <Name>.Katalog
-lage Plausibilisierung -> <Name>.Katalog
-lage Messwertpruefung -> <Name>.Katalog
-lage StoerungBeiAlarm -> <Name>.Katalog
-lage Alarmverteilung -> <Name>.Katalog
-lage Anrufkette -> <Name>.Katalog
-lage Funkruf -> <Name>.Katalog
-lage Alarmquittung -> <Name>.Katalog
-lage Messwertaufbereitung -> <Name>.Katalog
-lage Messkette -> <Name>.Katalog
-lage Stoerungsoeffnung -> <Name>.Katalog
-lage Alarmierung -> <Name>.Katalog
-lage ISensorbus -> <Name>.Katalog
-lage Feldbus -> <Name>.Katalog
-lage ITelefonie -> <Name>.Katalog
-lage Telefonanlage -> <Name>.Katalog
-lage SensorabfrageKonfig -> <Name>.Katalog
-lage Katalogeingang -> <Name>.Katalog
-lage Zeilenleser -> <Name>.Katalog
-lage Artikelanlage -> <Name>.Katalog
-lage Katalogimport -> <Name>.Katalog
-lage CsvZerleger -> <Name>.Katalog
-lage CsvKonfig -> <Name>.Katalog
-lage Tendenzbildung -> <Name>.Katalog
-lage Glaettung -> <Name>.Katalog
-lage Prognosemodell -> <Name>.Katalog
-lage Prognose -> <Name>.Katalog
-lage Kurzglaettung -> <Name>.Katalog
-lage IStatistik -> <Name>.Katalog
-lage Statistik -> <Name>.Katalog
-lage GlaettungsKonfig -> <Name>.Katalog
-lage Kartenzeichnung -> <Name>.Katalog
-lage Kantenglaettung -> <Name>.Katalog
-lage Kartenschaerfung -> <Name>.Katalog
-lage SkalierungsKonfig -> <Name>.Katalog
-lage Kartenskalierung -> <Name>.Katalog
-lage Kartenablage -> <Name>.Katalog
-lage Daumenmeldung -> <Name>.Katalog
-lage Kartenfilter -> <Name>.Katalog
-lage Kartenausgabe -> <Name>.Katalog
 # Leseseite → Projektionen; Store-Implementierungen → Infrastruktur
 lage LeihEintrag -> Domain.Projections
 lage Ausleihzaehler -> Domain.Projections
@@ -740,7 +767,8 @@ besitz Sondenkatalog.Katalog.Peilung.Peile command -> §begriffe
 besitz Sondenkatalog.Katalog.Peilung.Peilprotokoll event -> §begriffe
 lage Peilprotokoll -> nicht Sondenkatalog.Katalog
 
-# ── Funkortung (Funkortung.cs.txt): ÜBERSETZUNGEN IN DER DOMÄNE (docs/plan-ohne-pipeline.md) — der Graph ist die neutrale Peilkette des fremden
+# ── Funkortung (Funkortung.cs.txt, Uebersetzungen.Funkortung.cs.txt): ÜBERSETZUNGEN NEBEN DER REINEN DOMÄNE (docs/plan-ohne-pipeline.md, im Projekt
+#    der Übersetzungen) — der Graph ist die neutrale Peilkette des fremden
 #    Katalogs; eine Kopf-Übersetzung macht aus der Nachricht des Funkers ihren Eingang (Feld nach Namen, zwei ausdrücklich), eine Übersetzung macht
 #    aus dem Ergebnis (ein Zwischenstand, der im Graphen weiterläuft) einen Command an die Peilstelle, und die ANTWORT der Peilstelle geht zurück an den
 #    Kopf der Peilkette — beide aus dem Gesten-Skript.
@@ -759,6 +787,14 @@ besitz Funkortung.Ortung.OrtungAngefordert command -> §rand
 besitz Funkortung.Ortung.VermerkePeilung command -> aggregate:Peilstelle
 besitz Funkortung.Ortung.PeilungVermerkt event -> aggregate:Peilstelle
 lage Funker -> Domain.Akteure
-lage Hinein -> Domain.Uebersetzungen
-lage Vermerken -> Domain.Uebersetzungen
-lage Bestaetigen -> Domain.Uebersetzungen
+
+# ── Absichtlich falsch (Erinnerung.cs.txt): eine Funktion und ihr Graph in der Anwendung — eine Anwendung hat keine (docs/plan-ohne-pipeline.md);
+#    erkannt wird beides wie im Katalog, die Lage weist beides nach <Name>.Katalog ──
+besitz Leihwesen.Erinnerung.Erinnere command -> §begriffe
+besitz Leihwesen.Erinnerung.Erinnert rejection -> bausteinfunktion:Erinnerungsdienst
+funktion Leihwesen.Erinnerung.Erinnerungsdienst() | Auf(Erinnere) -> Erinnert
+graph Leihwesen.Erinnerung.Erinnerungslauf | knoten Dienst:Erinnerungsdienst [Kopf] | koepfe Erinnere | aus Erinnert
+record Leihwesen.Erinnerung.Erinnere command | LeserId:Guid
+record Leihwesen.Erinnerung.Erinnert rejection | LeserId:Guid
+lage Erinnerungsdienst -> <Name>.Katalog
+lage Erinnerungslauf -> <Name>.Katalog

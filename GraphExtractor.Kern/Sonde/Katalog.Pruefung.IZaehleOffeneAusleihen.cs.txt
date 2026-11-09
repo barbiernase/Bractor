@@ -1,0 +1,6 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog.Pruefung;
+
+/// <summary>Was die Mahnbemessung lesen will: wie viele Ausleihen eines Lesers offen sind — umgesetzt im Speicher der Anwendung (CQRS124).</summary>
+public interface IZaehleOffeneAusleihen : IReadStore { Task<int> AnzahlAsync(Guid leserId); }

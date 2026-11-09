@@ -1,0 +1,22 @@
+using Abstractions;
+using Sondenkatalog.Katalog.Messung;
+
+// SONDE — die Übersetzungen des Messnetzes (docs/plan-ohne-pipeline.md): der geprüfte Messwert an den Sensor, der Alarm der Schichtleitung in den
+// Kopf der Störungsöffnung und deren Ergebnis an den Störungsfall, die Alarmierung hinein und jede Erreichung an den Fall (Guid ⇄ Id ausdrücklich).
+
+namespace Anlagen.Messung;
+
+[Feld(nameof(MeldeMesswert.AggregateId), nameof(Geprueft.Sensor))]
+public sealed record MesswertMelden : IUebersetzung<Geprueft, MeldeMesswert>;
+
+[Feld(nameof(Alarm.Sensor), nameof(OeffneStoerungFuer.Sensor))]
+public sealed record StoerungAusAlarm : IUebersetzung<OeffneStoerungFuer, Alarm>;
+
+[Feld(nameof(OeffneStoerung.AggregateId), nameof(Stoerung.Fall))]
+public sealed record StoerungOeffnen : IUebersetzung<Stoerung, OeffneStoerung>;
+
+[Feld(nameof(Alarmiere.Fall), nameof(AlarmiereBereitschaft.Fall))]
+public sealed record BereitschaftAlarmieren : IUebersetzung<AlarmiereBereitschaft, Alarmiere>;
+
+[Feld(nameof(VermerkeAlarmierung.AggregateId), nameof(Erreicht.Fall))]
+public sealed record AlarmierungVermerken : IUebersetzung<Erreicht, VermerkeAlarmierung>;

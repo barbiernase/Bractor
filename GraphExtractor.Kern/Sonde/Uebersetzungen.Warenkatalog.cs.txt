@@ -1,0 +1,23 @@
+using Abstractions;
+using Warenkatalog.Import;
+using Sondenkatalog.Katalog.Import;
+
+// SONDE — die Übersetzungen des Warenkatalogs (docs/plan-ohne-pipeline.md): der Import an den Vorgang, seine ANTWORT in den Kopf des Zeilenimports,
+// Fortschritt und Bilanz an den Vorgang, jeder Artikel an seinen Stream — Guid ⇄ Id ausdrücklich, der Rest nach Namen.
+
+namespace Warenkatalog.Uebersetzungen;
+
+[Feld(nameof(StarteImport.AggregateId), nameof(Importieren.Import))]
+public sealed record ImportStarten : IUebersetzung<Importieren, StarteImport>;
+
+[Feld(nameof(KatalogBereit.Import), nameof(ImportGestartet.ImportId))]
+public sealed record ImportBereit : IUebersetzung<ImportGestartet, KatalogBereit>;
+
+[Feld(nameof(MeldeImportFortschritt.AggregateId), nameof(Fortschritt.Import))]
+public sealed record FortschrittMelden : IUebersetzung<Fortschritt, MeldeImportFortschritt>;
+
+[Feld(nameof(SchliesseImportAb.AggregateId), nameof(Bilanz.Import))]
+public sealed record ImportAbschliessen : IUebersetzung<Bilanz, SchliesseImportAb>;
+
+[Feld(nameof(LegeArtikelAn.AggregateId), nameof(Artikeldaten.Artikel))]
+public sealed record ArtikelAnlegen : IUebersetzung<Artikeldaten, LegeArtikelAn>;

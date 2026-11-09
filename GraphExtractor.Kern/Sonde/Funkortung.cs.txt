@@ -1,10 +1,8 @@
 using Abstractions;
-using Sondenkatalog.Katalog.Peilung;
 
-// SONDE — ÜBERSETZUNG IN BEIDE RICHTUNGEN (docs/plan-ohne-pipeline.md), die Domäne: die Peilstelle vermerkt, was gepeilt wurde. Der Graph ist die
-// domänenneutrale Peilkette des fremden Katalogs; domänenspezifisch machen ihn die Übersetzungen hier — am Kopf die Nachricht des Funkers in den
-// Eingang des Katalogs (Frequenz nach Namen, die Stelle als Auftrag, die Messdauer als DauerMs ausdrücklich). Das Ergebnis wird ein Command an die
-// Peilstelle und ihre Antwort geht an die Peilung zurück — beide Übersetzungen legt das Gesten-Skript an (Gezeichnet.gesten.json).
+// SONDE — ÜBERSETZUNG IN BEIDE RICHTUNGEN (docs/plan-ohne-pipeline.md), die Domäne: die Peilstelle vermerkt, was gepeilt wurde. Sie ist rein — sie
+// kennt den Katalog nicht. Der Graph ist die domänenneutrale Peilkette des fremden Katalogs; domänenspezifisch machen ihn die Übersetzungen
+// (Uebersetzungen.Funkortung.cs.txt, im Projekt der Übersetzungen).
 
 namespace Funkortung.Ortung;
 
@@ -13,9 +11,6 @@ public record PeilungVermerkt(double RichtungGrad, double Guete, string Quelle) 
 
 /// <summary>Ein Funker fordert eine Ortung an — eine Nachricht der Domäne, die eine Kopf-Übersetzung in den Eingang der Peilkette macht.</summary>
 public record OrtungAngefordert(Id<Peilstelle> Stelle, double FrequenzMhz, int Messdauer) : ICommand;
-
-[Feld(nameof(Peile.Auftrag), nameof(OrtungAngefordert.Stelle)), Feld(nameof(Peile.DauerMs), nameof(OrtungAngefordert.Messdauer))]
-public sealed record Hinein : IUebersetzung<OrtungAngefordert, Peile>;
 
 public partial class Peilstelle : IState
 {
