@@ -38,6 +38,10 @@ public static class Kataloge
         Referenz(puffer, uebersetzungen, katalog, nutzen, $"die Anwendung {wurzel} hat kein Projekt {uebersetzungen}");
     }
 
+    /// <summary>Der Speicher der Anwendung nutzt den Katalog: er setzt eine Lese-Fähigkeit um, die der Katalog deklariert (CQRS124). Idempotent.</summary>
+    public static void SpeicherNutzt(Dateipuffer puffer, string katalog, string wurzel = P.StandardWurzel) =>
+        Referenz(puffer, P.Projekt(wurzel, P.Rolle.Speicher), katalog, true, $"die Anwendung {wurzel} hat keinen Speicher");
+
     /// <summary>
     /// Der Katalog <paramref name="nutzer"/> nutzt den Katalog <paramref name="katalog"/> (Referenz in seiner Projektdatei) — etwa den allgemeinen,
     /// dessen Commands er als Input oder Output nimmt. Kreise sind verboten.

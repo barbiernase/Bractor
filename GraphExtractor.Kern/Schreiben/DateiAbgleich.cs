@@ -391,6 +391,15 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             var typ = Typ(text)!;
             if (Aufs(typ).FirstOrDefault(m => Nimmt(m, e)) is { } m)
             {
+                // Die Parameter nach der Nachricht folgen dem Modell: Herkunft, dann die Lese-Fähigkeiten; ein CancellationToken bleibt am Ende.
+                if (AufParameter(m, e) is { } liste)
+                {
+                    text = MitNamespaces(text[..m.ParameterList.SpanStart] + liste + text[m.ParameterList.Span.End..], e.Faehigkeiten.Select(p => p.Typ));
+                    notiz.Add($"Auf({e.Eingang}) nimmt " + (e.Herkunft || e.Faehigkeiten.Count > 0
+                        ? string.Join(", ", (e.Herkunft ? [nameof(Abstractions.Herkunft)] : Array.Empty<string>()).Concat(e.Faehigkeiten.Select(p => p.Typ)))
+                        : "nur die Nachricht"));
+                    m = Aufs(Typ(text)!).First(x => Nimmt(x, e));
+                }
                 var soll = FunktionsRueckgabe(m.ReturnType.ToString(), e);
                 if (N(m.ReturnType.ToString()) == N(soll)) continue;
                 text = MitNamespaces(text[..m.ReturnType.SpanStart] + soll + text[m.ReturnType.Span.End..], e.Ausgaben);
@@ -419,6 +428,25 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             }
         }
         return notiz.Count == 0 ? null : (text, string.Join(", ", notiz));
+    }
+
+    /// <summary>
+    /// Die Parameterliste eines bestehenden Auf, wenn sie vom Modell abweicht (sonst <c>null</c>): die Nachricht bleibt Wort für Wort, dann die
+    /// Herkunft und die Lese-Fähigkeiten des Modells — vorhandene behalten ihren Namen —, ein vorhandener <c>CancellationToken</c> am Ende (CQRS100).
+    /// </summary>
+    private static string? AufParameter(MethodDeclarationSyntax m, BausteinEingang e)
+    {
+        var ps = m.ParameterList.Parameters;
+        if (ps.Count == 0) return null;
+        static string Basis(string t) => N(t).Split('.')[^1];
+        var rest = ps.Skip(1).ToList();
+        string Vorhanden(string typ, string neu) => rest.FirstOrDefault(p => Basis(p.Type?.ToString() ?? "") == Basis(typ))?.ToString() ?? neu;
+        var soll = new List<string>();
+        if (e.Herkunft) soll.Add(Vorhanden(nameof(Abstractions.Herkunft), $"{nameof(Abstractions.Herkunft)} h"));
+        soll.AddRange(e.Faehigkeiten.Select(f => Vorhanden(f.Typ, $"{f.Typ} {f.Name}")));
+        soll.AddRange(rest.Where(p => Basis(p.Type?.ToString() ?? "") == nameof(CancellationToken)).Select(p => p.ToString()));
+        if (rest.Select(p => p.ToString()).SequenceEqual(soll, StringComparer.Ordinal)) return null;
+        return Liste(m.ParameterList, [ps[0].ToString(), .. soll]);
     }
 
     /// <summary>

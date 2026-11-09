@@ -2218,7 +2218,8 @@
     if(sq&&sp)FLGEO.baender.forEach(b=>{const x1=sq.x-40,x2=sp.x+sp.w+40,name=b.id?(FL().baender.find(x=>x.id===b.id)||{}).name||b.id:"ohne Domäne";
       const fr=h("div",{class:"fl-band"},h("span",{class:"fl-band-t",title:b.id||""},name));fr.style.setProperty("--dc","hsl("+domHue(b.id||"§")+" 45% 55%)");
       const sg=FLGEO.spalten.graphen;
-      if(b.id&&sg){const plus=h("button",{class:"fl-band-plus",title:"Einen Graphen aus einem Katalog an "+name+" binden — eine Übersetzung dieser Domäne nimmt einen seiner Ausgänge",
+      // Nur das Band einer Domäne bindet einen Graphen (über eine Übersetzung); das Band eines Katalogs gehört keiner Domäne.
+      if(b.id&&sg&&!funKatalog({namespace:b.id})){const plus=h("button",{class:"fl-band-plus",title:"Einen Graphen aus einem Katalog an "+name+" binden — eine Übersetzung dieser Domäne nimmt einen seiner Ausgänge",
         onclick:e=>{e.stopPropagation();flBandGraph(b.id,name,e);}},"＋ Graph");plus.style.left=(sg.x-x1)+"px";fr.append(plus);}
       Object.assign(fr.style,{left:x1+"px",top:b.y+"px",width:(x2-x1)+"px",height:b.h+"px"});ebene.append(fr);aus.y2=Math.max(aus.y2,b.y+b.h);});
     FLGEO.gruppen.forEach((r,id)=>{const g=FL().gruppen.find(x=>x.id===id)||{name:id};
@@ -3602,7 +3603,9 @@
       const schalter=(text,an,titel,setze)=>{const c=h("input",{type:"checkbox",onchange:ev=>{setze(ev.target.checked);render();}});c.checked=!!an;return h("label",{class:"ag-flag",title:titel},c," "+text);};
       aus.append(h("div",{class:"kat-form"},schalter("Strom (0..n)",e.strom,"Keine bis viele je Aufruf (IEnumerable) — sonst genau einer bzw. bei mehreren einer der Fälle (OneOf)",
           v=>{e.strom=v;gTitel(t+": Auf("+e.eingang+")"+(v?" als Strom":" ohne Strom"));}),
-        schalter("asynchron",e.asynchron,"Task bzw. IAsyncEnumerable",v=>{e.asynchron=v;gTitel(t+": Auf("+e.eingang+")"+(v?" asynchron":" synchron"));})));
+        schalter("asynchron",e.asynchron,"Task bzw. IAsyncEnumerable",v=>{e.asynchron=v;gTitel(t+": Auf("+e.eingang+")"+(v?" asynchron":" synchron"));}),
+        h("button",{class:"ag-plus",title:"Lese-Fähigkeiten des Katalogs, die dieses Auf nimmt — ein Store der Anwendung setzt sie um (CQRS124)",
+          onclick:ev=>katLiestWahl(f,kat,e,ev)},"⌕ liest"+((e.faehigkeiten||[]).length?" "+e.faehigkeiten.map(p=>p.typ).join(", "):"")+" ▾")));
       zelle(aus,z,5);});
     if(!aufs.length){zelle(h("button",{class:"kat-neu gross",title:"Der Input der Funktion: ein neuer Command oder einer aus den Listen",onclick:ev=>katWahl(f,kat,ev,"input")},"＋ Input"),1,1);
       zelle(h("div",{class:"kat-pfeil"},"─▶"),1,2);zelle(h("div",{class:"kat-pfeil leise"},"─▶"),1,4);
@@ -3707,8 +3710,37 @@
   //   derselben Mechanik wie Aggregat und Store (innenZeige: Detailstufen, ✎, ＋ am Port, gestrichelte Karten, ✕ mit Löschplan). Eingang ↔ Auf ist 1:1
   //   (je Eingangstyp ein Auf, R2), Auf → Ausgänge frei; der Rahmen ist der Konstruktor (Konfig, Technik, Zustand, Logger). Die Form der Ausgabe folgt
   //   aus Strom und Zahl der Ausgänge (1 · 0..1 · 0..n), dazu „asynchron“. Was im Katalog liegt, kennt keine Domäne: dort gibt es keinen Command an
-  //   ein Aggregat und keine Antwort; Lese-Fähigkeiten nimmt nur eine Funktion der Anwendung.
+  //   ein Aggregat und keine Antwort; eine Lese-Fähigkeit deklariert der Katalog selbst, ein Store der Anwendung setzt sie um (CQRS124).
   const funModell=id=>MODEL.bausteinFunktionen.find(f=>"fb:"+f._id===id);
+  // Die Lese-Fähigkeiten eines Katalogs (docs/04 §4.4, CQRS124): je Store ohne Bündel im Katalog seine Lese-Fns, dazu der Store der Anwendung, der sie umsetzt.
+  const katFaehigkeiten=kat=>MODEL.stores.filter(st=>funKatalog(st)===kat).flatMap(st=>(st.readFns||[]).map(fn=>({name:fn.faehigkeit||st.name,
+    store:st.impl&&st.impl.name}))).sort((a,b)=>a.name.localeCompare(b.name));
+  // „⌕ liest ▾“ am Auf im Katalog-Modal: die Lese-Fähigkeiten des Katalogs an- und abwählen, oder eine neue samt Store der Anwendung.
+  function katLiestWahl(f,kat,e,ev){const t="ƒ "+f.name,hat=new Set((e.faehigkeiten||[]).map(p=>p.typ));
+    const setze=(fa,v)=>{e.faehigkeiten=v?[...(e.faehigkeiten||[]),{typ:fa,name:paramName(fa,(e.faehigkeiten||[]).map(p=>p.name).concat(["e","h"]))}]
+      :(e.faehigkeiten||[]).filter(p=>p.typ!==fa);gTitel(t+": Auf("+e.eingang+")"+(v?" liest ":" liest nicht mehr ")+fa);render();};
+    const fas=katFaehigkeiten(kat);
+    menueFix(ev.clientX,ev.clientY,"Auf("+e.eingang+") liest …",[
+      ...fas.map(fa=>({t:(hat.has(fa.name)?"☑ ":"☐ ")+"⌕ "+fa.name+(fa.store?" · 🗄 "+fa.store:" · ⚠ kein Store"),fn:()=>setze(fa.name,!hat.has(fa.name))})),
+      ...(fas.length?[{trenn:1}]:[{hinweis:"Der Katalog deklariert noch keine Lese-Fähigkeit."}]),
+      {t:"＋ neue Lese-Fähigkeit …",fn:()=>katFaehigkeitNeu(f,kat,ev,n=>setze(n,true))}]);}
+  // ＋ neue Lese-Fähigkeit: das Interface im Bereich der Funktion (: IReadStore, eine Methode), dazu ein neuer Store der Anwendung im Bereich einer Domäne
+  //   (der Server legt ihn in den Speicher und gibt dem Speicher die Referenz auf den Katalog).
+  function katFaehigkeitNeu(f,kat,ev,fertig){const x=ev.clientX,y=ev.clientY,doms=[...new Set(MODEL.aggregate.map(A=>A.namespace))].sort();
+    frageFix(x,y,"⌕ Neue Lese-Fähigkeit in "+kat.replace(/\.Katalog$/,""),uniq("IHole"+f.name.replace(/^I(?=[A-ZÄÖÜ])/,"")+"Daten"),
+      "Ein Interface : IReadStore mit genau einer Methode — was die Funktion lesen will, ohne Domäne",n=>{const fe=nameFehler(n);if(fe)return fe;
+        if(!/^I[A-ZÄÖÜ]/.test(n))return "Ein Interface beginnt mit I";
+        setTimeout(()=>frageFix(x,y,"⌕ "+n+" — Methode","Task<int> HoleAsync(Guid id)","Rückgabe, Name und Parameter wie in C# (asynchron: Task<…>)",sig=>{
+          const m=/^\s*(Task(?:<(.+)>)?)\s+([A-ZÄÖÜ]\w*)\s*\((.*)\)\s*$/.exec(sig);if(!m)return "Form: Task<Typ> NameAsync(Typ name, …)";
+          const params=m[4].trim()?m[4].split(",").map(p=>p.trim().split(/\s+/)).map(([typ,name])=>({typ,name})):[];
+          if(params.some(p=>!p.typ||!p.name))return "Je Parameter: Typ und Name";
+          const anlegen=dom=>frageFix(x,y,"🗄 Store der Anwendung für "+n,uniq(n.replace(/^I/,"")+"Speicher"),"Setzt "+n+" um — im Speicher von "+dom,s=>{
+            const fs=nameFehler(s);if(fs)return fs;
+            MODEL.stores.push({_id:"store:"+n,name:n,namespace:f.namespace,istBuendel:false,writeFns:[],klassen:[],
+              readFns:[{_id:"rf:"+n+"."+m[3],name:m[3],faehigkeit:n,params,rueckgabe:m[2]||""}],impl:{name:s,namespace:dom}});
+            gTitel("⌕ "+n+" (Katalog) und 🗄 "+s+" (Speicher)");fertig(n);});
+          if(doms.length===1){setTimeout(()=>anlegen(doms[0]),0);return;}
+          setTimeout(()=>menueFix(x,y,"In welcher Domäne liegt der Store, der "+n+" umsetzt?",doms.map(d=>({t:"▣ "+d,fn:()=>anlegen(d)}))),0);}),0);});}
   const funKatalog=f=>{const ns=String(f.namespace||""),i=ns.indexOf(".Katalog");return i>0&&(ns.length===i+8||ns[i+8]===".")?ns.slice(0,i+8):null;};
   const funMult=e=>e.strom?"0..n":(e.ausgaben||[]).length>1?"0..1":"1";
   const funAufId=(f,e)=>"fa:"+f._id+":"+e.eingang;
@@ -3864,7 +3896,15 @@
         if(alle.length)box.append(h("div",{class:"ag-sek"},"liest (Lese-Fähigkeiten)"),...[...new Set(alle)].map(fa=>schalter("⌕ "+fa,hat.has(fa),"Eine Lese-Fähigkeit als Parameter des Auf",v=>{
           e.faehigkeiten=v?[...(e.faehigkeiten||[]),{typ:fa,name:paramName(fa,(e.faehigkeiten||[]).map(p=>p.name).concat(["e","h"]))}]:(e.faehigkeiten||[]).filter(p=>p.typ!==fa);
           gTitel(t+": Auf("+e.eingang+")"+(v?" liest ":" liest nicht mehr ")+fa);})));}
-      else box.append(h("div",{class:"kom-wo"},"Im Katalog: keine Lese-Fähigkeit — ein Katalog kennt keinen Store der Anwendung."));
+      else{const hat=new Set((e.faehigkeiten||[]).map(p=>p.typ));
+        const setze=(fa,v)=>{e.faehigkeiten=v?[...(e.faehigkeiten||[]),{typ:fa,name:paramName(fa,(e.faehigkeiten||[]).map(p=>p.name).concat(["e","h"]))}]
+          :(e.faehigkeiten||[]).filter(p=>p.typ!==fa);gTitel(t+": Auf("+e.eingang+")"+(v?" liest ":" liest nicht mehr ")+fa);};
+        box.append(h("div",{class:"ag-sek",title:"Der Katalog deklariert, was er lesen will (: IReadStore); ein Store im Speicher der Anwendung setzt es um (CQRS124)"},
+            "liest (Lese-Fähigkeiten des Katalogs)"),
+          ...katFaehigkeiten(kat).map(fa=>schalter("⌕ "+fa.name+(fa.store?"":" — ⚠ kein Store setzt sie um"),hat.has(fa.name),
+            fa.store?"umgesetzt von "+fa.store:"Noch kein Store der Anwendung setzt sie um (CQRS124)",v=>setze(fa.name,v))),
+          h("button",{class:"ag-plus",title:"Eine Lese-Fähigkeit im Katalog und der Store der Anwendung, der sie umsetzt",
+            onclick:ev=>katFaehigkeitNeu(f,kat,ev,n=>{setze(n,true);render();})},"＋ neue Lese-Fähigkeit …"));}
       ruempfe(r=>String(r.name||"").includes("("+e.eingang+")"));return box;}
     if(n.kind==="lausche"){ruempfe(r=>/Lausche/.test(String(r.name||"")));return box;}
     if(x.startsWith("rec:")){const r=n.ref;

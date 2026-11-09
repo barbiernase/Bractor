@@ -103,7 +103,23 @@ public static class Gesten
 
         var (geloescht, nicht) = Loeschen(board, soll, delta, ws);
         var bericht = DateiSchreiber.Schreibe(modell, ws);
+        SpeicherNutztKataloge(modell, delta, ws);
         return new GestenBericht(ws.Patch(), bericht, geloescht, nicht);
+    }
+
+    /// <summary>
+    /// Eine Lese-Fähigkeit eines Katalogs setzt ein Store im Speicher der Anwendung um (CQRS124, docs/07 §7.2): legt die Geste ihn an bzw. ändert sie
+    /// ihn, bekommt der Speicher die Referenz auf den Katalog (wie „neuer Katalog“ die der Übersetzungen) — nur für die Stores dieser Geste.
+    /// </summary>
+    private static void SpeicherNutztKataloge(EditorModell modell, KartenDelta delta, Dateipuffer ws)
+    {
+        var namen = (delta.Karten.GetValueOrDefault("stores") ?? []).Select(k => (string?)k["name"] ?? "").ToHashSet(StringComparer.Ordinal);
+        if (namen.Count == 0) return;
+        var speicher = Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Speicher);
+        if (ws.Lies($"{speicher}/{speicher}.csproj") == null) return;
+        foreach (var st in (modell.Lesen?.Stores ?? []).Where(s => namen.Contains(s.Name) && s.Impl != null))
+            if (Abstractions.Projektstruktur.KatalogVon(st.Namespace) is { } katalog)
+                Kataloge.SpeicherNutzt(ws, katalog);
     }
 
     // ══ Stempel aus dem Code-Stand ═══════════════════════════════════════════════════════════════

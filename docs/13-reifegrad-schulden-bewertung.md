@@ -16,7 +16,7 @@ Hinweise und Fristen aus; was nach einem Fakt geschieht, stößt ein Client an, 
 liegen **Funktionen und Graphen nur in Katalogen**, eine Anwendung macht sie mit **Übersetzungen** (`<Wurzel>.Uebersetzungen`, Routing über den
 Typ) domänenspezifisch, die **Domäne bleibt rein** (kein Katalog in Schreib- und Leseseite); die Rolle `Pipeline` ist entfallen (docs/04 §4.4,
 docs/07). Damit erledigt: FV-1, FV-2, FB-6, FB-8, FB-21, PF-7
-(§13.6); offen: GF-2, GF-3, GF-6, VM-3. Der Editor (Fläche in sieben Spalten, docs/10 §10.9): ED-1, ED-2, ED-3, ED-4.
+(§13.6); offen: GF-2, GF-3, GF-6, VM-3. Der Editor (Fläche in sieben Spalten, docs/10 §10.9): ED-1, ED-2, ED-3 (ED-4, Lese-Fähigkeit eines Katalogs im Modal, erledigt 2026-11-09).
 
 **Frühere Umbauten:** Pub/Sub-Neustrukturierung (2026-10-26 bis 2026-10-29) und „Funktionen vor dem Aggregat“ (2026-11-01); was sie erledigt
 haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7).
@@ -28,7 +28,6 @@ haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS1
 | ED-1 | Editor-Fläche: Karten lassen sich in ihrer Zelle nicht von Hand senkrecht umordnen (die Reihenfolge rechnet der Editor); eine neue, leere Domäne erscheint nicht als Band | P3 |
 | ED-3 | Werkbank-Abnahme rot im Worker-Schritt (2026-11-04, Server): zwei Bilddateien in der Quelle `linienimport` ergeben in 120 s kein `ImagePairErstellt`; ⟳, Akteur, Fläche und Gesten davor sind grün. Ungeklärt, ob Dateiwächter, Instanz (Rechner) oder Kette; der Test war seit E4 aus | P1 |
 | ED-2 | Gesten-Schreiber: schreibt er die Basisliste eines Akteurs neu (`IDarf`/`IHoert`), geht ein Kommentar in der Liste verloren | P2 |
-| ED-4 | Editor: das Funktions-Modal bietet die Lese-Fähigkeit eines Katalogs nicht an (im Code geht es: `: IReadStore` im Katalog, ein Store im Speicher setzt sie um, CQRS124) — und keine Geste legt den Store der Anwendung dazu an | P2 |
 | VM-3 | Die Laufzeit-Suiten nach dem Umbau „ohne Pipeline“ (2026-11-09) sind nicht gelaufen (Fokus Editor): Prüfdomäne und Verhaltens-Netz mit Auftrag und Verteilung als Reaktionen des Workers, Import mit Ids aus `Herkunft.NeueId`, die Prüfstand-Tests von Lage, Gesten und Sicht; S5 misst seitdem die Reaktionen statt der Graphen (neue Baseline) | P1 |
 | GF-6 | Kein Messblock für einen Client, der draußen rechnet (Klassifikation, Training; S2 ist entfallen), und keiner für einen Graphen unter Last außer der Zubuchung in S5 | P3 |
 | VM-2 | S3 und S5 brauchen eine neue Baseline: seit Schritt 6 (2026-11-07) liegt in der Kette ein Client — der `Reaktionsworker` des Treibers (`Cqrs.Vermessung/Reaktionsworker.cs`) meldet in S3 jedes Teil am Sammelvorgang, löst in S4 die Range auf und gibt in S5 Aufträge, Verteilungen und unterschrittene Posten an die Köpfe der Graphen (Log lesen, Command, Quittung). Messwerte davor sind mit denen danach nicht vergleichbar | P2 |

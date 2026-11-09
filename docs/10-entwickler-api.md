@@ -551,7 +551,10 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Auf stehen Strom, asynchron (`Task`/`IAsyncEnumerable`) und Herkunft, dazu der Rumpf. „＋ Ausgang“ bietet gestrichelt eine neue Nachricht und einen
   neuen Hinweis; der Spaltenkopf Eingänge eine neue Nachricht mit Auf und eine vorhandene Nachricht; der Rahmen Konfig (neu oder vorhanden), Technik
   (neu als Schnittstelle mit Umsetzung oder vorhanden) und den Logger. Eine Funktion im Katalog kennt keine Domäne: kein Command an ein Aggregat
-  (dafür gibt es die Übersetzung). Eine Lese-Fähigkeit des Katalogs (`: IReadStore` im Katalog, umgesetzt im Speicher der Anwendung, CQRS124) nimmt
-  sie im Code; das Modal bietet sie noch nicht an (offen, docs/13). Ein Doppelklick auf eine Funktion (Komposition, Baukasten) öffnet dieses Modal; Technik
+  (dafür gibt es die Übersetzung). **Lesen** über eine Lese-Fähigkeit des Katalogs (`: IReadStore` im Katalog, umgesetzt von einem Store im Speicher der
+  Anwendung, CQRS124): im ✎ des Auf bzw. im Katalog-Modal „⌕ liest ▾“ am Auf an- und abwählen; „＋ neue Lese-Fähigkeit …“ fragt Interface, Methode
+  (`Task<int> ZaehleAsync(Guid paar)`) und die Domäne des Stores — es entstehen das Interface im Bereich der Funktion, der Parameter am Auf und der
+  Store `<Wurzel>.Infrastructure/<Bereich>/<Name>.cs` mit Stub; der Speicher bekommt die Referenz auf den Katalog. Ein Auf übernimmt Herkunft und
+  Lese-Fähigkeiten auch an einer bestehenden Funktion (die Nachricht und ein `CancellationToken` bleiben). Ein Doppelklick auf eine Funktion (Komposition, Baukasten) öffnet dieses Modal; Technik
   und alles Übrige („✎ Formular“) das bisherige Formular. Neue Zustandsklassen legt das Modal noch nicht an.
 - `--check` prüft die Fläche mit (Kanten an vorhandenen Ports, je Typ höchstens ein deklarierender Port).
