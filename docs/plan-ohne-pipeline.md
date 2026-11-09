@@ -1,198 +1,97 @@
-# Plan: Funktionen nur in Katalogen — die Pipeline-Schicht geht auf
+# Plan: Graphen im Katalog, Übersetzungen in der Domäne — ohne Pipeline
 
-Stand 2026-11-09, **nur Plan, nichts umgesetzt; die vier offenen Punkte (§5) sind entschieden.** Er folgt aus Tobis Entscheidung vom 2026-11-09 zur offenen Annahme A4 aus
-[plan-katalog-und-graphen.md](plan-katalog-und-graphen.md): **Funktionen gibt es nur noch in Katalogen.** Umgesetzt wird schrittweise, je Schritt auf
-Tobis Wort. Seit dem 2026-11-09 liegt der Fokus auf Editor und Oberfläche: geprüft wird je Schritt mit `dotnet build` und in der Werkbank, die
-Server-Suiten laufen erst zur Abnahme und nur auf Tobis Wort.
+Stand 2026-11-09. Ersetzt den gleichnamigen Plan vom Vormittag (Graphen in die Schreibseite). Tobi am 2026-11-09: „Wir brauchen Pipeline nicht.
+Graphen sind auch domänenagnostisch, sie werden erst domänenspezifisch durch die Übersetzung. Die Übersetzungen müssen dann in den Domänen leben.“
+Umgesetzt wird schrittweise; geprüft je Schritt mit `dotnet build` und in der Werkbank, Server-Suiten nur zur Abnahme und auf Tobis Wort.
 
-## 1. Worum es geht
+## 1. Das Bild
 
-`<Wurzel>.Pipeline` (Rolle `Ablaeufe` in `Abstractions/Projektstruktur.cs`) stammt aus dem Fluss-Konzept, bevor es Funktionen und Graphen gab. Heute
-hat die Schicht nur noch eine Aufgabe: Sie ist der Ort, der den Katalog **und** die Domäne kennt. Ein Graph der Anwendung nennt einen Katalog-Graphen
-und übersetzt dessen Ausgaben in Commands an Aggregate; dafür muss er über beiden liegen. Daneben hielt sie die Funktionen der Anwendung (A4).
+Es gibt zwei Arten von Code, die nichts voneinander wissen müssen, und eine dünne Naht dazwischen:
 
-Fallen die Funktionen der Anwendung weg, bleibt in der Schicht nur **Verdrahtung**: Graphen, Übersetzungen und die Nachrichten, mit denen ein Client einen
-Graphen anstößt. Dafür braucht es kein eigenes Projekt und keinen eigenen Begriff. Der Graph liegt dann neben dem Aggregat, an das er schreibt
-(`Domain/ImagePair/Graphen.cs`), so wie Commands und Events dort liegen.
-
-Was damit wegfällt:
-
-- die Rolle `Ablaeufe` samt Suffix `.Pipeline`, die Projekte `Domain.Pipeline` und `Pruefdomaene.Pipeline`;
-- die Abbildung „Namespace der Abläufe → Domäne“ (`Projektstruktur.DomaeneDerAblaeufe`, `rahmen.ablaeufeSuffix`, im Editor `ablaufNs` und
-  `ablaufDomaene`). Sie macht heute die Zuordnung eines Graphen zu seinem Band umständlich und hat am 2026-11-09 einen Graphen ins falsche Projekt gelegt;
-- die Funktion der Anwendung als Primitive: Technik, Konfig-Records und Commands ohne Ziel zwischen Funktionen gibt es nur noch im Katalog;
-- dass eine Funktion ein Event hört (die Antwort auf ihren eigenen Aggregat-Command, CQRS108). Eine Katalogfunktion kennt kein Event der Domäne.
-
-Was bleibt: der Katalog als eigenes Projekt, das nur `Abstractions` (und `Core`, andere Kataloge) kennt (A8). Der Compiler prüft weiter, dass eine
-Funktion die Domäne nicht kennt. Die Gegenrichtung — die Domäne kennt keine Funktionsnachricht — prüft künftig ein Analyzer statt der Projektgrenze (§3).
-
-## 2. Was eine Funktion heute nur kann, weil sie die Domäne sieht
-
-Der Bestand zeigt drei Fähigkeiten, die mit der Schicht wandern müssen. Die Beispieldomäne braucht keine davon mehr (ihre Funktionen liegen schon in
-`Bildvorschau.Katalog`); die Prüfdomäne und die Sonde brauchen alle drei.
-
-### 2.1 Ein Command an ein Aggregat
-
-`Nachschub` gibt `BuchePostenZu` aus, `Zielbuchung` ebenso, `Auftragsabwicklung` gibt `ReservierePosten` und `BelegeKontingent` aus. Im Katalog
-geht das nicht: Die Funktion gibt einen eigenen Command ohne Ziel aus, und eine Übersetzung im Graphen macht daraus den Command an das Aggregat. So ist
-die Bildaufnahme schon gebaut. Das ist kein Verlust, sondern genau die eine Stelle zwischen Katalog und Domäne.
-
-Dabei zeigt sich: Viele Funktionen der Prüfdomäne sind nur eine Abbildung Feld für Feld (`Nachschub`, `Gutschrift`, `Merkmalsbildung`, `Zielbuchung`,
-der Antwort-Teil von `Auftragsabwicklung` und `Verteilabwicklung`). Sie werden ganz zu Übersetzungen und verschwinden als Funktion.
-
-### 2.2 Die Antwort auf den eigenen Command
-
-`Auftragsabwicklung` hört `PostenReserviert` als Antwort auf `ReservierePosten` und gibt daraufhin `VermerkeReservierung` an den Auftrag;
-`Zielbuchung` hört `PostenZugebucht` und meldet es der Verteilung. Heute geht das, weil die Funktion das Event kennt (CQRS108). Eine Übersetzung schickt
-ihren Command zwar schon ab (`FunktionsKindActor.UebersetzeAsync`), aber ihre Antwort hört niemand.
-
-**Vorschlag: die Antwort-Übersetzung.** Eine Übersetzung darf auch ein Event nehmen — die Antwort auf den Command, den die Übersetzung erzeugt, die sie
-in `[Von]` nennt:
-
-```csharp
-public sealed record Auftragsablauf(
-    [Kopf] Auftragsabwicklung Abwickeln,                                                        // Katalog: gibt PostenAnfordern aus
-    [Von(nameof(Abwickeln))] Uebersetze<PostenAnfordern, ReservierePosten> Reservieren,         // an das Aggregat Posten
-    [Von(nameof(Reservieren))] Uebersetze<PostenReserviert, VermerkeReservierung> Vermerken,   // seine Antwort an den Auftrag
-    [Von(nameof(Reservieren))] Uebersetze<ReservierungAbgelehnt, VermerkeAbsage> Absagen) : IGraph;
-```
-
-- Welche Events in Frage kommen, steht in der Signatur des `Decide` für `ReservierePosten` (R1). Ein anderes Event ist ein Build-Fehler.
-- Die Antwort-Übersetzung läuft inline im selben Kind, direkt nach dem Senden (wie heute das Weiterrechnen einer Antwort). Ihr Command geht an ein
-  Aggregat, an einen Knoten des Graphen oder an einen fremden Kopf, wie bei jeder Übersetzung. Die Kennung kommt aus Aufruf, Ort, Stelle und Nummer der
-  Antwort (`Kettenvertrag.Antwort`), die Ursache ist das Antwort-Event.
-- Geht die Antwort an den Knoten zurück, der die Übersetzung speist (ein Katalog-Command an die Funktion, die den ersten gab), ist das eine Antwort und
-  keine Kante eines Kreises: CQRS115 zählt sie nicht. Das ist dieselbe Regel, die heute für CQRS108 gilt, nur ausdrücklich im Graphen.
-- Eine Funktion hört danach **nie** ein Event. Ihre Eingänge sind nur Commands ohne Ziel (GR-EINGANG wird einfacher), `Traeger.Antworten` und der
-  Antwort-Zweig in `RechneAsync` fallen weg.
-
-Die Alternative wäre, Antworten ganz aufzugeben und jede Rückmeldung als Reaktion eines Clients auf das Fakt zu bauen (wie seit Schritt 6). Das kostet
-einen Umweg über das Log und einen Client, wo heute ein Schritt reicht; ich empfehle die Antwort-Übersetzung.
-
-### 2.3 Lesen aus einem Store der Anwendung
-
-`Schaetzer` liest die Projektion Messreihe über die Lese-Fähigkeit `IHoleMessreihe`, die die Leseseite der Prüfdomäne deklariert. Ein Katalog kennt
-die Stores der Anwendung nicht.
-
-**Vorschlag: der Katalog deklariert die Fähigkeit, die Anwendung setzt sie um.** Eine Fähigkeit ist schon heute eine Schnittstelle (`: IReadStore`, genau
-eine Funktion, CQRS051), die ein Store implementiert. Der Katalog deklariert seine eigene, mit seinen eigenen Typen:
-
-```csharp
-// Pruefdomaene.Katalog/Schaetzung
-public interface IHoleReihe : IReadStore { Task<Reihe> HoleAsync(Guid stelle); }
-public sealed class Schaetzer(IZaehlwerk zaehler) : IFunktion
-{
-    public async Task<Geschaetzt> Auf(Merkmal m, IHoleReihe reihe) { … }
-}
-```
-
-Der Store der Anwendung in `<Wurzel>.Infrastructure` implementiert sie zusätzlich zu den Fähigkeiten seiner Leseseite und liest dafür aus seinem eigenen
-Read-Model. Die Speicher-Rolle darf dazu Kataloge referenzieren. Welcher Store einer Instanz die Fähigkeit liefert, folgt aus dem Code: genau ein Store
-der Anwendung implementiert sie, sonst ein Build-Fehler (wie heute bei den Fähigkeiten der Leseseite). Die Fähigkeits-Fabrik der Funktionen findet
-so auch Katalog-Fähigkeiten. Der allgemeine Store-Test gilt unverändert.
-
-### 2.4 Kleinkram, der mitwandert
-
-- **Neue Ids:** `Herkunft.NeueId<T>()` verlangt einen Aggregat-Typ. Für den Katalog gibt es `Herkunft.NeueId(zweck)` als `Guid` (dieselbe Ableitung),
-  die Übersetzung macht daraus ausdrücklich `Id<T>` (A1 erlaubt `Guid` → `Id<T>` über `[Feld]`). So braucht es `Neu = true` an `[Feld]` nicht.
-- **Logik in Antworten:** `VermerkeAbsage` baut heute einen Text aus zwei Zahlen. Das ist Logik und gehört nicht in eine Übersetzung; der Command
-  trägt künftig die Zahlen, den Text bildet die Projektion bzw. der Client.
-- **Hinweise:** Eine Katalogfunktion darf Hinweise ausgeben (Katalog-Typen); die Akteure, die sie hören, kennen den Katalog (Rolle Akteure nutzt
-  Kataloge schon heute).
-
-## 3. Die neue Projektstruktur
-
-| Rolle | Projekt | Was dort liegt | darf referenzieren |
+| | wo | was | kennt |
 |---|---|---|---|
-| Schreibseite | `<Wurzel>` | Aggregate, Commands, Events, Hinweise, Wertobjekte, Enums, Aggregat-Queries — **und Graphen der Anwendung mit ihren Übersetzungen und den Nachrichten der Clients an ihre Köpfe** | Abstractions, Core, Kataloge |
-| Leseseite | `<Wurzel>.Projections` | unverändert | Schreibseite |
-| Speicher | `<Wurzel>.Infrastructure` | Stores; **dazu die Fähigkeiten aus Katalogen, die sie umsetzen** | Schreib-, Leseseite, Kataloge |
-| Akteure | `<Wurzel>.Akteure` | unverändert | Schreib-, Leseseite, Kataloge |
-| Leitung, Komposition | unverändert, ohne Pipeline | | |
-| Katalog | `<Name>.Katalog` | Funktionen, ihre Commands ohne Ziel, Hinweise, Konfig, Technik, Graphen, Fähigkeiten zum Lesen | Abstractions, Core, Kataloge |
+| **Katalog** | `<Name>.Katalog` | Funktionen, **Graphen**, ihre Commands ohne Ziel und Hinweise, Konfig, Technik, Lese-Fähigkeiten | Abstractions, Core, andere Kataloge |
+| **Domäne** | `<Wurzel>` (Schreibseite) | Aggregate, Commands, Events, Hinweise, Wertobjekte, Aggregat-Queries — **und die Übersetzungen** | dazu die Kataloge, die sie übersetzt |
+| **Umgebung** | `umgebungen/<name>/graphen/<instanz>.json` | welcher Katalog-Graph wie oft läuft, mit Konfig, Akteur, Rechner | — |
 
-Weil die Schreibseite jetzt Kataloge referenziert, prüft ein **Analyzer**, was bisher die Projektgrenze garantierte:
+- Ein **Graph** ist immer domänenneutral und liegt in einem Katalog, wie eine Funktion. Es gibt keinen Graphen der Anwendung mehr, keinen „Ablauf“, keine
+  Rolle `Ablaeufe`, kein `<Wurzel>.Pipeline`. Was früher ein Ablauf war (Dateiwächter + Bildaufbereitung), ist ein Graph im Katalog.
+- Eine **Übersetzung** macht ihn domänenspezifisch. Sie ist eine eigene kleine Deklaration in der Domäne, nicht mehr ein Knoten im Graphen.
+- Die **Umgebung** sagt, welche Katalog-Graphen laufen (Instanzen). Struktur ist Code, Auswahl und Werte sind Konfig (W7) — unverändert.
 
-- **CQRS122 (neu):** Zustand eines Aggregats, `Decide`, `Apply`, Commands an Aggregate, Events, Hinweise und Aggregat-Queries der Schreibseite nennen
-  keinen Typ aus einem Katalog. Erlaubt sind Katalog-Typen nur in Graphen und in Übersetzungen.
-- **CQRS098 (Lage)** kennt keine Funktion, keine Technik, keinen Konfig-Record außerhalb eines Katalogs mehr; ein Graph liegt in `Graphen.cs` im Bereich der
-  Schreibseite; ein Command ohne Ziel der Anwendung (ein Client stößt damit einen Graphen an) in `Commands.cs` daneben.
-- **GR-EINGANG** wird enger: eine Funktion nimmt nur Commands ohne Ziel. CQRS108 meldet jedes Event an einer Funktion.
-- **Antwort-Übersetzung:** CQRS119 erlaubt als `TEin` ein Event, wenn `[Von]` genau eine Übersetzung mit Aggregat-Command nennt und deren `Decide`
-  das Event ausgeben kann; sonst ein Build-Fehler mit eigener Meldung (CQRS123, neu).
+## 2. Die Übersetzung als Code-Fakt
 
-Eine Alternative wäre, die Schicht unter ehrlichem Namen (`.Ablaeufe`) zu behalten, nur mit Graphen und Übersetzungen. Dann bliebe die Projektgrenze, aber
-auch die Namespace-Abbildung und ein Projekt mehr für jede Anwendung. Ich empfehle das Auflösen: die Zugehörigkeit eines Graphen zu seiner Domäne steht
-dann direkt im Namespace, wie bei allem anderen.
+```csharp
+// Domain/ImagePair/Uebersetzungen.cs
+namespace Domain.ImagePair;
 
-## 4. Schritte
+/// <summary>Das gedeutete Bild aus der Bildaufbereitung wird ein Paar: die Id aus der Guid des Schlüssels, alles andere nach Namen.</summary>
+[Feld(nameof(NimmBildAuf.AggregateId), nameof(BildGedeutet.Paar))]
+public sealed record Aufnehmen : IUebersetzung<BildGedeutet, NimmBildAuf>;
+```
 
-Jeder Schritt baut für sich. Abgenommen wird im Editor: was der Schritt einführt, wird in der Werkbank gezeigt bzw. angelegt und gebaut.
+- Marker `IUebersetzung<TEin, TAus>` (ersetzt den Knotentyp `Uebersetze<TEin, TAus>`); `[Feld(Ziel, Quelle)]` steht am Record. Der Name des Records
+  ist der Name der Übersetzung (Karte, Spur, Command-Ids).
+- Die Zuordnung bleibt, wie sie ist (A1, CQRS119): `[Feld]`, sonst gleicher Name mit implizit zuweisbarem Typ, sonst der Standardwert; Feld für Feld,
+  ohne Logik (CQRS121).
+- Lage: Primitive `Uebersetzung`, Schreibseite, Sammeldatei `Uebersetzungen.cs` im Bereich des Aggregats, an das sie schreibt bzw. dessen Antwort sie
+  nimmt (für eine Kopf-Übersetzung: der Bereich der Nachricht, die sie nimmt).
 
-### Schritt 1 — Antwort-Übersetzung und Fähigkeiten aus dem Katalog
+## 3. Wohin eine Nachricht geht — Routing über Typen (Invariante 3)
 
-- `Uebersetzungsform`: Event als `TEin` (§2.2), CQRS119/123; Generator der Wegtabelle: je Übersetzung mit Aggregat-Command ihre Antwort-Übersetzungen;
-  `FunktionsKindActor.UebersetzeAsync` rechnet sie nach dem Senden; CQRS115 zählt die Antwort an den Ausgangsknoten nicht als Kreis.
-- Fähigkeits-Fabrik: Fähigkeiten aus einem Katalog, umgesetzt von genau einem Store der Anwendung (§2.3); die Speicher-Rolle nutzt Kataloge.
-- `Herkunft.NeueId(zweck)` (§2.4).
-- Sicht und Editor: die Antwort-Übersetzung steht als eigene Karte in der Spalte Übersetzungen, ihre Kante kommt vom Aggregat (Rücklauf); das Modal
-  der Zuordnung zeigt links die Felder des Events.
-- Sonde: je ein Beispiel für Antwort-Übersetzung und Katalog-Fähigkeit, `soll.txt` erweitert.
+Eine Übersetzung nennt keinen Graphen und keinen Knoten. Sie nimmt einen **Typ**, und der Typ entscheidet:
 
-### Schritt 2 — Prüfdomäne ohne Pipeline
+1. **Aus einem Graphen hinaus.** Was ein Knoten eines laufenden Graphen ausgibt und eine Übersetzung nimmt, wird übersetzt — inline, im Kind des Knotens.
+   Das gilt für einen Ausgang wie für einen Zwischenstand, den der Graph intern weitergibt (Abgriff). Nehmen mehrere Übersetzungen denselben Typ, ist
+   das eine Gabel: jede erzeugt ihre Nachricht.
+2. **Ergebnis einer Übersetzung.** Ein Command an ein Aggregat geht an das Aggregat; ein Command ohne Ziel geht an den Kopf genau eines Graphen (CQRS116).
+3. **Antwort.** Antwortet das Aggregat auf den Command einer Übersetzung mit einem Event, das eine Übersetzung nimmt, rechnet sie gleich weiter, im
+   selben Kind (eine **Antwort-Übersetzung**, `IUebersetzung<PostenReserviert, VermerkeReservierung>`). Ihr Ergebnis geht wie in 2. Geht es an den Kopf
+   eines Graphen, ist das eine neue Kette, kein Kreis. Ob das Event als Antwort überhaupt kommen kann, prüft CQRS123 (das Event steht in der Signatur
+   des `Decide` eines Commands, den eine Übersetzung erzeugt).
+4. **Von einem Client.** Ein Akteur gibt entweder den Eingang des Katalog-Graphen direkt hinein (`IDarf<DateiGefunden>`) oder eine Nachricht der Domäne,
+   die eine **Kopf-Übersetzung** in diesen Eingang übersetzt (`IUebersetzung<DateiGefundenAngefordert, DateiGefunden>`). Übersetzt wird beim Annehmen
+   des Eingangs.
+5. **Kein Empfänger.** Ein Command ohne Ziel, der einen laufenden Graphen verlässt, ohne dass eine Übersetzung oder ein anderer Graph ihn nimmt, ist ein
+   Build-Fehler (CQRS120, A3). Hinweise dürfen hinaus, an die Akteure, die sie hören.
 
-- Neues Projekt `Pruefdomaene.Katalog`: `Freigabeautomat`, `Mahnwesen` (mit `IMahnversand`), `Importlauf` (mit `IZeilenquelle`), `Importannahme`,
-  `Ausreisserpruefung`, `Schaetzer` (mit `IZaehlwerk` und `IHoleReihe`), `Zielaufteilung` und der Ausgabe-Teil von `Auftragsabwicklung` und
-  `Verteilabwicklung`, je mit eigenen Commands ohne Ziel.
-- Was nur abbildet, wird Übersetzung: `Nachschub`, `Gutschrift`, `Merkmalsbildung`, `Zielbuchung`, die Antwort-Teile (§2.1, §2.2).
-- Die Graphen ziehen nach `Pruefdomaene/<Bereich>/Graphen.cs`, die Nachrichten der Clients an ihre Köpfe nach `Pruefdomaene/<Bereich>/Commands.cs`;
-  der `ReaktionsWorker` gibt dieselben Commands wie heute.
-- Der Store der Messung setzt `IHoleReihe` um.
-- `Pruefdomaene.Pipeline` und seine Referenzen (Akteure, Leitung, Laufzeit, Client.Worker, Solution) entfallen.
+Folge: Routing ist eine Eigenschaft der Typen, nicht einer Instanz. Läuft derselbe Katalog-Graph mehrmals (eine Instanz je Linie), übersetzt dieselbe
+Übersetzung die Ausgaben aller Instanzen. Wer je Instanz anderes braucht, braucht verschiedene Typen (A5, generische Ausprägungen) — so wie heute ein
+Command genau einen Empfänger hat.
 
-### Schritt 3 — Beispieldomäne ohne Pipeline
+Der **Akteur einer Instanz** (Graph mit Quelle) muss dürfen, was aus seinen Ausgängen nach der Übersetzung entsteht (Start-Prüfung,
+`GraphInstanzen.Aus`): beim Linienimport das Kamerasystem `NimmBildAuf`.
 
-- `Linienimport` und `Bildaufnahme` ziehen nach `Domain/ImagePair/Graphen.cs`, ihre Client-Nachrichten daneben. `Domain` referenziert
-  `Bildvorschau.Katalog` und `Bildverarbeitung.Katalog`.
-- Tobis Versuche (`Domain.Pipeline/Datensatz/Graphen.cs`, `Domain/Pipeline/ImagePair/*`) ziehen nur auf sein Wort mit.
-- `Domain.Pipeline` und seine Referenzen (Akteure, Leitung, Laufzeit, Integrationstests, Codegen, Solution) entfallen; die Umgebungen bleiben (sie nennen
-  Graphen, keine Projekte).
+## 4. Was bleibt aus dem Plan vom Vormittag
 
-### Schritt 4 — die Rolle verschwindet
+- **Lese-Fähigkeit aus dem Katalog** (umgesetzt, 54fd8181): der Katalog deklariert, was er lesen will, ein Store im Speicher der Anwendung setzt es um;
+  CQRS124 meldet eine Fähigkeit ohne Store.
+- **`Herkunft.NeueId(zweck)`** (umgesetzt): eine Id ohne Aggregat-Typ für Katalogfunktionen; die Übersetzung macht daraus `Id<T>` (`[Feld]`).
+- **CQRS122** (neu, Schritt 4): Zustand, `Decide`, `Apply`, Commands an Aggregate, Events, Hinweise und Aggregat-Queries nennen keinen Katalog-Typ —
+  erlaubt sind sie nur in Übersetzungen. Die Domäne referenziert Kataloge, der Analyzer hält sie trotzdem sauber.
+- Die Antwort-Übersetzung über `[Von]` auf eine Übersetzung im Graphen (54fd8181) wird durch das Routing über Typen (§3.3) ersetzt.
 
-- `Projektstruktur`: Rolle `Ablaeufe` und `DomaeneDerAblaeufe` weg; Graph und Client-Command bei der Schreibseite; Funktion, Technik, Konfig nur im
-  Katalog; `NutzenKataloge` = Schreibseite, Speicher, Akteure, Leitung, Komposition.
-- `Lageart`, CQRS098, CQRS122 (neu), GR-EINGANG/CQRS108 enger; Grammatik (`DomainEditor/Grammatik.cs`) mit Gegenstücken.
-- `Strukturort`, `Scaffolder`, `Schreiben/Kataloge.cs`: ein neuer Graph landet im Bereich seiner Domäne; „Funktion der Anwendung“ gibt es nicht mehr.
-- Extractor und Sicht: das Band eines Graphen ist die Domäne seines Namespace (`GraphBand` ohne Umweg); `rahmen.ablaeufeSuffix` entfällt.
-- `Cqrs.Codegen`, `scripts/server-einrichten.sh`, Projektdateien.
-- Laufzeit: `Traeger.Antworten` und der Antwort-Zweig in `FunktionsKindActor.RechneAsync` fallen weg.
+## 5. Bestand
 
-### Schritt 5 — Sonde
+| heute | wird |
+|---|---|
+| `Domain.Pipeline/ImagePair`: `Linienimport` (Dateiwächter → Bildaufbereitung → Übersetzung) | Graph im Katalog `Bildvorschau.Katalog` (Dateiwächter → Bildaufbereitung, ohne Übersetzung); Instanzen wie heute |
+| `Domain.Pipeline/ImagePair`: `Bildaufnahme` (Kopf Bildaufbereitung → Übersetzung) | entfällt: eine Instanz des Katalog-Graphen `Bildaufbereitung` (Kopf `DateiGefunden`) |
+| die Übersetzung `Aufnehmen` in beiden | eine Übersetzung `Domain/ImagePair/Uebersetzungen.cs` |
+| `Pruefdomaene.Pipeline`: Funktionen, die die Domäne kennen, ihre Graphen | `Pruefdomaene.Katalog` (neutral), die Abbildungen als Übersetzungen in `Pruefdomaene/<Bereich>/Uebersetzungen.cs` |
+| `Pruefdomaene.Pipeline/Skalierung`: `Hochrechnung` mit zwei Übersetzungen | Kopf- und Ausgangs-Übersetzung in `Pruefdomaene/Messung`; `Skalierer` läuft als Instanz eines Graphen im Katalog `Rechenwerk.Katalog` |
+| Sonde: `Ablaeufe.Funkortung` (Graph `Ortung` mit Übersetzungen) | Graph `Ortung` im Sonden-Katalog, Übersetzungen in `Funkortung.Ortung` |
+| Tobis Versuch `Domain/Pipeline/ImagePair/Graphen.cs` (in-Graph-Übersetzungen) | bleibt liegen, bis Tobi sagt, was daraus wird — im neuen Modell sind es vier Übersetzungen in `Domain/ImagePair` |
 
-- Die rund 30 Funktionen der Sonde (Leihwesen, Kundenportal, Anlagen, Warenkatalog, Wetterdienst) ziehen in Sonden-Kataloge wie heute schon
-  `Katalog.Peilung.*`; was nur abbildet, wird Übersetzung. `Ablaeufe.Funkortung.cs.txt` geht in die Schreibseite der Funkortung auf.
-- `soll.txt` (Lage, Besitz, Sicht) und das Gesten-Skript (`Gezeichnet.gesten.json`) ziehen nach; die Sonde muss weiter alle allgemeinen Primitive
-  abdecken, jetzt mit Antwort-Übersetzung und Katalog-Fähigkeit.
+## 6. Schritte
 
-### Schritt 6 — Editor
-
-- „Wo liegt die neue Funktion?“ bietet nur Kataloge (`komFunktionNeu`), ebenso „ƒ neue Funktion der Anwendung, die sie nimmt …“ am Kopf.
-- „＋ Graph“ am Band legt den Graphen im Namespace der Domäne an; `ablaufNs` und `ablaufDomaene` entfallen.
-- Antwort-Übersetzungen auf der Fläche (Karte, Rücklauf-Kante vom Aggregat) und im Modal; „＋ ↦“ an einem Aggregat-Command bietet zusätzlich
-  „Antwort übersetzen“ für jedes Event seines `Decide`.
-
-### Schritt 7 — Doku und Abnahme
-
-- docs/04 (§4.4 Funktionen und Graphen, §4.5 Abläufe), 05, 07 (Rollen), 10 (Grammatik, Regeln, A4/A8 in plan-katalog-und-graphen.md), 11, 13,
-  konzept-funktionen-im-editor.md, README, CLAUDE.md.
-- Abnahme auf Tobis Wort: volle Stufe mit `--check`, `--sonde`, `--grammatik`, Codegen-Drift, `./pruefe-checkout.sh`, Werkbank-Abnahme.
-
-## 5. Entschieden (2026-11-09, Tobi: „Ja, alle vier“)
-
-1. **Analyzer statt Projektgrenze** (§3): die Schreibseite referenziert Kataloge, CQRS122 hält die Domäne frei von Katalog-Typen; keine Schicht
-   `.Ablaeufe`. Damit gilt §1 „Drei Schichten“ in plan-katalog-und-graphen.md nur noch für den Katalog (er kennt die Domäne nicht).
-2. **Antwort an den Ausgangsknoten ist erlaubt** (§2.2): sie ist eine Antwort, keine Kante eines Kreises (CQRS115 zählt sie nicht).
-3. **Katalog-Fähigkeit im Store der Anwendung** (§2.3), keine Lese-Übersetzung.
-4. **Tobis Versuchsdateien ziehen in Schritt 3 mit** (`Domain.Pipeline/Datensatz/Graphen.cs`, `Domain/Pipeline/ImagePair/*`) — gelesen als Zustimmung zur
-   ersten der beiden genannten Möglichkeiten.
+1. **Kern:** `IUebersetzung<TEin, TAus>` statt `Uebersetze`; Lesart `Uebersetzungsform` für einen Record; der Graph kennt keine Übersetzung mehr
+   (`Graphform`, `GraphGenerator`); eine generierte Tabelle `GeneratedUebersetzungen` (Typ → Übersetzungen); das Kind übersetzt jede Ausgabe nach Typ,
+   rechnet Antworten weiter, der Eingang übersetzt am Kopf; Analyzer CQRS116/119–121/123 auf das neue Bild; Start-Prüfung des Akteurs.
+2. **Beispieldomäne:** Graphen in den Katalog, `Aufnehmen` in die Domäne, `Domain.Pipeline` weg.
+3. **Prüfdomäne:** `Pruefdomaene.Katalog`, Übersetzungen, `Pruefdomaene.Pipeline` weg.
+4. **Die Rolle verschwindet:** Projektstruktur, `Lageart` (Graph nur im Katalog, Übersetzung in der Schreibseite), CQRS098, CQRS122, Codegen, Projekte.
+5. **Sonde:** Graphen in Sonden-Kataloge, Übersetzungen in die Domänen der Sonde, Gesten-Skript, `soll.txt`.
+6. **Sicht und Editor:** Die Spalte Graphen zeigt die Katalog-Graphen, die laufen (ohne Band, sie gehören keiner Domäne); die Spalte Übersetzungen die
+   Übersetzungen im Band ihrer Domäne; Kanten nach Typ. „＋ ↦“ an einem Ausgang legt eine Übersetzung in einer Domäne an, das Modal ordnet die Felder zu.
+7. **Doku und Abnahme** (docs/04, 05, 07, 10, 11, 13, konzept-funktionen-im-editor, README, CLAUDE.md).
