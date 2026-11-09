@@ -1,5 +1,5 @@
 {
-  "_zweck": "Im Editor GEZEICHNET, als Gesten-Skript (Werkbank P7.3): jede Geste ist ein Karten-Delta wie aus dem Browser; die Sonde schreibt sie über den Gesten-Motor (GraphExtractor.Kern/Schreiben/Gesten) in den Fork und liest nach jeder Geste neu — spätere Gesten verweisen auf die Ids, die der Code-Stand vergibt (wf:/rf: der Store-Funktionen). Leseseite: neuer Store mit einer im Panel benannten und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel. Ein Akteur, der hineingibt (IDarf) und hört (IHoert), und ein Client als Record, der ihn verkörpert. Eine neue Funktion (Klasse mit Technik im Konstruktor) samt ihrem Command; ein Knoten kommt an einen geschriebenen Graphen (ein Parameter mehr am Record); ein neuer Graph mit einer generischen Funktion als Knoten (Typargument wie geschrieben). Zwei Übersetzungen kommen in eine Domäne (docs/04 §4.4): das Ergebnis eines Katalog-Graphen an ein Aggregat (Uebersetzung Gepeilt ↦ VermerkePeilung mit [Feld]: der Auftrag wird die Id der Peilstelle) und die Antwort des Aggregats zurück in den Katalog (PeilungVermerkt ↦ PeilungBestaetigt).",
+  "_zweck": "Im Editor GEZEICHNET, als Gesten-Skript (Werkbank P7.3): jede Geste ist ein Karten-Delta wie aus dem Browser; die Sonde schreibt sie über den Gesten-Motor (GraphExtractor.Kern/Schreiben/Gesten) in den Fork und liest nach jeder Geste neu — spätere Gesten verweisen auf die Ids, die der Code-Stand vergibt (wf:/rf: der Store-Funktionen). Leseseite: neuer Store mit einer im Panel benannten und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel. Ein Akteur, der hineingibt (IDarf) und hört (IHoert), und ein Client als Record, der ihn verkörpert. Eine neue Funktion (Klasse mit Technik im Konstruktor) samt ihrem Command; ein Knoten kommt an einen geschriebenen Graphen (ein Parameter mehr am Record); ein neuer Graph mit einer generischen Funktion als Knoten (Typargument wie geschrieben). Zwei Übersetzungen kommen in eine Domäne (docs/04 §4.4): das Ergebnis eines Katalog-Graphen an ein Aggregat (Gepeilt_VermerkePeilung_1: der Auftrag wird die Id der Peilstelle, `new(source.Auftrag)`) und die Antwort des Aggregats zurück in den Katalog (PeilungVermerkt ↦ PeilungBestaetigt).",
   "gesten": [
     {
       "titel": "Leseseite: Query, Antwort, Read Model, Store",
@@ -226,11 +226,11 @@
       }
     },
     {
-      "titel": "Übersetzungen: ein Ergebnis an ein Aggregat mit [Feld] und seine Antwort zurück in den Katalog",
+      "titel": "Übersetzungen: ein Ergebnis an ein Aggregat und seine Antwort zurück in den Katalog",
       "karten": {
         "uebersetzungen": [
           {
-            "name": "Vermerken",
+            "name": "Gepeilt_VermerkePeilung_1",
             "namespace": "Funkortung.Ortung",
             "ein": "Gepeilt",
             "aus": "VermerkePeilung",
@@ -238,15 +238,32 @@
               {
                 "ziel": "AggregateId",
                 "quelle": "Auftrag"
+              },
+              {
+                "ziel": "RichtungGrad",
+                "quelle": "RichtungGrad"
+              },
+              {
+                "ziel": "Guete",
+                "quelle": "Guete"
               }
             ]
           },
           {
-            "name": "Bestaetigen",
+            "name": "PeilungVermerkt_PeilungBestaetigt_1",
             "namespace": "Funkortung.Ortung",
             "ein": "PeilungVermerkt",
             "aus": "PeilungBestaetigt",
-            "felder": []
+            "felder": [
+              {
+                "ziel": "RichtungGrad",
+                "quelle": "RichtungGrad"
+              },
+              {
+                "ziel": "Guete",
+                "quelle": "Guete"
+              }
+            ]
           }
         ]
       }

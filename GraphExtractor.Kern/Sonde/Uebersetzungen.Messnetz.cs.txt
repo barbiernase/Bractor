@@ -6,17 +6,29 @@ using Sondenkatalog.Katalog.Messung;
 
 namespace Anlagen.Messung;
 
-[Feld(nameof(MeldeMesswert.AggregateId), nameof(Geprueft.Sensor))]
-public sealed record MesswertMelden : IUebersetzung<Geprueft, MeldeMesswert>;
+#pragma warning disable CS9113
 
-[Feld(nameof(Alarm.Sensor), nameof(OeffneStoerungFuer.Sensor))]
-public sealed record StoerungAusAlarm : IUebersetzung<OeffneStoerungFuer, Alarm>;
+public sealed class Geprueft_MeldeMesswert_1(Geprueft source) : ITranslate<Geprueft, MeldeMesswert>
+{
+    public MeldeMesswert Translate() => new(AggregateId: new(source.Sensor), Wert: source.Wert, GemessenAm: source.GemessenAm);
+}
 
-[Feld(nameof(OeffneStoerung.AggregateId), nameof(Stoerung.Fall))]
-public sealed record StoerungOeffnen : IUebersetzung<Stoerung, OeffneStoerung>;
+public sealed class OeffneStoerungFuer_Alarm_1(OeffneStoerungFuer source) : ITranslate<OeffneStoerungFuer, Alarm>
+{
+    public Alarm Translate() => new(Sensor: source.Sensor.Wert, Wert: source.Wert);
+}
 
-[Feld(nameof(Alarmiere.Fall), nameof(AlarmiereBereitschaft.Fall))]
-public sealed record BereitschaftAlarmieren : IUebersetzung<AlarmiereBereitschaft, Alarmiere>;
+public sealed class Stoerung_OeffneStoerung_1(Stoerung source) : ITranslate<Stoerung, OeffneStoerung>
+{
+    public OeffneStoerung Translate() => new(AggregateId: new(source.Fall), Wert: source.Wert);
+}
 
-[Feld(nameof(VermerkeAlarmierung.AggregateId), nameof(Erreicht.Fall))]
-public sealed record AlarmierungVermerken : IUebersetzung<Erreicht, VermerkeAlarmierung>;
+public sealed class AlarmiereBereitschaft_Alarmiere_1(AlarmiereBereitschaft source) : ITranslate<AlarmiereBereitschaft, Alarmiere>
+{
+    public Alarmiere Translate() => new(Fall: source.Fall.Wert);
+}
+
+public sealed class Erreicht_VermerkeAlarmierung_1(Erreicht source) : ITranslate<Erreicht, VermerkeAlarmierung>
+{
+    public VermerkeAlarmierung Translate() => new(AggregateId: new(source.Fall), Weg: source.Weg);
+}

@@ -6,20 +6,34 @@ using Sondenkatalog.Katalog.Konten;
 
 namespace Kundenportal.Konten;
 
-[Feld(nameof(Reserviere.Benutzer), nameof(PruefeAdresse.BenutzerId))]
-public sealed record AdresspruefungStarten : IUebersetzung<PruefeAdresse, Reserviere>;
+#pragma warning disable CS9113
 
-[Feld(nameof(ReserviereAdresse.AggregateId), nameof(Reservierung.Adresse)), Feld(nameof(ReserviereAdresse.BenutzerId), nameof(Reservierung.Benutzer))]
-public sealed record AdresseReservieren : IUebersetzung<Reservierung, ReserviereAdresse>;
+public sealed class PruefeAdresse_Reserviere_1(PruefeAdresse source) : ITranslate<PruefeAdresse, Reserviere>
+{
+    public Reserviere Translate() => new(Benutzer: source.BenutzerId.Wert, Email: source.Email);
+}
 
-[Feld(nameof(Reserviert.Benutzer), nameof(AdresseReserviert.BenutzerId))]
-public sealed record ReservierungMelden : IUebersetzung<AdresseReserviert, Reserviert>;
+public sealed class Reservierung_ReserviereAdresse_1(Reservierung source) : ITranslate<Reservierung, ReserviereAdresse>
+{
+    public ReserviereAdresse Translate() => new(AggregateId: new(source.Adresse), Email: source.Email, BenutzerId: new(source.Benutzer));
+}
 
-[Feld(nameof(Vergeben.Benutzer), nameof(AdresseVergeben.BenutzerId))]
-public sealed record VergabeMelden : IUebersetzung<AdresseVergeben, Vergeben>;
+public sealed class AdresseReserviert_Reserviert_1(AdresseReserviert source) : ITranslate<AdresseReserviert, Reserviert>
+{
+    public Reserviert Translate() => new(Benutzer: source.BenutzerId.Wert);
+}
 
-[Feld(nameof(BestaetigeBenutzer.AggregateId), nameof(Bestaetige.Benutzer))]
-public sealed record BenutzerBestaetigen : IUebersetzung<Bestaetige, BestaetigeBenutzer>;
+public sealed class AdresseVergeben_Vergeben_1(AdresseVergeben source) : ITranslate<AdresseVergeben, Vergeben>
+{
+    public Vergeben Translate() => new(Benutzer: source.BenutzerId.Wert);
+}
 
-[Feld(nameof(LehneRegistrierungAb.AggregateId), nameof(Ablehnen.Benutzer))]
-public sealed record RegistrierungAblehnen : IUebersetzung<Ablehnen, LehneRegistrierungAb>;
+public sealed class Bestaetige_BestaetigeBenutzer_1(Bestaetige source) : ITranslate<Bestaetige, BestaetigeBenutzer>
+{
+    public BestaetigeBenutzer Translate() => new(AggregateId: new(source.Benutzer));
+}
+
+public sealed class Ablehnen_LehneRegistrierungAb_1(Ablehnen source) : ITranslate<Ablehnen, LehneRegistrierungAb>
+{
+    public LehneRegistrierungAb Translate() => new(AggregateId: new(source.Benutzer), Grund: source.Grund);
+}

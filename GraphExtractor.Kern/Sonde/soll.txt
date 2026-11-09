@@ -80,11 +80,11 @@ sicht Leihwesen.Ausleihe.Zustand enum domaene=Leihwesen.Ausleihe block=Leihvorga
 sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Gebuehren block=§akteure
 sicht Leihwesen.Rand.Theke akteur domaene=Leihwesen.Ausleihe block=§akteure
 technik Sondenkatalog.Katalog.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
-uebersetzung Leihwesen.Uebersetzungen.MahnungEroeffnen | Mahnbetrag -> EroeffneMahnung [Feld AggregateId=Vorgang] | AggregateId=Vorgang(feld), Betrag=Betrag(name)
-uebersetzung Leihwesen.Uebersetzungen.RueckgabePruefen | PruefeRueckgabe -> Rueckgabe | LeserId=LeserId(name), Beschaedigt=Beschaedigt(name)
-uebersetzung Leihwesen.Uebersetzungen.SchadenMelden | Schaden -> MeldeSchaden [Feld AggregateId=Fall] | AggregateId=Fall(feld), LeserId=LeserId(name)
-uebersetzung Leihwesen.Uebersetzungen.SchadenSchaetzen | SchaetzeSchaden -> Schaetze [Feld Fall=Fall] | Fall=Fall(feld), LeserId=LeserId(name)
-uebersetzung Leihwesen.Uebersetzungen.VorOrtBegutachten | VorOrt -> BegutachteVorOrt [Feld AggregateId=Fall] | AggregateId=Fall(feld), LeserId=LeserId(name)
+uebersetzung Leihwesen.Uebersetzungen.Mahnbetrag_EroeffneMahnung_1 | Mahnbetrag -> EroeffneMahnung [Feld AggregateId=Vorgang+Betrag=Betrag] | AggregateId=Vorgang(feld), Betrag=Betrag(name)
+uebersetzung Leihwesen.Uebersetzungen.PruefeRueckgabe_Rueckgabe_1 | PruefeRueckgabe -> Rueckgabe [Feld LeserId=LeserId+Beschaedigt=Beschaedigt] | LeserId=LeserId(name), Beschaedigt=Beschaedigt(name)
+uebersetzung Leihwesen.Uebersetzungen.Schaden_MeldeSchaden_1 | Schaden -> MeldeSchaden [Feld AggregateId=Fall+LeserId=LeserId] | AggregateId=Fall(feld), LeserId=LeserId(name)
+uebersetzung Leihwesen.Uebersetzungen.SchaetzeSchaden_Schaetze_1 | SchaetzeSchaden -> Schaetze [Feld Fall=Fall+LeserId=LeserId] | Fall=Fall(name), LeserId=LeserId(name)
+uebersetzung Leihwesen.Uebersetzungen.VorOrt_BegutachteVorOrt_1 | VorOrt -> BegutachteVorOrt [Feld AggregateId=Fall+LeserId=LeserId] | AggregateId=Fall(feld), LeserId=LeserId(name)
 aggregat Leihwesen.Gebuehren.Schadensfall | Gemeldet:bool, Begutachtet:bool
 aggregat Leihwesen.Gebuehren.Mahnvorgang | Betrag:decimal
 decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchadenExistiert
@@ -141,11 +141,11 @@ record Sondenkatalog.Katalog.Pruefung.Starte command | Pruefung:Guid, LeserId:Gu
 sicht Sondenkatalog.Katalog.Pruefung.IZaehleOffeneAusleihen store domaene=Leihwesen.Gebuehren block=§geteilt
 store Sondenkatalog.Katalog.Pruefung.IZaehleOffeneAusleihen klasse=1 | schreibt  | liest AnzahlAsync(leserId:Guid):int
 technik Sondenkatalog.Katalog.Pruefung.ISeitenleser schnittstelle | IstBeschaedigt(seite:string):bool | umsetzung Handpruefung(); umsetzung Lichtpruefung()
-uebersetzung Leihwesen.Uebersetzungen.MahnungBemessen | BemesseMahnung -> Bemesse | LeserId=LeserId(name)
-uebersetzung Leihwesen.Uebersetzungen.PruefungAusScan | RueckgabeGescannt -> Scan | LeserId=LeserId(name), Seiten=Seiten(name)
-uebersetzung Leihwesen.Uebersetzungen.PruefungGestartetMelden | PruefungGestartet -> Gestartet [Feld Pruefung=PruefungId] | Pruefung=PruefungId(feld), Seiten=Seiten(name)
-uebersetzung Leihwesen.Uebersetzungen.PruefungStarten | Starte -> StartePruefung [Feld AggregateId=Pruefung] | AggregateId=Pruefung(feld), LeserId=LeserId(name), Seiten=Seiten(name)
-uebersetzung Leihwesen.Uebersetzungen.SeiteVermerken | Seitenbefund -> VermerkeSeite [Feld AggregateId=Pruefung] | AggregateId=Pruefung(feld), Nummer=Nummer(name), Beschaedigt=Beschaedigt(name)
+uebersetzung Leihwesen.Uebersetzungen.BemesseMahnung_Bemesse_1 | BemesseMahnung -> Bemesse [Feld LeserId=LeserId] | LeserId=LeserId(name)
+uebersetzung Leihwesen.Uebersetzungen.RueckgabeGescannt_Scan_1 | RueckgabeGescannt -> Scan [Feld LeserId=LeserId+Seiten=Seiten] | LeserId=LeserId(name), Seiten=Seiten(name)
+uebersetzung Leihwesen.Uebersetzungen.PruefungGestartet_Gestartet_1 | PruefungGestartet -> Gestartet [Feld Pruefung=PruefungId+Seiten=Seiten] | Pruefung=PruefungId(feld), Seiten=Seiten(name)
+uebersetzung Leihwesen.Uebersetzungen.Starte_StartePruefung_1 | Starte -> StartePruefung [Feld AggregateId=Pruefung+LeserId=LeserId+Seiten=Seiten] | AggregateId=Pruefung(feld), LeserId=LeserId(name), Seiten=Seiten(name)
+uebersetzung Leihwesen.Uebersetzungen.Seitenbefund_VermerkeSeite_1 | Seitenbefund -> VermerkeSeite [Feld AggregateId=Pruefung+Nummer=Nummer+Beschaedigt=Beschaedigt] | AggregateId=Pruefung(feld), Nummer=Nummer(name), Beschaedigt=Beschaedigt(name)
 aggregat Leihwesen.Pruefung.Seitenpruefung | LeserId:Guid, Seiten:int, Geprueft:int, Beschaedigte:int, Fertig:bool
 decide Seitenpruefung.StartePruefung -> PruefungGestartet; PruefungLaeuftSchon; Frist<BrichPruefungAb>
 decide Seitenpruefung.BrichPruefungAb -> PruefungAbgebrochen
@@ -311,12 +311,12 @@ record Sondenkatalog.Katalog.Konten.Reserviere command | Benutzer:Guid, Email:st
 record Sondenkatalog.Katalog.Konten.Reserviert command | Benutzer:Guid
 record Sondenkatalog.Katalog.Konten.Reservierung command | Adresse:Guid, Email:string, Benutzer:Guid
 record Sondenkatalog.Katalog.Konten.Vergeben command | Benutzer:Guid
-uebersetzung Kundenportal.Konten.AdresseReservieren | Reservierung -> ReserviereAdresse [Feld AggregateId=Adresse+BenutzerId=Benutzer] | AggregateId=Adresse(feld), Email=Email(name), BenutzerId=Benutzer(feld)
-uebersetzung Kundenportal.Konten.AdresspruefungStarten | PruefeAdresse -> Reserviere [Feld Benutzer=BenutzerId] | Benutzer=BenutzerId(feld), Email=Email(name)
-uebersetzung Kundenportal.Konten.BenutzerBestaetigen | Bestaetige -> BestaetigeBenutzer [Feld AggregateId=Benutzer] | AggregateId=Benutzer(feld)
-uebersetzung Kundenportal.Konten.RegistrierungAblehnen | Ablehnen -> LehneRegistrierungAb [Feld AggregateId=Benutzer] | AggregateId=Benutzer(feld), Grund=Grund(name)
-uebersetzung Kundenportal.Konten.ReservierungMelden | AdresseReserviert -> Reserviert [Feld Benutzer=BenutzerId] | Benutzer=BenutzerId(feld)
-uebersetzung Kundenportal.Konten.VergabeMelden | AdresseVergeben -> Vergeben [Feld Benutzer=BenutzerId] | Benutzer=BenutzerId(feld)
+uebersetzung Kundenportal.Konten.Reservierung_ReserviereAdresse_1 | Reservierung -> ReserviereAdresse [Feld AggregateId=Adresse+Email=Email+BenutzerId=Benutzer] | AggregateId=Adresse(feld), Email=Email(name), BenutzerId=Benutzer(feld)
+uebersetzung Kundenportal.Konten.PruefeAdresse_Reserviere_1 | PruefeAdresse -> Reserviere [Feld Benutzer=BenutzerId+Email=Email] | Benutzer=BenutzerId(feld), Email=Email(name)
+uebersetzung Kundenportal.Konten.Bestaetige_BestaetigeBenutzer_1 | Bestaetige -> BestaetigeBenutzer [Feld AggregateId=Benutzer] | AggregateId=Benutzer(feld)
+uebersetzung Kundenportal.Konten.Ablehnen_LehneRegistrierungAb_1 | Ablehnen -> LehneRegistrierungAb [Feld AggregateId=Benutzer+Grund=Grund] | AggregateId=Benutzer(feld), Grund=Grund(name)
+uebersetzung Kundenportal.Konten.AdresseReserviert_Reserviert_1 | AdresseReserviert -> Reserviert [Feld Benutzer=BenutzerId] | Benutzer=BenutzerId(feld)
+uebersetzung Kundenportal.Konten.AdresseVergeben_Vergeben_1 | AdresseVergeben -> Vergeben [Feld Benutzer=BenutzerId] | Benutzer=BenutzerId(feld)
 enum Kundenportal.Konten.Kontostatus | Beantragt = 1, Aktiv = 2, Abgelehnt = 3
 aggregat Kundenportal.Konten.Benutzer | Email:string="", Status:Kontostatus
 aggregat Kundenportal.Konten.Adresse | Inhaber:Id<Benutzer>
@@ -403,11 +403,11 @@ record Sondenkatalog.Katalog.Messung.SensorabfrageKonfig konfig | Sensoren:strin
 record Sondenkatalog.Katalog.Messung.Stoerung command | Fall:Guid, Wert:double
 technik Sondenkatalog.Katalog.Messung.ISensorbus schnittstelle | LiesAsync(sensor:Guid, ct:CancellationToken):Task<double?> | umsetzung Feldbus()
 technik Sondenkatalog.Katalog.Messung.ITelefonie schnittstelle | RufeAsync(fall:Guid):Task<string> | umsetzung Telefonanlage()
-uebersetzung Anlagen.Messung.AlarmierungVermerken | Erreicht -> VermerkeAlarmierung [Feld AggregateId=Fall] | AggregateId=Fall(feld), Weg=Weg(name)
-uebersetzung Anlagen.Messung.BereitschaftAlarmieren | AlarmiereBereitschaft -> Alarmiere [Feld Fall=Fall] | Fall=Fall(feld)
-uebersetzung Anlagen.Messung.MesswertMelden | Geprueft -> MeldeMesswert [Feld AggregateId=Sensor] | AggregateId=Sensor(feld), Wert=Wert(name), GemessenAm=GemessenAm(name)
-uebersetzung Anlagen.Messung.StoerungAusAlarm | OeffneStoerungFuer -> Alarm [Feld Sensor=Sensor] | Sensor=Sensor(feld), Wert=Wert(name)
-uebersetzung Anlagen.Messung.StoerungOeffnen | Stoerung -> OeffneStoerung [Feld AggregateId=Fall] | AggregateId=Fall(feld), Wert=Wert(name)
+uebersetzung Anlagen.Messung.Erreicht_VermerkeAlarmierung_1 | Erreicht -> VermerkeAlarmierung [Feld AggregateId=Fall+Weg=Weg] | AggregateId=Fall(feld), Weg=Weg(name)
+uebersetzung Anlagen.Messung.AlarmiereBereitschaft_Alarmiere_1 | AlarmiereBereitschaft -> Alarmiere [Feld Fall=Fall] | Fall=Fall(name)
+uebersetzung Anlagen.Messung.Geprueft_MeldeMesswert_1 | Geprueft -> MeldeMesswert [Feld AggregateId=Sensor+Wert=Wert+GemessenAm=GemessenAm] | AggregateId=Sensor(feld), Wert=Wert(name), GemessenAm=GemessenAm(name)
+uebersetzung Anlagen.Messung.OeffneStoerungFuer_Alarm_1 | OeffneStoerungFuer -> Alarm [Feld Sensor=Sensor+Wert=Wert] | Sensor=Sensor(name), Wert=Wert(name)
+uebersetzung Anlagen.Messung.Stoerung_OeffneStoerung_1 | Stoerung -> OeffneStoerung [Feld AggregateId=Fall+Wert=Wert] | AggregateId=Fall(feld), Wert=Wert(name)
 aggregat Anlagen.Messung.Sensor | Grenzwert:double, AlarmNach:int, Hintereinander:int, Alarm:bool
 aggregat Anlagen.Messung.Stoerungsfall | Offen:bool
 decide Sensor.RichteSensorEin -> SensorEingerichtet
@@ -502,11 +502,11 @@ record Sondenkatalog.Katalog.Import.Importieren command | Import:Guid, Pfad:stri
 record Sondenkatalog.Katalog.Import.KatalogBereit command | Import:Guid, Pfad:string
 record Sondenkatalog.Katalog.Import.Zeile command | Import:Guid, Nummer:int, Felder:string[]
 technik Sondenkatalog.Katalog.Import.CsvZerleger klasse(konfig:CsvKonfig) | Zerlege(zeile:string):string[]
-uebersetzung Warenkatalog.Uebersetzungen.ArtikelAnlegen | Artikeldaten -> LegeArtikelAn [Feld AggregateId=Artikel] | AggregateId=Artikel(feld), Nummer=Nummer(name), Bezeichnung=Bezeichnung(name), Preis=Preis(name)
-uebersetzung Warenkatalog.Uebersetzungen.FortschrittMelden | Fortschritt -> MeldeImportFortschritt [Feld AggregateId=Import] | AggregateId=Import(feld), Zeilen=Zeilen(name)
-uebersetzung Warenkatalog.Uebersetzungen.ImportAbschliessen | Bilanz -> SchliesseImportAb [Feld AggregateId=Import] | AggregateId=Import(feld), Zeilen=Zeilen(name), Fehler=Fehler(name)
-uebersetzung Warenkatalog.Uebersetzungen.ImportBereit | ImportGestartet -> KatalogBereit [Feld Import=ImportId] | Import=ImportId(feld), Pfad=Pfad(name)
-uebersetzung Warenkatalog.Uebersetzungen.ImportStarten | Importieren -> StarteImport [Feld AggregateId=Import] | AggregateId=Import(feld), Pfad=Pfad(name)
+uebersetzung Warenkatalog.Uebersetzungen.Artikeldaten_LegeArtikelAn_1 | Artikeldaten -> LegeArtikelAn [Feld AggregateId=Artikel+Nummer=Nummer+Bezeichnung=Bezeichnung+Preis=Preis] | AggregateId=Artikel(feld), Nummer=Nummer(name), Bezeichnung=Bezeichnung(name), Preis=Preis(name)
+uebersetzung Warenkatalog.Uebersetzungen.Fortschritt_MeldeImportFortschritt_1 | Fortschritt -> MeldeImportFortschritt [Feld AggregateId=Import+Zeilen=Zeilen] | AggregateId=Import(feld), Zeilen=Zeilen(name)
+uebersetzung Warenkatalog.Uebersetzungen.Bilanz_SchliesseImportAb_1 | Bilanz -> SchliesseImportAb [Feld AggregateId=Import+Zeilen=Zeilen+Fehler=Fehler] | AggregateId=Import(feld), Zeilen=Zeilen(name), Fehler=Fehler(name)
+uebersetzung Warenkatalog.Uebersetzungen.ImportGestartet_KatalogBereit_1 | ImportGestartet -> KatalogBereit [Feld Import=ImportId+Pfad=Pfad] | Import=ImportId(feld), Pfad=Pfad(name)
+uebersetzung Warenkatalog.Uebersetzungen.Importieren_StarteImport_1 | Importieren -> StarteImport [Feld AggregateId=Import+Pfad=Pfad] | AggregateId=Import(feld), Pfad=Pfad(name)
 aggregat Warenkatalog.Import.Importlauf | Zeilen:int, Fertig:bool
 aggregat Warenkatalog.Import.Artikel | Nummer:string="", Preis:decimal
 decide Importlauf.StarteImport -> ImportGestartet; ImportLaeuftSchon
@@ -635,8 +635,8 @@ record Sondenkatalog.Katalog.Vorhersage.ZeichneKarte command | Station:Guid, Gra
 sicht Sondenkatalog.Katalog.Vorhersage.Kurzfenster valueobject domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt insel
 sicht Sondenkatalog.Katalog.Vorhersage.Langfenster valueobject domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt insel
 technik Sondenkatalog.Katalog.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
-uebersetzung Wetterdienst.Vorhersage.PrognoseBilden | BildePrognose -> Bilde [Feld Station=Station] | Station=Station(feld), Grad=Grad(name)
-uebersetzung Wetterdienst.Vorhersage.PrognoseVermerken | Prognostiziert -> VermerkePrognose [Feld AggregateId=Station] | AggregateId=Station(feld), Grad=Grad(name), Gelernt=Gelernt(name)
+uebersetzung Wetterdienst.Vorhersage.BildePrognose_Bilde_1 | BildePrognose -> Bilde [Feld Station=Station+Grad=Grad] | Station=Station(name), Grad=Grad(name)
+uebersetzung Wetterdienst.Vorhersage.Prognostiziert_VermerkePrognose_1 | Prognostiziert -> VermerkePrognose [Feld AggregateId=Station+Grad=Grad+Gelernt=Gelernt] | AggregateId=Station(feld), Grad=Grad(name), Gelernt=Gelernt(name)
 aggregat Wetterdienst.Vorhersage.Station | Stillgelegt:bool, Letzte:double
 decide Station.MeldeTemperatur -> TemperaturGemeldet; StationStillgelegt
 decide Station.VermerkePrognose -> PrognoseVermerkt
@@ -772,9 +772,9 @@ lage Peilprotokoll -> nicht Sondenkatalog.Katalog
 #    Katalogs; eine Kopf-Übersetzung macht aus der Nachricht des Funkers ihren Eingang (Feld nach Namen, zwei ausdrücklich), eine Übersetzung macht
 #    aus dem Ergebnis (ein Zwischenstand, der im Graphen weiterläuft) einen Command an die Peilstelle, und die ANTWORT der Peilstelle geht zurück an den
 #    Kopf der Peilkette — beide aus dem Gesten-Skript.
-uebersetzung Funkortung.Ortung.Hinein | OrtungAngefordert -> Peile [Feld Auftrag=Stelle+DauerMs=Messdauer] | Auftrag=Stelle(feld), FrequenzMhz=FrequenzMhz(name), DauerMs=Messdauer(feld)
-uebersetzung Funkortung.Ortung.Vermerken | Gepeilt -> VermerkePeilung [Feld AggregateId=Auftrag] | AggregateId=Auftrag(feld), RichtungGrad=RichtungGrad(name), Guete=Guete(name), Quelle=(standard)
-uebersetzung Funkortung.Ortung.Bestaetigen | PeilungVermerkt -> PeilungBestaetigt | RichtungGrad=RichtungGrad(name), Guete=Guete(name)
+uebersetzung Funkortung.Ortung.OrtungAngefordert_Peile_1 | OrtungAngefordert -> Peile [Feld Auftrag=Stelle+FrequenzMhz=FrequenzMhz+DauerMs=Messdauer] | Auftrag=Stelle(feld), FrequenzMhz=FrequenzMhz(name), DauerMs=Messdauer(feld)
+uebersetzung Funkortung.Ortung.Gepeilt_VermerkePeilung_1 | Gepeilt -> VermerkePeilung [Feld AggregateId=Auftrag+RichtungGrad=RichtungGrad+Guete=Guete] | AggregateId=Auftrag(feld), RichtungGrad=RichtungGrad(name), Guete=Guete(name), Quelle=(standard)
+uebersetzung Funkortung.Ortung.PeilungVermerkt_PeilungBestaetigt_1 | PeilungVermerkt -> PeilungBestaetigt [Feld RichtungGrad=RichtungGrad+Guete=Guete] | RichtungGrad=RichtungGrad(name), Guete=Guete(name)
 akteur Funkortung.Ablauf.Funker | darf OrtungAngefordert | hoert PeilungVermerkt
 aggregat Funkortung.Ortung.Peilstelle | Richtung:double
 decide Peilstelle.VermerkePeilung -> PeilungVermerkt

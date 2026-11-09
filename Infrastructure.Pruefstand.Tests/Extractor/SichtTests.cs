@@ -214,7 +214,7 @@ public class SichtTests
         F("Sensorabfrage")["eingaenge"]!.AsArray().Should().BeEmpty("eine Quelle lauscht und nimmt nichts");
     }
 
-    // ── Die Fläche in sechs Spalten und die Komposition eines Graphen (docs/10 §10.9) ──
+    // ── Die Fläche in sieben Spalten und die Komposition eines Graphen (docs/10 §10.9) ──
 
     private static List<JsonObject> FlaechenKarten(JsonObject board) => board["sicht"]!["flaeche"]!["karten"]!.AsArray().OfType<JsonObject>().ToList();
     private static List<string> FlaechenKanten(JsonObject board) => board["sicht"]!["flaeche"]!["kanten"]!.AsArray().OfType<JsonObject>()
@@ -223,7 +223,7 @@ public class SichtTests
         ((string?)p["richtung"] == "ein" ? "◀" : "▶") + (string?)p["typ"] + ((bool?)p["eigen"] == true ? "*" : "")));
 
     [Fact]
-    public async Task Die_Flaeche_ordnet_Karten_in_sechs_Spalten_und_Nachrichten_als_Ports()
+    public async Task Die_Flaeche_ordnet_Karten_in_sieben_Spalten_und_Nachrichten_als_Ports()
     {
         var board = await BoardAsync();
         var karten = FlaechenKarten(board);
@@ -258,16 +258,16 @@ public class SichtTests
         //   die aus seiner Nachricht den Eingang des Katalogs macht (docs/04 §4.4).
         var archiv = "akt:" + Id(board, "akteure", "name", "Archiv");
         string Ue(string name) => "ue:" + Id(board, "uebersetzungen", "name", name);
-        kanten.Should().Contain($"{archiv}|aus -BemesseMahnung/schreiben-> {Ue("MahnungBemessen")}");
-        kanten.Should().Contain($"{Ue("MahnungBemessen")} -Bemesse/schreiben-> gr:{Id(board, "graphen", "name", "Mahnbemessung")}");
+        kanten.Should().Contain($"{archiv}|aus -BemesseMahnung/schreiben-> {Ue("BemesseMahnung_Bemesse_1")}");
+        kanten.Should().Contain($"{Ue("BemesseMahnung_Bemesse_1")} -Bemesse/schreiben-> gr:{Id(board, "graphen", "name", "Mahnbemessung")}");
         kanten.Should().NotContain(k => k.StartsWith("agg:Leihvorgang -BemesseMahnung"));
         // Rücklauf: die Antwort (Event) an die Antwort-Übersetzung, die daraus den Kopf des Zeilenimports macht.
-        kanten.Should().Contain($"agg:Importlauf -ImportGestartet/ruecklauf-> {Ue("ImportBereit")}");
-        kanten.Should().Contain($"{Ue("ImportBereit")} -KatalogBereit/schreiben-> gr:{Id(board, "graphen", "name", "Zeilenimport")}");
+        kanten.Should().Contain($"agg:Importlauf -ImportGestartet/ruecklauf-> {Ue("ImportGestartet_KatalogBereit_1")}");
+        kanten.Should().Contain($"{Ue("ImportGestartet_KatalogBereit_1")} -KatalogBereit/schreiben-> gr:{Id(board, "graphen", "name", "Zeilenimport")}");
         // Fakten gehen an die Eingangsseite der Akteure, Antworten als Lesefluss; die Begutachtung vor Ort geht über ihre Übersetzung an den
         //   Schadensfall, sein Fakt an das Archiv.
-        kanten.Should().Contain($"gr:{Id(board, "graphen", "name", "Schadensbewertung")} -VorOrt/schreiben-> {Ue("VorOrtBegutachten")}");
-        kanten.Should().Contain($"{Ue("VorOrtBegutachten")} -BegutachteVorOrt/schreiben-> agg:Schadensfall");
+        kanten.Should().Contain($"gr:{Id(board, "graphen", "name", "Schadensbewertung")} -VorOrt/schreiben-> {Ue("VorOrt_BegutachteVorOrt_1")}");
+        kanten.Should().Contain($"{Ue("VorOrt_BegutachteVorOrt_1")} -BegutachteVorOrt/schreiben-> agg:Schadensfall");
         kanten.Should().Contain($"agg:Schadensfall -BegutachtungAngefordert/kenntnis-> {archiv}|ein");
         kanten.Should().Contain($"agg:Leihvorgang -Ausgeliehen/kenntnis-> {archiv}|ein");
         kanten.Should().Contain(k => k.StartsWith("rdr:") && k.EndsWith($"-OffeneAusleihenAntwort/lesen-> {theke}|ein"));

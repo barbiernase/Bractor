@@ -326,23 +326,62 @@ public static class Scaffolder
     }
 
     /// <summary>
-    /// Eine ÜBERSETZUNG (docs/04 §4.4): je Abweichung ein <c>[Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))]</c> über dem Record, dann
-    /// <c>public sealed record Name : IUebersetzung&lt;Ein, Aus&gt;;</c>.
+    /// Eine ÜBERSETZUNG (docs/04 §4.4) als Klasse: der Konstruktor nimmt die Quelle, <c>Translate()</c> baut das Ziel aus der Verdrahtung im Editor —
+    /// je zugeordnetem Parameter <c>Ziel: source.Feld</c>, <c>Guid</c> → <c>Id&lt;T&gt;</c> als <c>new(source.Feld)</c>, <c>Id&lt;T&gt;</c> → <c>Guid</c> als
+    /// <c>source.Feld.Wert</c>. Was nicht zugeordnet ist, fehlt im Aufruf: der Compiler meldet es (Unfertiges ist Code, der nicht baut, W1).
+    /// <code>public sealed class Ein_Aus_1(Ein source) : ITranslate&lt;Ein, Aus&gt;
+    /// {
+    ///     public Aus Translate() => new(AggregateId: new(source.Paar), …);
+    /// }</code>
     /// </summary>
-    public static string UebersetzungRecord(Uebersetzung u) =>
-        string.Concat(u.Felder.Select(f => UebersetzungsFeldText(u, f) + "\n"))
-        + $"public sealed record {u.Name} : {nameof(Abstractions.IUebersetzung<object, object>)}<{u.Ein}, {u.Aus}>;";
+    public static string UebersetzungKlasse(Uebersetzung u, EditorModell m)
+    {
+        var quellen = UebersetzungQuellen(u, m);
+        var ziele = UebersetzungZiele(u, m);
+        var typVon = quellen.ToDictionary(q => q.Name, q => q.Typ, StringComparer.Ordinal);
+        string Ausdruck(FeldZuordnung f)
+        {
+            var nach = ziele.FirstOrDefault(z => z.Name == f.Ziel).Typ ?? "";
+            var von = typVon.GetValueOrDefault(f.Quelle) ?? "";
+            var feld = $"{QuellParameter}.{f.Quelle}";
+            return IstIdTyp(nach) && IstGuidTyp(von) ? $"new({feld})" : IstGuidTyp(nach) && IstIdTyp(von) ? $"{feld}.Wert" : feld;
+        }
+        var reihe = ziele.Select(z => z.Name).ToList();
+        var argumente = u.Felder.Where(f => typVon.ContainsKey(f.Quelle))
+            .OrderBy(f => reihe.IndexOf(f.Ziel) is var i && i >= 0 ? i : int.MaxValue).Select(f => $"{f.Ziel}: {Ausdruck(f)}");
+        var marker = nameof(Abstractions.ITranslate<object, object>);
+        var liste = argumente.ToList();
+        var zeile = $"    public {u.Aus} Translate() => new({string.Join(", ", liste)});";
+        // Passt der Aufruf nicht in eine Zeile, steht je Feld eine (wie die Knoten eines Graphen).
+        if (zeile.Length > 150) zeile = $"    public {u.Aus} Translate() => new(\n" + string.Join(",\n", liste.Select(x => "        " + x)) + ");";
+        return $"public sealed class {u.Name}({u.Ein} {QuellParameter}) : {marker}<{u.Ein}, {u.Aus}>\n{{\n{zeile}\n}}";
+    }
 
-    /// <summary>Ein <c>[Feld]</c> einer Übersetzung, wie man es schreibt — die Namen als <c>nameof</c> über die Typen (der Compiler benennt mit um).</summary>
-    public static string UebersetzungsFeldText(Uebersetzung u, FeldZuordnung f) =>
-        $"[{FeldAttribut}(nameof({Basis(u.Aus)}.{f.Ziel}), nameof({Basis(u.Ein)}.{f.Quelle}))]";
+    /// <summary>Der Name des Konstruktor-Parameters einer Übersetzung: die Quelle.</summary>
+    public const string QuellParameter = "source";
+
+    /// <summary>Die Felder der Quelle (Name, Typ): wie der Code sie liest, sonst aus dem Record im Modell.</summary>
+    internal static IReadOnlyList<(string Name, string Typ)> UebersetzungQuellen(Uebersetzung u, EditorModell m) =>
+        u.Quellen.Count > 0 ? u.Quellen.Select(q => (q.Name, q.Typ)).ToList()
+            : m.Records.FirstOrDefault(r => r.Name == Basis(u.Ein))?.Felder.Select(f => (f.Name, f.Typ)).ToList() ?? [];
+
+    /// <summary>Die Parameter des Ziels (Name, Typ) — das Ziel-Feld eines Commands an ein Aggregat ist dessen <c>Id&lt;T&gt;</c>.</summary>
+    internal static IReadOnlyList<(string Name, string Typ)> UebersetzungZiele(Uebersetzung u, EditorModell m)
+    {
+        if (u.Ziele.Count > 0) return u.Ziele.Select(z => (z.Name, z.Typ)).ToList();
+        var r = m.Records.FirstOrDefault(x => x.Name == Basis(u.Aus));
+        return r?.Felder.Select(f => (f.Name, f.Name == m.Rahmen.AggregatIdFeld && !string.IsNullOrEmpty(r.Aggregat) && IstGuidTyp(f.Typ) ? $"{Id}<{r.Aggregat}>" : f.Typ))
+            .ToList() ?? [];
+    }
+
+    private static bool IstGuidTyp(string t) => t is "Guid" or "System.Guid";
+    private static bool IstIdTyp(string t) => t.StartsWith(Id + "<", StringComparison.Ordinal) || t.Contains("." + Id + "<");
 
     private static string Basis(string typ) => typ.IndexOf('<') is > 0 and var i ? typ[..i] : typ;
 
     /// <summary>Die Attribute eines Graph-Knotens, wie man sie schreibt (<c>[Kopf]</c>, <c>[Von(…)]</c>).</summary>
     public static readonly string KopfAttribut = nameof(Abstractions.KopfAttribute)[..^"Attribute".Length];
     public static readonly string VonAttribut = nameof(Abstractions.VonAttribute)[..^"Attribute".Length];
-    public static readonly string FeldAttribut = nameof(Abstractions.FeldAttribute)[..^"Attribute".Length];
 
     private static string GraphDatei(string ns, List<Graph> graphen, EditorModell modell)
     {
@@ -361,12 +400,17 @@ public static class Scaffolder
 
     private static string UebersetzungsDatei(string ns, List<Uebersetzung> uebersetzungen, EditorModell modell)
     {
-        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace], uebersetzungen.SelectMany(u => new[] { u.Ein, u.Aus }),
+        // usings: Quelle und Ziel.
+        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace],
+            uebersetzungen.SelectMany(u => new[] { u.Ein, u.Aus }),
             uebersetzungen.SelectMany(u => u.Usings)));
+        // Der Konstruktor nimmt die Quelle — eine Übersetzung, deren Ziel nur Standardwerte hat, liest sie nicht (CS9113 ist dann kein Befund).
+        b.AppendLine("#pragma warning disable CS9113");
+        b.AppendLine();
         for (var i = 0; i < uebersetzungen.Count; i++)
         {
             Doku(b, uebersetzungen[i].Doku, "");
-            b.AppendLine(UebersetzungRecord(uebersetzungen[i]));
+            b.AppendLine(UebersetzungKlasse(uebersetzungen[i], modell));
             if (i < uebersetzungen.Count - 1) b.AppendLine();
         }
         return b.ToString();

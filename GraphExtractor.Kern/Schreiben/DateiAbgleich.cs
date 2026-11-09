@@ -697,53 +697,16 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (attribute.Any(a => Name(a) == Scaffolder.KopfAttribut), vons.SelectMany(Namen).ToList(), vons.Where(Verlierbar).SelectMany(Namen).ToList());
     }
 
-    // ── Übersetzung (docs/04 §4.4): ihre [Feld] am Record gehören dem Modell; Ein und Aus stehen im Marker (eine neue Übersetzung legt
-    //    der Scaffolder an) ──
+    // ── Übersetzung (docs/04 §4.4): eine Klasse ITranslate<TSource, TTarget>, ganz aus dem Modell (eine neue legt der Scaffolder an) ──
     private (string, string)? UebersetzungFelder(string text, Uebersetzung u)
     {
+        // Die Klasse gehört dem Modell (docs/04 §4.4): Konstruktor aus der Quelle, Translate() aus der Zuordnung — geschrieben wie der Scaffolder sie
+        //   schreibt; der Doku-Kommentar davor bleibt.
         if (Typ(Parse(text), u.Name, u.Namespace) is not TypeDeclarationSyntax decl) return (text, $"Übersetzung {u.Name} nicht gefunden");
-        var edits = new List<(int, int, string)>();
-        var notiz = new List<string>();
-        // Generisch: was sie nimmt und was sie macht, steht in der Basisliste — IUebersetzung<TEin, TAus> folgt dem Modell.
-        var marker = nameof(Abstractions.IUebersetzung<object, object>);
-        var soll = $"{marker}<{u.Ein}, {u.Aus}>";
-        if (decl.BaseList?.Types.FirstOrDefault(t => t.Type is GenericNameSyntax g && g.Identifier.Text == marker
-                || t.Type is QualifiedNameSyntax { Right: GenericNameSyntax q } && q.Identifier.Text == marker) is { } basis
-            && N(basis.Type.ToString()) != N(soll))
-        {
-            edits.Add((basis.Type.SpanStart, basis.Type.Span.End, soll));
-            notiz.Add($"{u.Ein} ↦ {u.Aus}");
-        }
-        if (!Felder(decl).SequenceEqual(u.Felder))
-        {
-            // Die übrigen Attribut-Listen bleiben; die [Feld] stehen danach je eine Zeile über dem Record, in der Reihenfolge des Modells.
-            var andere = decl.AttributeLists.Where(l => !l.Attributes.All(IstFeld)).Select(l => l.ToString());
-            var einzug = new string(' ', decl.GetLocation().GetLineSpan().StartLinePosition.Character);
-            var vorne = string.Concat(andere.Concat(u.Felder.Select(f => Scaffolder.UebersetzungsFeldText(u, f))).Select(x => x + "\n" + einzug));
-            var start = decl.AttributeLists.Count > 0 ? decl.AttributeLists[0].SpanStart : decl.Modifiers.Count > 0 ? decl.Modifiers[0].SpanStart : decl.Keyword.SpanStart;
-            var ende = decl.Modifiers.Count > 0 ? decl.Modifiers[0].SpanStart : decl.Keyword.SpanStart;
-            edits.Add((start, ende, vorne));
-            notiz.Add("Felder");
-        }
-        return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), [u.Ein, u.Aus]), string.Join(", ", notiz));
-    }
-
-    private static bool IstFeld(AttributeSyntax a) => a.Name.ToString().Split('.')[^1] is var n && (n == Scaffolder.FeldAttribut || n == Scaffolder.FeldAttribut + "Attribute");
-
-    /// <summary>
-    /// Die <c>[Feld(nameof(TAus.Ziel), nameof(TEin.Quelle))]</c> einer Übersetzung, wie sie im Quelltext stehen: je <c>nameof</c> der letzte Name (auch
-    /// für die Parität).
-    /// </summary>
-    internal static List<FeldZuordnung> Felder(MemberDeclarationSyntax p)
-    {
-        static string Wert(ExpressionSyntax e) => e switch
-        {
-            InvocationExpressionSyntax { ArgumentList.Arguments: [var a] } => a.Expression.ToString().Split('.')[^1].Trim(),
-            _ => e.ToString().Trim('"'),
-        };
-        return p.AttributeLists.SelectMany(l => l.Attributes).Where(IstFeld)
-            .Where(a => a.ArgumentList?.Arguments.Count == 2)
-            .Select(a => new FeldZuordnung(Wert(a.ArgumentList!.Arguments[0].Expression), Wert(a.ArgumentList.Arguments[1].Expression))).ToList();
+        var einzug = new string(' ', decl.GetLocation().GetLineSpan().StartLinePosition.Character);
+        var neu = Scaffolder.UebersetzungKlasse(u, modell).Replace("\n", "\n" + einzug);
+        if (decl.ToString() == neu) return null;
+        return (MitNamespaces(Anwenden(text, [(decl.SpanStart, decl.Span.End, neu)]), [u.Ein, u.Aus]), $"{u.Ein} ↦ {u.Aus}");
     }
 
     // ── Bausteine ──────────────────────────────────────────────────────────────────────────────

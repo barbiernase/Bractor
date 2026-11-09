@@ -8,5 +8,9 @@ using Sondenkatalog.Katalog.Peilung;
 
 namespace Funkortung.Ortung;
 
-[Feld(nameof(Peile.Auftrag), nameof(OrtungAngefordert.Stelle)), Feld(nameof(Peile.DauerMs), nameof(OrtungAngefordert.Messdauer))]
-public sealed record Hinein : IUebersetzung<OrtungAngefordert, Peile>;
+#pragma warning disable CS9113
+
+public sealed class OrtungAngefordert_Peile_1(OrtungAngefordert source) : ITranslate<OrtungAngefordert, Peile>
+{
+    public Peile Translate() => new(Auftrag: source.Stelle.Wert, FrequenzMhz: source.FrequenzMhz, DauerMs: source.Messdauer);
+}

@@ -71,7 +71,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 
     private static readonly DiagnosticDescriptor Verlaesst = D(VerlaesstId, "Katalog-Command verlässt den Graphen",
         "'{0}': {1} aus dem Katalog {2} verlässt den Graphen (von {3}), und keine Übersetzung nimmt ihn — übersetze ihn in der Domäne "
-        + "(record … : IUebersetzung<{1}, …>) oder lass ihn den Kopf eines Graphen nehmen (GR-UEBERSETZUNG)", DiagnosticSeverity.Error);
+        + "(class …(…) : ITranslate<{1}, …>) oder lass ihn den Kopf eines Graphen nehmen (GR-UEBERSETZUNG)", DiagnosticSeverity.Error);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(Query, AusgangOffen, EingangOffen, AntwortOhneCommand, UebersetzteAntwort, FaehigkeitOhneStore, Empfaenger, OhneGraph, Verlaesst);
@@ -82,7 +82,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         "IState", "IDecider`1", "IApplier`1", "ICommand", "IEvent", "IQuery", "IQueryResponse", "IReadModel", "IWriteStore", "IReadStore",
         "IProjektion", "IReader", "IFunktion", "IGraph", "IWertobjekt",
         // Die Übersetzungen der Anwendung (<Wurzel>.Uebersetzungen, ein Projekt nur mit ihnen).
-        "IUebersetzung`2",
+        "ITranslate`2",
         // Der Rand (Domain.Akteure): wer was hineingibt und hört, und welcher Client wen verkörpert.
         "IAkteur", "IClient",
     };

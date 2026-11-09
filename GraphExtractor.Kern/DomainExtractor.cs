@@ -23,7 +23,7 @@ public sealed class DomainModel
     public List<ClientRaw> Clients { get; } = new();
     /// <summary><c>IGraph</c>-Records: die Graphen mit ihren Knoten (Graphform: dieselbe Lesart wie Generator und Analyzer).</summary>
     public List<GraphRaw> Graphen { get; } = new();
-    /// <summary><c>IUebersetzung&lt;TEin, TAus&gt;</c>-Records: die Übersetzungen der Domänen (Uebersetzungsform).</summary>
+    /// <summary><c>ITranslate&lt;TSource, TTarget&gt;</c>-Klassen: die Übersetzungen der Anwendung (Uebersetzungsform).</summary>
     public List<UebersetzungRaw> Uebersetzungen { get; } = new();
 
     /// <summary>Records ohne Nachrichten-Marker in Domain-Assemblies (Value Objects).</summary>
@@ -422,8 +422,8 @@ public sealed class GraphRaw
 }
 
 /// <summary>
-/// Eine Übersetzung der Domäne (<c>record X : IUebersetzung&lt;TEin, TAus&gt;</c>, docs/04 §4.4): Ein, Aus, die <c>[Feld]</c> wie sie
-/// dastehen und abgeleitet die Zuordnung (Lesart <c>Infrastructure.SourceGeneration.Uebersetzungsform</c>).
+/// Eine Übersetzung (<c>class X(…) : ITranslate&lt;TSource, TTarget&gt;</c>, docs/04 §4.4): Ein, Aus und die Zuordnung, wie sie in <c>Translate()</c>
+/// steht (Lesart <c>Infrastructure.SourceGeneration.Uebersetzungsform</c>).
 /// </summary>
 public sealed class UebersetzungRaw
 {
@@ -985,7 +985,7 @@ public sealed partial class DomainExtractor
         return raw;
     }
 
-    // ── Übersetzungen: ein Record der Domäne mit IUebersetzung<TEin, TAus> und seinen [Feld] (Uebersetzungsform, eine Lesart mit Generator) ──────
+    // ── Übersetzungen: eine Klasse mit ITranslate<TSource, TTarget>; die Zuordnung aus Translate() (Uebersetzungsform, eine Lesart mit Generator) ────
     private UebersetzungRaw ReadUebersetzung(INamedTypeSymbol t)
     {
         var decl = QuellDeklarationen(t).FirstOrDefault();
@@ -996,7 +996,7 @@ public sealed partial class DomainExtractor
         {
             Name = t.Name, Namespace = ns, Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
             Ein = Infrastructure.SourceGeneration.Funktionsform.Anzeigename(u.Ein), Aus = Infrastructure.SourceGeneration.Funktionsform.Anzeigename(u.Aus),
-            Felder = Infrastructure.SourceGeneration.Uebersetzungsform.Felder(t).Select(f => new DomainEditor.FeldZuordnung(f.Ziel, f.Quelle)).ToList(),
+            Felder = u.Ziele.Where(z => z.Quelle != null).Select(z => new DomainEditor.FeldZuordnung(z.Name, z.Quelle!)).ToList(),
             Usings = new[] { u.Ein, u.Aus }.Select(x => x.ContainingNamespace?.Fq() ?? "").Where(n => n.Length > 0 && n != ns)
                 .Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal).ToList(),
             Quellen = u.Felder.Select(f => new DomainEditor.UebersetzungsFeld(f.Name, T(f.Type))).ToList(),

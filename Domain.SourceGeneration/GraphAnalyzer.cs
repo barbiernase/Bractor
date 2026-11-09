@@ -12,10 +12,9 @@ namespace Domain.SourceGeneration;
 /// je Eingangstyp genau ein Kopf, kreisfrei über die Knoten; die Erzeuger eines Eingangs auf einer Ebene der Unterläufe (bis die Laufzeit ohne Lauf
 /// auskommt). Dass ein Auf genau eine Nachricht nimmt, prüft die Funktionsform (CQRS100). Schon im Pipeline-Projekt mit Ort; die Regeln über alle Projekte (Empfänger, Funktion ohne
 /// Graph) prüft das Gesamtbild.
-/// <para>Eine ÜBERSETZUNG ist ein eigener Record der Domäne (<c>IUebersetzung&lt;TEin, TAus&gt;</c>), kein Knoten. <b>CQRS119 (GR-UEBERSETZUNG)</b> —
-/// jeder Parameter der Nachricht, die sie erzeugt, hat eine Quelle (<c>[Feld]</c>, gleicher Name mit implizit zuweisbarem Typ, Standardwert); ein
-/// <c>[Feld]</c> nennt ein Ziel und eine Quelle, die es gibt. <b>CQRS121</b> — sie nimmt einen Command ohne Ziel oder ein Event (eine Antwort) und erzeugt
-/// einen Command (<see cref="Uebersetzungsform"/>).</para>
+/// <para>Eine ÜBERSETZUNG ist eine eigene Klasse der Anwendung (<c>ITranslate&lt;TSource, TTarget&gt;</c>), kein Knoten. <b>CQRS119 (GR-UEBERSETZUNG)</b> —
+/// ihr Konstruktor nimmt genau die Quelle; ob <c>Translate()</c> das Ziel vollständig baut, prüft der Compiler.
+/// <b>CQRS121</b> — sie nimmt einen Command ohne Ziel oder ein Event (eine Antwort) und erzeugt einen Command (<see cref="Uebersetzungsform"/>).</para>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class GraphAnalyzer : DiagnosticAnalyzer
@@ -25,7 +24,7 @@ public sealed class GraphAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Form = new(Id, "Graph hat nicht die Form",
         "Graph '{0}': {1} (GR-GRAPH, GR-KANTE, GR-KOPF, GR-EINGANG)", "CQRS.Graph", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor Zuordnung = new(Uebersetzungsform.Zuordnung, "Übersetzung ohne vollständige Zuordnung",
+    private static readonly DiagnosticDescriptor Zuordnung = new(Uebersetzungsform.Zuordnung, "Übersetzung nimmt nicht ihre Quelle",
         "Übersetzung '{0}': {1} (GR-UEBERSETZUNG)", "CQRS.Graph", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor Nachricht = new(Uebersetzungsform.Nachricht, "Übersetzung nimmt bzw. erzeugt keine Nachricht",

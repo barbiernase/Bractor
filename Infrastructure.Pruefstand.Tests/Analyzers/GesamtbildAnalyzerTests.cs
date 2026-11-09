@@ -83,7 +83,7 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
     {
         var befunde = await Befunde("public sealed record Nutzer : IAkteur, IDarf<Rechen.Katalog.Rechne>;", katalog: Rechenkatalog);
         befunde.Where(d => d.Id == GesamtbildAnalyzer.VerlaesstId).Select(d => d.GetMessage()).Should().ContainSingle()
-            .Which.Should().StartWith("'Kette'").And.Contain("Gerechnet").And.Contain("IUebersetzung<Gerechnet, …>");
+            .Which.Should().StartWith("'Kette'").And.Contain("Gerechnet").And.Contain("ITranslate<Gerechnet, …>");
     }
 
     [Fact]
@@ -91,10 +91,10 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
     {
         var befunde = await Befunde("""
             public sealed record Nutzer : IAkteur, IDarf<Rechen.Katalog.Rechne>;
-            [Feld(nameof(Eroeffne.AggregateId), nameof(Rechen.Katalog.Gerechnet.Bezug))] public sealed record Vermerken : IUebersetzung<Rechen.Katalog.Gerechnet, Eroeffne>;
+            public sealed class Gerechnet_Eroeffne_1(Rechen.Katalog.Gerechnet source) : ITranslate<Rechen.Katalog.Gerechnet, Eroeffne> { public Eroeffne Translate() => new(AggregateId: new(source.Bezug)); }
             """, katalog: Rechenkatalog);
         befunde.Where(d => d.Id is GesamtbildAnalyzer.EmpfaengerId or GesamtbildAnalyzer.VerlaesstId).Should().BeEmpty(
-            "Gerechnet nimmt die Übersetzung Vermerken — der Graph bleibt neutral, die Domäne macht ihn spezifisch");
+            "Gerechnet nimmt die Übersetzung Gerechnet_Eroeffne_1 — der Graph bleibt neutral, die Domäne macht ihn spezifisch");
     }
 
     [Fact]
@@ -186,10 +186,10 @@ public sealed record Anstossgraph([Kopf] Anstoss A) : IGraph;
         (await Ids(Verteilt)).Should().BeEmpty("Pruefe verlässt den Anstoßgraphen und nimmt genau der Prüfgraph am Kopf");
         var zwei = await Befunde(Verteilt + "public sealed class Zweite : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } public sealed record Zweitgraph([Kopf] Zweite Z) : IGraph;");
         zwei.Should().ContainSingle(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Which.GetMessage().Should().StartWith("'Pruefe'").And.Contain("Anstossgraph.A")
-            .And.Contain("mehrere nehmen ihn").And.Contain("Pruefgraph").And.Contain("Zweitgraph");
+            .And.Contain("mehrere Graphen nehmen ihn am Kopf").And.Contain("Pruefgraph").And.Contain("Zweitgraph");
         var keiner = await Befunde("public record Weiter() : ICommand; public record Los() : ICommand; "
                                    + "public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } public sealed record Losgraph([Kopf] Start L) : IGraph;");
-        keiner.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).Should().Contain(m => m.Contains("kein Graph nimmt ihn am Kopf"));
+        keiner.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).Should().Contain(m => m.Contains("keine Übersetzung nimmt ihn und kein Graph am Kopf"));
     }
 
     // Arbeit (Entscheidung 13): ein Akteur, der einen Command ohne Ziel hört, ist sein Empfänger.
@@ -203,7 +203,7 @@ public sealed record Melder : IAkteur, IDarf<Pruefe>;
     {
         var ohne = await Befunde(Melder);
         ohne.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage())
-            .Should().ContainSingle().Which.Should().StartWith("'Pruefe'").And.Contain("Akteur Melder").And.Contain("kein Graph nimmt ihn am Kopf");
+            .Should().ContainSingle().Which.Should().StartWith("'Pruefe'").And.Contain("Akteur Melder").And.Contain("keine Übersetzung nimmt ihn und kein Graph am Kopf");
         (await Ids(Melder + "public sealed class Pruefung : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } "
                           + "public sealed record Pruefgraph([Kopf] Pruefung P) : IGraph;"))
             .Should().NotContain(GesamtbildAnalyzer.EmpfaengerId, "der Kopf des Pruefgraphs ist sein Empfänger");

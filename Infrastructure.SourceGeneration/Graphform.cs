@@ -20,7 +20,7 @@ namespace Infrastructure.SourceGeneration
     /// <para>Jedes <c>Auf</c> nimmt genau eine Nachricht (<see cref="Funktionsform"/>) und rechnet je Ankunft; Zusammenführen und Einsammeln stehen
     /// im Logik-Code. Eine Kante ist gesichert, mit <c>Verlierbar = true</c> an ihrem <c>[Von]</c> verlierbar.</para>
     /// <para>Ein Graph ist domänenneutral und liegt in einem Katalog; eine ÜBERSETZUNG ist kein Knoten, sie lebt in der Domäne
-    /// (<c>IUebersetzung&lt;TEin, TAus&gt;</c>, <see cref="Uebersetzungsform"/>) und nimmt, was ein laufender Graph ausgibt, nach seinem Typ.</para>
+    /// (<c>ITranslate&lt;TSource, TTarget&gt;</c>, <see cref="Uebersetzungsform"/>) und nimmt, was ein laufender Graph ausgibt, nach seinem Typ.</para>
     /// </summary>
     internal static class Graphform
     {

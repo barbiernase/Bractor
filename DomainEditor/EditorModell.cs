@@ -51,7 +51,7 @@ public sealed record EditorModell
     /// Graph, dazu <c>[Kopf]</c> und <c>[Von(…)]</c>). Köpfe, Ausgänge und Kanten folgen aus den Attributen — abgeleitet, nicht Modell.
     /// </summary>
     public IReadOnlyList<Graph> Graphen { get; init; } = [];
-    /// <summary>Die Übersetzungen der Domänen (docs/04 §4.4): je Record mit <c>IUebersetzung&lt;TEin, TAus&gt;</c> einer.</summary>
+    /// <summary>Die Übersetzungen der Anwendung (docs/04 §4.4): je Klasse mit <c>ITranslate&lt;TSource, TTarget&gt;</c> eine.</summary>
     public IReadOnlyList<Uebersetzung> Uebersetzungen { get; init; } = [];
     /// <summary>
     /// Die LESESEITE als Signatur-Fakten: Stores (Fähigkeiten + Bündel + Impl-Klasse), Projektionen und Reader.
@@ -646,11 +646,8 @@ public sealed record Graph
 }
 
 /// <summary>
-/// Eine ÜBERSETZUNG (docs/04 §4.4): ein Record der Domäne, <c>public sealed record {Name} : IUebersetzung&lt;{Ein}, {Aus}&gt;;</c>, mit den
-/// Abweichungen der Feldzuordnung als <c>[Feld(nameof({Aus}.Ziel), nameof({Ein}.Quelle))]</c>. Sie macht einen Graphen aus einem Katalog
-/// domänenspezifisch; wohin sie gehört, sagt nur der Typ <see cref="Ein"/>. Abgeleitet (nicht editierbar): die Felder von <c>TEin</c>, je Parameter von
-/// <c>TAus</c> seine Quelle mit Regel (<c>feld</c>, <c>name</c>, <c>standard</c>, leer = offen) und den Feldern von <c>TEin</c>, die ausdrücklich passen
-/// (für die Wahl im Modal), und die Fehler (CQRS119/CQRS121).
+/// Eine ÜBERSETZUNG (docs/04 §4.4): eine Klasse <c>public sealed class {Name}({Ein} source) : ITranslate&lt;{Ein}, {Aus}&gt;</c> mit
+/// <c>Translate()</c>, die das Ziel aus der Zuordnung baut. Name <c>{Ein}_{Aus}_{Zähler}</c>; der Editor legt sie an und schreibt sie ganz.
 /// </summary>
 public sealed record Uebersetzung
 {
@@ -658,7 +655,7 @@ public sealed record Uebersetzung
     public string Namespace { get; init; } = "";
     public string Ein { get; init; } = "";
     public string Aus { get; init; } = "";
-    /// <summary>Die Abweichungen der Feldzuordnung (<c>[Feld]</c> am Record).</summary>
+    /// <summary>Die Zuordnung: je Parameter des Ziels, der etwas bekommt, sein Feld der Quelle (in <c>Translate()</c>: <c>source.Feld</c>).</summary>
     public IReadOnlyList<FeldZuordnung> Felder { get; init; } = [];
     /// <summary>Die Namespaces von <see cref="Ein"/> und <see cref="Aus"/>, die nicht der der Übersetzung sind — wie geschrieben.</summary>
     public IReadOnlyList<string> Usings { get; init; } = [];
@@ -692,7 +689,7 @@ public sealed record GraphKnoten
     public IReadOnlyList<string> Verlierbar { get; init; } = [];
 }
 
-/// <summary>Ein <c>[Feld]</c> an einer Übersetzung: der Parameter <see cref="Ziel"/> von <c>TAus</c> bekommt die Eigenschaft <see cref="Quelle"/> von <c>TEin</c>.</summary>
+/// <summary>Eine Zuordnung einer Übersetzung: der Parameter <see cref="Ziel"/> des Ziels bekommt den Parameter <see cref="Quelle"/> der Quelle.</summary>
 public sealed record FeldZuordnung(string Ziel, string Quelle);
 
 /// <summary>Eine Kante eines Graphen (aus einem <c>Von</c>): vom Knoten <see cref="Von"/> über den Typ <see cref="Typ"/> zum Knoten <see cref="Nach"/>.</summary>

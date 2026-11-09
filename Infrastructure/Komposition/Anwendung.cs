@@ -123,7 +123,7 @@ public interface IFunktionsTabelle
     IReadOnlyList<FunktionsBaustein> Bausteine { get; }
     /// <summary>Die Graphen (Blaupausen, docs/04 §4.4, GeneratedGraphen): Knoten, Kanten, Köpfe.</summary>
     IReadOnlyList<GraphPlan> Graphen { get; }
-    /// <summary>Die Übersetzungen der Domänen (GeneratedUebersetzungen): je Record mit <c>IUebersetzung&lt;TEin, TAus&gt;</c> seine Rechnung.</summary>
+    /// <summary>Die Übersetzungen der Domänen (GeneratedUebersetzungen): je Klasse mit <c>ITranslate&lt;TSource, TTarget&gt;</c> seine Rechnung.</summary>
     IReadOnlyList<UebersetzungPlan> Uebersetzungen { get; }
 }
 

@@ -6,8 +6,14 @@ using Sondenkatalog.Katalog.Vorhersage;
 
 namespace Wetterdienst.Vorhersage;
 
-[Feld(nameof(Bilde.Station), nameof(BildePrognose.Station))]
-public sealed record PrognoseBilden : IUebersetzung<BildePrognose, Bilde>;
+#pragma warning disable CS9113
 
-[Feld(nameof(VermerkePrognose.AggregateId), nameof(Prognostiziert.Station))]
-public sealed record PrognoseVermerken : IUebersetzung<Prognostiziert, VermerkePrognose>;
+public sealed class BildePrognose_Bilde_1(BildePrognose source) : ITranslate<BildePrognose, Bilde>
+{
+    public Bilde Translate() => new(Station: source.Station.Wert, Grad: source.Grad);
+}
+
+public sealed class Prognostiziert_VermerkePrognose_1(Prognostiziert source) : ITranslate<Prognostiziert, VermerkePrognose>
+{
+    public VermerkePrognose Translate() => new(AggregateId: new(source.Station), Grad: source.Grad, Gelernt: source.Gelernt);
+}

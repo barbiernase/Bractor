@@ -67,8 +67,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Konfig-Records, Technik (ohne Marker), `IZustand<T>`, `ILogger<T>`.
 - **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs` eines **Katalogs** (`<Name>.Katalog`, domänenneutral; Funktionen und
   Graphen gibt es nur dort); jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch mehrfach). Domänenspezifisch macht ihn eine
-  **Übersetzung**: `[Feld(nameof(Aus.Ziel), nameof(Ein.Quelle))] record X : IUebersetzung<TEin, TAus>` in
-  `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs`, Feld für Feld ohne Logik, Routing über den Typ (jede Ausgabe eines laufenden Graphen, ein
+  **Übersetzung**: `class {Quelle}_{Ziel}_{n}(TSource source) : ITranslate<TSource, TTarget>` mit `TTarget Translate() => new(…source.Feld…)` in
+  `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` — der Editor schreibt `Translate()` aus der Verdrahtung, der Compiler prüft sie; Feld für Feld ohne Logik, Routing über den Typ (jede Ausgabe eines laufenden Graphen, ein
   Client-Command am Kopf, eine Antwort auf ihren Command; docs/04 §4.4, CQRS119–121/123). Nur das Projekt der Übersetzungen (und
   Speicher, Akteure, Leitung, Komposition) referenziert Kataloge: **die Domäne bleibt rein**. **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
   jeder Kopf als `[Kopf]` (nimmt von außen, was keine Quelle speist; je Eingangstyp genau einer); nur eine Quelle trägt keins; was kein Knoten über

@@ -30,7 +30,7 @@ static class Projektstruktur
         Schreibseite,
         /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reader.</summary>
         Leseseite,
-        /// <summary><c>&lt;Wurzel&gt;.Uebersetzungen</c>: die Übersetzungen (<c>IUebersetzung&lt;TEin, TAus&gt;</c>) — die eine Naht zwischen Katalogen und
+        /// <summary><c>&lt;Wurzel&gt;.Uebersetzungen</c>: die Übersetzungen (<c>ITranslate&lt;TSource, TTarget&gt;</c>) — die eine Naht zwischen Katalogen und
         /// Domäne (docs/07 §7.2). Sie referenziert die Schreibseite und die Kataloge, deren Graphen sie bindet; so bleibt die Domäne rein.</summary>
         Uebersetzungen,
         /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure und Clients — der äußerste Ring.</summary>
@@ -71,7 +71,7 @@ static class Projektstruktur
         Hinweis,
         /// <summary>Ein Graph (<c>record … : IGraph</c>, Knoten als Parameter): im Katalog, in <c>Graphen.cs</c>.</summary>
         Graph,
-        /// <summary>Eine Übersetzung (<c>record … : IUebersetzung&lt;TEin, TAus&gt;</c>): bei den Übersetzungen der Anwendung, in <c>Uebersetzungen.cs</c>
+        /// <summary>Eine Übersetzung (<c>class …(…) : ITranslate&lt;TSource, TTarget&gt;</c>): bei den Übersetzungen der Anwendung, in <c>Uebersetzungen.cs</c>
         /// — sie macht einen Graphen aus einem Katalog domänenspezifisch (docs/07 §7.2).</summary>
         Uebersetzung,
         /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — im Katalog,
