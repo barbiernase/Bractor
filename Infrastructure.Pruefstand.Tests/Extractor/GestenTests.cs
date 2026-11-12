@@ -534,7 +534,7 @@ public sealed class GestenTests : IDisposable
     [Fact]
     public async Task Neue_Technik_per_Plus_legt_Schnittstelle_ohne_Marker_und_Umsetzung_an()
     {
-        var bericht = await GesteAsync(new KartenDelta { Karten = new() { ["bausteinFunktionen"] = [Leuchte()] } });
+        var bericht = await GesteAsync(new KartenDelta { Karten = new() { ["techniken"] = [Leuchte()] } });
 
         bericht.Patch.Select(p => p.Datei).Should().BeEquivalentTo("Leihwesen/ILeuchte.cs", "Leihwesen/Leuchte.cs");
         Text("ILeuchte.cs").Should().Contain("public interface ILeuchte\n{").And.Contain("    bool Hell(int stufe);");
@@ -545,10 +545,10 @@ public sealed class GestenTests : IDisposable
     [Fact]
     public async Task Methode_an_der_Technik_kommt_an_die_Schnittstelle_und_als_Stub_an_jede_Umsetzung()
     {
-        var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
+        var f = Karte(await BoardAsync(), "techniken", d => (string?)d["name"] == "IWertTabelle");
         f["methoden"]!.AsArray().Add(new JsonObject { ["name"] = "Runde", ["rueckgabe"] = "decimal", ["parameter"] = new JsonArray(Param("decimal", "betrag")) });
 
-        await GesteAsync(Geaendert("bausteinFunktionen", f));
+        await GesteAsync(Geaendert("techniken", f));
 
         Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("    Task<bool> IstSchaetzbarAsync(Guid leserId);\n    decimal Runde(decimal betrag);\n}")
             .And.Contain("    public decimal Runde(decimal betrag)\n    {\n        throw new NotImplementedException(\"TODO: LineareWertTabelle.Runde\");");
@@ -557,10 +557,10 @@ public sealed class GestenTests : IDisposable
     [Fact]
     public async Task Zweite_Umsetzung_einer_Technik_ist_eine_neue_Klasse_mit_Stubs()
     {
-        var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
+        var f = Karte(await BoardAsync(), "techniken", d => (string?)d["name"] == "IWertTabelle");
         f["umsetzungen"]!.AsArray().Add(new JsonObject { ["name"] = "FesteWertTabelle" });
 
-        var bericht = await GesteAsync(Geaendert("bausteinFunktionen", f));
+        var bericht = await GesteAsync(Geaendert("techniken", f));
 
         bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/FesteWertTabelle.cs");
         Text("FesteWertTabelle.cs").Should().Contain("public sealed class FesteWertTabelle : IWertTabelle")
@@ -570,10 +570,10 @@ public sealed class GestenTests : IDisposable
     [Fact]
     public async Task Einen_Konfig_Record_in_den_Konstruktor_einer_Umsetzung_nehmen()
     {
-        var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
+        var f = Karte(await BoardAsync(), "techniken", d => (string?)d["name"] == "IWertTabelle");
         f["umsetzungen"]![0]!["konstruktor"]!.AsArray().Add(Param("GutachtenKonfig", "gutachten"));
 
-        await GesteAsync(Geaendert("bausteinFunktionen", f));
+        await GesteAsync(Geaendert("techniken", f));
 
         Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("public sealed class LineareWertTabelle(WertTabellenKonfig konfig, GutachtenKonfig gutachten) : IWertTabelle");
     }
@@ -593,12 +593,12 @@ public sealed class GestenTests : IDisposable
     [Fact]
     public async Task Umbenennen_eines_Typs_in_seiner_eigenen_Datei_zieht_die_Datei_mit()
     {
-        await GesteAsync(new KartenDelta { Karten = new() { ["bausteinFunktionen"] = [Leuchte()] } });
+        await GesteAsync(new KartenDelta { Karten = new() { ["techniken"] = [Leuchte()] } });
         // Technik ist, was der Konstruktor einer Funktion nimmt: erst im Konstruktor einer Funktion wird ILeuchte eine Karte.
         var schaetzung = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "Schadensschaetzer");
         schaetzung["konstruktor"]!.AsArray().Add(Param("ILeuchte", "leuchte"));
         await GesteAsync(Geaendert("bausteinFunktionen", schaetzung));
-        var karte = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "ILeuchte");
+        var karte = Karte(await BoardAsync(), "techniken", d => (string?)d["name"] == "ILeuchte");
         var methode = karte["methoden"]![0]!["_ort"]!;
         var impl = karte["umsetzungen"]![0]!["_ort"]!;
         ((string?)impl["datei"]).Should().Be("Leihwesen/Leuchte.cs", "die Implementierung trägt ihren Ort — ihr Name ist umbenennbar");

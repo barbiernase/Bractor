@@ -162,13 +162,15 @@ public class UmgebungLaderTests
     [Fact]
     public void Der_Akteur_einer_Instanz_darf_was_sie_verlaesst()
     {
+        // Was den Graphen verlässt, zählt nach der Übersetzung: der Katalog gibt BildGedeutet aus, die Domäne macht daraus NimmBildAuf.
         var rechte = Infrastructure.Komposition.Anwendung.Akteure.Rechte;
+        var uebersetzungen = new Uebersetzungen(Infrastructure.Komposition.Anwendung.Funktionen.Uebersetzungen);
         GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["linie1"] = new() { Graph = "Linienimport", Akteur = "KameraSystem" } },
-            Graphen, rechte).Alle.Single(i => i.Name == "linie1").Akteur.Should().Be("KameraSystem");
+            Graphen, rechte, uebersetzungen).Alle.Single(i => i.Name == "linie1").Akteur.Should().Be("KameraSystem");
         FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
                 ["linie1"] = new() { Graph = "Linienimport", Akteur = "Inspekteur" },
-            }, Graphen, rechte))
+            }, Graphen, rechte, uebersetzungen))
             .Should().Throw<BootFehler>().WithMessage("*Inspekteur darf NimmBildAuf nicht*");
     }
 
