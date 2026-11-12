@@ -59,7 +59,7 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
     public static JsonObject Schema(JsonObject board, string graph)
     {
         var graphen = Liste(board["graphen"]).ToDictionary(g => S(g, "name"), StringComparer.Ordinal);
-        var funktionen = Liste(board["bausteinFunktionen"]).Concat(Liste(board["katalog"]))
+        var funktionen = Liste(board["bausteinFunktionen"]).Concat(Liste(board["techniken"])).Concat(Liste(board["katalog"]))
             .GroupBy(f => S(f, "name"), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         if (!graphen.TryGetValue(graph, out var wurzel)) throw new ArgumentException($"Kein Graph „{graph}“.");
 

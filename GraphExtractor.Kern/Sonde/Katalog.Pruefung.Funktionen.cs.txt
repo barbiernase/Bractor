@@ -6,10 +6,12 @@ namespace Sondenkatalog.Katalog.Pruefung;
 // Der Start: je gescannter Rückgabe ein Vorgang (Id aus der Herkunft); seine Antwort öffnet JE Seite einen Unterlauf.
 public sealed class Pruefungsstart : IFunktion
 {
-    public Starte Auf(Scan e, Herkunft h) => new(h.NeueId("pruefung"), e.LeserId, e.Seiten);
+    public async Task<Starte> Auf(Scan e, Herkunft h) => new(h.NeueId("pruefung"), e.LeserId, e.Seiten);
 
-    public IEnumerable<SeiteZuPruefen> Auf(Gestartet g) =>
-        g.Seiten.Select((seite, i) => new SeiteZuPruefen(g.Pruefung, i + 1, seite));
+    public async IAsyncEnumerable<SeiteZuPruefen> Auf(Gestartet g)
+    {
+        for (var i = 0; i < g.Seiten.Count; i++) yield return new SeiteZuPruefen(g.Pruefung, i + 1, g.Seiten[i]);
+    }
 }
 
 // Technik ohne Marker mit zwei Umsetzungen — welche, sagt die Instanz (Technik am Knoten).
@@ -31,7 +33,7 @@ public sealed class Handpruefung : ISeitenleser
 // Im Unterlauf je Seite.
 public sealed class Seitenpruefer(ISeitenleser leser) : IFunktion
 {
-    public Seitenbefund Auf(SeiteZuPruefen s) => new(s.Pruefung, s.Nummer, leser.IstBeschaedigt(s.Seite));
+    public async Task<Seitenbefund> Auf(SeiteZuPruefen s) => new(s.Pruefung, s.Nummer, leser.IstBeschaedigt(s.Seite));
 }
 
 // Lese-Fähigkeit: die Mahnung nach Ablauf der Leihfrist richtet sich nach der Zahl offener Ausleihen des Lesers.

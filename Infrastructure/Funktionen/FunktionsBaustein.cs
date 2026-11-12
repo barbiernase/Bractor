@@ -50,45 +50,22 @@ public sealed record FunktionsBaustein(
     /// <summary>Der Eingang für einen Typ, oder null.</summary>
     public FunktionsEingang? Eingang(Type typ) => Eingaenge.FirstOrDefault(e => e.Ports.Contains(typ));
 
-    /// <summary>Die Antwort-Events (ein Ziel entschied sie auf einen Command der Funktion hin) mit der Nummer ihres <c>Auf</c>.</summary>
-    public IReadOnlyDictionary<Type, int> Antworten() =>
-        Eingaenge.Select((e, i) => (e, i)).Where(x => typeof(IEvent).IsAssignableFrom(x.e.Typ))
-            .ToDictionary(x => x.e.Typ, x => x.i);
-
     /// <summary>Hat irgendein Eingang Lese-Fähigkeiten? Dann läuft die Funktion nur im Host.</summary>
     public bool Liest => Eingaenge.Any(e => e.Faehigkeiten.Count > 0);
 }
 
 /// <summary>
-/// Bringt jede erlaubte Rückgabe eines <c>Auf</c> (konkreter Typ, <c>OneOf</c>, je auch als Task; ein Strom) auf einen Strom von Ausgaben — der
-/// Generator ruft die passende Form, mit einer Abbildung je Element (<c>x =&gt; x.Value</c> für OneOf). Ein leerer Strom heißt „nichts“.
+/// Bringt die beiden Rückgaben eines <c>Auf</c> (<c>Task&lt;T&gt;</c> bzw. <c>Task&lt;OneOf&lt;…&gt;&gt;</c>; ein <c>IAsyncEnumerable&lt;…&gt;</c>) auf einen
+/// Strom von Ausgaben — der Generator ruft die passende Form, mit einer Abbildung je Element (<c>x =&gt; x.Value</c> für OneOf). Ein leerer Strom heißt „nichts“.
 /// </summary>
 public static class Ausgaben
 {
-    public static async IAsyncEnumerable<TA> Einzeln<T, TA>(T wert, Func<T, TA?> abbildung) where TA : class
-    {
-        await Task.CompletedTask;
-        if (abbildung(wert) is { } a) yield return a;
-    }
-
-    public static async IAsyncEnumerable<TA> EinzelnAsync<T, TA>(Task<T> wert, Func<T, TA?> abbildung) where TA : class
+    public static async IAsyncEnumerable<TA> Einzeln<T, TA>(Task<T> wert, Func<T, TA?> abbildung) where TA : class
     {
         if (abbildung(await wert.ConfigureAwait(false)) is { } a) yield return a;
     }
 
-    public static async IAsyncEnumerable<TA> Strom<T, TA>(IEnumerable<T>? strom, Func<T, TA?> abbildung,
-        [EnumeratorCancellation] CancellationToken ct = default) where TA : class
-    {
-        await Task.CompletedTask;
-        if (strom is null) yield break;
-        foreach (var x in strom)
-        {
-            ct.ThrowIfCancellationRequested();
-            if (abbildung(x) is { } a) yield return a;
-        }
-    }
-
-    public static async IAsyncEnumerable<TA> StromAsync<T, TA>(IAsyncEnumerable<T>? strom, Func<T, TA?> abbildung,
+    public static async IAsyncEnumerable<TA> Strom<T, TA>(IAsyncEnumerable<T>? strom, Func<T, TA?> abbildung,
         [EnumeratorCancellation] CancellationToken ct = default) where TA : class
     {
         if (strom is null) yield break;

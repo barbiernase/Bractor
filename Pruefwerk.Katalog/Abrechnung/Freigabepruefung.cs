@@ -7,6 +7,6 @@ public sealed class Freigabepruefung : IFunktion
 {
     public const decimal Grenze = 10_000;
 
-    public OneOf<Freigegeben, ZurPruefungVorzulegen> Auf(Pruefe p) =>
+    public async Task<OneOf<Freigegeben, ZurPruefungVorzulegen>> Auf(Pruefe p) =>
         p.Betrag > Grenze ? new ZurPruefungVorzulegen(p.Vorgang) : new Freigegeben(p.Vorgang);
 }

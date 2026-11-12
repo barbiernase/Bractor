@@ -163,10 +163,6 @@ public sealed partial class Sicht
                 if (!ports.Any(p => p.Typ == t && p.Richtung == ri)) ports.Add(new(t, ri, sorte ?? Sorte(t), false));
             }
             foreach (var t in L(g, "koepfe")) Port(t, "ein");
-            // Ein Event nimmt eine Funktion nur als Antwort auf ihren eigenen Aggregat-Command (CQRS108) — es kommt vom Aggregat zurück.
-            foreach (var f in InnereFunktionen(g))
-                foreach (var e in Alle(f["eingaenge"]))
-                    if (Sorte(S(e, "eingang")) == "event") Port(S(e, "eingang"), "ein");
             foreach (var (qg, knoten, typ) in Quellknoten(g))
             {
                 var qid = "q:" + S(qg, "_id") + ":" + knoten;
@@ -301,7 +297,7 @@ public sealed partial class Sicht
                     if (nk.Id == k.Id || nk.Karte == k.Karte) continue;
                     var a = np.Sorte is "query" or "antwort" ? "lesen"
                         : nk.Spalte == "eingang" ? "kenntnis"
-                        : k.Spalte == "aggregate" && nk.Spalte is "graphen" or "uebersetzungen" ? "ruecklauf"
+                        : k.Spalte == "aggregate" && nk.Spalte == "uebersetzungen" ? "ruecklauf"
                         : "schreiben";
                     kanten.Add(new(k.Id, nk.Id, p.Typ, a));
                 }

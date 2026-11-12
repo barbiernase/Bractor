@@ -44,7 +44,7 @@ public class UebersetzungAnalyzerTests
         public record Gerechnet(Guid Bezug, int Betrag) : ICommand;
         public record Bestaetigt(decimal Betrag) : ICommand;
         public record Fremd(string Betrag) : ICommand;
-        public sealed class Rechner : IFunktion { public Gerechnet Auf(Rechne r) => default!; }
+        public sealed class Rechner : IFunktion { public Task<Gerechnet> Auf(Rechne r) => null!; }
         """;
 
     [Fact]

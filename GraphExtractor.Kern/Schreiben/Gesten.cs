@@ -37,7 +37,7 @@ public static class KartenSchluessel
     /// <summary>Die Sammlungen, die aus dem Code kommen und von Gesten geändert werden.</summary>
     public static readonly string[] Sammlungen =
     [
-        "records", "enums", "aggregate", "decider", "applier", "bausteinFunktionen", "akteure", "clients", "graphen", "uebersetzungen",
+        "records", "enums", "aggregate", "decider", "applier", "bausteinFunktionen", "techniken", "zustaende", "akteure", "clients", "graphen", "uebersetzungen",
         "readModels", "stores", "projektionen", "reader",
     ];
 
@@ -137,6 +137,8 @@ public static class Gesten
         var agg = Nach(code.Aggregate, a => a.Namespace + "|" + a.Name);
         var dec = Nach(code.Decider, d => d.Aggregat + "|" + d.Command);
         var fkt = Nach(code.BausteinFunktionen, f => f.Namespace + "|" + f.Name);
+        var tec = Nach(code.Techniken, t => t.Namespace + "|" + t.Name);
+        var zus = Nach(code.Zustaende, z => z.Namespace + "|" + z.Name);
         var akt = Nach(code.Akteure, a => a.Namespace + "|" + a.Name);
         var cli = Nach(code.Clients, c => c.Namespace + "|" + c.Name);
         var gra = Nach(code.Graphen, g => g.Namespace + "|" + g.Name);
@@ -160,6 +162,8 @@ public static class Gesten
             Aggregate = soll.Aggregate.Select(a => a with { Herkunft = agg.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Decider = soll.Decider.Select(d => d with { Herkunft = dec.GetValueOrDefault(d.Aggregat + "|" + d.Command)?.Herkunft }).ToList(),
             BausteinFunktionen = soll.BausteinFunktionen.Select(f => f with { Herkunft = fkt.GetValueOrDefault(f.Namespace + "|" + f.Name)?.Herkunft }).ToList(),
+            Techniken = soll.Techniken.Select(t => t with { Herkunft = tec.GetValueOrDefault(t.Namespace + "|" + t.Name)?.Herkunft }).ToList(),
+            Zustaende = soll.Zustaende.Select(z => z with { Herkunft = zus.GetValueOrDefault(z.Namespace + "|" + z.Name)?.Herkunft }).ToList(),
             Akteure = soll.Akteure.Select(a => a with { Herkunft = akt.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Clients = soll.Clients.Select(c => c with { Herkunft = cli.GetValueOrDefault(c.Namespace + "|" + c.Name)?.Herkunft }).ToList(),
             Graphen = soll.Graphen.Select(g => g with { Herkunft = gra.GetValueOrDefault(g.Namespace + "|" + g.Name)?.Herkunft }).ToList(),

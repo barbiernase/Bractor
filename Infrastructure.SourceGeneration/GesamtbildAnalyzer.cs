@@ -14,8 +14,6 @@ namespace Infrastructure.SourceGeneration;
 /// <list type="bullet">
 /// <item>CQRS084 (GR-QUERY, R4) — eine Query hat genau ein Ziel: einen Reader oder ein Aggregat (<c>Frage</c> im Decider, docs/03 §3.2).</item>
 /// <item>CQRS085 (GR-MODUL-AUSGANG-OFFEN, UNUSED-EVENT; Warnung) — ein Event, eine Ablehnung oder eine Response, die niemand erzeugt.</item>
-/// <item>CQRS108 (GR-ANTWORT; Fehler) — eine Funktion hört ein Event, das keiner ihrer Commands entscheiden kann: eine Funktion liest nie das Log, ein
-///   Event erreicht sie nur als Antwort auf einen eigenen Command (docs/04 §4.4) — dieses käme nie.</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
 /// <item>CQRS116 (GR-EMPFAENGER; Fehler) — ein Command ohne Ziel, der seinen Erzeuger verlässt (von einem Akteur, aus einem Knoten, den kein Knoten
 ///   desselben Graphen nimmt), hat genau einen Empfänger: den Kopf genau eines Graphen. Kein Empfänger oder mehrere sind ein Fehler. Ein Graph
@@ -37,7 +35,7 @@ namespace Infrastructure.SourceGeneration;
 public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 {
     public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086",
-        AntwortOhneCommandId = "CQRS108", EmpfaengerId = "CQRS116", OhneGraphId = "CQRS117", VerlaesstId = Uebersetzungsform.Verlassen,
+        EmpfaengerId = "CQRS116", OhneGraphId = "CQRS117", VerlaesstId = Uebersetzungsform.Verlassen,
         UebersetzteAntwortId = Uebersetzungsform.Antwort, FaehigkeitOhneStoreId = "CQRS124";
 
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
@@ -49,10 +47,6 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         "'{0}' ({1}) erzeugt niemand — {2} (GR-MODUL-AUSGANG-OFFEN)", DiagnosticSeverity.Warning);
     private static readonly DiagnosticDescriptor EingangOffen = D(EingangOffenId, "Eingang ohne Konsument",
         "'{0}' ({1}) nimmt niemand an — {2} (GR-MODUL-EINGANG-OFFEN)", DiagnosticSeverity.Warning);
-
-    private static readonly DiagnosticDescriptor AntwortOhneCommand = D(AntwortOhneCommandId, "Antwort ohne eigenen Command",
-        "Die Funktion '{0}' hört '{1}', aber keiner ihrer Commands kann es entscheiden ({2}) — eine Funktion liest nie das Log, ein Event erreicht sie nur "
-        + "als Antwort auf einen eigenen Command; was sie aus einer Entscheidung braucht, sagt ihr das Aggregat als Folge (GR-ANTWORT)", DiagnosticSeverity.Error);
 
     private static readonly DiagnosticDescriptor UebersetzteAntwort = D(UebersetzteAntwortId, "Antwort, die nie kommt",
         "'{0}': die Antwort-Übersetzung nimmt {1}, aber kein Decide eines Commands, den eine Übersetzung erzeugt, gibt es aus ({2}) — eine "
@@ -74,7 +68,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         + "(class …(…) : ITranslate<{1}, …>) oder lass ihn den Kopf eines Graphen nehmen (GR-UEBERSETZUNG)", DiagnosticSeverity.Error);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, AntwortOhneCommand, UebersetzteAntwort, FaehigkeitOhneStore, Empfaenger, OhneGraph, Verlaesst);
+        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, UebersetzteAntwort, FaehigkeitOhneStore, Empfaenger, OhneGraph, Verlaesst);
 
     /// <summary>Die Rollen-Marker, deren Implementierung eine Assembly zur Domäne macht (wie die Projektlage des Extractors).</summary>
     private static readonly string[] DomaenenRollen =
@@ -163,7 +157,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 foreach (var a in Funktionsform.Lies(t).Aufs)
                 {
                     erzeugt.UnionWith(a.Ausgaben);
-                    if (a.Command) genommen.UnionWith(a.Eingaenge);
+                    genommen.UnionWith(a.Eingaenge);
                 }
             // Eine Übersetzung der Domäne nimmt TEin und erzeugt TAus.
             if (Uebersetzungsform.IstUebersetzung(t))
@@ -205,18 +199,6 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     "kein Decide, keine Funktion und kein Akteur nennt es in seiner Signatur"));
             else if (IstT(t, iResponse) && !erzeugt.Contains(t) && !alsFeld.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, "Response", "keine Frage eines Readers oder Aggregats nennt sie in ihrer Signatur"));
-        }
-
-        // GR-ANTWORT: ein Event-Eingang einer Funktion ist eine Antwort — einer ihrer Commands (aus irgendeinem Auf) muss es entscheiden können.
-        foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstFunktion(t)))
-        {
-            var form = Funktionsform.Lies(f);
-            if (form.Fehler.Count > 0) continue;   // CQRS100 meldet der Generator
-            var befehle = form.Aufs.SelectMany(a => a.Ausgaben).Where(x => IstT(x, iAggregatCommand)).Distinct<ITypeSymbol>(SymbolEqualityComparer.Default).ToList();
-            foreach (var a in form.Aufs.Where(form.IstAntwort))
-                if (!befehle.Any(b => entscheidet.TryGetValue(b, out var aus) && aus.Contains(a.Eingang)))
-                    ctx.ReportDiagnostic(Diagnostic.Create(AntwortOhneCommand, a.Methode.Locations.FirstOrDefault() ?? Location.None, f.Name, a.Eingang.Name,
-                        befehle.Count == 0 ? "sie gibt keinen Command aus" : "ihre Commands: " + string.Join(", ", befehle.Select(b => b.Name))));
         }
 
         // Die Übersetzungen der Domänen (docs/04 §4.4): sie nehmen nach Typ, was ein Graph ausgibt, was ein Client gibt, was ein Aggregat

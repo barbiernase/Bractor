@@ -53,7 +53,9 @@ public sealed partial class Sicht
             case "aggregate": case "store": return Anwendung;
             // Eine Funktion bzw. ein Graph, der als Knoten in genau einem Graphen steht, gehört diesem Graphen — so steht der Graph als Block mit
             //   seinen Knoten beisammen. Technik (gerufen) und Knoten mehrerer Graphen bleiben eigene Blöcke der Anwendung.
-            case "bausteinfunktion": return IstGerufen(r) ? Anwendung : Einer(n, GraphenMitKnoten(name), leer: Anwendung, mehrdeutig: false);
+            case "bausteinfunktion": return Einer(n, GraphenMitKnoten(name), leer: Anwendung, mehrdeutig: false);
+            // Technik ist ein eigener Block der Anwendung; eine Zustandsklasse gehört ihrem Halter (wie Hilfscode: dem einzigen Nutzer).
+            case "technik": return Anwendung;
             case "graph": return Einer(n, GraphenMitKnoten(name).Where(g => g != n.Id), leer: Anwendung, mehrdeutig: false);
             case "akteur": case "client": return Rand;
             case "state": case "decider": case "applier": return AggId(S(r, "aggregat")) ?? Begriffe;
@@ -127,9 +129,9 @@ public sealed partial class Sicht
         foreach (var r in _records.Where(r => S(r, "name") != t && Felder(r, "felder"))) nutzer.Add(BlockDes("rec:" + S(r, "name")));
         foreach (var rm in _readModels.Where(x => S(x, "name") != t && Felder(x, "felder"))) nutzer.Add(BlockDes("rm:" + S(rm, "_id")));
         foreach (var g in _aggregate.Where(g => Felder(g, "state"))) nutzer.Add("agg:" + S(g, "name"));
-        foreach (var f in _bausteinFunktionen.Where(f => Felder(f, "konstruktor") || Alle(f["umsetzungen"]).Any(u => Felder(u, "konstruktor"))
+        foreach (var f in _bausteinFunktionen.Concat(_techniken).Where(f => Felder(f, "konstruktor") || Alle(f["umsetzungen"]).Any(u => Felder(u, "konstruktor"))
                                                          || Alle(f["methoden"]).Any(m => Nutzt(S(m, "rueckgabe")) || Felder(m, "parameter"))))
-            nutzer.Add("fb:" + S(f, "_id"));
+            nutzer.Add(HalterKarte(f));
         foreach (var st in _stores.Where(s => Alle(s["writeFns"]).Concat(Alle(s["readFns"])).Any(f => Felder(f, "params") || Nutzt(S(f["sig"], "rueckgabe")))))
             nutzer.Add("sto:" + S(st, "_id"));
         return Einer(n, nutzer, mehrdeutig: false);

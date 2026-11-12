@@ -13,10 +13,7 @@ public delegate IAsyncEnumerable<object> FunktionsRechnung(object umsetzung, int
 /// Was die Laufzeit von einem Knoten braucht (docs/04 §4.4): der Name seiner Funktion, wie eine Aktivierung entsteht (Bereich, Umsetzung, Zustand),
 /// wie sie rechnet und ob ihr <c>Auf</c> Lese-Fähigkeiten nimmt, dazu Instanz, Knoten und seine Kanten im Graphen.
 /// </summary>
-/// <param name="Antworten">Die Event-Typen, die die Funktion als Antwort auf ihre eigenen Commands hört (das Ziel entschied sie, docs/04 §4.4), je mit der
-/// Nummer ihres <c>Auf</c>.</param>
-public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, FunktionsAktivierung>? Aktivierung, FunktionsRechnung? Rechne, bool Liest = false,
-    IReadOnlyDictionary<Type, int>? Antworten = null)
+public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, FunktionsAktivierung>? Aktivierung, FunktionsRechnung? Rechne, bool Liest = false)
 {
     private static readonly IReadOnlySet<Type> KeineKanten = new HashSet<Type>();
 
@@ -49,7 +46,7 @@ public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, Funkti
 public sealed record FunktionsOrtKonfig(int Parallel = FunktionsOrtKonfig.StandardParallel, int Warteschlange = FunktionsOrtKonfig.StandardWarteschlange,
     bool Vorwaermen = false, int Wiederholungen = FunktionsOrtKonfig.StandardWiederholungen)
 {
-    /// <summary>Standard für <see cref="Parallel"/>: ein Kind rechnet einen Eingang samt den Antworten auf seine Commands (eine ganze Kette) — so viele
+    /// <summary>Standard für <see cref="Parallel"/>: ein Kind rechnet einen Eingang samt den Übersetzungen seiner Ausgaben — so viele
     /// zugleich, wie früher Partitionen mal Slots Eingänge einzeln liefen, und mehr.</summary>
     public const int StandardParallel = 256, StandardWarteschlange = 10_000, StandardWiederholungen = 3;
 }

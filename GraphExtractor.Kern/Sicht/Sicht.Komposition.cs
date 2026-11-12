@@ -36,7 +36,7 @@ public sealed partial class Sicht
             o["art"] = "technik";
             if (GerufenZu(typ) is { } t)
             {
-                o["karte"] = "fb:" + S(t, "_id");
+                o["karte"] = "tk:" + S(t, "_id");
                 o["umsetzungen"] = Arr(Alle(t["umsetzungen"]).Select(u => S(u, "name")));
             }
         }
@@ -225,7 +225,7 @@ public sealed partial class Sicht
         IEnumerable<string> Verwendet(string name) => GraphenMitKnoten(name).OfType<string>();
         IEnumerable<string> Typargumente(string name) => _graphen.SelectMany(g => Alle(g["knoten"])).Select(k => S(k, "typ"))
             .Where(t => Basis(t) == name && t.Length > name.Length).Select(t => t[(name.Length + 1)..^1]).Distinct();
-        var funktionen = new JsonArray(_bausteinFunktionen.Where(f => !IstGerufen(f)).Select(f =>
+        var funktionen = new JsonArray(_bausteinFunktionen.Select(f =>
         {
             var o = new JsonObject
             {
@@ -243,17 +243,18 @@ public sealed partial class Sicht
         {
             ["name"] = S(k, "name"), ["meldet"] = Arr(L(k, "lauscht")), ["konfig"] = Arr(Alle(k["konfigs"]).Select(c => S(c, "record"))),
         }).ToArray());
-        var technik = new JsonArray(_bausteinFunktionen.Where(IstGerufen).Select(t => (JsonNode)new JsonObject
+        var technik = new JsonArray(_techniken.Select(t => (JsonNode)new JsonObject
         {
-            ["karte"] = "fb:" + S(t, "_id"), ["name"] = S(t, "name"),
+            ["karte"] = "tk:" + S(t, "_id"), ["name"] = S(t, "name"),
             ["umsetzungen"] = Arr(Alle(t["umsetzungen"]).Select(u => S(u, "name"))),
-            ["genutztVon"] = Arr(GerufenNutzer(t).Select(f => "fb:" + S(f, "_id"))),
+            ["genutztVon"] = Arr(GerufenNutzer(t).Select(HalterKarte)),
         }).ToArray());
-        var konfig = new JsonArray(_bausteinFunktionen.SelectMany(f => Alle(f["konfigs"]).Select(c => (Record: S(c, "record"), Felder: c["felder"], F: f)))
+        var konfig = new JsonArray(_bausteinFunktionen.Concat(_techniken)
+            .SelectMany(f => Alle(f["konfigs"]).Concat(Alle(f["umsetzungen"]).SelectMany(u => Alle(u["konfigs"]))).Select(c => (Record: S(c, "record"), Felder: c["felder"], F: f)))
             .GroupBy(x => x.Record, StringComparer.Ordinal).Select(x => (JsonNode)new JsonObject
             {
                 ["name"] = x.Key, ["felder"] = Arr(Alle(x.First().Felder).Select(fe => S(fe, "feld"))),
-                ["genutztVon"] = Arr(x.Select(y => "fb:" + S(y.F, "_id")).Distinct()),
+                ["genutztVon"] = Arr(x.Select(y => HalterKarte(y.F)).Distinct()),
             }).ToArray());
         var nachrichten = new JsonArray();
         foreach (var r in _records.Where(r => S(r, "kind") is "command" or "rejection"))

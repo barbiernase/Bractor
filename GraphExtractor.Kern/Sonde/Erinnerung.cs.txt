@@ -10,7 +10,7 @@ public record Erinnert(Guid LeserId) : ITransientEvent;
 
 public sealed class Erinnerungsdienst : IFunktion
 {
-    public Erinnert Auf(Erinnere e) => new(e.LeserId);
+    public async Task<Erinnert> Auf(Erinnere e) => new(e.LeserId);
 }
 
 public sealed record Erinnerungslauf([Kopf] Erinnerungsdienst Dienst) : IGraph;

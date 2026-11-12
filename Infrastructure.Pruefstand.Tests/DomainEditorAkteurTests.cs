@@ -122,7 +122,7 @@ public sealed class DomainEditorAkteurTests
 
     private static BausteinFunktion Folge => new()
     {
-        Name = "Folge", Namespace = "Shop.Bestellung", Klasse = true,
+        Name = "Folge", Namespace = "Shop.Bestellung",
         Eingaenge = [new() { Eingang = "Bestellt", Ausgaben = ["Storniere"] }],
     };
 

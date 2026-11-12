@@ -300,22 +300,28 @@ public static class Sonde
         string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
         // Funktionen (Entscheidung 4): eine Klasse mit typisierten Ports — Konstruktor (Technik, Konfig, Zustand), je Auf seine eine Nachricht
         //   (GR-EINGANG), Herkunft, Lese-Fähigkeiten und die Ausgaben (Strom); eine Quelle lauscht (Lausche).
-        bool Gerufen(JsonNode f) => A(f, "methoden").Any() && !A(f, "eingaenge").Any() && !A(f, "lauscht").Any();
         string Ausgaben(JsonNode e, string feld = "ausgaben") => A(e, feld).Any() ? string.Join("; ", A(e, feld).Select(x => (string?)x)) : "nichts";
-        foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(f => !Gerufen(f)))
-            z.Add($"funktion {S(f, "namespace")}.{S(f, "name")}{(f["klasse"]?.GetValue<bool>() == true ? Konstruktor(f) : " schnittstelle")}"
+        string Typparameter(JsonNode f) => A(f, "typparameter").Any()
+            ? "<" + string.Join(", ", A(f, "typparameter").Select(t => S(t, "name") + (t?["einschraenkung"] is { } e ? ":" + e : ""))) + ">" : "";
+        foreach (var f in A(b, "bausteinFunktionen").Where(Sonde))
+            z.Add($"funktion {S(f, "namespace")}.{S(f, "name")}{Typparameter(f)}{Konstruktor(f)}"
                 + (f["zustand"] is { } zu ? $" zustand={zu}" : "")
                 + " | "
                 + string.Join(" || ", A(f, "eingaenge").Select(e => $"Auf({S(e, "eingang")})"
                     + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
+                    + (e["abbruch"]?.GetValue<bool>() == true ? " abbruch" : "")
                     + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")
                     + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "") + Ausgaben(e))
                     .Concat(A(f, "lauscht").Any() ? [$"Lausche -> strom {Ausgaben(f, "lauscht")}"] : Array.Empty<string>())));
         // Technik (docs/06 §6.5, ohne Marker: was der Konstruktor einer Funktion nimmt): Klasse oder Schnittstelle, Signatur (Methoden) und Umsetzungen.
-        foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(Gerufen))
+        foreach (var f in A(b, "techniken").Where(Sonde))
             z.Add($"technik {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
                   + string.Join("; ", A(f, "methoden").Select(m => $"{S(m, "name")}({string.Join(", ", A(m, "parameter").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(m, "rueckgabe")}"))
                   + (A(f, "umsetzungen").Any() ? " | " + string.Join("; ", A(f, "umsetzungen").Select(u => $"umsetzung {S(u, "name")}{Konstruktor(u)}")) : ""));
+        // Zustandsklassen (docs/04 §4.4): was ein Konstruktor als IZustand<T> nimmt — mit ihren Eigenschaften.
+        foreach (var zk in A(b, "zustaende").Where(Sonde))
+            z.Add($"zustand {S(zk, "namespace")}.{S(zk, "name")} | " + string.Join(", ", A(zk, "eigenschaften").Select(e => $"{S(e, "name")}:{S(e, "typ")}"
+                + (e?["standard"] is { } st ? "=" + st : ""))));
 
         // Leseseite: Store-Fn-Ids → „Store.Fn" auflösen.
         var fnName = new Dictionary<string, string>();
@@ -399,7 +405,7 @@ public static class Sonde
         // Der Besitz (Hierarchie Anwendung → Blöcke → Glieder): je Typ, der kein Block ist, sein Besitzer — aus den Signaturen.
         string Eltern(string id) => id.StartsWith('§') ? id : sicht.KarteVon.TryGetValue(id, out var e) ? $"{e.Art}:{e.Name}" : id;
         foreach (var k in sicht.Karten.Where(k => k.Art is "command" or "event" or "rejection" or "valueobject" or "query" or "queryresponse" or "konfig"
-                                                       or "enum" or "readmodel" or "projektion" or "reader" or "code" && Sonde(k.Ref)))
+                                                       or "enum" or "readmodel" or "projektion" or "reader" or "code" or "zustand" && Sonde(k.Ref)))
             z.Add($"besitz {S(k.Ref, "namespace")}.{k.Name} {k.Art} -> {Eltern(sicht.Besitzer(k))}{(sicht.Mehrdeutig(k) ? " mehrdeutig" : "")}");
 
         // Code-Karten (Werkbank P7.4): Hilfscode ohne Baustein-Rolle, roh — mit der Zahl seiner Deklarationen (partial: _ort + _teile).

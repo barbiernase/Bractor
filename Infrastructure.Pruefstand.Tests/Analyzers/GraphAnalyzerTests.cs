@@ -37,8 +37,7 @@ public class GraphAnalyzerTests
     private const string Vorspann = """
         using System; using System.Collections.Generic; using System.Threading.Tasks; using Abstractions;
         namespace Probe {
-        public partial class Konto : IState { public int Version { get; set; } public Guid Id { get; set; } }
-        public record Buche(Id<Konto> AggregateId) : ICommand<Konto>;
+        public record Meldung(int N) : ICommand;
         public record Start(int N) : ICommand;
         public record Bild(int N) : ICommand;
         public record Klein(int N) : ICommand;
@@ -46,12 +45,12 @@ public class GraphAnalyzerTests
         public record Kachel(int N) : ICommand;
         public record Befund(int N) : ICommand;
         public record Unlesbar(string Grund) : ITransientEvent;
-        public sealed class Lies : IFunktion { public OneOf<Bild, Unlesbar> Auf(Start s) => default!; }
-        public sealed class Verkleinere : IFunktion { public Klein Auf(Bild b) => default!; }
-        public sealed class Gleiche : IFunktion { public Kontrast Auf(Bild b) => default!; }
-        public sealed class Kachle : IFunktion { public IEnumerable<Kachel> Auf(Bild b) => []; }
-        public sealed class Pruefe : IFunktion { public Befund Auf(Kachel k) => default!; }
-        public sealed class Melde : IFunktion { public Buche Auf(Klein k) => default!; }
+        public sealed class Lies : IFunktion { public Task<OneOf<Bild, Unlesbar>> Auf(Start s) => null!; }
+        public sealed class Verkleinere : IFunktion { public Task<Klein> Auf(Bild b) => null!; }
+        public sealed class Gleiche : IFunktion { public Task<Kontrast> Auf(Bild b) => null!; }
+        public sealed class Kachle : IFunktion { public async IAsyncEnumerable<Kachel> Auf(Bild b) { await Task.CompletedTask; yield break; } }
+        public sealed class Pruefe : IFunktion { public Task<Befund> Auf(Kachel k) => null!; }
+        public sealed class Melde : IFunktion { public Task<Meldung> Auf(Klein k) => null!; }
         public sealed class Waechter : IFunktion
         {
             public async IAsyncEnumerable<Start> Lausche([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct)
@@ -69,8 +68,8 @@ public class GraphAnalyzerTests
     [Fact]
     public async Task Eine_Kette_mit_gleichem_Typ_hinein_und_hinaus_ist_kein_Kreis()
         => (await Befunde("""
-            public sealed class Normalisiere : IFunktion { public Bild Auf(Bild b) => default!; }
-            public sealed class Schaerfe : IFunktion { public Bild Auf(Bild b) => default!; }
+            public sealed class Normalisiere : IFunktion { public Task<Bild> Auf(Bild b) => null!; }
+            public sealed class Schaerfe : IFunktion { public Task<Bild> Auf(Bild b) => null!; }
             public sealed record Filter([Kopf] Lies L, [Von(nameof(L))] Normalisiere Vorher, [Von(nameof(Vorher))] Schaerfe S,
                 [Von(nameof(S))] Normalisiere Nachher, [Von(nameof(Nachher))] Verkleinere V) : IGraph;
             """)).Should().BeEmpty("Bild → Bild → Bild: die Kreis-Prüfung läuft über die Knoten, nicht über die Typen");
@@ -78,7 +77,7 @@ public class GraphAnalyzerTests
     [Fact]
     public async Task Ein_Knoten_mit_Kopf_und_Von_nimmt_einen_Port_von_aussen_und_einen_von_innen()
     {
-        const string sammle = "public sealed class Sammle : IFunktion { public Buche Auf(Klein k) => default!; public Buche Auf(Kachel k) => default!; }";
+        const string sammle = "public sealed class Sammle : IFunktion { public Task<Meldung> Auf(Klein k) => null!; public Task<Meldung> Auf(Kachel k) => null!; }";
         (await Befunde(sammle + "public sealed record Mix([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Kopf, Von(nameof(V))] Sammle S) : IGraph;"))
             .Should().BeEmpty("Klein kommt von V, Kachel von außen — zwei Köpfe: Start an L, Kachel an S");
     }
@@ -106,7 +105,7 @@ public class GraphAnalyzerTests
     public async Task Ein_Kreis_und_ein_Graph_der_sich_selbst_enthaelt_sind_Fehler()
     {
         (await Befunde("""
-            public sealed class Zurueck : IFunktion { public Bild Auf(Klein k) => default!; }
+            public sealed class Zurueck : IFunktion { public Task<Bild> Auf(Klein k) => null!; }
             public sealed record Kreis([Kopf] Lies L, [Von(nameof(L), nameof(Z))] Verkleinere V, [Von(nameof(V))] Zurueck Z) : IGraph;
             """)).Should().Contain(b => b.Contains("bilden einen Kreis"));
         (await Befunde("public sealed record Selbst([Kopf] Lies L, [Von(nameof(L))] Selbst S) : IGraph;")).Should().Contain(b => b.Contains("enthält sich selbst"));
@@ -120,7 +119,7 @@ public class GraphAnalyzerTests
             public sealed record Linie(Waechter Eingang, [Von(nameof(Eingang))] Vorschau Vorschau, [Von(nameof(Vorschau))] Melde M) : IGraph;
             """)).Should().BeEmpty("der Wächter speist den Kopf der Schachtel; ein Graph mit Quelle braucht keinen Kopf");
         (await Befunde("""
-            public sealed class Fremd : IFunktion { public Buche Auf(Kachel k) => default!; }
+            public sealed class Fremd : IFunktion { public Task<Meldung> Auf(Kachel k) => null!; }
             public sealed record Gemischt(Waechter Eingang, [Von(nameof(Eingang))] Lies L, [Kopf] Fremd F) : IGraph;
             """)).Should().ContainSingle().Which.Should().Contain("Quellknoten Eingang").And.Contain("Kachel");
         (await Befunde("public sealed record Laut([Kopf] Waechter Eingang, [Von(nameof(Eingang))] Lies L) : IGraph;"))
@@ -155,7 +154,7 @@ public class GraphAnalyzerTests
         (await Befunde("""
             public sealed record Gemischt([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Von(nameof(L))] Gleiche G,
                 [Von(nameof(V))] [Von(nameof(G), Verlierbar = true)] Sammle S) : IGraph;
-            public sealed class Sammle : IFunktion { public Buche Auf(Klein k) => default!; public Buche Auf(Kontrast c) => default!; }
+            public sealed class Sammle : IFunktion { public Task<Meldung> Auf(Klein k) => null!; public Task<Meldung> Auf(Kontrast c) => null!; }
             """)).Should().BeEmpty("Verlierbar ist ein benannter Wert, kein Knoten — und je Zustellung ein eigenes [Von]");
         (await Befunde("""
             public sealed record Zweimal([Kopf] Lies L, [Von(nameof(L))] [Von(nameof(L), Verlierbar = true)] Verkleinere V) : IGraph;
@@ -170,7 +169,7 @@ public class GraphAnalyzerTests
     [Fact]
     public async Task Ein_Port_ohne_Quelle_an_einem_Knoten_ohne_Kopf_ist_ein_Fehler()
         => (await Befunde("""
-            public sealed class Zusammen : IFunktion { public Buche Auf(Klein k) => default!; public Buche Auf(Kontrast c) => default!; }
+            public sealed class Zusammen : IFunktion { public Task<Meldung> Auf(Klein k) => null!; public Task<Meldung> Auf(Kontrast c) => null!; }
             public sealed record Halb([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Von(nameof(V))] Zusammen Z) : IGraph;
             """)).Should().ContainSingle().Which.Should().Contain("'c' in Z (Kontrast) bekommt von keiner genannten Quelle (V) etwas");
 

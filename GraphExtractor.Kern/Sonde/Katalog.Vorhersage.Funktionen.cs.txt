@@ -13,13 +13,13 @@ namespace Sondenkatalog.Katalog.Vorhersage;
 
 public sealed class Tendenzbildung : IFunktion
 {
-    public Tendenz Auf(Bilde b) => new(b.Station, b.Grad);
+    public async Task<Tendenz> Auf(Bilde b) => new(b.Station, b.Grad);
 }
 
 // Eine GENERISCHE Funktion: die offene Definition ist eine Blaupause, je Typargument eines Knotens ein Baustein.
 public sealed class Glaettung<TFenster>(GlaettungsKonfig konfig) : IFunktion where TFenster : IFenster
 {
-    public Geglaettet<TFenster> Auf(Tendenz t) => new(t.Station, t.Grad * konfig.Gewicht);
+    public async Task<Geglaettet<TFenster>> Auf(Tendenz t) => new(t.Station, t.Grad * konfig.Gewicht);
 }
 
 // Der Zustand des Modells: je Station, was es gelernt hat (gesichert, wenn der Lauf fertig ist).
@@ -51,16 +51,16 @@ public sealed class Statistik(IZustand<Zaehlung> zaehlung) : IStatistik
 // Strom); dann mit Technik eine WAHL zwischen Prognose und Warnung (Hinweis).
 public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik statistik) : IFunktion
 {
-    public IEnumerable<OneOf<Prognostiziert, Unwetter>> Auf(Geglaettet<Kurzfenster> kurz)
+    public async IAsyncEnumerable<OneOf<Prognostiziert, Unwetter>> Auf(Geglaettet<Kurzfenster> kurz)
     {
         gewichte.Wert.Kurz[kurz.Station] = kurz.Grad;
-        return Prognose(kurz.Station);
+        foreach (var x in Prognose(kurz.Station)) yield return x;
     }
 
-    public IEnumerable<OneOf<Prognostiziert, Unwetter>> Auf(Geglaettet<Langfenster> lang)
+    public async IAsyncEnumerable<OneOf<Prognostiziert, Unwetter>> Auf(Geglaettet<Langfenster> lang)
     {
         gewichte.Wert.Lang[lang.Station] = lang.Grad;
-        return Prognose(lang.Station);
+        foreach (var x in Prognose(lang.Station)) yield return x;
     }
 
     private IEnumerable<OneOf<Prognostiziert, Unwetter>> Prognose(Guid s)
@@ -79,31 +79,31 @@ public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik stati
 
 public sealed class Kartenzeichnung : IFunktion
 {
-    public KarteGezeichnet Auf(ZeichneKarte z) => new(z.Station, 2048);
+    public async Task<KarteGezeichnet> Auf(ZeichneKarte z) => new(z.Station, 2048);
 }
 
 public sealed class Kantenglaettung : IFunktion
 {
-    public KarteGezeichnet Auf(KarteGezeichnet k) => k;
+    public async Task<KarteGezeichnet> Auf(KarteGezeichnet k) => k;
 }
 
 public sealed class Kartenschaerfung : IFunktion
 {
-    public KarteGezeichnet Auf(KarteGezeichnet k) => k;
+    public async Task<KarteGezeichnet> Auf(KarteGezeichnet k) => k;
 }
 
 public sealed class Kartenskalierung(SkalierungsKonfig konfig) : IFunktion
 {
-    public KarteSkaliert Auf(KarteGezeichnet k) => new(k.Station, konfig.Breite);
+    public async Task<KarteSkaliert> Auf(KarteGezeichnet k) => new(k.Station, konfig.Breite);
 }
 
 public sealed class Kartenablage : IFunktion
 {
-    public KarteBereit Auf(KarteSkaliert k) => new(k.Station, k.Breite);
-    public KarteGeloescht Auf(LoescheKarte l) => new(l.Station);
+    public async Task<KarteBereit> Auf(KarteSkaliert k) => new(k.Station, k.Breite);
+    public async Task<KarteGeloescht> Auf(LoescheKarte l) => new(l.Station);
 }
 
 public sealed class Daumenmeldung : IFunktion
 {
-    public KarteBereit Auf(KarteSkaliert k) => new(k.Station, k.Breite);
+    public async Task<KarteBereit> Auf(KarteSkaliert k) => new(k.Station, k.Breite);
 }

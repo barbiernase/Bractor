@@ -31,22 +31,18 @@ namespace Infrastructure.SourceGeneration
         internal sealed class Auf
         {
             public IMethodSymbol Methode = null!;
-            /// <summary>Die Eingangsports (Entscheidung 4): je Command-Parameter einer; ein Antwort-Event nur allein.</summary>
+            /// <summary>Der Eingangsport: genau einer, ein Command ohne Ziel.</summary>
             public List<Port> Ports = new List<Port>();
-            /// <summary>Der erste Typ des ersten Ports — bei einem einzelnen Eingang (Antwort, ein Command) der Eingang.</summary>
+            /// <summary>Der Eingang: der Typ des einen Ports.</summary>
             public INamedTypeSymbol Eingang => Ports[0].Typen[0];
             /// <summary>Alle Typen, die das <c>Auf</c> nimmt (über alle Ports).</summary>
             public IEnumerable<INamedTypeSymbol> Eingaenge => Ports.SelectMany(p => p.Typen);
-            /// <summary>Die Eingänge sind Commands ohne Ziel (Nachrichtenform): aus einem Decide, von einem anderen Knoten oder einem Akteur.</summary>
-            public bool Command;
             /// <summary>Die Parameter in Reihenfolge: <c>p</c> (ein Port, Nummer in <see cref="Ports"/>), <c>h</c> (Herkunft), <c>ct</c> (Abbruch) oder eine Lese-Fähigkeit.</summary>
             public List<(string Art, INamedTypeSymbol? Typ, string Name, int Port)> Parameter = new List<(string, INamedTypeSymbol?, string, int)>();
             public List<INamedTypeSymbol> Faehigkeiten = new List<INamedTypeSymbol>();
             public bool MitHerkunft;
-            /// <summary><c>""</c> oder <c>"Task"</c>.</summary>
-            public string Huelle = "";
+            /// <summary>Ein Strom (<c>IAsyncEnumerable&lt;…&gt;</c>, keine bis viele Ausgaben) — sonst ein <c>Task&lt;…&gt;</c> mit genau einer.</summary>
             public bool Strom;
-            public bool StromAsync;
             /// <summary>Das Element der Rückgabe (bei einem Strom sein Element).</summary>
             public ITypeSymbol Element = null!;
             /// <summary>Wie ein Element zur Ausgabe wird: <c>""</c> (es selbst) oder <c>".Value"</c> (OneOf).</summary>
@@ -66,14 +62,6 @@ namespace Infrastructure.SourceGeneration
             public List<(INamedTypeSymbol Eingang, Location Ort)> Doppelt = new List<(INamedTypeSymbol, Location)>();
             /// <summary>Der Typ des Zustands (<c>IZustand&lt;T&gt;</c> im Konstruktor einer Klasse, docs/04 §4.4) — null = ohne Zustand.</summary>
             public INamedTypeSymbol? Zustand;
-            /// <summary>Hat die Funktion einen Einstieg — einen Command, oder lauscht sie? Wer nur Events hört, hätte keinen
-            /// (CQRS100): eine Funktion liest nie das Log.</summary>
-            public bool MitEinstieg => Lausche != null || Aufs.Any(a => a.Command);
-
-            /// <summary>Ein Event-Eingang ist eine ANTWORT: ein Ziel entschied es auf einen ihrer Commands hin; sie hört es nur so, nie aus dem Log
-            /// (dass einer ihrer Commands es entscheiden kann, prüft das Gesamtbild).</summary>
-            public bool IstAntwort(Auf a) => !a.Command;
-
             /// <summary>
             /// Die Methode <c>Lausche(CancellationToken)</c> einer QUELLFUNKTION (docs/04 §4.7, Entscheidung 8) — ohne Ports, ihr Strom startet je Element
             /// einen Lauf; null = keine Quelle. Sie steht nicht in <see cref="Aufs"/>; die Rechnung ruft sie unter der Nummer <c>Aufs.Count</c>.
@@ -233,10 +221,6 @@ namespace Infrastructure.SourceGeneration
             if (f.Lausche != null && f.Aufs.Count > 0)
                 f.Fehler.Add(("eine Quellfunktion lauscht nur (Lausche) und nimmt keine Eingänge — was sie meldet, rechnet der nächste Knoten ihres Graphen",
                     f.Aufs[0].Methode.Locations.FirstOrDefault() ?? ort));
-            // Eine Funktion liest nie das Log: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
-            if (f.Aufs.Count > 0 && !f.MitEinstieg)
-                f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie nimmt einen Command (ohne Ziel); ein Event nur als "
-                    + "Antwort auf einen eigenen Command", ort));
             if (gesehen.Count == 0 && f.Lausche == null && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
                 f.Fehler.Add(($"'{t.Name}' hat kein {Abstractions.Funktionsvertrag.Auf} — eine Funktion hört mindestens einen Eingang; Technik hinter einer "
                     + "Funktion trägt keinen Marker (sie steht nur im Konstruktor ihres Halters)", ort));
@@ -269,7 +253,7 @@ namespace Infrastructure.SourceGeneration
                 fehler.Add((form, ort));
                 return null;
             }
-            var auf = new Auf { Methode = m, Strom = true, StromAsync = true, Element = r.TypeArguments[0] };
+            var auf = new Auf { Methode = m, Strom = true, Element = r.TypeArguments[0] };
             auf.Parameter.Add(("ct", (INamedTypeSymbol)m.Parameters[0].Type, m.Parameters[0].Name, -1));
             IEnumerable<ITypeSymbol> faelle = new[] { auf.Element };
             if (auf.Element is INamedTypeSymbol o && IstOneOf(o)) { auf.Abbildung = ".Value"; faelle = o.TypeArguments; }
@@ -317,7 +301,7 @@ namespace Infrastructure.SourceGeneration
             }
             if (auf.Ports.Count == 0)
             {
-                fehler.Add(("ein Auf nimmt eine Nachricht (einen Command ohne Ziel; allein auch ein Event als Antwort)", ort));
+                fehler.Add(("ein Auf nimmt eine Nachricht (einen Command ohne Ziel)", ort));
                 return null;
             }
             if (auf.Ports.Count > 1)
@@ -327,37 +311,34 @@ namespace Infrastructure.SourceGeneration
                     + "und der Zustand des Knotens oder ein Aggregat führt sie zusammen", auf.Ports[1].Ort));
                 return null;
             }
-            auf.Command = IstCommandOhneZiel(auf.Ports[0].Typen[0]);
-
-            // Rückgabe: T | OneOf<…> | IEnumerable<…> | IAsyncEnumerable<…>, T und OneOf auch in Task<…>. Kein void, kein T?, kein ValueTask: was
-            //   „nichts“ sein kann, ist ein Strom (leer = nichts), was einer von mehreren ist, ein OneOf (Entscheidung 4).
+            // Rückgabe — genau zwei Formen, beide asynchron: Task<T> bzw. Task<OneOf<…>> (genau eine Ausgabe je Aufruf) oder IAsyncEnumerable<…>
+            //   (keine bis viele). Kein void, kein T?, kein ValueTask, keine synchrone Form: was „nichts“ sein kann, ist ein Strom (leer = nichts), was
+            //   einer von mehreren ist, ein OneOf (Entscheidung 4).
+            const string formen = "ein Auf gibt Task<T>, Task<OneOf<…>> oder IAsyncEnumerable<…> zurück";
             ITypeSymbol r = m.ReturnType;
             if (m.ReturnsVoid || r is INamedTypeSymbol { IsGenericType: false } k && (Name(k) == "System.Threading.Tasks.Task" || Name(k) == "System.Threading.Tasks.ValueTask"))
             {
-                fehler.Add(("ein Auf gibt etwas aus — void und Task ohne Ergebnis sind keine Funktion (was nichts ausgeben kann, ist ein Strom)", ort));
-                return null;
-            }
-            if (r is INamedTypeSymbol { IsGenericType: true } v && Name(v) == "System.Threading.Tasks.ValueTask`1")
-            {
-                fehler.Add(("ein Auf gibt keinen ValueTask zurück — asynchron ist es ein Task<…> oder ein IAsyncEnumerable<…>", ort));
+                fehler.Add((formen + " — void und Task ohne Ergebnis geben nichts aus (was nichts ausgeben kann, ist ein Strom)", ort));
                 return null;
             }
             if (r is INamedTypeSymbol { IsGenericType: true } h && Name(h) == "System.Threading.Tasks.Task`1")
             {
-                auf.Huelle = "Task";
                 r = h.TypeArguments[0];
-            }
-            if (r is INamedTypeSymbol { IsGenericType: true } s && Name(s) == "System.Collections.Generic.IEnumerable`1")
-            {
-                if (auf.Huelle.Length > 0) { fehler.Add(("ein Strom steht nicht in einem Task — asynchron ist er ein IAsyncEnumerable<…>", ort)); return null; }
-                auf.Strom = true;
-                r = s.TypeArguments[0];
+                if (r is INamedTypeSymbol { IsGenericType: true } st && (Name(st) == "System.Collections.Generic.IEnumerable`1" || Name(st) == "System.Collections.Generic.IAsyncEnumerable`1"))
+                {
+                    fehler.Add((formen + " — ein Strom steht nicht in einem Task, er ist ein IAsyncEnumerable<…>", ort));
+                    return null;
+                }
             }
             else if (r is INamedTypeSymbol { IsGenericType: true } sa && Name(sa) == "System.Collections.Generic.IAsyncEnumerable`1")
             {
-                if (auf.Huelle.Length > 0) { fehler.Add(("ein asynchroner Strom steht nicht in einem Task", ort)); return null; }
-                auf.Strom = auf.StromAsync = true;
+                auf.Strom = true;
                 r = sa.TypeArguments[0];
+            }
+            else
+            {
+                fehler.Add((formen + $" — '{m.ReturnType.ToDisplayString()}' ist {(r is INamedTypeSymbol { IsGenericType: true } se && Name(se) == "System.Collections.Generic.IEnumerable`1" ? "ein synchroner Strom (IAsyncEnumerable<…>)" : "synchron (Task<…>)")}", ort));
+                return null;
             }
             if (r.NullableAnnotation == NullableAnnotation.Annotated || r is INamedTypeSymbol { IsGenericType: true } nl && Name(nl) == "System.Nullable`1")
             {
@@ -376,10 +357,10 @@ namespace Infrastructure.SourceGeneration
             foreach (var x in faelle)
             {
                 if (x is not INamedTypeSymbol a || a.TypeKind == TypeKind.Interface || a.IsAbstract || a.TypeKind == TypeKind.TypeParameter
-                    || !(IstCommandOhneZiel(a) || Hat(a, A + "IAggregatCommand") || Hat(a, A + "ITransientEvent")))
+                    || !(IstCommandOhneZiel(a) || Hat(a, A + "ITransientEvent")))
                 {
-                    fehler.Add(($"die Ausgabe '{x.ToDisplayString()}' ist kein konkreter Command und kein Hinweis — eine Funktion schreibt nie ins Log; was sie "
-                        + "ausgibt, steht vollständig in der Signatur", ort));
+                    fehler.Add(($"die Ausgabe '{x.ToDisplayString()}' ist kein konkreter Command ohne Ziel und kein Hinweis — eine Funktion schreibt nie ins Log "
+                        + "und kennt kein Aggregat (an ein Aggregat geht es über eine Übersetzung); was sie ausgibt, steht vollständig in der Signatur", ort));
                     return null;
                 }
                 auf.Ausgaben.Add(a);
@@ -389,7 +370,7 @@ namespace Infrastructure.SourceGeneration
         }
 
         /// <summary>
-        /// Der Eingang aus einem Parameter: ein Command ohne Ziel als <c>T</c>, allein auch ein konkretes Event (als Antwort). Ein Auf rechnet, sobald
+        /// Der Eingang aus einem Parameter: ein Command ohne Ziel als <c>T</c>. Ein Auf rechnet, sobald
         /// seine Nachricht ankommt — eine Liste, ein <c>OneOf</c> oder ein <c>T?</c> als Eingang ist ein Formfehler (warten, sammeln und zusammenführen
         /// steht im Logik-Code: im Zustand des Knotens oder in einem Aggregat). Ein Hinweis ist kein Eingang: Hinweise gehen nur an Akteure draußen
         /// (Entscheidung 14).
@@ -427,12 +408,12 @@ namespace Infrastructure.SourceGeneration
                     + "was ein Knoten braucht, ist ein Command ohne Ziel", ort));
                 return null;
             }
-            if (!command && (n.TypeKind == TypeKind.Interface || n.IsAbstract || !Hat(n, A + "IEvent")))
+            if (!command)
             {
-                fehler.Add(($"der Parameter '{p.Name}' ('{p.Type.ToDisplayString()}') ist weder Eingang (ein Command ohne Ziel; allein auch ein konkretes "
-                    + "Event als Antwort) noch Herkunft, CancellationToken "
-                    + "oder Lese-Fähigkeit (Interface mit IReadStore)"
-                    + (Hat(n, A + "IAggregatCommand") ? " — ein Command an ein Aggregat nimmt nur sein Aggregat" : ""), ort));
+                fehler.Add(($"der Parameter '{p.Name}' ('{p.Type.ToDisplayString()}') ist weder Eingang (ein Command ohne Ziel) noch Herkunft, "
+                    + "CancellationToken oder Lese-Fähigkeit (Interface mit IReadStore)"
+                    + (Hat(n, A + "IAggregatCommand") ? " — ein Command an ein Aggregat nimmt nur sein Aggregat"
+                        : Hat(n, A + "IEvent") ? " — ein Event hört eine Funktion nie: sie liest nicht das Log; eine Antwort eines Aggregats geht über eine Übersetzung an den Kopf eines Graphen" : ""), ort));
                 return null;
             }
             port.Typen.Add(n);

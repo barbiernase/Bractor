@@ -417,25 +417,16 @@ namespace Infrastructure.SourceGeneration
         {
             var form = Funktionsform.Lies(f);
             var k = new Knoten { Name = name, Typ = f, Funktion = form, Ort = ort, Bereich = bereich };
-            var antworten = form.Aufs.Where(form.IstAntwort).ToList();
             for (var i = 0; i < form.Aufs.Count; i++)
             {
                 var a = form.Aufs[i];
-                if (form.IstAntwort(a)) continue;
                 var op = new Operation { Knoten = k, Auf = a, Nummer = i };
-                void Nimm(Funktionsform.Auf von)
+                foreach (var x in a.Ausgaben)
                 {
-                    foreach (var x in von.Ausgaben)
-                    {
-                        if (!op.Ausgaben.Any(y => V(y) == V(x))) op.Ausgaben.Add(x);
-                        if (von.Strom) op.Stroeme.Add(V(x));
-                        if (von.Wahl) op.Wahlen.Add(V(x));
-                    }
+                    if (!op.Ausgaben.Any(y => V(y) == V(x))) op.Ausgaben.Add(x);
+                    if (a.Strom) op.Stroeme.Add(V(x));
+                    if (a.Wahl) op.Wahlen.Add(V(x));
                 }
-                Nimm(a);
-                // Gibt sie Commands an Aggregate, kann jede Antwort kommen (ein Ziel entscheidet sie darauf hin) — und mit ihr deren Ausgaben.
-                if (a.Ausgaben.Any(x => Funktionsform.Hat(x, A + "IAggregatCommand")))
-                    foreach (var an in antworten) Nimm(an);
                 k.Operationen.Add(op);
             }
             if (form.Lausche is { } l)

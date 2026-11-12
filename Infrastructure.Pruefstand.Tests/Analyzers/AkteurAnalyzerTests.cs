@@ -56,7 +56,7 @@ public sealed record Leser : IAkteur, IDarf<Zeige>, IHoert<Gebucht>, IHoert<Hinw
     public async Task Ein_Interface_oder_eine_Funktion_kann_man_nicht_duerfen()
     {
         (await Ids("public interface IIrgendwas { } public sealed record Rechner : IAkteur, IDarf<IIrgendwas>;")).Should().Equal("CQRS058");
-        (await Ids("public sealed class Rechnung : IFunktion { public Storniere Auf(Pruefe p) => default!; } public sealed record Rechner : IAkteur, IDarf<Rechnung>;"))
+        (await Ids("public sealed class Rechnung : IFunktion { public System.Threading.Tasks.Task<Hinweis> Auf(Pruefe p) => null!; } public sealed record Rechner : IAkteur, IDarf<Rechnung>;"))
             .Should().Equal(["CQRS058"], "IDarf<IFunktion> ist entfallen — draußen rechnet ein Client, der auf ein Fakt reagiert");
     }
 

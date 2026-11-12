@@ -24,6 +24,9 @@ public class WiederholungAnalyzerTests
         namespace Probe {
         public sealed record Ueberfaellig(int Tage) : IEvent;
         public sealed record Bezahlt(decimal Betrag) : IEvent;
+        public sealed record Faellig(int Tage) : ICommand;
+        public sealed record Gezahlt(decimal Betrag) : ICommand;
+        public sealed record Erinnere(Id<Konto> Konto, DateTimeOffset Am) : ICommand;
         public partial class Konto : IState
         {
             public int Version { get; set; } public Guid Id { get; set; } public DateTimeOffset Seit { get; set; }
@@ -56,11 +59,11 @@ public class WiederholungAnalyzerTests
         (await Befunde("""
             public sealed class Doppelt : IFunktion
             {
-                public Mahne Auf(Ueberfaellig e) => default!;
-                public Mahne Auf(Ueberfaellig e, Herkunft h) => default!;
-                public Mahne Auf(Bezahlt e) => default!;
+                public Task<Erinnere> Auf(Faellig e) => null!;
+                public Task<Erinnere> Auf(Faellig e, Herkunft h) => null!;
+                public Task<Erinnere> Auf(Gezahlt e) => null!;
             }
-            """)).Should().ContainSingle(b => b.Id == EinEingangAnalyzer.Id).Which.Text.Should().Contain("Ueberfaellig");
+            """)).Should().ContainSingle(b => b.Id == EinEingangAnalyzer.Id).Which.Text.Should().Contain("Faellig");
         (await Befunde("""
             public sealed class Liste : IProjektion
             {
@@ -107,7 +110,7 @@ public class WiederholungAnalyzerTests
         (await Befunde("""
             public sealed class Mahner(IPost post) : IFunktion
             {
-                public Mahne Auf(Ueberfaellig e) => new(Id<Konto>.Neu(), DateTimeOffset.UnixEpoch);
+                public async Task<Erinnere> Auf(Faellig e) => new(Id<Konto>.Neu(), DateTimeOffset.UnixEpoch);
             }
             """)).Should().ContainSingle(b => b.Id == GleichbleibendAnalyzer.NeueIdId).Which.Text.Should().Contain("Herkunft.NeueId");
         (await Befunde("""

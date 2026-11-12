@@ -106,23 +106,31 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         }
         foreach (var d in modell.Decider.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
             Datei(d.Datei!, $"decide {d.Aggregat}.{d.Command}", t => DecideRueckgabe(t, d));
-        // Funktion (IFunktion): je Eingang ein Auf bzw. je gerufene Methode ihre Signatur — an der Klasse bzw. Schnittstelle und an jeder Umsetzung
-        //   (fehlende als throw-Stub, Rückgabe aus den Ausgaben, die Hülle bleibt); entfernte fallen an der Schnittstelle (Auf auch an der Klasse) weg,
-        //   eine Umsetzung behält ihren Rumpf. Der Konstruktor der Klasse und jeder Umsetzung wird abgeglichen. Rümpfe gehören dem Code (✎ am Rumpf);
-        //   der Name ist die Identität (Umbenennen ist ein Refactoring).
+        // Funktion (IFunktion): je Eingang ein Auf (fehlende als throw-Stub, Rückgabe aus den Ausgaben), entfernte fallen weg; Typparameter und
+        //   Konstruktor werden abgeglichen. Rümpfe gehören dem Code (✎ am Rumpf); der Name ist die Identität (Umbenennen ist ein Refactoring).
         foreach (var f in modell.BausteinFunktionen.Where(f => f.Datei != null && Herkunft.Geaendert(f.Herkunft, Herkunft.Von(f))))
         {
             var was = $"funktion {f.Namespace}.{f.Name}";
-            Datei(f.Datei!, was, t => FunktionsMethoden(t, f.Name, f, stub: f.Klasse, entfernen: true));
-            Datei(f.Datei!, was, t => GerufeneMethoden(t, f.Name, f, stub: f.Klasse, entfernen: !f.Klasse));
-            if (f.Klasse) Datei(f.Datei!, was, t => Konstruktor(t, f.Name, f.Konstruktor));
-            foreach (var u in f.Umsetzungen.Where(u => u.Datei != null))
+            Datei(f.Datei!, was, t => FunktionsMethoden(t, f.Name, f, stub: true, entfernen: true));
+            Datei(f.Datei!, was, t => Typparameter(t, f));
+            Datei(f.Datei!, was, t => Konstruktor(t, f.Name, f.Konstruktor));
+        }
+        // Technik: je Methode ihre Signatur — an der Schnittstelle bzw. Klasse und an jeder Umsetzung (fehlende als throw-Stub); entfernte fallen an
+        //   der Schnittstelle weg, eine Umsetzung behält ihren Rumpf. Der Konstruktor der Klasse und jeder Umsetzung wird abgeglichen.
+        foreach (var tk in modell.Techniken.Where(t => t.Datei != null && Herkunft.Geaendert(t.Herkunft, Herkunft.Von(t))))
+        {
+            var was = $"technik {tk.Namespace}.{tk.Name}";
+            Datei(tk.Datei!, was, t => GerufeneMethoden(t, tk.Name, tk, stub: tk.Klasse, entfernen: !tk.Klasse));
+            if (tk.Klasse) Datei(tk.Datei!, was, t => Konstruktor(t, tk.Name, tk.Konstruktor));
+            foreach (var u in tk.Umsetzungen.Where(u => u.Datei != null))
             {
-                Datei(u.Datei!, was, t => FunktionsMethoden(t, u.Name, f, stub: true, entfernen: false));
-                Datei(u.Datei!, was, t => GerufeneMethoden(t, u.Name, f, stub: true, entfernen: false));
+                Datei(u.Datei!, was, t => GerufeneMethoden(t, u.Name, tk, stub: true, entfernen: false));
                 Datei(u.Datei!, was, t => Konstruktor(t, u.Name, u.Konstruktor));
             }
         }
+        // Zustandsklasse: ihre Eigenschaften (public Typ Name { get; set; } = Standard;) — hinzu, geändert, weg.
+        foreach (var z in modell.Zustaende.Where(z => z.Datei != null && Herkunft.Geaendert(z.Herkunft, Herkunft.Von(z))))
+            Datei(z.Datei!, $"zustand {z.Namespace}.{z.Name}", t => ZustandsEigenschaften(t, z));
         foreach (var a in modell.Akteure.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
             Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
         foreach (var c in modell.Clients.Where(c => c.Datei != null && Herkunft.Geaendert(c.Herkunft, Herkunft.Von(c))))
@@ -338,7 +346,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
     }
 
     // ── Gerufene Methoden: Signaturen (Abgleich je Name), fehlende anhängen (an einer Klasse als Stub); an der Schnittstelle fallen entfernte weg ──
-    private (string, string)? GerufeneMethoden(string text, string klasse, BausteinFunktion f, bool stub, bool entfernen)
+    private (string, string)? GerufeneMethoden(string text, string klasse, Technik f, bool stub, bool entfernen)
     {
         var notiz = new List<string>();
         foreach (var m in f.Methoden)
@@ -376,6 +384,59 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             }
         }
         return notiz.Count == 0 ? null : (text, "Methoden " + string.Join(", ", notiz));
+    }
+
+    // ── Funktion: die Typparameter der Klasse (<T, U>) und ihre where-Klauseln wie im Modell ──
+    private (string, string)? Typparameter(string text, BausteinFunktion f)
+    {
+        var root = Parse(text);
+        if (root.DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == f.Name) is not { } cls)
+            return (text, $"{f.Name} nicht gefunden");
+        var (liste, klauseln) = Scaffolder.Typparameter(f);
+        var istListe = cls.TypeParameterList?.ToString() ?? "";
+        var istKlauseln = string.Concat(cls.ConstraintClauses.Select(c => " " + c.ToString()));
+        if (N(istListe) == N(liste) && N(istKlauseln) == N(klauseln)) return null;
+        var edits = new List<(int, int, string)>();
+        // Die where-Klauseln stehen nach der Basisliste: vorhandene ersetzt bzw. entfernt, sonst eingefügt.
+        if (cls.ConstraintClauses.Count > 0)
+            edits.Add((cls.ConstraintClauses.First().SpanStart - 1, cls.ConstraintClauses.Last().Span.End, klauseln));
+        else if (klauseln.Length > 0)
+        {
+            var nach = cls.BaseList?.Span.End ?? cls.ParameterList?.Span.End ?? cls.TypeParameterList?.Span.End ?? cls.Identifier.Span.End;
+            edits.Add((nach, nach, klauseln));
+        }
+        if (cls.TypeParameterList is { } tpl) edits.Add((tpl.SpanStart, tpl.Span.End, liste));
+        else if (liste.Length > 0) edits.Add((cls.Identifier.Span.End, cls.Identifier.Span.End, liste));
+        return (Anwenden(text, edits), "Typparameter " + (liste.Length == 0 ? "—" : liste));
+    }
+
+    // ── Zustandsklasse: je Eigenschaft public Typ Name { get; set; } = Standard; — geänderte ersetzt, fehlende angehängt, entfernte gelöscht ──
+    private (string, string)? ZustandsEigenschaften(string text, Zustandsklasse z)
+    {
+        var root = Parse(text);
+        if (root.DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == z.Name) is not { } cls)
+            return (text, $"{z.Name} nicht gefunden");
+        var edits = new List<(int, int, string)>();
+        var notiz = new List<string>();
+        var props = cls.Members.OfType<PropertyDeclarationSyntax>().ToList();
+        foreach (var p in props)
+        {
+            var soll = z.Eigenschaften.FirstOrDefault(e => e.Name == p.Identifier.Text);
+            if (soll == null) { edits.Add((p.FullSpan.Start, p.FullSpan.End, "")); notiz.Add("−" + p.Identifier.Text); continue; }
+            var standard = p.Initializer?.Value.ToString();
+            if (N(p.Type.ToString()) == N(soll.Typ) && N(standard ?? "") == N(soll.Standard ?? "")) continue;
+            edits.Add((p.SpanStart, p.Span.End, Scaffolder.ZustandsEigenschaft(soll)));
+            notiz.Add(soll.Name);
+        }
+        var neu = z.Eigenschaften.Where(e => props.All(p => p.Identifier.Text != e.Name)).ToList();
+        if (neu.Count > 0)
+        {
+            var vor = cls.CloseBraceToken.SpanStart;
+            edits.Add((vor, vor, string.Concat(neu.Select(e => "    " + Scaffolder.ZustandsEigenschaft(e) + "\n"))));
+            notiz.AddRange(neu.Select(e => "+" + e.Name));
+        }
+        if (edits.Count == 0) return null;
+        return (MitNamespaces(Anwenden(text, edits), z.Eigenschaften.Select(e => e.Typ)), "Eigenschaften " + string.Join(", ", notiz));
     }
 
     // ── Funktion: je Eingang das Auf (Schlüssel: der Eingangstyp), Rückgabe aus den Ausgaben bei gleicher Hülle; fehlende anhängen ──
@@ -432,7 +493,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
 
     /// <summary>
     /// Die Parameterliste eines bestehenden Auf, wenn sie vom Modell abweicht (sonst <c>null</c>): die Nachricht bleibt Wort für Wort, dann die
-    /// Herkunft und die Lese-Fähigkeiten des Modells — vorhandene behalten ihren Namen —, ein vorhandener <c>CancellationToken</c> am Ende (CQRS100).
+    /// Herkunft und die Lese-Fähigkeiten des Modells — vorhandene behalten ihren Namen —, mit <see cref="BausteinEingang.Abbruch"/> der
+    /// <c>CancellationToken</c> am Ende (ein vorhandener behält seinen Namen).
     /// </summary>
     private static string? AufParameter(MethodDeclarationSyntax m, BausteinEingang e)
     {
@@ -444,7 +506,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         var soll = new List<string>();
         if (e.Herkunft) soll.Add(Vorhanden(nameof(Abstractions.Herkunft), $"{nameof(Abstractions.Herkunft)} h"));
         soll.AddRange(e.Faehigkeiten.Select(f => Vorhanden(f.Typ, $"{f.Typ} {f.Name}")));
-        soll.AddRange(rest.Where(p => Basis(p.Type?.ToString() ?? "") == nameof(CancellationToken)).Select(p => p.ToString()));
+        if (e.Abbruch) soll.Add(Vorhanden(nameof(CancellationToken), $"{nameof(CancellationToken)} ct"));
         if (rest.Select(p => p.ToString()).SequenceEqual(soll, StringComparer.Ordinal)) return null;
         return Liste(m.ParameterList, [ps[0].ToString(), .. soll]);
     }
@@ -754,6 +816,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             .Concat((modell.Lesen?.Stores ?? []).SelectMany(s => s.Fns.Select(f => (f.Name, f.Namespace ?? s.Namespace)).Append((s.Name, s.Namespace))))
             // Funktionen: ein Akteur, der eine rechnen darf (IDarf<IFunktion>), und eine Umsetzung, die eine gerufene nimmt, brauchen ihren Namespace.
             .Concat(modell.BausteinFunktionen.Select(f => (f.Name, f.Namespace)))
+            .Concat(modell.Techniken.Select(t => (t.Name, t.Namespace)))
+            .Concat(modell.Zustaende.Select(z => (z.Name, z.Namespace)))
             // Akteure: ein Client, der einen verkörpert (IVerkoerpert<A>), braucht seinen Namespace.
             .Concat(modell.Akteure.Select(a => (a.Name, a.Namespace)))
             // Graphen: ein Graph als Knoten eines anderen.

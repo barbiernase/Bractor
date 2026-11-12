@@ -41,7 +41,7 @@ public sealed class Sensorabfrage(SensorabfrageKonfig konfig, IZustand<Abfragest
 // Die Aufbereitung: ein unlesbarer Wert ergibt nichts (ein leerer Strom), ein lesbarer den geprüften Wert.
 public sealed class Plausibilisierung : IFunktion
 {
-    public IEnumerable<Plausibel> Auf(Rohwert r)
+    public async IAsyncEnumerable<Plausibel> Auf(Rohwert r)
     {
         if (!double.IsNaN(r.Wert) && !double.IsInfinity(r.Wert)) yield return new Plausibel(r.Sensor, r.Wert, r.GemessenAm);
     }
@@ -49,19 +49,19 @@ public sealed class Plausibilisierung : IFunktion
 
 public sealed class Messwertpruefung : IFunktion
 {
-    public Geprueft Auf(Plausibel p) => new(p.Sensor, p.Wert, p.GemessenAm);
+    public async Task<Geprueft> Auf(Plausibel p) => new(p.Sensor, p.Wert, p.GemessenAm);
 }
 
 // Der Alarm öffnet die Störung desselben Sensors (dieselbe Id wie der Sensor).
 public sealed class StoerungBeiAlarm : IFunktion
 {
-    public Stoerung Auf(Alarm a) => new(a.Sensor, a.Wert);
+    public async Task<Stoerung> Auf(Alarm a) => new(a.Sensor, a.Wert);
 }
 
 // ── RENNEN: die Bereitschaft wird über zwei Wege gesucht; jeder Weg meldet für sich ──────────────────────────────────────────────────────────
 public sealed class Alarmverteilung : IFunktion
 {
-    public AlarmVerteilt Auf(Alarmiere a) => new(a.Fall);
+    public async Task<AlarmVerteilt> Auf(Alarmiere a) => new(a.Fall);
 }
 
 public interface ITelefonie
@@ -90,7 +90,7 @@ public sealed class Funkruf : IFunktion
 
 public sealed class Alarmquittung : IFunktion
 {
-    public Erreicht Auf(PerAnrufErreicht anruf) => new(anruf.Fall, "Anruf " + anruf.Nummer);
+    public async Task<Erreicht> Auf(PerAnrufErreicht anruf) => new(anruf.Fall, "Anruf " + anruf.Nummer);
 
-    public Erreicht Auf(PerFunkErreicht funk) => new(funk.Fall, "Funk " + funk.Kanal);
+    public async Task<Erreicht> Auf(PerFunkErreicht funk) => new(funk.Fall, "Funk " + funk.Kanal);
 }

@@ -127,15 +127,22 @@ public static class ModellMapper
             Records = records, Enums = enums, Aggregate = aggregate, Decider = decider, Applier = applier, Rahmen = rahmen,
             BausteinFunktionen = dom.BausteinFunktionen.Select(f => new BausteinFunktion
             {
-                Name = f.Name, Namespace = f.Namespace, Klasse = f.Klasse, Doku = f.Doku, Datei = Rel(f.Datei),
+                Name = f.Name, Namespace = f.Namespace, Doku = f.Doku, Datei = Rel(f.Datei),
+                Typparameter = f.Typparameter.Select(t => new Typparameter { Name = t.Name, Einschraenkung = t.Einschraenkung }).ToList(),
                 Zustand = f.ZustandFull is { } z ? Kurz(z) : null,
                 Eingaenge = f.Eingaenge.Select(e => new BausteinEingang
                 {
-                    Eingang = Kurz(e.EingangFull), Hinweis = e.Hinweis, Herkunft = e.Herkunft, Strom = e.Strom, Asynchron = e.Asynchron,
+                    Eingang = Kurz(e.EingangFull), Hinweis = e.Hinweis, Herkunft = e.Herkunft, Strom = e.Strom, Abbruch = e.Abbruch,
                     Faehigkeiten = e.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                     Ausgaben = e.AusgabenFull.Select(Kurz).ToList(),
                 }).ToList(),
                 Lauscht = f.LauschtFull.Select(Kurz).ToList(),
+                Konstruktor = f.Konstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
+            }).ToList(),
+            Techniken = dom.Techniken.Select(f => new Technik
+            {
+                Name = f.Name, Namespace = f.Namespace, Klasse = f.Klasse, Doku = f.Doku, Datei = Rel(f.Datei),
+                Zustand = f.ZustandFull is { } z ? Kurz(z) : null,
                 Methoden = f.Methoden.Select(me => new FunktionsMethode
                 {
                     Name = me.Name, Rueckgabe = me.Rueckgabe, Doku = me.Doku,
@@ -149,6 +156,10 @@ public static class ModellMapper
                     Datei = Rel(f.UmsetzungsDateien.GetValueOrDefault(u)),
                     Rumpfe = f.UmsetzungsRumpfe.GetValueOrDefault(u, []).Select(r => new MethodenRumpf { Methode = r.Methode, Rumpf = r.Rumpf }).ToList(),
                 }).ToList(),
+            }).ToList(),
+            Zustaende = dom.Zustaende.Select(z => new Zustandsklasse
+            {
+                Name = z.Name, Namespace = z.Namespace, Doku = z.Doku, Datei = Rel(z.Datei), Eigenschaften = z.Fields.Select(MappeFeld).ToList(),
             }).ToList(),
             Akteure = dom.Akteure.Select(x => new Akteur
             {
@@ -611,8 +622,8 @@ public static class ModellMapper
             if (orte.Count > 0) k["_teile"] = new JsonArray(orte.Select(o => (JsonNode?)OrtJson(dom, o)).Where(x => x != null).ToArray());
         }
         var storeVon = dom.Stores.GroupBy(x => x.Namespace + "." + x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        var bausteinVon = dom.BausteinFunktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "akteure", "clients", "graphen", "uebersetzungen", "readModels", "projektionen", "reader", "stores" })
+        var bausteinVon = dom.BausteinFunktionen.Concat(dom.Techniken).GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "techniken", "zustaende", "akteure", "clients", "graphen", "uebersetzungen", "readModels", "projektionen", "reader", "stores" })
             foreach (var k in Alle(root[sammlung]))
             {
                 var full = S(k, "namespace") + "." + S(k, "name");
@@ -620,7 +631,7 @@ public static class ModellMapper
                 k["_ort"] = OrtJson(dom, haupt);
                 var weitere = new List<string> { full };
                 // Eine Funktion: ihre Umsetzungen im Host gehören zur Karte; bei einer gerufenen steht je Methode der Rumpf in der Umsetzung.
-                if (sammlung == "bausteinFunktionen" && bausteinVon.TryGetValue(full, out var bf))
+                if (sammlung is "bausteinFunktionen" or "techniken" && bausteinVon.TryGetValue(full, out var bf))
                 {
                     weitere.AddRange(bf.UmsetzungenFull);
                     // Je Auf (und Lausche) der Ort der Methode und ihr Rumpf — der Rumpf-Edit wie bei Decide und Apply.
@@ -703,6 +714,8 @@ public static class ModellMapper
         foreach (var d in Alle(root["decider"])) d["_id"] = Abstractions.WirkerId.FuerDecide(S(d, "aggregat"), S(d, "command"));
         foreach (var a in Alle(root["applier"])) a["_id"] = "apply:" + S(a, "aggregat") + "/" + S(a, "event");
         foreach (var f in Alle(root["bausteinFunktionen"])) f["_id"] = Abstractions.WirkerId.FuerFunktion(S(f, "name"));
+        foreach (var t in Alle(root["techniken"])) t["_id"] = "technik:" + S(t, "name");
+        foreach (var z in Alle(root["zustaende"])) z["_id"] = "zustand:" + S(z, "name");
         foreach (var a in Alle(root["akteure"])) a["_id"] = Abstractions.WirkerId.FuerAkteur(S(a, "name"));
         foreach (var c in Alle(root["clients"])) c["_id"] = "client:" + S(c, "name");
         foreach (var g in Alle(root["graphen"])) g["_id"] = "graph:" + S(g, "name");

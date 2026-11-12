@@ -155,14 +155,12 @@ namespace Infrastructure.SourceGeneration
                 }));
                 var aufruf = $"f.{Abstractions.Funktionsvertrag.Auf}({args})";
                 var abbildung = "y => (object?)y" + x.Abbildung;
-                string adapter;
-                if (x.Strom) adapter = x.StromAsync ? "StromAsync" : "Strom";
-                else adapter = x.Huelle.Length > 0 ? "EinzelnAsync" : "Einzeln";
-                var mitCt = x.Strom ? ", ct" : "";
-                sb.AppendLine($"                case {n}: return Ausgaben.{adapter}({aufruf}, {abbildung}{mitCt});");
+                sb.AppendLine(x.Strom
+                    ? $"                case {n}: return Ausgaben.Strom({aufruf}, {abbildung}, ct);"
+                    : $"                case {n}: return Ausgaben.Einzeln({aufruf}, {abbildung});");
             }
             if (f.Lausche is { } l)
-                sb.AppendLine($"                case {f.Aufs.Count}: return Ausgaben.StromAsync(f.{Abstractions.Funktionsvertrag.Lausche}(ct), y => (object?)y{l.Abbildung}, ct);");
+                sb.AppendLine($"                case {f.Aufs.Count}: return Ausgaben.Strom(f.{Abstractions.Funktionsvertrag.Lausche}(ct), y => (object?)y{l.Abbildung}, ct);");
             sb.AppendLine($"                default: throw new NotSupportedException($\"{Funktionsform.Anzeigename(f.Typ)} hat kein Auf Nummer {{auf}}.\");");
             sb.AppendLine("            }");
             sb.AppendLine("        }");

@@ -21,17 +21,23 @@ public static class Herkunft
     public static string Von(Client c) => Hash(new { c.Name, c.Verkoerpert });
     public static string Von(Graph g) => Hash(new { g.Name, g.Knoten });
     public static string Von(Uebersetzung u) => Hash(new { u.Name, u.Ein, u.Aus, u.Felder });
-    // Eine Funktion: ihre Form, je Eingang (Auf) Eingang und Ausgaben bzw. je gerufene Methode ihre Signatur, der Konstruktor der Klasse und je
-    //   Umsetzung ihr Konstruktor — Rümpfe gehören dem Code.
+    // Eine Funktion: Typparameter, je Eingang (Auf) Eingang und Ausgaben, was sie meldet, der Konstruktor — Rümpfe gehören dem Code.
     public static string Von(BausteinFunktion f) => Hash(new
     {
-        f.Name, f.Klasse,
-        Eingaenge = f.Eingaenge.Select(e => new { e.Eingang, e.Hinweis, e.Herkunft, e.Strom, e.Asynchron, e.Ausgaben, e.Faehigkeiten }).ToList(),
+        f.Name, f.Typparameter,
+        Eingaenge = f.Eingaenge.Select(e => new { e.Eingang, e.Hinweis, e.Herkunft, e.Strom, e.Abbruch, e.Ausgaben, e.Faehigkeiten }).ToList(),
         f.Lauscht,
-        Methoden = f.Methoden.Select(m => new { m.Name, m.Rueckgabe, m.Parameter }).ToList(),
         f.Konstruktor,
-        Umsetzungen = f.Umsetzungen.Select(u => new { u.Name, u.Konstruktor }).ToList(),
     });
+    // Eine Technik: je Methode ihre Signatur, der Konstruktor der Klasse und je Umsetzung ihr Konstruktor — Rümpfe gehören dem Code.
+    public static string Von(Technik t) => Hash(new
+    {
+        t.Name, t.Klasse,
+        Methoden = t.Methoden.Select(m => new { m.Name, m.Rueckgabe, m.Parameter }).ToList(),
+        t.Konstruktor,
+        Umsetzungen = t.Umsetzungen.Select(u => new { u.Name, u.Konstruktor }).ToList(),
+    });
+    public static string Von(Zustandsklasse z) => Hash(new { z.Name, Eigenschaften = z.Eigenschaften.Select(f => f with { ElementTyp = null }).ToList() });
     public static string Von(Faehigkeit f) => Hash(new { f.Name, f.Methode, f.Lesen, f.Rueckgabe, f.Parameter });
     public static string Von(Handle h) => Hash(new { h.Eingang, h.Ueber, h.Faehigkeiten, h.Ausgaenge, h.Rueckgabe });
     public static string Von(Konsument k) => Hash(new { k.MindestensEinmal, k.Basen });
@@ -49,6 +55,8 @@ public static class Herkunft
             Aggregate = m.Aggregate.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Decider = m.Decider.Select(d => d with { Herkunft = Von(d) }).ToList(),
             BausteinFunktionen = m.BausteinFunktionen.Select(f => f with { Herkunft = Von(f) }).ToList(),
+            Techniken = m.Techniken.Select(t => t with { Herkunft = Von(t) }).ToList(),
+            Zustaende = m.Zustaende.Select(z => z with { Herkunft = Von(z) }).ToList(),
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
             Graphen = m.Graphen.Select(g => g with { Herkunft = Von(g) }).ToList(),
@@ -72,6 +80,8 @@ public static class Herkunft
         foreach (var a in m.Aggregate) Pruefe(a.Herkunft, Von(a), $"state {a.Namespace}.{a.Name}");
         foreach (var d in m.Decider) Pruefe(d.Herkunft, Von(d), $"decide {d.Aggregat}.{d.Command}");
         foreach (var f in m.BausteinFunktionen) Pruefe(f.Herkunft, Von(f), $"funktion {f.Namespace}.{f.Name}");
+        foreach (var t in m.Techniken) Pruefe(t.Herkunft, Von(t), $"technik {t.Namespace}.{t.Name}");
+        foreach (var z in m.Zustaende) Pruefe(z.Herkunft, Von(z), $"zustand {z.Namespace}.{z.Name}");
         foreach (var a in m.Akteure) Pruefe(a.Herkunft, Von(a), $"akteur {a.Namespace}.{a.Name}");
         foreach (var c in m.Clients) Pruefe(c.Herkunft, Von(c), $"client {c.Namespace}.{c.Name}");
         var l = m.Lesen;

@@ -31,11 +31,20 @@ public sealed record EditorModell
     /// <summary>Applier (Event → State-Faltung) — je Regel EIGENSTÄNDIG, referenziert sein Aggregat.</summary>
     public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
     /// <summary>
-    /// Funktionen (<c>IFunktion</c>, docs/10 §10.3) — aufrufbare Objekte: mit Eingängen (je Eingang ein <c>Auf</c> mit freier Ausgabe, das Framework
-    /// ruft sie) oder gerufen (frei benannte Methoden, ihr Halter nimmt sie im Konstruktor, docs/06 §6.5); als Klasse im Host, als Schnittstelle
-    /// draußen bzw. mit Umsetzungen (welche läuft, wählt die Umgebung: <c>Funktionen:&lt;Name&gt;</c>).
+    /// Funktionen (<c>IFunktion</c>, docs/10 §10.3): Klassen mit Operationen (je Eingang ein <c>Auf</c>) oder Quellen (<c>Lausche</c>) — die Knoten
+    /// der Graphen. Was ihr Konstruktor an Technik nimmt, steht in <see cref="Techniken"/>.
     /// </summary>
     public IReadOnlyList<BausteinFunktion> BausteinFunktionen { get; init; } = [];
+    /// <summary>
+    /// Technik (docs/10 §10.3, ohne Marker): jede Schnittstelle oder Klasse, die der Konstruktor einer Funktion (oder einer Technik-Umsetzung) nimmt —
+    /// ihre Methoden, die der Halter ruft, und ihre Umsetzungen (welche läuft, wählt die Instanz am Knoten).
+    /// </summary>
+    public IReadOnlyList<Technik> Techniken { get; init; } = [];
+    /// <summary>
+    /// Zustandsklassen (docs/04 §4.4, R19): die Klassen <c>T</c>, die eine Funktion oder Technik als <c>IZustand&lt;T&gt;</c> im Konstruktor nimmt —
+    /// nicht generisch, öffentlicher Konstruktor ohne Parameter, öffentliche Eigenschaften (gesichert je Instanz und Knoten).
+    /// </summary>
+    public IReadOnlyList<Zustandsklasse> Zustaende { get; init; } = [];
     /// <summary>
     /// Akteure (<c>docs/konzept-akteure.md</c>): wer draußen steht — je Akteur, was er hineingibt (<c>IDarf&lt;T&gt;</c>: Commands, Queries,
     /// Hinweise) und was zu ihm kommt (<c>IHoert&lt;T&gt;</c>: ein Command ohne Ziel ist Arbeit, ein Event oder Hinweis Kenntnis).
@@ -275,23 +284,19 @@ public sealed record ApplyRegel
 }
 
 /// <summary>
-/// Eine Funktion (eine Klasse mit typisierten Ports, Entscheidung 4) — mit Eingängen (je <c>Auf</c> die Signatur) oder als Quelle (<c>Lausche</c>,
-/// <see cref="Lauscht"/>); oder Technik (Schnittstelle oder Klasse im Konstruktor einer Funktion, ohne Marker): ihre <see cref="Methoden"/> und
-/// Umsetzungen.
+/// Eine Funktion (eine Klasse mit typisierten Ports, Entscheidung 4): je Operation ein <c>Auf</c> (<see cref="Eingaenge"/>) oder als Quelle ein
+/// <c>Lausche</c> (<see cref="Lauscht"/>); im Konstruktor Konfig-Records, Technik, <c>IZustand&lt;T&gt;</c>, <c>ILogger&lt;T&gt;</c>.
 /// </summary>
 public sealed record BausteinFunktion
 {
     public required string Name { get; init; }
     public required string Namespace { get; init; }
-    /// <summary>Als Klasse deklariert (eine Funktion oder Technik ohne Schnittstelle). Sonst Schnittstelle: Technik mit ihren Umsetzungen (welche, sagt die Umgebung).</summary>
-    public bool Klasse { get; init; }
+    /// <summary>Die Typparameter einer generischen Funktion (<c>Glaettung&lt;TFenster&gt; where TFenster : IFenster</c>) — eine Blaupause, ein Knoten
+    /// nennt sie mit Typargument.</summary>
+    public IReadOnlyList<Typparameter> Typparameter { get; init; } = [];
     public IReadOnlyList<BausteinEingang> Eingaenge { get; init; } = [];
-    /// <summary>Technik: die Methoden, die ihr Halter ruft (Signatur, Deklarations-Reihenfolge). Leer bei einer Funktion.</summary>
-    public IReadOnlyList<FunktionsMethode> Methoden { get; init; } = [];
-    /// <summary>Konstruktor der Klasse (gerufene Funktionen, Konfig-Records, Logger).</summary>
+    /// <summary>Konstruktor der Klasse (Technik, Konfig-Records, Zustand, Logger).</summary>
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
-    /// <summary>Bei einer Schnittstelle: ihre Umsetzungen im Host (Klasse und Konstruktor).</summary>
-    public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
     /// <summary>Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4): der einfache Name von T, sonst null.</summary>
     public string? Zustand { get; init; }
     /// <summary>Eine Quellfunktion (<c>Lausche(CancellationToken)</c>, Entscheidung 8): was sie meldet (einfache Namen); leer = keine Quelle.</summary>
@@ -302,9 +307,56 @@ public sealed record BausteinFunktion
     public string? Herkunft { get; init; }
 }
 
+/// <summary>Ein Typparameter einer generischen Funktion: sein Name und, falls gesetzt, die Einschränkung (<c>where T : …</c>, wie geschrieben).</summary>
+public sealed record Typparameter
+{
+    public required string Name { get; init; }
+    public string? Einschraenkung { get; init; }
+}
+
 /// <summary>
-/// Eine Umsetzung einer Funktion im Host: die Klasse und ihr Konstruktor (eine gerufene Funktion darin ist die Kante Funktion → gerufene Funktion);
-/// bei einer gerufenen Funktion je Methode ihr Rumpf.
+/// TECHNIK (docs/10 §10.3): was der Konstruktor einer Funktion nimmt und weder Konfig-Record noch <c>ILogger&lt;T&gt;</c> noch <c>IZustand&lt;T&gt;</c> ist —
+/// ohne Marker. Eine Schnittstelle mit ihren <see cref="Umsetzungen"/> (welche läuft, wählt die Instanz am Knoten) oder eine Klasse, die ihre eigene
+/// Umsetzung ist (dann <see cref="Klasse"/> mit <see cref="Konstruktor"/>). Kein Knoten, keine Operation: ihre <see cref="Methoden"/> ruft ihr Halter.
+/// </summary>
+public sealed record Technik
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    /// <summary>Als Klasse deklariert (ihre eigene Umsetzung). Sonst eine Schnittstelle mit <see cref="Umsetzungen"/>.</summary>
+    public bool Klasse { get; init; }
+    /// <summary>Die Methoden, die ihr Halter ruft (Signatur, Deklarations-Reihenfolge).</summary>
+    public IReadOnlyList<FunktionsMethode> Methoden { get; init; } = [];
+    /// <summary>Bei einer Klasse: ihr Konstruktor (geschachtelte Technik, Konfig-Records, Zustand, Logger).</summary>
+    public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
+    /// <summary>Bei einer Schnittstelle: ihre Umsetzungen im Host (Klasse und Konstruktor, je Methode der Rumpf).</summary>
+    public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
+    /// <summary>Der Zustand einer Klasse (<c>IZustand&lt;T&gt;</c> im Konstruktor): der einfache Name von T, sonst null.</summary>
+    public string? Zustand { get; init; }
+    public string? Doku { get; init; }
+    public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel (<see cref="DomainEditor.Herkunft"/>): Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>
+/// Eine ZUSTANDSKLASSE (docs/04 §4.4): die Klasse hinter <c>IZustand&lt;T&gt;</c> — ihre Eigenschaften als <see cref="Feld"/>er (Name, Typ, Startwert
+/// in <see cref="Feld.Standard"/>; geschrieben als <c>public Typ Name { get; set; } = Standard;</c>). Kein Marker: Zustandsklasse ist, was ein
+/// Konstruktor als <c>IZustand&lt;T&gt;</c> nimmt.
+/// </summary>
+public sealed record Zustandsklasse
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    public IReadOnlyList<Feld> Eigenschaften { get; init; } = [];
+    public string? Doku { get; init; }
+    public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel (<see cref="DomainEditor.Herkunft"/>): Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>
+/// Eine Umsetzung einer Technik-Schnittstelle im Host: die Klasse, ihr Konstruktor und je Methode ihr Rumpf.
 /// </summary>
 public sealed record FunktionsUmsetzung
 {
@@ -319,7 +371,7 @@ public sealed record FunktionsUmsetzung
 /// <summary>
 /// Ein Eingang (ein <c>Auf</c>): die eine Nachricht, die es nimmt (GR-EINGANG), ob mit Herkunft, Lese-Fähigkeiten, Ausgaben (einfache Namen) und
 /// die FORM der Ausgabe: <see cref="Strom"/> (keine bis viele je Aufruf), sonst bei einer Ausgabe genau eine, bei mehreren eine Wahl
-/// (<c>OneOf</c>, keine oder eine) — dazu <see cref="Asynchron"/> (<c>Task&lt;…&gt;</c> bzw. <c>IAsyncEnumerable&lt;…&gt;</c>).
+/// (<c>OneOf</c>, keine oder eine); immer asynchron (<c>Task&lt;…&gt;</c> bzw. <c>IAsyncEnumerable&lt;…&gt;</c>).
 /// </summary>
 public sealed record BausteinEingang
 {
@@ -327,7 +379,8 @@ public sealed record BausteinEingang
     public bool Hinweis { get; init; }
     public bool Herkunft { get; init; }
     public bool Strom { get; init; }
-    public bool Asynchron { get; init; }
+    /// <summary>Nimmt das Auf einen <c>CancellationToken</c> (Abbruch, etwa beim Zeitlimit des Knotens)?</summary>
+    public bool Abbruch { get; init; }
     public IReadOnlyList<Parameter> Faehigkeiten { get; init; } = [];
     public IReadOnlyList<string> Ausgaben { get; init; } = [];
 }

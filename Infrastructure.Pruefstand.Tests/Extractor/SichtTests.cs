@@ -209,7 +209,7 @@ public class SichtTests
         Ports(F("MahnungNachSchaetzung")).Should().Be("GutachtenErhalten", "ein Auf, eine Nachricht");
         Ports(F("Alarmquittung")).Should().Be("PerAnrufErreicht || PerFunkErreicht", "zwei Wege, je einer ein Auf");
         Ports(F("Prognosemodell")).Should().Be("Geglaettet<Kurzfenster> || Geglaettet<Langfenster>", "zusammengeführt im Zustand, je Glättung ein Auf");
-        Ports(F("Pruefungsstart")).Should().Be("Scan || Gestartet", "ein Command und die Antwort auf den eigenen Command (aus dem Event übersetzt)");
+        Ports(F("Pruefungsstart")).Should().Be("Scan || Gestartet", "zwei Commands ohne Ziel — Gestartet bringt eine Antwort-Übersetzung aus dem Event an den Kopf");
         F("Sensorabfrage")["lauscht"]!.AsArray().Select(x => (string?)x).Should().Equal("Rohwert");
         F("Sensorabfrage")["eingaenge"]!.AsArray().Should().BeEmpty("eine Quelle lauscht und nimmt nichts");
     }

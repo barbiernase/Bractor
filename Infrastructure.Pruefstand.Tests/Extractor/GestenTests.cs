@@ -258,32 +258,34 @@ public sealed class GestenTests : IDisposable
 
         await GesteAsync(Geaendert("bausteinFunktionen", karte));
 
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("IEnumerable<OneOf<Schaden, Mahnbetrag>> Auf(Rueckgabe p, Herkunft h)",
+        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("IAsyncEnumerable<OneOf<Schaden, Mahnbetrag>> Auf(Rueckgabe p, Herkunft h)",
             "die Ausgaben stehen in der Signatur (CQRS050); der Strom bleibt ein Strom");
     }
 
     [Fact]
-    public async Task Die_Form_der_Ausgabe_steht_in_der_Signatur_Strom_und_asynchron()
+    public async Task Die_Form_der_Ausgabe_steht_in_der_Signatur_Strom_oder_eine()
     {
-        // Lesen: SchadenBeiRueckgabe gibt einen Strom aus (synchron), Schadensschaetzer ein Task<…> — beides aus der Signatur.
+        // Lesen: SchadenBeiRueckgabe gibt einen Strom aus (IAsyncEnumerable<…>), Schadensschaetzer genau eine Ausgabe (Task<…>) — beides aus der
+        //   Signatur; asynchron ist ein Auf immer.
         var board = await BoardAsync();
         var strom = Karte(board, "bausteinFunktionen", f => (string?)f["name"] == "SchadenBeiRueckgabe")["eingaenge"]!.AsArray().OfType<JsonObject>().Single();
         ((bool?)strom["strom"]).Should().BeTrue();
-        ((bool?)strom["asynchron"]).Should().BeFalse();
         var task = Karte(board, "bausteinFunktionen", f => (string?)f["name"] == "Schadensschaetzer")["eingaenge"]!.AsArray().OfType<JsonObject>().Single();
-        ((bool?)task["asynchron"]).Should().BeTrue();
+        ((bool?)task["strom"]).Should().BeFalse();
 
-        // Schreiben: asynchron macht aus dem Strom einen IAsyncEnumerable, ohne Strom wird aus dem Task die bloße Ausgabe.
+        // Schreiben: ohne Strom wird aus dem IAsyncEnumerable ein Task, mit Strom aus dem Task ein IAsyncEnumerable.
         var karte = Karte(board, "bausteinFunktionen", f => (string?)f["name"] == "SchadenBeiRueckgabe");
-        karte["eingaenge"]!.AsArray().OfType<JsonObject>().Single()["asynchron"] = true;
+        karte["eingaenge"]!.AsArray().OfType<JsonObject>().Single()["strom"] = false;
         await GesteAsync(Geaendert("bausteinFunktionen", karte));
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("IAsyncEnumerable<Schaden> Auf(Rueckgabe p, Herkunft h)");
+        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain(" Task<Schaden> Auf(Rueckgabe p, Herkunft h)")
+            .And.NotContain("IAsyncEnumerable<Schaden> Auf(Rueckgabe p, Herkunft h)");
 
         var schaetzer = Karte(await BoardAsync(), "bausteinFunktionen", f => (string?)f["name"] == "Schadensschaetzer");
-        schaetzer["eingaenge"]!.AsArray().OfType<JsonObject>().Single()["asynchron"] = false;
+        schaetzer["eingaenge"]!.AsArray().OfType<JsonObject>().Single()["strom"] = true;
         await GesteAsync(Geaendert("bausteinFunktionen", schaetzer));
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain(" SchadenGeschaetzt Auf(SchadenErfasst e)").And.NotContain("Task<SchadenGeschaetzt> Auf(SchadenErfasst e)",
-            "nur die Rückgabe folgt der Form — der Rumpf gehört dem Code (sein await baut danach nicht mehr: unfertig, W1)");
+        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain(" IAsyncEnumerable<SchadenGeschaetzt> Auf(SchadenErfasst e)")
+            .And.NotContain("Task<SchadenGeschaetzt> Auf(SchadenErfasst e)",
+                "nur die Rückgabe folgt der Form — der Rumpf gehört dem Code (sein return baut danach nicht mehr: unfertig, W1)");
     }
 
     [Fact]
@@ -299,7 +301,7 @@ public sealed class GestenTests : IDisposable
         await GesteAsync(Geaendert("bausteinFunktionen", neu));
 
         Text("Mahnlauf.cs").Should().Contain("public sealed class Mahnlauf(WertTabellenKonfig konfig) : IFunktion")
-            .And.Contain("public Schaden Auf(Schaetze e, Herkunft h)", "kein T? als Ausgabe (Entscheidung 4)").And.Contain("NotImplementedException");
+            .And.Contain("public Task<Schaden> Auf(Schaetze e, Herkunft h)", "immer asynchron, kein T? als Ausgabe (Entscheidung 4)").And.Contain("NotImplementedException");
     }
 
     [Fact]

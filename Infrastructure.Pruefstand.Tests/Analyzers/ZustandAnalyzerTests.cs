@@ -23,7 +23,7 @@ public class ZustandAnalyzerTests
     private const string Vorspann = """
         using System; using System.Collections.Generic; using System.Text; using System.Threading.Tasks; using Abstractions;
         namespace Probe {
-        public sealed record Gemessen(double Wert) : IEvent;
+        public sealed record Gemessen(double Wert) : ICommand;
         public sealed record Auffaellig(double Wert) : ITransientEvent;
         public sealed class Modell { public double Summe { get; set; } public int Anzahl { get; set; } }
         public interface IVerbindung { Task<int> ZaehleAsync(); }
@@ -51,8 +51,12 @@ public class ZustandAnalyzerTests
             {
                 private readonly IVerbindung _db = db;
                 private const int Grenze = 3;
-                public void Auf(Gemessen e) { modell.Wert.Summe += e.Wert; modell.Wert.Anzahl++; }
-                public Auffaellig? Auf(Auffaellig a) => modell.Wert.Anzahl > Grenze ? a : null;
+                public async IAsyncEnumerable<Auffaellig> Auf(Gemessen e)
+                {
+                    await Task.CompletedTask;
+                    modell.Wert.Summe += e.Wert;
+                    if (++modell.Wert.Anzahl > Grenze) yield return new(e.Wert);
+                }
             }
             """)).Should().BeEmpty();
     }
@@ -66,14 +70,14 @@ public class ZustandAnalyzerTests
     [InlineData("public int Gesehen { get; set; }", "Setter")]
     public async Task Zustand_in_Feldern_oder_Eigenschaften_einer_Funktion_ist_CQRS105(string member, string worum)
     {
-        var befunde = await Befunde("public sealed class Zaehler : IFunktion { " + member + " public Auffaellig? Auf(Gemessen e) => null; }");
+        var befunde = await Befunde("public sealed class Zaehler : IFunktion { " + member + " public async IAsyncEnumerable<Auffaellig> Auf(Gemessen e) { await Task.CompletedTask; yield break; } }");
         befunde.Should().ContainSingle(b => b.Id == ZustandAnalyzer.Id).Which.Text.Should().Contain(worum);
     }
 
     [Fact]
     public async Task IZustand_in_einer_Technik_ist_erlaubt_hoechstens_einer()
     {
-        const string halter = "public sealed class Nutzer(IVerbindung v) : IFunktion { public Auffaellig? Auf(Gemessen e) => null; }\n";
+        const string halter = "public sealed class Nutzer(IVerbindung v) : IFunktion { public async IAsyncEnumerable<Auffaellig> Auf(Gemessen e) { await Task.CompletedTask; yield break; } }\n";
         (await Befunde(halter + """
             public sealed class Verbindung(IZustand<Modell> m) : IVerbindung { public Task<int> ZaehleAsync() => Task.FromResult(m.Wert.Anzahl); }
             """)).Should().NotContain(b => b.Id == ZustandAnalyzer.Id, "ihr Zustand gehört der Aktivierung ihres Halters");

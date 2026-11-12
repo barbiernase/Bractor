@@ -52,13 +52,13 @@ public class TechnikBindungTests
     }
 
     private const string Bild = @"namespace Probe {
-        public sealed record Gemacht(string X) : IEvent;
-        public sealed record Angefordert(string X) : IEvent;
+        public sealed record Gemacht(string X) : ICommand;
+        public sealed record Angefordert(string X) : ICommand;
         public interface ISkalierer { int Skaliere(int x); }
         public sealed class Skalierer(ILogger<Skalierer> log) : ISkalierer { public int Skaliere(int x) => x; }
         public enum Modus { Schnell = 1, Gruendlich = 2 }
         public record BildKonfig(string Ausgabe, int Hoehe, Modus Modus, TimeSpan Frist, bool Laut = false, string[]? Endungen = null);
-        public sealed class Mach(ISkalierer s, BildKonfig k) : IFunktion { public Gemacht Auf(Angefordert e) => default!; }
+        public sealed class Mach(ISkalierer s, BildKonfig k) : IFunktion { public Task<Gemacht> Auf(Angefordert e) => null!; }
     }";
 
     [Fact]
@@ -284,7 +284,7 @@ public class TechnikBindungTests
     {
         // Eine generische Funktion ist eine Blaupause: der Generator baut sie je Typargument eines Knotens (Entscheidung 4).
         string Mit(string sichtbar) => Bild.Replace("public enum Modus", "public sealed record Los() : ICommand; public sealed record Fertig() : ICommand; "
-            + sichtbar + " sealed class Glaettung<T>(ISkalierer s) : IFunktion { public Fertig Auf(Los l) => default!; } public enum Modus");
+            + sichtbar + " sealed class Glaettung<T>(ISkalierer s) : IFunktion { public Task<Fertig> Auf(Los l) => null!; } public enum Modus");
         (await Befunde(Mit("public"))).Should().NotContain(TechnikAnalyzer.BaubarId);
         (await Befunde(Mit("internal"))).Should().Contain(TechnikAnalyzer.BaubarId);
     }

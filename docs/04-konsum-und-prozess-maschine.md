@@ -235,10 +235,11 @@ ein Bündel), Garantie-Tests `BuendelGarantieTests`.
 
 **Funktion.** Eine Funktion ist eine Klasse `: IFunktion` (Name = Klassenname); jedes `Auf` ist eine Operation desselben Knotens. Ein `Auf`
 nimmt **genau eine Nachricht** (einen Command ohne Ziel), dazu optional `Herkunft`, Lese-Fähigkeiten (`: IReadStore`) und ein `CancellationToken`,
-und rechnet, sobald sie ankommt — kommen zwei, rechnet es zweimal. Die Fälle des Rückgabetyps sind die **Ausgangsports**: ein konkreter Typ,
-`OneOf<…>`, `IEnumerable<…>` oder `IAsyncEnumerable<…>` (auch in `Task<…>`), mit Commands und Hinweisen — kein `void`, kein `T?`, kein
-`ValueTask`, ein leerer Strom heißt „nichts“ (CQRS100). Ein Event hört eine Funktion nur als **Antwort** auf ihren eigenen Command an ein Aggregat
-(das Ziel entschied es, das Kind rechnet gleich weiter, CQRS108); einen Hinweis hört sie nie. Im Konstruktor stehen Konfig-Records (Werte je
+und rechnet, sobald sie ankommt — kommen zwei, rechnet es zweimal. Die Fälle des Rückgabetyps sind die **Ausgangsports**, immer asynchron:
+`Task<T>`, `Task<OneOf<…>>` oder `IAsyncEnumerable<…>`, mit Commands ohne Ziel und Hinweisen — kein `void`, kein `T?`, kein `ValueTask`, keine
+synchrone Form, ein leerer Strom heißt „nichts“ (CQRS100; „async ohne await“ unterdrückt der Analyzer für `Auf` und `Lausche`). Eine Funktion
+hört nie ein Event und keinen Hinweis und gibt nie einen Command an ein Aggregat aus: an ein Aggregat geht es über eine Übersetzung, was nach
+dessen Entscheidung gerechnet wird, bringt eine Antwort-Übersetzung an den Kopf eines Graphen. Im Konstruktor stehen Konfig-Records (Werte je
 Instanz und Knoten), Technik (jede andere Schnittstelle oder Klasse, ohne Marker, CQRS089–092), `IZustand<T>` und `ILogger<T>`. Eine generische
 Funktion (`Glaettung<TFenster>` der Sonde, als Knoten `Glaettung<Kurzfenster>`) ist eine Blaupause, je Typargument eines Knotens ein Baustein;
 generische Commands fließen nur zwischen Knoten. Der `FunktionsBausteinGenerator` erzeugt je Funktion ihre Rechnung (`GeneratedFunktionsBausteine`:
@@ -250,7 +251,7 @@ je `Auf` der Eingang als Objekt, die Ausgaben in Reihenfolge, reflexionsfrei).
 - **Die Nachricht trägt mit, was danach gebraucht wird.** Die Vorschau der Bildaufbereitung trägt die Datei der Quelle, so deutet die letzte
   Funktion das Bild aus ihr allein (`Bildvorschau.Katalog/Aufbereitung/Dateinamendeutung.cs`):
   ```csharp
-  public OneOf<BildGedeutet, DateinameUnbekannt> Auf(VorschauErstellt vorschau) => …;
+  public async Task<OneOf<BildGedeutet, DateinameUnbekannt>> Auf(VorschauErstellt vorschau) => …;
   ```
 - **Ein Knoten mit Zustand** nimmt jede Nachricht in einem eigenen `Auf` und hält die erste in `IZustand<T>`, bis die zweite da ist (bis dahin ein
   leerer Strom) — das Prognosemodell der Sonde (`Vorhersage.cs.txt`) führt so zwei Glättungen zusammen.
@@ -310,14 +311,14 @@ Der Wirker in der Spur ist die Übersetzung (`uebersetzung:<Name>`). Ein Graph e
 ein Akteur ihn bindet.
 ```csharp
 // Pruefdomaene.Uebersetzungen/Messung/Uebersetzungen.cs — Client ↦ Katalog Rechenwerk (Kopf) und dessen Ergebnis ↦ Aggregat
-public sealed class HochrechnungAngefordert_Skalieren_1(Id<Messstelle> Stelle, double Wert) : ITranslate<HochrechnungAngefordert, Skalieren>
+public sealed class HochrechnungAngefordert_Skalieren_1(HochrechnungAngefordert source) : ITranslate<HochrechnungAngefordert, Skalieren>
 {
-    public Skalieren Translate() => new(Bezug: Stelle.Wert, Wert: Wert);
+    public Skalieren Translate() => new(Bezug: source.Stelle.Wert, Wert: source.Wert);
 }
 
-public sealed class Skaliert_MeldeAusreisser_1(Guid Bezug, double Wert) : ITranslate<Skaliert, MeldeAusreisser>
+public sealed class Skaliert_MeldeAusreisser_1(Skaliert source) : ITranslate<Skaliert, MeldeAusreisser>
 {
-    public MeldeAusreisser Translate() => new(AggregateId: new(Bezug), Wert: Wert);
+    public MeldeAusreisser Translate() => new(AggregateId: new(source.Bezug), Wert: source.Wert);
 }
 ```
 
@@ -348,7 +349,7 @@ Schritt, rechnet er zweimal; ein Strom gibt je Element eine Nachricht, eine Wahl
   und geht die Nachricht verloren, merkt es niemand.
 
 Ausgaben an Knoten des Graphen gehen erst mit dem Erfolg des Aufrufs hinaus (eine Wiederholung liefert sie nicht doppelt), Commands an Aggregate
-sofort. Haltbar ist allein der Kopf: fehlt sein „fertig“ (Absturz, Umzug), kommt er erneut, und die Kette rechnet neu — mit denselben Ids.
+(aus Übersetzungen) sofort. Haltbar ist allein der Kopf: fehlt sein „fertig“ (Absturz, Umzug), kommt er erneut, und die Kette rechnet neu — mit denselben Ids.
 
 **Ids und Herkunft.** Command-Ids leitet das Framework ab, nie der Entwickler, und zwar aus der Nachricht, nie aus einer Reihenfolge: die Kennung
 eines Aufrufs aus der Kennung seiner Nachricht, dem Ort (`instanz/knoten`) und der Operation (`Kettenvertrag.Aufruf`); die Nachricht, die er an
@@ -373,9 +374,10 @@ mit der kleineren Id die festgelegten Instanzen (der andere meldet den Fehler). 
 Knoten, wenn er die Instanz hält, sonst reihum an einen, der sie hält (`Bote.FrageAnKnotenAsync`). Der Graph-Actor erkennt einen doppelten Kopf an der
 Kennung (in Arbeit: er hängt sich an; fertig: sofort „fertig“, Gedächtnis 10 000); sind schon so viele Ketten offen, wie die Warteschlange des Kopfs
 erlaubt, heißt die Antwort „später“. Der Parent erkennt einen doppelten Aufruf ebenso an seiner Kennung. Ein **Kind** rechnet einen Aufruf zugleich
-und bringt jede Ausgabe hinaus: einen Command an ein Aggregat der Reihe nach über den Emitter (§4.6; „unbekannt“ → derselbe Command erneut, bis acht
-Versuche) — die **Antwort** trägt die Events, die das Ziel entschied (`CommandResult.Antwort`, auch bei einer erkannten Wiederholung), und hört die
-Funktion einen dieser Typen, rechnet das Kind ihn gleich weiter (Kennung `Kettenvertrag.Antwort`); einen Command ohne Ziel an einen Knoten desselben
+und bringt jede Ausgabe hinaus: nimmt sie eine Übersetzung, rechnet das Kind diese inline, und einen Command an ein Aggregat sendet es der Reihe nach
+über den Emitter (§4.6; „unbekannt“ → derselbe Command erneut, bis acht Versuche) — die **Antwort** trägt die Events, die das Ziel entschied
+(`CommandResult.Antwort`, auch bei einer erkannten Wiederholung), und nimmt eine Antwort-Übersetzung einen dieser Typen, rechnet das Kind sie gleich
+weiter (Kennung `Kettenvertrag.Antwort`); einen Command ohne Ziel an einen Knoten desselben
 Graphen im Ergebnis an seinen Parent, der ihn nach der Wegtabelle weitergibt; einen an den Kopf einer anderen Instanz dorthin, und es wartet, bis
 deren Kette fertig ist („später“ oder 60 s ohne Antwort → erneut, mit derselben Kennung); einen Hinweis verlierbar an die Verteiler. Reihenfolge nur
 bei `Parallel` 1.
@@ -393,9 +395,9 @@ Quelle nennt im Cluster ihren **Rechner** (Pflicht, sonst Boot-Fehler) und läuf
 GPU. Fällt der Rechner aus, zieht nichts um: die durablen Eingänge warten in `cqrs_eingaenge`, die Quelle setzt nach dem Neustart ab ihrem
 gesicherten Stand fort. Im Einzelknoten-Betrieb ist der eine Host jeder Rechner. Was aus Fakten gelernt wird, gehört weiter in eine Projektion, die Funktion liest es per Lese-Fähigkeit:
 ```csharp
-public sealed class Schaetzer(IZaehlwerk zaehler) : IFunktion         // Prüfdomäne, Graph Merkmalbildung
+public sealed class Schaetzer(IZaehlwerk zaehler) : IFunktion         // Pruefwerk.Katalog, Graph Merkmalbildung
 {
-    public async Task<VermerkeSchaetzung> Auf(Merkmal m, IHoleMessreihe reihe) => …;   // Command rein, Messreihe (Projektion) lesen, Command raus
+    public async Task<Geschaetzt> Auf(Merkmal m, IHoleReihe reihe) => …;   // Command rein, Reihe (Projektion) lesen, Command ohne Ziel raus
 }
 public sealed class Zaehlwerk(IZustand<Zaehlstand> stand) : IZaehlwerk { … }         // Technik mit Zustand: gesichert mit dem Knoten des Schätzers
 ```

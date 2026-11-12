@@ -38,7 +38,7 @@ public class LageAnalyzerTests
     private const string Bausteine = """
         public record Ueberfaellig(int Tage) : ICommand;
         public record Gemahnt(int Stufe) : ICommand;
-        public sealed class Mahnwesen : IFunktion { public Gemahnt Auf(Ueberfaellig e) => default!; }
+        public sealed class Mahnwesen : IFunktion { public Task<Gemahnt> Auf(Ueberfaellig e) => null!; }
         public sealed record Mahnablauf([Kopf] Mahnwesen M) : IGraph;
         """;
 

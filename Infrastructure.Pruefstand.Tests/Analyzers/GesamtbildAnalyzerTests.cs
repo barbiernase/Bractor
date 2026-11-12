@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// CQRS084–086, CQRS108, CQRS116/117 — Regeln über das Gesamtbild der Domänen-Projekte, geprüft in der Laufzeit-Compilation (Werkbank P7.4): die Domäne liegt
+/// CQRS084–086, CQRS116/117 — Regeln über das Gesamtbild der Domänen-Projekte, geprüft in der Laufzeit-Compilation (Werkbank P7.4): die Domäne liegt
 /// dort nur als Metadaten-Referenz vor — genau wie hier (die Probe wird übersetzt und als Referenz einer leeren „Laufzeit“ gelesen).
 /// </summary>
 public class GesamtbildAnalyzerTests
@@ -29,7 +29,7 @@ public class GesamtbildAnalyzerTests
         if (katalog is not null)
         {
             // Ein Funktionskatalog als eigene Assembly (<Name>.Katalog): die Domänen-Probe nutzt ihn wie die Abläufe.
-            var kat = CSharpCompilation.Create("Rechen.Katalog", new[] { CSharpSyntaxTree.ParseText("using System; using Abstractions;\n" + katalog) }, refs,
+            var kat = CSharpCompilation.Create("Rechen.Katalog", new[] { CSharpSyntaxTree.ParseText("using System; using System.Threading.Tasks; using Abstractions;\n" + katalog) }, refs,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
             using var katBild = new MemoryStream();
             kat.Emit(katBild).Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Should().BeEmpty("der Katalog muss kompilieren");
@@ -73,7 +73,7 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
         namespace Rechen.Katalog {
         public record Rechne(int N) : ICommand;
         public record Gerechnet(Guid Bezug, int N) : ICommand;
-        public sealed class Rechner : IFunktion { public Gerechnet Auf(Rechne r) => default!; }
+        public sealed class Rechner : IFunktion { public Task<Gerechnet> Auf(Rechne r) => null!; }
         public sealed record Kette([Kopf] Rechner R) : IGraph;
         }
         """;
@@ -117,20 +117,6 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
         befunde.Should().OnlyContain(d => d.Location == Location.None, "die Typen liegen in der Domänen-Referenz — der Name führt zur Karte");
     }
 
-    // GR-ANTWORT (docs/04 §4.4): ein Event erreicht eine Funktion nur als Antwort auf einen eigenen Command.
-    [Fact]
-    public async Task Eine_Antwort_die_kein_eigener_Command_entscheiden_kann_ist_CQRS108()
-    {
-        (await Ids("public record Anstoss(Id<Konto> Konto) : ICommand; public sealed class Kette : IFunktion { public Eroeffne Auf(Anstoss a) => default!; "
-                   + "public IEnumerable<Eroeffne> Auf(Eroeffnet e) => []; } public sealed record G([Kopf] Kette K) : IGraph;"))
-            .Should().NotContain(GesamtbildAnalyzer.AntwortOhneCommandId, "Eroeffne kann Eroeffnet entscheiden");
-        var befunde = await Befunde("public record Anstoss(Id<Konto> Konto) : ICommand; public record Anderes() : IEvent; "
-                                    + "public sealed class Lauscher : IFunktion { public Eroeffne Auf(Anstoss a) => default!; public IEnumerable<Eroeffne> Auf(Anderes e) => []; } "
-                                    + "public sealed record G([Kopf] Lauscher L) : IGraph;");
-        befunde.Should().Contain(d => d.Id == GesamtbildAnalyzer.AntwortOhneCommandId)
-            .Which.GetMessage().Should().StartWith("Die Funktion 'Lauscher' hört 'Anderes'").And.Contain("Eroeffne");
-    }
-
     // R4 (docs/03 §3.2, docs/10 §10.6): eine Query hat genau ein Ziel — einen Reader oder ein Aggregat (Frage im Decider).
     private const string Kasse = @"
 public record Zaehle(Id<Kasse> AggregateId) : ICommand<Kasse>;
@@ -170,13 +156,19 @@ public partial class Kasse : IState
         befunde.Select(d => d.GetMessage()).Should().Contain(m => m.StartsWith("'Tot' (Event)")).And.Contain(m => m.StartsWith("'Lose' (Response)"));
     }
 
+    // Eine Funktion kennt kein Aggregat (docs/04 §4.4): was sie ausgibt, ist ein Command ohne Ziel; an das Konto geht er über eine Übersetzung.
+    private const string Eroeffnung = @"
+public record Geprueft(Id<Konto> Konto) : ICommand;
+public sealed class Geprueft_Eroeffne_1(Geprueft source) : ITranslate<Geprueft, Eroeffne> { public Eroeffne Translate() => new(source.Konto); }
+";
+
     // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf.
-    private const string Verteilt = @"
+    private const string Verteilt = Eroeffnung + @"
 public record Pruefe(Id<Konto> Konto) : ICommand;
 public record Los() : ICommand;
-public sealed class Pruefung : IFunktion { public Eroeffne Auf(Pruefe p) => default!; }
+public sealed class Pruefung : IFunktion { public Task<Geprueft> Auf(Pruefe p) => null!; }
 public sealed record Pruefgraph([Kopf] Pruefung P) : IGraph;
-public sealed class Anstoss : IFunktion { public Pruefe Auf(Los l) => default!; }
+public sealed class Anstoss : IFunktion { public Task<Pruefe> Auf(Los l) => null!; }
 public sealed record Anstossgraph([Kopf] Anstoss A) : IGraph;
 ";
 
@@ -184,11 +176,11 @@ public sealed record Anstossgraph([Kopf] Anstoss A) : IGraph;
     public async Task Ein_Command_ohne_Ziel_hat_genau_einen_Empfaenger_den_Kopf_eines_Graphen_CQRS116()
     {
         (await Ids(Verteilt)).Should().BeEmpty("Pruefe verlässt den Anstoßgraphen und nimmt genau der Prüfgraph am Kopf");
-        var zwei = await Befunde(Verteilt + "public sealed class Zweite : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } public sealed record Zweitgraph([Kopf] Zweite Z) : IGraph;");
+        var zwei = await Befunde(Verteilt + "public sealed class Zweite : IFunktion { public Task<Geprueft> Auf(Pruefe p) => null!; } public sealed record Zweitgraph([Kopf] Zweite Z) : IGraph;");
         zwei.Should().ContainSingle(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Which.GetMessage().Should().StartWith("'Pruefe'").And.Contain("Anstossgraph.A")
             .And.Contain("mehrere Graphen nehmen ihn am Kopf").And.Contain("Pruefgraph").And.Contain("Zweitgraph");
         var keiner = await Befunde("public record Weiter() : ICommand; public record Los() : ICommand; "
-                                   + "public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } public sealed record Losgraph([Kopf] Start L) : IGraph;");
+                                   + "public sealed class Start : IFunktion { public Task<Weiter> Auf(Los l) => null!; } public sealed record Losgraph([Kopf] Start L) : IGraph;");
         keiner.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).Should().Contain(m => m.Contains("keine Übersetzung nimmt ihn und kein Graph am Kopf"));
     }
 
@@ -204,7 +196,7 @@ public sealed record Melder : IAkteur, IDarf<Pruefe>;
         var ohne = await Befunde(Melder);
         ohne.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage())
             .Should().ContainSingle().Which.Should().StartWith("'Pruefe'").And.Contain("Akteur Melder").And.Contain("keine Übersetzung nimmt ihn und kein Graph am Kopf");
-        (await Ids(Melder + "public sealed class Pruefung : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } "
+        (await Ids(Melder + Eroeffnung + "public sealed class Pruefung : IFunktion { public Task<Geprueft> Auf(Pruefe p) => null!; } "
                           + "public sealed record Pruefgraph([Kopf] Pruefung P) : IGraph;"))
             .Should().NotContain(GesamtbildAnalyzer.EmpfaengerId, "der Kopf des Pruefgraphs ist sein Empfänger");
     }
@@ -212,10 +204,10 @@ public sealed record Melder : IAkteur, IDarf<Pruefe>;
     [Fact]
     public async Task Innerhalb_eines_Graphen_ist_die_Kante_der_Empfaenger_eine_Funktion_ohne_Graph_eine_Warnung_CQRS117()
     {
-        (await Ids("public record Weiter() : ICommand; public record Los() : ICommand; public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } "
-                   + "public sealed class Dann : IFunktion { public Eroeffne Auf(Weiter w) => default!; } public sealed record Kette([Kopf] Start L, [Von(nameof(L))] Dann D) : IGraph;"))
-            .Should().BeEmpty("Weiter nimmt ein Knoten desselben Graphen");
-        (await Befunde("public record Los() : ICommand; public sealed class Allein : IFunktion { public Eroeffne Auf(Los l) => default!; }"))
+        (await Ids(Eroeffnung + "public record Weiter() : ICommand; public record Los() : ICommand; public sealed class Start : IFunktion { public Task<Weiter> Auf(Los l) => null!; } "
+                   + "public sealed class Dann : IFunktion { public Task<Geprueft> Auf(Weiter w) => null!; } public sealed record Kette([Kopf] Start L, [Von(nameof(L))] Dann D) : IGraph;"))
+            .Should().BeEmpty("Weiter nimmt ein Knoten desselben Graphen, Geprueft die Übersetzung");
+        (await Befunde(Eroeffnung + "public record Los() : ICommand; public sealed class Allein : IFunktion { public Task<Geprueft> Auf(Los l) => null!; }"))
             .Should().ContainSingle().Which.Id.Should().Be(GesamtbildAnalyzer.OhneGraphId);
     }
 }

@@ -53,7 +53,7 @@ besitz Sondenkatalog.Katalog.Gebuehren.SchadenErfasst command -> bausteinfunktio
 besitz Sondenkatalog.Katalog.Gebuehren.SchadenGeschaetzt command -> bausteinfunktion:Schadensschaetzer
 besitz Sondenkatalog.Katalog.Gebuehren.Schaetze command -> §begriffe
 besitz Sondenkatalog.Katalog.Gebuehren.VorOrt command -> bausteinfunktion:Schadensaufnahme
-besitz Sondenkatalog.Katalog.Gebuehren.WertTabellenKonfig konfig -> bausteinfunktion:IWertTabelle
+besitz Sondenkatalog.Katalog.Gebuehren.WertTabellenKonfig konfig -> technik:IWertTabelle
 client Leihwesen.Rand.Lesesaal | verkoerpert Theke, Archiv
 funktion Sondenkatalog.Katalog.Gebuehren.Gutachtenanfrage(konfig:GutachtenKonfig) | Auf(SchadenGeschaetzt) -> GutachtenErhalten
 funktion Sondenkatalog.Katalog.Gebuehren.MahnungNachSchaetzung() | Auf(GutachtenErhalten) herkunft -> Mahnbetrag
@@ -365,7 +365,7 @@ besitz Kundenportal.Konten.Adressschluessel code -> §begriffe
 #    Technik am Kopf der Messkette, dahinter ein GRAPH IM GRAPHEN (aufgefaltete Kanten Aufbereitung.Plausi …); der Alarm öffnet die Störung über einen
 #    Graphen, auf die Störung alarmiert die Schichtleitung (sie reagiert auf beide Fakten) über zwei Wege nebeneinander. Die Domäne ist rein: die drei
 #    Graphen liegen im Katalog (Katalog.Messung.*, Guid statt Id), fünf Übersetzungen binden sie an Sensor, Störungsfall und Schichtleitung ──
-besitz Sondenkatalog.Katalog.Messung.Abfragestand code -> bausteinfunktion:Sensorabfrage
+besitz Sondenkatalog.Katalog.Messung.Abfragestand zustand -> bausteinfunktion:Sensorabfrage
 besitz Sondenkatalog.Katalog.Messung.Alarm command -> §begriffe
 besitz Sondenkatalog.Katalog.Messung.AlarmVerteilt command -> bausteinfunktion:Alarmverteilung
 besitz Sondenkatalog.Katalog.Messung.Alarmiere command -> §begriffe
@@ -377,11 +377,11 @@ besitz Sondenkatalog.Katalog.Messung.Plausibel command -> bausteinfunktion:Plaus
 besitz Sondenkatalog.Katalog.Messung.Rohwert command -> bausteinfunktion:Sensorabfrage
 besitz Sondenkatalog.Katalog.Messung.SensorabfrageKonfig konfig -> bausteinfunktion:Sensorabfrage
 besitz Sondenkatalog.Katalog.Messung.Stoerung command -> bausteinfunktion:StoerungBeiAlarm
-code Sondenkatalog.Katalog.Messung.Abfragestand class teile=1 domaene=Sondenkatalog.Katalog.Messung block=§geteilt
+zustand Sondenkatalog.Katalog.Messung.Abfragestand | Abfragen:long
 funktion Sondenkatalog.Katalog.Messung.Alarmquittung() | Auf(PerAnrufErreicht) -> Erreicht || Auf(PerFunkErreicht) -> Erreicht
 funktion Sondenkatalog.Katalog.Messung.Alarmverteilung() | Auf(Alarmiere) -> AlarmVerteilt
 funktion Sondenkatalog.Katalog.Messung.Anrufkette(telefonie:ITelefonie) | Auf(AlarmVerteilt) -> PerAnrufErreicht
-funktion Sondenkatalog.Katalog.Messung.Funkruf() | Auf(AlarmVerteilt) -> PerFunkErreicht
+funktion Sondenkatalog.Katalog.Messung.Funkruf() | Auf(AlarmVerteilt) abbruch -> PerFunkErreicht
 funktion Sondenkatalog.Katalog.Messung.Messwertpruefung() | Auf(Plausibel) -> Geprueft
 funktion Sondenkatalog.Katalog.Messung.Plausibilisierung() | Auf(Rohwert) -> strom Plausibel
 funktion Sondenkatalog.Katalog.Messung.Sensorabfrage(konfig:SensorabfrageKonfig, stand:IZustand<Abfragestand>, bus:ISensorbus) zustand=Abfragestand | Lausche -> strom Rohwert
@@ -482,7 +482,7 @@ besitz Anlagen.Messung.AlarmiereBereitschaft command -> §rand
 #    Schreib-Fähigkeit nimmt die Herkunft) und der Klasse 3 (nur mit [MindestensEinmal]; ohne Herkunft, mit Abbruch) ──
 besitz Sondenkatalog.Katalog.Import.Artikeldaten command -> bausteinfunktion:Artikelanlage
 besitz Sondenkatalog.Katalog.Import.Bilanz command -> bausteinfunktion:Zeilenleser
-besitz Sondenkatalog.Katalog.Import.CsvKonfig konfig -> bausteinfunktion:CsvZerleger
+besitz Sondenkatalog.Katalog.Import.CsvKonfig konfig -> technik:CsvZerleger
 besitz Sondenkatalog.Katalog.Import.Fortschritt command -> bausteinfunktion:Zeilenleser
 besitz Sondenkatalog.Katalog.Import.Importieren command -> bausteinfunktion:Katalogeingang
 besitz Sondenkatalog.Katalog.Import.KatalogBereit command -> §begriffe
@@ -585,7 +585,7 @@ besitz Warenkatalog.Import.Artikelzaehlung projektion -> store:IArtikelprotokoll
 #    am Kopf die Nachricht des Warndiensts, am Ausgang die Prognose an die Station; der Warndienst gibt und hört Nachrichten des Katalogs (bei den Akteuren) ──
 besitz Sondenkatalog.Katalog.Vorhersage.Bilde command -> §begriffe
 besitz Sondenkatalog.Katalog.Vorhersage.Geglaettet command -> bausteinfunktion:Glaettung
-besitz Sondenkatalog.Katalog.Vorhersage.Gewichte code -> bausteinfunktion:Prognosemodell
+besitz Sondenkatalog.Katalog.Vorhersage.Gewichte zustand -> bausteinfunktion:Prognosemodell
 besitz Sondenkatalog.Katalog.Vorhersage.GlaettungsKonfig konfig -> bausteinfunktion:Glaettung
 besitz Sondenkatalog.Katalog.Vorhersage.IFenster code -> §begriffe
 besitz Sondenkatalog.Katalog.Vorhersage.KarteBereit rejection -> §begriffe mehrdeutig
@@ -599,13 +599,13 @@ besitz Sondenkatalog.Katalog.Vorhersage.Prognostiziert command -> bausteinfunkti
 besitz Sondenkatalog.Katalog.Vorhersage.SkalierungsKonfig konfig -> bausteinfunktion:Kartenskalierung
 besitz Sondenkatalog.Katalog.Vorhersage.Tendenz command -> bausteinfunktion:Tendenzbildung
 besitz Sondenkatalog.Katalog.Vorhersage.Unwetter rejection -> bausteinfunktion:Prognosemodell
-besitz Sondenkatalog.Katalog.Vorhersage.Zaehlung code -> bausteinfunktion:IStatistik
+besitz Sondenkatalog.Katalog.Vorhersage.Zaehlung zustand -> technik:IStatistik
 besitz Sondenkatalog.Katalog.Vorhersage.ZeichneKarte command -> §rand
-code Sondenkatalog.Katalog.Vorhersage.Gewichte class teile=1 domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt
+zustand Sondenkatalog.Katalog.Vorhersage.Gewichte | Mittel:Dictionary<Guid, double>=new(), Anzahl:Dictionary<Guid, int>=new(), Kurz:Dictionary<Guid, double>=new(), Lang:Dictionary<Guid, double>=new()
 code Sondenkatalog.Katalog.Vorhersage.IFenster interface teile=1 domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt
-code Sondenkatalog.Katalog.Vorhersage.Zaehlung class teile=1 domaene=Sondenkatalog.Katalog.Vorhersage block=§geteilt
+zustand Sondenkatalog.Katalog.Vorhersage.Zaehlung | Je:Dictionary<Guid, int>=new()
 funktion Sondenkatalog.Katalog.Vorhersage.Daumenmeldung() | Auf(KarteSkaliert) -> KarteBereit
-funktion Sondenkatalog.Katalog.Vorhersage.Glaettung(konfig:GlaettungsKonfig) | Auf(Tendenz) -> Geglaettet<TFenster>
+funktion Sondenkatalog.Katalog.Vorhersage.Glaettung<TFenster:IFenster>(konfig:GlaettungsKonfig) | Auf(Tendenz) -> Geglaettet<TFenster>
 funktion Sondenkatalog.Katalog.Vorhersage.Kantenglaettung() | Auf(KarteGezeichnet) -> KarteGezeichnet
 funktion Sondenkatalog.Katalog.Vorhersage.Kartenablage() | Auf(KarteSkaliert) -> KarteBereit || Auf(LoescheKarte) -> KarteGeloescht
 funktion Sondenkatalog.Katalog.Vorhersage.Kartenschaerfung() | Auf(KarteGezeichnet) -> KarteGezeichnet

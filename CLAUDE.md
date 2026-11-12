@@ -62,8 +62,9 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   gerufen, sobald zum Schlüssel (die gemeinsame `Id<T>` der Events, sonst `[Ueber<T>]`, keine = global) von jedem Typ eines im Log steht — ohne
   Zustand, gegen das Log bis zur gesetzten Sequenz.
 - **Funktion** (docs/04 §4.4): eine Klasse `: IFunktion`, liest NIE das Log. Je `Auf` genau **eine Nachricht** (ein Command ohne Ziel; gerechnet
-  je Ankunft — kein `T?`, `OneOf`, `IReadOnlyList` als Eingang, GR-EINGANG), dazu optional `Herkunft`, Lese-Fähigkeiten, `CancellationToken`; die Fälle der Rückgabe sind die Ausgangsports (`T`, `OneOf`, `IEnumerable`, `IAsyncEnumerable`:
-  Commands und Hinweise). Ein Event hört sie nur als Antwort auf ihren eigenen Aggregat-Command (`CommandResult.Antwort`, CQRS108). Im Konstruktor:
+  je Ankunft — kein `T?`, `OneOf`, `IReadOnlyList` als Eingang, GR-EINGANG), dazu optional `Herkunft`, Lese-Fähigkeiten, `CancellationToken`; die Fälle der Rückgabe sind die Ausgangsports — immer asynchron: `Task<T>`, `Task<OneOf<…>>`
+  oder `IAsyncEnumerable<…>`, mit Commands ohne Ziel und Hinweisen (CQRS100; „async ohne await“ unterdrückt der Analyzer für `Auf`/`Lausche`). Eine
+  Funktion hört nie ein Event und gibt nie einen Command an ein Aggregat — beides läuft über Übersetzungen. Im Konstruktor:
   Konfig-Records, Technik (ohne Marker), `IZustand<T>`, `ILogger<T>`.
 - **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs` eines **Katalogs** (`<Name>.Katalog`, domänenneutral; Funktionen und
   Graphen gibt es nur dort); jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch mehrfach). Domänenspezifisch macht ihn eine

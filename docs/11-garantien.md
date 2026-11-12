@@ -159,8 +159,7 @@ sie über ihren gesicherten Zustand.
 | eine Frist steht nur in einem Decide und zielt auf einen Command | Generator (Ausgabe `Frist<TCmd>`), R5-Prüfung beim Schreiben im Actor | P `UhrTests.Eine_Frist_aus_dem_Decide…` |
 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor; keine veränderlichen Felder, keine Setter, keine Sammlung hinter `readonly` (R19) | CQRS105, CQRS100 (höchstens ein Zustand, eine eigene Klasse) | P `ZustandAnalyzerTests`, `FunktionsBausteinGeneratorTests.Ein_Zustand_im_Konstruktor…`, `…Zustand_und_Hinweis_ausser_Form…` |
 | Technik steht nur im Konstruktor einer Funktion bzw. Umsetzung und ist bindbar | CQRS089–092 (`TechnikAnalyzer`) | P `TechnikBindungTests` |
-| eine Funktion liest nie das Log: wer nur Events hört, hat keinen Einstieg; sie gibt nie ein Event aus | CQRS100 | P `FunktionsBausteinGeneratorTests.Eine_Funktion_die_nur_Events_hoert…` |
-| ein Event-Eingang einer Funktion kann die Antwort auf einen ihrer Commands sein (sonst käme er nie) | CQRS108 (Gesamtbild) | P `GesamtbildAnalyzerTests.Eine_Antwort_die_kein_eigener_Command…` |
+| eine Funktion liest nie das Log: sie hört nie ein Event (auch nicht als Antwort), gibt nie ein Event und nie einen Command an ein Aggregat aus; ihre Rückgabe ist asynchron | CQRS100 | P `FunktionsBausteinGeneratorTests.Eine_Funktion_hoert_nie_ein_Event…`, `…Eine_synchrone_Rueckgabe_ist_CQRS100`, `…Ein_Command_an_ein_Aggregat_als_Ausgabe_ist_CQRS100` |
 | jeder Hörer aus dem Log (Projektion) steht mit jedem gehörten Typ im Weckplan; er hört nur konkrete, persistente Events (GR-WECKPLAN) | die Form (CQRS057; Weckplan und Batch-Kinds lesen über dieselbe Lesart), Start-Prüfung des Takts (`Wecker.Pruefe`, Boot-Fehler) | P `WeckplanGeneratorTests`, `WeckerTests.Die_Startpruefung…`; jeder Host-Start in I, PD, VT |
 | eine Datenbank gehört genau einer Umgebung | `UmgebungsSiegel` | I `UmgebungE2ETests.Sim_Host_startet_nicht_gegen_eine_Datenbank_mit_Siegel_Prod` |
 

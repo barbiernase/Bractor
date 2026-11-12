@@ -24,11 +24,11 @@ namespace Probe
     public sealed record Kaputt(string Name) : IEvnt;
     public record Teilweise(int Wert) : IEvent, IFehlt;
     public sealed record DateiDa(string Pfad) : ICommand;
-    public sealed record Melde(Id<ProbeZiel> AggregateId, string Pfad) : ICommand<ProbeZiel>;
+    public sealed record Melde(Guid Meldung, string Pfad) : ICommand;
     public partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
     public sealed class ProbeStart : IFunktion
     {
-        public Melde Auf(DateiDa e, Herkunft h) => new(h.NeueId<ProbeZiel>(), e.Pfad);
+        public async Task<Melde> Auf(DateiDa e, Herkunft h) => new(h.NeueId(""meldung""), e.Pfad);
     }
 }
 namespace Probe.A { public interface ILiesZahl : IReadStore { Task<int> LiesAsync(string id); } }

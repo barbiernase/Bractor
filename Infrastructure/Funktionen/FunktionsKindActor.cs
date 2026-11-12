@@ -21,11 +21,11 @@ public sealed record KindLausche(PID Graph);
 public sealed record LauschenEndete(string? Fehler);
 
 /// <summary>
-/// Ein KIND eines Knotens (docs/04 §4.4): eine Umsetzung seiner Funktion mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Aufruf zugleich. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command an ein
-/// Aggregat sofort über den Emitter mit der Id aus Aufruf, Ort und Stelle (die Inbox verwirft eine Wiederholung; die Antwort rechnet die Funktion gleich
-/// weiter), einen Command ohne Ziel an einen Knoten desselben Graphen erst mit dem Erfolg (im Ergebnis an den Parent, der ihn nach der Wegtabelle
-/// weitergibt), einen anderen an den Kopf der Instanz, die ihn nimmt (gewartet wird, bis ihre Kette fertig ist), einen Hinweis verlierbar. Geht eine
-/// Ausgabe in eine ÜBERSETZUNG, rechnet das Kind sie inline und bringt ihr Ergebnis ebenso hinaus — mit Ort und Wirker der Übersetzung (docs/04 §4.4).
+/// Ein KIND eines Knotens (docs/04 §4.4): eine Umsetzung seiner Funktion mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Aufruf zugleich. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command ohne
+/// Ziel an einen Knoten desselben Graphen erst mit dem Erfolg (im Ergebnis an den Parent, der ihn nach der Wegtabelle weitergibt), einen anderen an den
+/// Kopf der Instanz, die ihn nimmt (gewartet wird, bis ihre Kette fertig ist), einen Hinweis verlierbar. Geht eine Ausgabe in eine ÜBERSETZUNG, rechnet
+/// das Kind sie inline und bringt ihr Ergebnis hinaus — einen Command an ein Aggregat sofort über den Emitter mit der Id aus Aufruf, Ort und Stelle (die
+/// Inbox verwirft eine Wiederholung), mit Ort und Wirker der Übersetzung (docs/04 §4.4).
 /// Das <see cref="KnotenKonfig.Zeitlimit"/> begrenzt eine Rechnung; danach gilt sie als gescheitert.
 /// </summary>
 public sealed class FunktionsKindActor(
@@ -127,8 +127,8 @@ public sealed class FunktionsKindActor(
     }
 
     /// <summary>
-    /// Rechnet ein <c>Auf</c> — die Operation des Aufrufs oder die Antwort auf einen ihrer Commands (ein Event, das ein Ziel darauf hin entschied; Kennung
-    /// aus Aufruf, Stelle und Nummer). Ausgaben an Knoten des Graphen sammelt es in <paramref name="ausgaben"/>, Wege zu fremden Köpfen in <paramref name="warten"/>.
+    /// Rechnet das <c>Auf</c> des Aufrufs. Ausgaben an Knoten des Graphen sammelt es in <paramref name="ausgaben"/>, Wege zu fremden Köpfen in
+    /// <paramref name="warten"/>.
     /// </summary>
     private async Task RechneAsync(KnotenAufruf a, int auf, object?[] argumente, Herkunft herkunft, Guid kennung, string ursache, IFaehigkeiten? bereich,
         List<KnotenAusgabe> ausgaben, List<Task> warten, CancellationToken ct)
@@ -147,17 +147,6 @@ public sealed class FunktionsKindActor(
             }
             switch (x)
             {
-                case IAggregatCommand c:
-                    // Commands an Aggregate der Reihe nach (ein Ziel sieht sie in der Reihenfolge der Funktion); die Antwort rechnet die Funktion gleich weiter.
-                    var antwort = await SendeAsync(c, Kettenvertrag.Befehl(kennung, traeger.Ort, i, c), a, ct);
-                    for (var j = 0; j < antwort.Events.Count; j++)
-                    {
-                        var (ev, version) = (antwort.Events[j].Event, antwort.Events[j].Version);
-                        if (traeger.Antworten?.TryGetValue(ev.GetType(), out var antwortAuf) != true) continue;
-                        await RechneAsync(a, antwortAuf, [ev], new Herkunft(c.Ziel, version, a.Kontext.Zeit, herkunft.Akteur, WirkerId.FuerFunktion(traeger.Name)),
-                            Kettenvertrag.Antwort(kennung, traeger.Ort, i, j), Spur.Ursache(c.Ziel, version), bereich, ausgaben, warten, ct);
-                    }
-                    break;
                 case ITransientEvent h:
                     // Nur an die Akteure draußen, die ihn hören (über die Verteiler); Funktionen hören keine Hinweise.
                     hinweise?.Invoke(new HinweisZustellen(Kettenvertrag.Ausgabe(kennung, traeger.Ort, i), h, a.Kontext.Stream, a.Kontext.Version, a.Kontext.Zeit,
@@ -165,14 +154,14 @@ public sealed class FunktionsKindActor(
                     break;
                 case ICommand weiter when traeger.ImGraphen.Contains(weiter.GetType()):
                     // An einen Knoten desselben Graphen: erst mit dem Erfolg sichtbar (der Parent gibt ihn nach der Wegtabelle weiter).
-                    ausgaben.Add(new KnotenAusgabe(ausgaben.Count, weiter));   // Stelle über den ganzen Aufruf (auch aus Antworten): Unterläufe, Ids
+                    ausgaben.Add(new KnotenAusgabe(ausgaben.Count, weiter));   // Stelle über den ganzen Aufruf: Unterläufe, Ids
                     break;
                 case ICommand weiter:
                     ZuFremdemKopf(a, weiter, Kettenvertrag.Ausgabe(kennung, traeger.Ort, i), warten, ct);
                     break;
                 default:
-                    throw new InvalidOperationException($"{traeger.Name} gab {x.GetType().Name} aus — eine Funktion gibt Commands und Hinweise aus, "
-                        + "nie ein Event (docs/04 §4.4).");
+                    throw new InvalidOperationException($"{traeger.Name} gab {x.GetType().Name} aus — eine Funktion gibt Commands ohne Ziel und Hinweise "
+                        + "aus; an ein Aggregat geht es über eine Übersetzung (docs/04 §4.4).");
             }
         }
     }

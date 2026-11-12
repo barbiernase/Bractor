@@ -9,7 +9,7 @@ namespace Bildvorschau.Katalog.Aufbereitung;
 /// </summary>
 public sealed class Dateinamendeutung : IFunktion
 {
-    public OneOf<BildGedeutet, DateinameUnbekannt> Auf(VorschauErstellt vorschau)
+    public async Task<OneOf<BildGedeutet, DateinameUnbekannt>> Auf(VorschauErstellt vorschau)
     {
         if (Aufnahmename.Resolve(vorschau.Dateiname) is not { } paar) return new DateinameUnbekannt(vorschau.Dateiname);
         return new BildGedeutet(paar.Paar, paar.PairKey, paar.ProduziertAm, vorschau.ErkanntAm, vorschau.Pfad, paar.Version,

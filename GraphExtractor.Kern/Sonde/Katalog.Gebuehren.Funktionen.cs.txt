@@ -5,7 +5,7 @@ namespace Sondenkatalog.Katalog.Gebuehren;
 // Gleichbleibend: nur ein beschädigt zurückgegebenes Medium ist ein Schadensfall — je Rückgabe genau einer (Id aus der Herkunft).
 public sealed class SchadenBeiRueckgabe : IFunktion
 {
-    public IEnumerable<Schaden> Auf(Rueckgabe p, Herkunft h)
+    public async IAsyncEnumerable<Schaden> Auf(Rueckgabe p, Herkunft h)
     {
         if (p.Beschaedigt) yield return new Schaden(h.NeueId("schaden"), p.LeserId);
     }
@@ -14,7 +14,7 @@ public sealed class SchadenBeiRueckgabe : IFunktion
 // WAHL: genau einer der drei Fälle je Lauf.
 public sealed class Schadensaufnahme : IFunktion
 {
-    public OneOf<SchadenErfasst, VorOrt, NichtSchaetzbar> Auf(Schaetze s)
+    public async Task<OneOf<SchadenErfasst, VorOrt, NichtSchaetzbar>> Auf(Schaetze s)
     {
         if (s.LeserId == Guid.Empty) return new NichtSchaetzbar("unbekannter Leser");
         if (s.Fall.ToByteArray()[0] % 2 == 0) return new VorOrt(s.Fall, s.LeserId);   // an den Schadensfall
@@ -64,5 +64,5 @@ public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion
 // KETTE, Schritt 3: die Mahnung aus dem, was das Gutachten mitträgt.
 public sealed class MahnungNachSchaetzung : IFunktion
 {
-    public Mahnbetrag Auf(GutachtenErhalten g, Herkunft h) => new(h.NeueId("mahnung"), g.Betrag + g.Zuschlag);
+    public async Task<Mahnbetrag> Auf(GutachtenErhalten g, Herkunft h) => new(h.NeueId("mahnung"), g.Betrag + g.Zuschlag);
 }

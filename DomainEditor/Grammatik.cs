@@ -86,15 +86,10 @@ public static class Grammatik
              An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Ziel ohne bzw. mit mehreren Empfängern)")]),
         new("GR-EVENT", "Event → Projektionen, Akteure, das eigene Aggregat", "Ein persistentes Event hören Projektionen (beliebig viele; einzeln oder "
             + "in einem Bündel) und Akteure (IHoert: gepusht an ihre Sitzungen, im Log lesbar — ihr Client reagiert darauf oder nimmt es zur Kenntnis); "
-            + "gefaltet wird es im eigenen Aggregat. Eine Funktion liest nie "
-            + "das Log: sie hört ein Event nur als Antwort auf einen eigenen Command (docs/04 §4.4).", "error",
+            + "gefaltet wird es im eigenen Aggregat. Eine Funktion hört nie ein Event: sie liest nicht das Log; was nach einer Entscheidung gerechnet "
+            + "wird, bringt eine Antwort-Übersetzung an den Kopf eines Graphen (docs/04 §4.4).", "error",
             [Comp("Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Auf einer Projektion)"),
-             Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (eine Funktion, die nur Events hört, hat keinen Einstieg)")]),
-        new("GR-ANTWORT", "Antwort → die Funktion, die den Command schickte", "Ein Event hört eine Funktion nur als Antwort auf einen eigenen Command: "
-            + "die Antwort trägt die Events, die das Ziel entschied, und das Kind rechnet sie gleich weiter. Ein Event-Eingang, den keiner ihrer Commands "
-            + "entscheiden kann, käme nie (docs/04 §4.4).", "error",
-            [An("CQRS108", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Antwort ohne eigenen Command)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (Antwort aus CommandResult.Antwort weitergerechnet)")]),
+             Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (ein Event als Eingang einer Funktion)")]),
         new("GR-KANTE", "Kante: [Von(nameof(Quelle))] am nehmenden Knoten", "Eine Funktion gibt Commands und Hinweise aus, nie ein Event. Innerhalb "
             + "eines Graphen ist jede Kante ausdrücklich: [Von(nameof(A), nameof(B))] am nehmenden Knoten nennt die Knoten, von denen er bekommt; eine genannte "
             + "Quelle speist die Eingänge, deren Typ sie ausgibt, und mindestens einen. Ein Eingang, den keine genannte Quelle speist, nimmt von außen — nur "
@@ -331,7 +326,7 @@ public static class Grammatik
     public static readonly IReadOnlyList<Konsum> Konsume =
     [
         new(Command, Aggregat, GenauEins, "GR-COMMAND"),
-        new(Event, Projektion, Beliebig, "GR-EVENT"), new(Event, Funktion, Beliebig, "GR-EVENT"),
+        new(Event, Projektion, Beliebig, "GR-EVENT"),
         new(Event, Buendel, Beliebig, "GR-BUENDEL"), new(Gebuendelt, Projektion, Beliebig, "GR-BUENDEL"),
         new(Event, Aggregat, GenauEins, "GR-FALTUNG"),
         new(Query, Reader, GenauEins, "GR-QUERY"), new(Query, Aggregat, GenauEins, "GR-QUERY"),

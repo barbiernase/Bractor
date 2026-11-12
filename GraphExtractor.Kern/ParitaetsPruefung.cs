@@ -143,6 +143,7 @@ public static class ParitaetsPruefung
         Vergleiche("Ablehnung", soll.Ablehnungen, BoardRecords(RecordArt.Rejection), befunde);
         Vergleiche("Value Object", soll.ValueObjects, BoardRecords(RecordArt.ValueObject), befunde);
         Vergleiche("Funktion", soll.Funktionen, BoardListe("bausteinfunktion"), befunde);
+        Vergleiche("Technik", soll.Techniken, BoardListe("technik"), befunde);
         Vergleiche("Konfiguration", soll.Konfigs, BoardRecords("konfig"), befunde);
         Vergleiche("Store", soll.Stores, BoardListe("store"), befunde);
         Vergleiche("Query", soll.Queries, BoardRecords("query"), befunde);
@@ -242,7 +243,7 @@ public static class ParitaetsPruefung
     {
         public HashSet<string> Commands = new(), Events = new(), Ablehnungen = new(), ValueObjects = new(),
             Queries = new(), Responses = new(), Enums = new(), ReadModels = new(), Readers = new(),
-            Projektionen = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new();
+            Projektionen = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new(), Techniken = new();
         /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
         public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
         /// <summary>Akteur → was er hört (IHoert-Ziele, einfache Namen) — aus der Basisliste.</summary>
@@ -299,10 +300,10 @@ public static class ParitaetsPruefung
                         if (t.ContainingType == null)
                             inv.Deklarationen.Add((full, tree.FilePath, decl.Span.Start, decl.Span.End, decl.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
-                        // Funktion (IFunktion) oder Technik: Klasse im Host oder Schnittstelle — ein eigener Baustein.
+                        // Funktion (IFunktion) bzw. Technik: je ein eigener Baustein.
                         if (t.ContainingType == null && (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) || technik.IstTechnik(t)))
                         {
-                            inv.Funktionen.Add(full);
+                            (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) ? inv.Funktionen : inv.Techniken).Add(full);
                             if (t.TypeKind == TypeKind.Interface) continue;   // eine Klasse zählt unten weiter (Konfig im Konstruktor)
                         }
                         // Client (Record mit IClient): wen er verkörpert, aus der Basisliste (direkt).

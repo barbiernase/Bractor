@@ -20,7 +20,7 @@ public static class Adresskennung
 // Ein Knoten, drei Auf: der Command am Kopf und die zwei Antworten der Anwendung auf den eigenen Command.
 public sealed class Registrierung : IFunktion
 {
-    public Reservierung Auf(Reserviere p) => new(Adresskennung.Von(p.Email), p.Email, p.Benutzer);
-    public Bestaetige Auf(Reserviert a) => new(a.Benutzer);
-    public Ablehnen Auf(Vergeben v) => new(v.Benutzer, "Adresse vergeben");
+    public async Task<Reservierung> Auf(Reserviere p) => new(Adresskennung.Von(p.Email), p.Email, p.Benutzer);
+    public async Task<Bestaetige> Auf(Reserviert a) => new(a.Benutzer);
+    public async Task<Ablehnen> Auf(Vergeben v) => new(v.Benutzer, "Adresse vergeben");
 }

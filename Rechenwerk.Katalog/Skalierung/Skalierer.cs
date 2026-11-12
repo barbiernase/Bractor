@@ -8,5 +8,5 @@ namespace Rechenwerk.Katalog.Skalierung;
 /// </summary>
 public sealed class Skalierer : IFunktion
 {
-    public Skaliert Auf(Skalieren e) => new(e.Bezug, e.Wert * e.Faktor);
+    public async Task<Skaliert> Auf(Skalieren e) => new(e.Bezug, e.Wert * e.Faktor);
 }

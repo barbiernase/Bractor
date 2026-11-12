@@ -7,7 +7,7 @@ namespace Sondenkatalog.Katalog.Import;
 // Der Eingang: aus der gefundenen Datei der Import (Id aus der Herkunft).
 public sealed class Katalogeingang : IFunktion
 {
-    public Importieren Auf(DateiGefunden d, Herkunft h) => new(h.NeueId("import:" + d.RelativerPfad), d.Pfad);
+    public async Task<Importieren> Auf(DateiGefunden d, Herkunft h) => new(h.NeueId("import:" + d.RelativerPfad), d.Pfad);
 }
 
 // Technik als Klasse (ohne Schnittstelle, ohne Marker) mit Konfig-Record.
@@ -38,6 +38,6 @@ public sealed class Zeilenleser(CsvZerleger zerleger) : IFunktion
 // Im Unterlauf je Zeile: der Artikel (Id aus der Herkunft und der Artikelnummer).
 public sealed class Artikelanlage : IFunktion
 {
-    public Artikeldaten Auf(Zeile z, Herkunft h) =>
+    public async Task<Artikeldaten> Auf(Zeile z, Herkunft h) =>
         new(h.NeueId("artikel:" + z.Felder[0]), z.Felder[0], z.Felder.ElementAtOrDefault(1) ?? "", decimal.Parse(z.Felder.ElementAtOrDefault(2) ?? "0"));
 }

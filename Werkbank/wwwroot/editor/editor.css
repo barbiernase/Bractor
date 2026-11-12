@@ -911,3 +911,46 @@
 #de .fl-g-port.s-hinweis{color:#e0a0c8}
 #de .fl-g-m{color:#ffd27a;font-size:10px}
 #de .fl-ab-plus.frei{border-color:#d9822b;color:#ffb35c}
+
+/* ── Werkstatt (docs/10 §10.9): Navigator links, die Funktion als EINE Karte wie ihre Klasse — Konstruktor oben, je Operation eine Zeile ── */
+#de .kom-leib.innen.mit-nav{grid-template-columns:minmax(170px,230px) 1fr}
+#de .kom-leib.innen.mit-nav>.kat-leer{padding:28px;color:#8c97ab;font-size:13px;max-width:60ch;line-height:1.5}
+#de .gnode2.n-werkfn{width:auto;min-width:430px;max-width:620px;border-color:#8ab4f8;border-width:2px}
+#de .gnode2.n-werkfn .ghead{background:#8ab4f8}
+#de .gnode2.n-technik,#de .gnode2.n-technikkarte{border-color:#8a97a8}#de .gnode2.n-technik .ghead,#de .gnode2.n-technikkarte .ghead{background:#aab4c2}
+#de .gnode2.n-technikkarte{width:auto;min-width:360px}
+#de .gnode2.n-zustand{border-color:#c9a23a}#de .gnode2.n-zustand .ghead{background:#e5bd57}
+#de .gnode2.n-lesefaehigkeit{border-color:#3f8fa8}#de .gnode2.n-lesefaehigkeit .ghead{background:#6cc3e0}
+#de .gnode2.n-konfig{border-color:#2f9f8f}#de .gnode2.n-konfig .ghead{background:#5fd0be}
+#de .gnode2.n-umsetzungtk{width:auto;min-width:260px}
+#de .ws-fn{display:flex;flex-direction:column;gap:8px;padding:8px 10px 10px;font-size:12px}
+#de .ws-lbl{font:600 10px/1.6 ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:#7f8aa0;margin-right:6px}
+#de .ws-ctor{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding-bottom:6px;border-bottom:1px dashed #2c3547}
+#de .ws-chip{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:10px;border:1px solid #3a4560;background:#1b2231;font:11px ui-monospace,Menlo,monospace;color:#d6deeb}
+#de .ws-chip.c-konfig{border-color:#2f9f8f;color:#7fe0d0}#de .ws-chip.c-technik{border-color:#8a97a8;color:#c3ccd8}
+#de .ws-chip.c-zustand{border-color:#c9a23a;color:#f0cc6e}#de .ws-chip.c-liest{border-color:#3f8fa8;color:#8fd3ea}#de .ws-chip.c-logger{color:#9aa4b3}
+#de .ws-zeile{border:1px solid #2c3547;border-radius:8px;background:#121722;padding:6px 8px;display:flex;flex-direction:column;gap:6px}
+#de .ws-zeile.quelle{border-style:dashed}
+#de .ws-z-kopf{display:flex;align-items:center;gap:6px;margin-left:-8px;padding-left:8px;border-left:3px solid #8fa6c8}
+#de .ws-z-kopf .ws-auf{flex:1;font:12px ui-monospace,Menlo,monospace;color:#c7d2e4}
+#de .ws-zutaten,#de .ws-form{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+#de .ws-f{font:11px system-ui,sans-serif;padding:1px 8px;border-radius:10px;border:1px solid #3a4560;background:transparent;color:#9aa4b3;cursor:pointer}
+#de .ws-f.an{background:#8ab4f8;border-color:#8ab4f8;color:#0d1017}
+#de .ws-f:focus-visible,#de .ws-plus:focus-visible,#de .ws-neu:focus-visible{outline:2px solid #ffd27a;outline-offset:1px}
+#de .ws-aus{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+#de .ws-ausgang{display:flex;align-items:center;gap:6px;margin-right:-8px;padding-right:8px;border-right:3px solid #8fa6c8;font:12px ui-monospace,Menlo,monospace}
+#de .ws-ausgang.s-hinweis{border-right-color:#cf6f68}
+#de .ws-mult{color:#7f8aa0;font-size:10.5px}
+#de .ws-plus{font-size:11px}
+#de .ws-plus.aktiv{background:#ffd27a;color:#0d1017}
+#de .ws-neu{border:1px dashed #3a4560;border-radius:8px;background:transparent;color:#8c97ab;padding:6px;cursor:pointer;font-size:12px}
+#de .ws-neu:hover{border-color:#8ab4f8;color:#c7d2e4}
+#de .ws-rumpf{display:flex;flex-direction:column;gap:4px}
+#de .ws-methoden{display:flex;flex-direction:column;gap:4px;margin:4px 0}
+#de .ws-methoden .ag-zeile{display:flex;gap:4px;align-items:center}
+#de .ws-methoden input.mono,#de .ag-edit input.mono{font-family:ui-monospace,Menlo,monospace}
+#de .kom-kanten path.rahmen{stroke:#7a8699;stroke-width:1.4;stroke-dasharray:4 3}
+#de .gnode2.n-halter{border-color:#4f78b0}#de .gnode2.n-halter .ghead{background:#8ab4f8}
+#de .gnode2.n-technikkarte{min-width:440px}
+#de .ws-methoden .ag-zeile input{flex:1;min-width:0}
+#de .ws-methoden .ag-zeile input.mono{flex:3}

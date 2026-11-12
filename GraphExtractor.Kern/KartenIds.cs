@@ -26,7 +26,9 @@ public static class KartenIds
                 && Id("applier", a => S(a, "aggregat") == typ && S(a, "event") == arg) is { } app) return app;
             return "agg:" + typ;
         }
-        return Id("bausteinFunktionen", f => S(f, "name") == typ || (f["umsetzungen"] as JsonArray ?? []).OfType<JsonObject>().Any(u => S(u, "name") == typ))
+        return Id("bausteinFunktionen", f => S(f, "name") == typ)
+            ?? Id("techniken", f => S(f, "name") == typ || (f["umsetzungen"] as JsonArray ?? []).OfType<JsonObject>().Any(u => S(u, "name") == typ))
+            ?? Id("zustaende", z => S(z, "name") == typ)
             ?? Id("projektionen", p => S(p, "name") == typ)
             ?? Id("reader", p => S(p, "name") == typ)
             ?? Id("stores", s => S(s, "name") == typ || (s["impl"] is JsonObject impl && S(impl, "name") == typ))

@@ -26,7 +26,7 @@ public sealed partial class Sicht
 
     private readonly JsonObject _board;
     private readonly List<JsonObject> _records, _enums, _aggregate, _decider, _applier, _states,
-        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _codeKarten, _bausteinFunktionen, _graphen, _uebersetzungen;
+        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _codeKarten, _bausteinFunktionen, _techniken, _zustaende, _graphen, _uebersetzungen;
     private readonly Dictionary<string, (HashSet<string> Direkt, HashSet<string> Kette)> _mengen = new(StringComparer.Ordinal);
 
     public IReadOnlyList<SichtKarte> Karten { get; }
@@ -43,6 +43,7 @@ public sealed partial class Sicht
         _akteure = Liste("akteure"); _clients = Liste("clients"); _readModels = Liste("readModels"); _stores = Liste("stores");
         _projektionen = Liste("projektionen"); _reader = Liste("reader"); _codeKarten = Liste("codeKarten");
         _bausteinFunktionen = Liste("bausteinFunktionen"); _graphen = Liste("graphen"); _uebersetzungen = Liste("uebersetzungen");
+        _techniken = Liste("techniken"); _zustaende = Liste("zustaende");
         // Wie der Editor das Board liest: je Aggregat mit State eine State-Karte.
         _states = _aggregate.Where(a => Alle(a["state"]).Any()).Select(a => new JsonObject { ["_id"] = "state:" + S(a, "name"), ["aggregat"] = S(a, "name") }).ToList();
         foreach (var (n, m) in Eintraege(board["rahmen"]?["akteurMengen"] as JsonObject))
@@ -140,8 +141,10 @@ public sealed partial class Sicht
         foreach (var d in _decider) k.Add(new("dec:" + S(d, "_id"), "decider", S(d, "command"), d));
         foreach (var a in _applier) k.Add(new("app:" + S(a, "_id"), "applier", S(a, "event"), a));
         foreach (var e in _enums) k.Add(new("enum:" + S(e, "name"), "enum", S(e, "name"), e));
-        // Funktionen: eine Karte je Funktion — mit Eingängen oder gerufen (Methoden statt Auf).
+        // Funktionen: eine Karte je Funktion (Operationen bzw. Lausche); Technik und Zustandsklassen je eine eigene Karte.
         foreach (var f in _bausteinFunktionen) k.Add(new("fb:" + S(f, "_id"), "bausteinfunktion", S(f, "name"), f));
+        foreach (var t in _techniken) k.Add(new("tk:" + S(t, "_id"), "technik", S(t, "name"), t));
+        foreach (var z in _zustaende) k.Add(new("zu:" + S(z, "_id"), "zustand", S(z, "name"), z));
         // Graphen (docs/04 §4.4): eine Karte je Graph-Record — seine Knoten sind Funktionen oder Graphen.
         foreach (var g in _graphen) k.Add(new("gr:" + S(g, "_id"), "graph", S(g, "name"), g));
         // Übersetzungen (docs/04 §4.4): eine Karte je Record der Domäne — sie nimmt TEin und erzeugt TAus.
@@ -197,22 +200,24 @@ public sealed partial class Sicht
         if (belegt.Contains(v)) v = "I" + kern + OhneI(S(st, "name"));
         return v;
     }
-    /// <summary>Die gerufene Funktion zu einem Konstruktor-Parametertyp (einfacher Name, ohne <c>?</c>) — oder null (Konfig-Record, Logger …).</summary>
+    /// <summary>Die Technik zu einem Konstruktor-Parametertyp (einfacher Name, ohne <c>?</c>) — oder null (Konfig-Record, Logger …).</summary>
     internal JsonObject? GerufenZu(string typ)
     {
         var t = typ.Trim().TrimEnd('?');
-        return _bausteinFunktionen.FirstOrDefault(f => S(f, "name") == t && IstGerufen(f));
+        return _techniken.FirstOrDefault(f => S(f, "name") == t);
     }
-    /// <summary>Ist die Funktion gerufen (Methoden, kein Eingang)?</summary>
-    internal static bool IstGerufen(JsonObject f) => Alle(f["methoden"]).Any() && !Alle(f["eingaenge"]).Any();
+    /// <summary>Die Zustandsklasse dieses Namens — oder null.</summary>
+    internal JsonObject? ZustandNamens(string name) => _zustaende.FirstOrDefault(z => S(z, "name") == name);
+    /// <summary>Die Karte eines Halters (Funktion <c>fb:</c> bzw. Technik <c>tk:</c>).</summary>
+    internal string HalterKarte(JsonObject h) => (_techniken.Contains(h) ? "tk:" : "fb:") + S(h, "_id");
     /// <summary>Die Funktion dieses Namens — oder null.</summary>
     internal JsonObject? BausteinFunktion(string name) => _bausteinFunktionen.FirstOrDefault(x => S(x, "name") == name);
     /// <summary>Die Konstruktor-Parameter einer Funktion: der Klasse, bzw. aller Umsetzungen einer Schnittstelle.</summary>
     internal static IEnumerable<JsonObject> BausteinKonstruktor(JsonObject f) =>
         Alle(f["konstruktor"]).Concat(Alle(f["umsetzungen"]).SelectMany(u => Alle(u["konstruktor"])));
-    /// <summary>Die Funktionen, deren Klasse oder Umsetzung die gerufene Funktion im Konstruktor nimmt.</summary>
+    /// <summary>Die Funktionen und Techniken, deren Klasse oder Umsetzung die Technik im Konstruktor nimmt.</summary>
     internal IEnumerable<JsonObject> GerufenNutzer(JsonObject g) =>
-        _bausteinFunktionen.Where(f => !ReferenceEquals(f, g) && BausteinKonstruktor(f).Any(p => ReferenceEquals(GerufenZu(S(p, "typ")), g)));
+        _bausteinFunktionen.Concat(_techniken).Where(f => !ReferenceEquals(f, g) && BausteinKonstruktor(f).Any(p => ReferenceEquals(GerufenZu(S(p, "typ")), g)));
     private (JsonObject Store, JsonObject Fn)? LeseFnZu(string typ)
     {
         foreach (var st in _stores)
@@ -319,8 +324,12 @@ public sealed partial class Sicht
                 foreach (var p in Alle(ein["faehigkeiten"])) if (LeseFnZu(S(p, "typ")) is { } z) P(fid, "fn:" + S(z.Fn, "_id"));
             }
             foreach (var p in BausteinKonstruktor(f))
-                if (GerufenZu(S(p, "typ")) is { } g && !ReferenceEquals(g, f)) P(fid, "fb:" + S(g, "_id"));
+                if (GerufenZu(S(p, "typ")) is { } g && !ReferenceEquals(g, f)) P(fid, "tk:" + S(g, "_id"));
         }
+        // Technik: geschachtelte Technik im Konstruktor ihrer Klasse bzw. einer Umsetzung.
+        foreach (var t in _techniken)
+            foreach (var p in BausteinKonstruktor(t))
+                if (GerufenZu(S(p, "typ")) is { } g && !ReferenceEquals(g, t)) P("tk:" + S(t, "_id"), "tk:" + S(g, "_id"));
         foreach (var rm in _readModels)
             if (_stores.FirstOrDefault(s => S(s, "name") == S(rm, "store")) is { } st) P("rm:" + S(rm, "_id"), "sto:" + S(st, "_id"));
         foreach (var st in _stores)

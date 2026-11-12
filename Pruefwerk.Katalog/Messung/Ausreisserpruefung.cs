@@ -7,7 +7,7 @@ public sealed class Ausreisserpruefung : IFunktion
 {
     public const double Schwelle = 1_000;
 
-    public IEnumerable<Ausreisser> Auf(Merkmal m)
+    public async IAsyncEnumerable<Ausreisser> Auf(Merkmal m)
     {
         if (m.Wert > Schwelle) yield return new Ausreisser(m.Stelle, m.Wert);
     }

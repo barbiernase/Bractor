@@ -166,10 +166,12 @@ public sealed partial class Sicht
                 break;
             }
             case "bausteinfunktion":
-                // Gerufen: wer ihre Nutzer anstößt.
-                foreach (var f in GerufenNutzer(r)) Add(AkteureId("fb:" + S(f, "_id")));
                 foreach (var a in _akteure.Where(a => L(a, "darf").Contains(name))) Add([S(a, "name")]);
                 foreach (var e in Alle(r["eingaenge"])) Add(MengeListe(S(e, "eingang")));
+                break;
+            case "technik":
+                // Technik: wer ihre Halter anstößt.
+                foreach (var f in GerufenNutzer(r)) Add(AkteureId(HalterKarte(f)));
                 break;
             case "projektion": Add(ProjektionAkteure(r)); break;
             case "store": Add(StoreAkteure(r)); break;

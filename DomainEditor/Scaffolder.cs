@@ -124,16 +124,20 @@ public static class Scaffolder
             dateien.Add(Platziert(agg.ApplierDatei, v, $"{agg.Name}.{rahmen.ApplierKlasse}.cs", ApplierDatei(agg, applier, modell), DateiArt.Applier));
         }
 
-        // ── Funktionen (IFunktion, docs/04 §4.4) → je NEUE Funktion ihre Klasse (im Host, throw-Stubs; eigene Datei) bzw. ihre Schnittstelle
-        //    (draußen oder mit Umsetzung; auch sie in eigener Datei, wie die Lage es will: Technik je Typ eine Datei) — mit Eingängen (Auf) oder gerufen (Methoden); je NEUE Umsetzung einer
-        //    Schnittstelle ihre Klasse mit throw-Stubs. Eine bestehende gehört dem Code, ihre Signaturen gleicht der Abgleich ab ──
-        foreach (var f in modell.BausteinFunktionen)
+        // ── Funktionen (IFunktion, docs/04 §4.4) → je NEUE Funktion ihre Klasse mit throw-Stubs (eigene Datei). Technik → je NEUE Technik ihre
+        //    Schnittstelle bzw. Klasse, je NEUE Umsetzung ihre Klasse (je Typ eine Datei). Zustand → je NEUE Zustandsklasse ihre Klasse mit
+        //    Eigenschaften. Eine bestehende gehört dem Code, ihre Signaturen gleicht der Abgleich ab ──
+        foreach (var f in modell.BausteinFunktionen.Where(f => f.Datei == null))
+            dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{f.Name}.cs", FunktionsDatei(f, modell), DateiArt.Typen));
+        foreach (var t in modell.Techniken)
         {
-            if (f.Datei == null)
-                dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{f.Name}.cs", FunktionsDatei(f, modell), DateiArt.Typen));
-            foreach (var u in f.Umsetzungen.Where(u => u.Datei == null && !f.Klasse))
-                dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{u.Name}.cs", UmsetzungsDatei(f, u, modell), DateiArt.Typen));
+            if (t.Datei == null)
+                dateien.Add(Platziert(null, Verzeichnis(modell, t.Namespace), $"{t.Name}.cs", TechnikDatei(t, modell), DateiArt.Typen));
+            foreach (var u in t.Umsetzungen.Where(u => u.Datei == null && !t.Klasse))
+                dateien.Add(Platziert(null, Verzeichnis(modell, t.Namespace), $"{u.Name}.cs", UmsetzungsDatei(t, u, modell), DateiArt.Typen));
         }
+        foreach (var z in modell.Zustaende.Where(z => z.Datei == null))
+            dateien.Add(Platziert(null, Verzeichnis(modell, z.Namespace), $"{z.Name}.cs", ZustandsDatei(z, modell), DateiArt.Typen));
 
         if (modell.Lesen is { } lesen) dateien.AddRange(LeseseitenDateien(modell, lesen));
 
@@ -500,31 +504,31 @@ public static class Scaffolder
     private static readonly string OneOfName = typeof(Abstractions.OneOf<>).Name.Split('`')[0];
 
     /// <summary>
-    /// Die Rückgabe eines Auf aus seinen Ausgaben und seiner Form (Entscheidung 4: kein <c>T?</c>, ein leerer Strom ist „nichts“): eine → <c>X</c>;
-    /// mehrere → eine Wahl <c>OneOf&lt;…&gt;</c>; als Strom <c>IEnumerable&lt;…&gt;</c>; asynchron in <c>Task&lt;…&gt;</c> bzw. als
-    /// <c>IAsyncEnumerable&lt;…&gt;</c>; keine → <c>void</c> bzw. <c>Task</c> (baut nicht — W1: Unfertiges ist Code, der nicht baut).
+    /// Die Rückgabe eines Auf aus seinen Ausgaben und seiner Form (Entscheidung 4: kein <c>T?</c>, ein leerer Strom ist „nichts“; immer asynchron):
+    /// eine → <c>Task&lt;X&gt;</c>; mehrere → eine Wahl <c>Task&lt;OneOf&lt;…&gt;&gt;</c>; als Strom <c>IAsyncEnumerable&lt;…&gt;</c>; keine →
+    /// <c>Task</c> (baut nicht — W1: Unfertiges ist Code, der nicht baut).
     /// </summary>
-    public static string FunktionsRueckgabe(BausteinEingang e) => Rueckgabe(e.Ausgaben, e.Strom, e.Asynchron);
+    public static string FunktionsRueckgabe(BausteinEingang e) => Rueckgabe(e.Ausgaben, e.Strom);
 
-    private static string Rueckgabe(IReadOnlyList<string> ausgaben, bool strom, bool asynchron)
+    private static string Rueckgabe(IReadOnlyList<string> ausgaben, bool strom)
     {
         var innen = ausgaben.Count switch { 0 => null, 1 => ausgaben[0], _ => $"{OneOfName}<{string.Join(", ", ausgaben)}>" };
-        if (innen == null) return asynchron ? "Task" : "void";
-        if (strom) return asynchron ? $"IAsyncEnumerable<{innen}>" : $"IEnumerable<{innen}>";
-        return asynchron ? $"Task<{innen}>" : innen;
+        if (innen == null) return "Task";
+        return strom ? $"IAsyncEnumerable<{innen}>" : $"Task<{innen}>";
     }
 
     /// <summary>
-    /// Die Parameter eines Auf: die eine Nachricht (GR-EINGANG), die Herkunft (Ids über <c>h.NeueId</c>), dann die Lese-Fähigkeiten.
+    /// Die Parameter eines Auf: die eine Nachricht (GR-EINGANG), die Herkunft (Ids über <c>h.NeueId</c>), die Lese-Fähigkeiten, der Abbruch.
     /// </summary>
     public static IReadOnlyList<Parameter> FunktionsParameter(BausteinEingang e) =>
         [new Parameter { Typ = e.Eingang, Name = "e" },
          .. (e.Herkunft ? [new Parameter { Typ = nameof(Abstractions.Herkunft), Name = "h" }] : Array.Empty<Parameter>()),
-         .. e.Faehigkeiten];
+         .. e.Faehigkeiten,
+         .. (e.Abbruch ? [new Parameter { Typ = nameof(CancellationToken), Name = "ct" }] : Array.Empty<Parameter>())];
 
     /// <summary>Eine Quellfunktion lauscht so (Entscheidung 8): ein asynchroner Strom dessen, was sie meldet, mit dem Abbruch als einzigem Parameter.</summary>
     public static string LauscheKopf(BausteinFunktion f) =>
-        $"async {Rueckgabe(f.Lauscht, strom: true, asynchron: true)} {Abstractions.Funktionsvertrag.Lausche}([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)";
+        $"async {Rueckgabe(f.Lauscht, strom: true)} {Abstractions.Funktionsvertrag.Lausche}([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)";
 
     private static string LauscheStub(BausteinFunktion f, string einzug) =>
         $"{einzug}public {LauscheKopf(f)}\n{einzug}{{\n{einzug}    await Task.CompletedTask;\n{einzug}    throw new NotImplementedException(\"TODO: {f.Name}.Lausche\");\n"
@@ -537,31 +541,51 @@ public static class Scaffolder
     public static string FunktionsStub(string klasse, BausteinEingang e, string einzug) =>
         $"{einzug}public {FunktionsKopf(e)}\n{einzug}{{\n{einzug}    throw new NotImplementedException(\"TODO: {klasse}.Auf({e.Eingang})\");\n{einzug}}}\n";
 
-    /// <summary>Die Typen, die eine Funktion nennt (Eingänge, Ausgaben, Lese-Fähigkeiten, gerufene Methoden) — für ihre usings.</summary>
+    /// <summary>Die Typen, die eine Funktion nennt (Eingänge, Ausgaben, Lese-Fähigkeiten, was sie meldet) — für ihre usings.</summary>
     private static IEnumerable<string> FunktionsTypen(BausteinFunktion f) =>
-        f.Eingaenge.SelectMany(e => FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben)).Concat(f.Lauscht)
-            .Concat(f.Methoden.SelectMany(m => m.Parameter.Select(p => p.Typ).Append(m.Rueckgabe)));
+        f.Eingaenge.SelectMany(e => FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben)).Concat(f.Lauscht);
+
+    /// <summary>Die Typen, die eine Technik in ihren Methoden nennt — für ihre usings.</summary>
+    private static IEnumerable<string> TechnikTypen(Technik t) => t.Methoden.SelectMany(m => m.Parameter.Select(p => p.Typ).Append(m.Rueckgabe));
+
+    /// <summary>Die Typparameter einer Funktion: <c>&lt;T, U&gt;</c> und ihre <c>where</c>-Klauseln (leer ohne).</summary>
+    public static (string Liste, string Klauseln) Typparameter(BausteinFunktion f) =>
+        f.Typparameter.Count == 0 ? ("", "")
+            : ("<" + string.Join(", ", f.Typparameter.Select(t => t.Name)) + ">",
+               string.Concat(f.Typparameter.Where(t => !string.IsNullOrWhiteSpace(t.Einschraenkung)).Select(t => $" where {t.Name} : {t.Einschraenkung}")));
 
     private static string FunktionsDatei(BausteinFunktion f, EditorModell modell)
     {
         var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], FunktionsTypen(f).Concat(f.Konstruktor.Select(p => p.Typ)), []));
         Doku(b, f.Doku, "");
-        // Technik (Methoden, kein Eingang) trägt keinen Marker — sie ist, was der Konstruktor einer Funktion nimmt (docs/10 §10.3).
-        var basis = f.Methoden.Count > 0 && f.Eingaenge.Count == 0 && f.Lauscht.Count == 0 ? "" : $" : {IFunktion}";
-        if (f.Klasse)
+        var ctor = f.Konstruktor.Count > 0 ? $"({ParameterListe(f.Konstruktor)})" : "";
+        var (tp, wo) = Typparameter(f);
+        b.AppendLine($"public sealed class {f.Name}{tp}{ctor} : {IFunktion}{wo}");
+        b.AppendLine("{");
+        var teile = f.Eingaenge.Select(e => FunktionsStub(f.Name, e, "    ")).Concat(f.Lauscht.Count > 0 ? [LauscheStub(f, "    ")] : Array.Empty<string>());
+        b.Append(string.Join("\n", teile));
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    /// <summary>Eine Technik trägt keinen Marker (docs/10 §10.3): eine Schnittstelle mit ihren Methoden bzw. eine Klasse mit Methoden-Stubs.</summary>
+    private static string TechnikDatei(Technik t, EditorModell modell)
+    {
+        var b = Kopf(t.Namespace, Usings(t.Namespace, modell, [modell.Rahmen.VertragsNamespace], TechnikTypen(t).Concat(t.Konstruktor.Select(p => p.Typ)), []));
+        Doku(b, t.Doku, "");
+        if (t.Klasse)
         {
-            var ctor = f.Konstruktor.Count > 0 ? $"({ParameterListe(f.Konstruktor)})" : "";
-            b.AppendLine($"public sealed class {f.Name}{ctor}{basis}");
+            var ctor = t.Konstruktor.Count > 0 ? $"({ParameterListe(t.Konstruktor)})" : "";
+            b.AppendLine($"public sealed class {t.Name}{ctor}");
             b.AppendLine("{");
-            b.Append(Stubs(f, f.Name));
+            b.Append(string.Join("\n", t.Methoden.Select(m => MethodenStub(t.Name, m, "    "))));
             b.AppendLine("}");
         }
         else
         {
-            b.AppendLine($"public interface {f.Name}{basis}");
+            b.AppendLine($"public interface {t.Name}");
             b.AppendLine("{");
-            foreach (var e in f.Eingaenge) b.AppendLine($"    {FunktionsKopf(e)};");
-            foreach (var m in f.Methoden)
+            foreach (var m in t.Methoden)
             {
                 Doku(b, m.Doku, "    ");
                 b.AppendLine($"    {MethodenKopf(m)};");
@@ -571,24 +595,33 @@ public static class Scaffolder
         return b.ToString();
     }
 
-    /// <summary>Die throw-Stubs einer Klasse: je Eingang ein Auf, je gerufene Methode die Methode.</summary>
-    private static string Stubs(BausteinFunktion f, string klasse)
+    /// <summary><c>public sealed class X(Konstruktor) : ITechnik { … Stubs … }</c> — eine neue Umsetzung einer Technik-Schnittstelle.</summary>
+    private static string UmsetzungsDatei(Technik t, FunktionsUmsetzung u, EditorModell modell)
     {
-        var teile = f.Eingaenge.Select(e => FunktionsStub(klasse, e, "    ")).Concat(f.Methoden.Select(m => MethodenStub(klasse, m, "    ")))
-            .Concat(f.Lauscht.Count > 0 ? [LauscheStub(f, "    ")] : Array.Empty<string>());
-        return string.Join("\n", teile);
-    }
-
-    /// <summary><c>public sealed class X(Konstruktor) : IF { … Stubs … }</c> — eine neue Umsetzung einer Funktions-Schnittstelle.</summary>
-    private static string UmsetzungsDatei(BausteinFunktion f, FunktionsUmsetzung u, EditorModell modell)
-    {
-        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], FunktionsTypen(f).Concat(u.Konstruktor.Select(p => p.Typ)), []));
-        b.AppendLine($"public sealed class {u.Name}{(u.Konstruktor.Count == 0 ? "" : $"({ParameterListe(u.Konstruktor)})")} : {f.Name}");
+        var b = Kopf(t.Namespace, Usings(t.Namespace, modell, [modell.Rahmen.VertragsNamespace], TechnikTypen(t).Concat(u.Konstruktor.Select(p => p.Typ)), []));
+        b.AppendLine($"public sealed class {u.Name}{(u.Konstruktor.Count == 0 ? "" : $"({ParameterListe(u.Konstruktor)})")} : {t.Name}");
         b.AppendLine("{");
-        b.Append(Stubs(f, u.Name));
+        b.Append(string.Join("\n", t.Methoden.Select(m => MethodenStub(u.Name, m, "    "))));
         b.AppendLine("}");
         return b.ToString();
     }
+
+    /// <summary>Eine Zustandsklasse (docs/04 §4.4): öffentlicher Konstruktor ohne Parameter (der Anfangszustand), je Eigenschaft
+    /// <c>public Typ Name { get; set; } = Standard;</c> — ohne Standard <c>= new();</c> bzw. nichts bei Werttypen bleibt dem Entwickler.</summary>
+    private static string ZustandsDatei(Zustandsklasse z, EditorModell modell)
+    {
+        var b = Kopf(z.Namespace, Usings(z.Namespace, modell, [], z.Eigenschaften.Select(e => e.Typ), []));
+        Doku(b, z.Doku, "");
+        b.AppendLine($"public sealed class {z.Name}");
+        b.AppendLine("{");
+        foreach (var e in z.Eigenschaften) b.AppendLine("    " + ZustandsEigenschaft(e));
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    /// <summary>Eine Eigenschaft einer Zustandsklasse: <c>public Typ Name { get; set; }</c>, mit Startwert <c>= Standard;</c>.</summary>
+    public static string ZustandsEigenschaft(Feld e) =>
+        $"public {e.Typ} {e.Name} {{ get; set; }}" + (string.IsNullOrWhiteSpace(e.Standard) ? "" : $" = {e.Standard};");
 
     /// <summary><c>R M(P p)</c> — Rückgabe und Parameter einer gerufenen Methode wie im Modell.</summary>
     public static string MethodenKopf(FunktionsMethode m) => $"{m.Rueckgabe} {m.Name}({ParameterListe(m.Parameter)})";

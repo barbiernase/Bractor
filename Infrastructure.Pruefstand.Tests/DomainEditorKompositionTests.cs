@@ -32,7 +32,7 @@ public sealed class DomainEditorKompositionTests
             new() { Aggregat = "Versand", Command = "Versende", Ergibt = [new() { Event = "Versendet" }] },
         ],
         Applier = [new() { Aggregat = "Bestellung", Event = "Bestellt" }, new() { Aggregat = "Versand", Event = "Versendet" }],
-        BausteinFunktionen = [new() { Name = "VersandStarter", Namespace = "Shop.Versand", Klasse = true, Eingaenge = [new() { Eingang = "Bestellt", Ausgaben = ["Versende"] }] }],
+        BausteinFunktionen = [new() { Name = "VersandStarter", Namespace = "Shop.Versand", Eingaenge = [new() { Eingang = "Bestellt", Ausgaben = ["Versende"] }] }],
         Lesen = new Leseseite(),
     };
 
@@ -47,11 +47,11 @@ public sealed class DomainEditorKompositionTests
         var bausteine = Grammatik.Bausteine.Select(b => b.Id).ToHashSet();
         Grammatik.Konsume.Should().OnlyContain(k => sorten.Contains(k.Sorte) && bausteine.Contains(k.Baustein));
         Grammatik.Erzeugungen.Should().OnlyContain(e => sorten.Contains(e.Sorte) && bausteine.Contains(e.Baustein));
-        // Die Tabelle aus §3: Command genau ein Empfänger, Query genau ein Reader, Event beliebig viele Projektionen und Funktionen.
+        // Die Tabelle aus §3: Command genau ein Empfänger, Query genau ein Reader, Event beliebig viele Projektionen — nie eine Funktion.
         Grammatik.KonsumVon(Grammatik.Command, Grammatik.Aggregat)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
         Grammatik.KonsumVon(Grammatik.Query, Grammatik.Reader)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
         Grammatik.KonsumVon(Grammatik.Event, Grammatik.Projektion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
-        Grammatik.KonsumVon(Grammatik.Event, Grammatik.Funktion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
+        Grammatik.KonsumVon(Grammatik.Event, Grammatik.Funktion).Should().BeNull("eine Funktion liest nie das Log — eine Antwort geht über eine Übersetzung an einen Kopf");
         Grammatik.KonsumVon(Grammatik.Command, Grammatik.Funktion)!.Regel.Should().Be("GR-KANTE", "ein Command ohne Ziel geht an die Knoten desselben Graphen");
         Grammatik.KonsumVon(Grammatik.Command, Grammatik.Akteur).Should().BeNull("einen Command hört kein Akteur — er hört Fakten");
         Grammatik.ErzeugungVon(Grammatik.Projektion, Grammatik.Event).Should().BeNull("eine Projektion schreibt keine Fakten");
@@ -122,7 +122,7 @@ public sealed class DomainEditorKompositionTests
             Records = [.. m.Records, Cmd("Mahne", "Shop.Mahnung")],
             Aggregate = [.. m.Aggregate, new() { Name = "Mahnvorgang", Namespace = "Shop.Mahnung" }],
             Decider = [.. m.Decider, new() { Aggregat = "Mahnvorgang", Command = "Mahne", Ergibt = [new() { Event = "Frist<Versende>" }] }],
-            BausteinFunktionen = [.. m.BausteinFunktionen, new() { Name = "Mahner", Namespace = "Shop.Mahnung", Klasse = true,
+            BausteinFunktionen = [.. m.BausteinFunktionen, new() { Name = "Mahner", Namespace = "Shop.Mahnung",
                 Eingaenge = [new() { Eingang = "Bestellt", Ausgaben = ["Mahne"], Faehigkeiten = [new() { Typ = "IFinde", Name = "finde" }] }] }],
             Lesen = m.Lesen! with
             {

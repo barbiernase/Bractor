@@ -18,7 +18,8 @@ namespace Infrastructure.Pruefstand.Funktionen;
 /// <summary>
 /// Die Laufzeit der Graphen vor dem Aggregat (docs/04 §4.4), store-frei in einem echten lokalen Actor-System: je Instanz ein Graph-Actor (Halter und
 /// Kopf), je Knoten ein Parent (ein Schritt der Kette: Warteschlange, Kinder bis Parallel, Wiederholungen, Wegtabelle, „fertig“ erst nach den gesicherten
-/// Ausgaben), je Umsetzung ein Kind (Commands mit Ids aus Aufruf, Ort und Stelle). Die Pläne baut der Test von Hand wie der Generator (Wege aus den
+/// Ausgaben), je Umsetzung ein Kind. Eine Funktion gibt nur Commands ohne Ziel und Hinweise aus; an ein Aggregat geht es über eine Übersetzung, die das
+/// Kind inline rechnet (Commands mit Ids aus Aufruf, Ort der Übersetzung und Stelle). Die Pläne baut der Test von Hand wie der Generator (Wege aus den
 /// Typen, verlierbar je Quelle); der Emitter ist eine Naht. Bewiesen: die Folge mit ihren Ids, zwei Werte an einem Schritt (zweimal gerechnet), Wahl,
 /// Strom, eine verlierbare Kante (hält den Kopf nicht auf), Rückstau, der gescheiterte Kopf, der Neustart vom Kopf mit denselben Ids, die Quelle und ein
 /// Zustand, der nach einem Absturz nichts doppelt zählt.
@@ -33,10 +34,11 @@ public class FunktionsLaufzeitTests
     private sealed record Links(int Wert) : ICommand;
     private sealed record Rechts(int Wert) : ICommand;
     private sealed record Teil(int Wert) : ICommand;
+    /// <summary>Was eine Funktion am Ende einer Kette ausgibt — die Übersetzung <see cref="Buchung"/> macht daraus den Command an das Aggregat.</summary>
+    private sealed record Summe(int Wert) : ICommand;
     private sealed record Gemerkt(int Wert) : ITransientEvent;
     private sealed record Falsch(int Wert) : IEvent;
     private sealed record Gebucht(int Wert) : IEvent;
-    private sealed record Bestaetige(Id<Ziel> AggregateId) : ICommand<Ziel>;
     private sealed class Zaehler { public int N { get; set; } }
 
     private static readonly Guid Stream = Guid.NewGuid();
@@ -51,7 +53,6 @@ public class FunktionsLaufzeitTests
         public List<(int Auf, Type? Eingang, Type[] Aus)> Ops { get; } = new();
         public FunktionsOrtKonfig Konfig { get; set; } = new();
         public KnotenKonfig Knoten { get; } = new();
-        public Dictionary<Type, int> Antworten { get; } = new();
         public Action? BeimBau { get; set; }
         /// <summary>Von welchen Knoten dieser verlierbar bekommt.</summary>
         public HashSet<string> Verlierbar { get; } = new();
@@ -62,24 +63,14 @@ public class FunktionsLaufzeitTests
 
         public K Lausche(params Type[] aus)
         {
-            Lauscht = Ops.Count + Antworten.Count;
+            Lauscht = Ops.Count;
             Ops.Add((Lauscht.Value, null, aus));
             return this;
         }
 
         public K Op<TEingang>(params Type[] aus)
         {
-            Ops.Add((Ops.Count + Antworten.Count, typeof(TEingang), aus));
-            return this;
-        }
-
-        public K Antwort<TEvent>(params Type[] aus)
-        {
-            var nr = Ops.Count + Antworten.Count;
-            Antworten[typeof(TEvent)] = nr;
-            // Die Ausgaben einer Antwort gehören zu jeder Operation, die Commands an Aggregate gibt (wie im Generator).
-            for (var i = 0; i < Ops.Count; i++)
-                if (Ops[i].Aus.Any(t => typeof(IAggregatCommand).IsAssignableFrom(t))) Ops[i] = Ops[i] with { Aus = Ops[i].Aus.Concat(aus).Distinct().ToArray() };
+            Ops.Add((Ops.Count, typeof(TEingang), aus));
             return this;
         }
     }
@@ -102,6 +93,9 @@ public class FunktionsLaufzeitTests
     private static UebersetzungPlan U<TEin, TAus>(string name, Func<TEin, TAus> rechne) where TEin : notnull where TAus : notnull =>
         new(name, typeof(TEin), typeof(TAus), x => rechne((TEin)x));
 
+    /// <summary>Die Übersetzung am Ende der meisten Ketten hier: <see cref="Summe"/> → <see cref="Buche"/> an das Konto.</summary>
+    private static readonly UebersetzungPlan Buchung = U<Summe, Buche>("Buchung", e => new Buche(Konto, e.Wert));
+
     private static readonly FunktionsZustandsform ZaehlerForm = new(typeof(Zaehler), () => new Zaehler(), o => BitConverter.GetBytes(((Zaehler)o).N),
         (o, b) => ((Zaehler)o).N = BitConverter.ToInt32(b), _ => { });
 
@@ -123,7 +117,7 @@ public class FunktionsLaufzeitTests
         private readonly Dictionary<string, PID> _instanzen = new();
         private readonly ServiceProvider _dienste = new ServiceCollection().BuildServiceProvider();
 
-        public GraphInstanz Instanz(string name, params K[] knoten) => Instanz(name, [], knoten);
+        public GraphInstanz Instanz(string name, params K[] knoten) => Instanz(name, [Buchung], knoten);
 
         public GraphInstanz Instanz(string name, UebersetzungPlan[] uebersetzungen, params K[] knoten)
         {
@@ -134,7 +128,7 @@ public class FunktionsLaufzeitTests
                 var traeger = new FunktionsTraeger(k.Name, sp => new FunktionsAktivierung(sp, (_, z) => { k.BeimBau?.Invoke(); return z ?? new object(); },
                         k.MitZustand ? ZaehlerForm : null, name: k.Name, knoten: new KnotenKontext(name, k.Name, k.Knoten), ablage: Zustaende,
                         quelle: k.Lauscht is not null),
-                    k.Rechne, Antworten: k.Antworten)
+                    k.Rechne)
                 { Instanz = name, Knoten = k.Name, ImGraphen = plan.ImGraphen(k.Name), Uebersetzungen = new Uebersetzungen(uebersetzungen),
                     Zeitlimit = k.Knoten.Zeitlimit, Lausche = k.Lauscht };
                 return (Func<FunktionsParent>)(() => new FunktionsParent(traeger, k.Konfig, () => new FunktionsKindActor(traeger, _dienste, this, Koepfe, SendeAsync,
@@ -266,9 +260,9 @@ public class FunktionsLaufzeitTests
     public async Task Eine_Uebersetzung_greift_einen_Zwischenstand_ab_der_im_Graphen_weiterlaeuft()
     {
         await using var w = new Welt();
-        w.Instanz("G", [U<X, Buche>("Abgriff", x => new Buche(Konto, x.Wert + 100))],
+        w.Instanz("G", [U<X, Buche>("Abgriff", x => new Buche(Konto, x.Wert + 100)), Buchung],
             new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op<Start>(typeof(X)),
-            new K("C", Einzeln(a => new Buche(Konto, -((X)a[0]!).Wert))).Op<X>(typeof(Buche)));
+            new K("C", Einzeln(a => new Summe(-((X)a[0]!).Wert))).Op<X>(typeof(Summe)));
 
         var eingang = Eingang("G", new Start(5));
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig, "fertig erst, wenn beide Wege fertig sind");
@@ -309,15 +303,16 @@ public class FunktionsLaufzeitTests
         await using var w = new Welt();
         w.Instanz("G",
             new K("A", Einzeln(a => new X(((Start)a[0]!).Wert * 2))).Op<Start>(typeof(X)),
-            new K("B", (_, _, a, _, _, _) => Strom(new Buche(Konto, ((X)a[0]!).Wert), new Buche(Konto, ((X)a[0]!).Wert + 1)))
-                .Op<X>(typeof(Buche)));
+            new K("B", (_, _, a, _, _, _) => Strom(new Summe(((X)a[0]!).Wert), new Summe(((X)a[0]!).Wert + 1)))
+                .Op<X>(typeof(Summe)));
 
         var eingang = Eingang("G", new Start(21));
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig, "fertig ist die Kette erst, wenn B fertig ist — und B erst, wenn seine Commands beantwortet sind");
 
         var b = Danach(AmKopf(eingang.Kennung, "G/A"), "G/A", "G/B");
         w.Gesendet.Select(x => x.Befehl).Should().Equal(new Buche(Konto, 42), new Buche(Konto, 43));
-        w.Gesendet.Select(x => x.Id).Should().Equal(Kettenvertrag.Befehl(b, "G/B", 0, new Buche(Konto, 42)), Kettenvertrag.Befehl(b, "G/B", 1, new Buche(Konto, 43)));
+        w.Gesendet.Select(x => x.Id).Should().Equal(Kettenvertrag.Befehl(b, "G/Buchung", 0, new Buche(Konto, 42)),
+            Kettenvertrag.Befehl(b, "G/Buchung", 1, new Buche(Konto, 43)));
     }
 
     [Fact]
@@ -325,8 +320,8 @@ public class FunktionsLaufzeitTests
     {
         await using var w = new Welt();
         var gerechnet = 0;
-        w.Instanz("G", new K("A", Einzeln(a => { Interlocked.Increment(ref gerechnet); return new Buche(Konto, ((Start)a[0]!).Wert); }))
-            .Op<Start>(typeof(Buche)));
+        w.Instanz("G", new K("A", Einzeln(a => { Interlocked.Increment(ref gerechnet); return new Summe(((Start)a[0]!).Wert); }))
+            .Op<Start>(typeof(Summe)));
         var eingang = Eingang("G", new Start(1));
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig);
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig);
@@ -338,7 +333,7 @@ public class FunktionsLaufzeitTests
     public async Task Durabel_heisst_sofort_angenommen_den_fertigen_Kopf_traegt_der_Graph_Actor_aus()
     {
         await using var w = new Welt();
-        w.Instanz("G", new K("A", Einzeln(a => new Buche(Konto, ((Start)a[0]!).Wert))).Op<Start>(typeof(Buche)));
+        w.Instanz("G", new K("A", Einzeln(a => new Summe(((Start)a[0]!).Wert))).Op<Start>(typeof(Summe)));
         var eingang = Eingang("G", new Start(1), Eingangsart.Durabel);
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Angenommen);
         await Warte(() => w.Ausgetragen.Contains(eingang.Kennung), "der fertige durable Kopf wird nicht ausgetragen");
@@ -351,7 +346,7 @@ public class FunktionsLaufzeitTests
         var frei = new TaskCompletionSource();
         var laufen = 0;
         var hoechstens = 0;
-        var a = new K("A", (_, _, _, _, _, ct) => Blockiert(ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 2) }.Op<Start>(typeof(Buche));
+        var a = new K("A", (_, _, _, _, _, ct) => Blockiert(ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 2) }.Op<Start>(typeof(Summe));
         a.Knoten.Warteschlange = 3;
         w.Instanz("G", a);
 
@@ -385,11 +380,11 @@ public class FunktionsLaufzeitTests
         await using var w = new Welt();
         var gebaut = 0;
         w.Instanz("Warm", new K("A", Einzeln(_ => null)) { Konfig = new FunktionsOrtKonfig(Parallel: 3, Vorwaermen: true), BeimBau = () => Interlocked.Increment(ref gebaut) }
-            .Op<Start>(typeof(Buche)));
+            .Op<Start>(typeof(Summe)));
         await Warte(() => Volatile.Read(ref gebaut) == 3, "vorgewärmt baut der Parent alle Kinder beim Start");
         var kalt = 0;
         w.Instanz("Kalt", new K("A", Einzeln(_ => null)) { Konfig = new FunktionsOrtKonfig(Parallel: 3), BeimBau = () => Interlocked.Increment(ref kalt) }
-            .Op<Start>(typeof(Buche)));
+            .Op<Start>(typeof(Summe)));
         await Task.Delay(300);
         kalt.Should().Be(0);
         (await Fertig(w, Eingang("Kalt", new Start(1)))).Should().Be(Quittungsart.Fertig);
@@ -401,7 +396,7 @@ public class FunktionsLaufzeitTests
     {
         await using var w = new Welt();
         w.Instanz("G", new K("A", Einzeln(a => new Gemerkt(((Start)a[0]!).Wert))).Op<Start>(typeof(Gemerkt)));
-        var schreiber = new K("S", Einzeln(_ => new Falsch(1))) { Konfig = new FunktionsOrtKonfig(Wiederholungen: 0) }.Op<Start>(typeof(Buche));
+        var schreiber = new K("S", Einzeln(_ => new Falsch(1))) { Konfig = new FunktionsOrtKonfig(Wiederholungen: 0) }.Op<Start>(typeof(Summe));
         w.Instanz("Schreiber", schreiber);
 
         (await Fertig(w, Eingang("G", new Start(5)))).Should().Be(Quittungsart.Fertig, "auf einen Hinweis wird nicht gewartet");
@@ -411,27 +406,14 @@ public class FunktionsLaufzeitTests
     }
 
     [Fact]
-    public async Task Eine_Antwort_auf_den_eigenen_Command_rechnet_die_Funktion_gleich_weiter()
+    public async Task Ein_Command_an_ein_Aggregat_geht_nur_ueber_eine_Uebersetzung_direkt_aus_einer_Funktion_scheitert_die_Kette()
     {
+        // Eine Funktion kennt kein Aggregat (docs/04 §4.4): das Kind sendet nur, was eine Übersetzung ergibt.
         await using var w = new Welt();
-        w.Antwort = c => c is Buche b ? [new Antwortereignis(new Gebucht(b.Wert), 5)] : Array.Empty<Antwortereignis>();
-        Herkunft? gesehen = null;
-        w.Instanz("G", new K("A", (_, auf, a, h, _, _) => auf switch
-        {
-            0 => Strom(new Buche(Konto, ((Start)a[0]!).Wert)),
-            1 => Strom(Merke(h, new Bestaetige(Konto))),
-            _ => Strom(),
-        }).Op<Start>(typeof(Buche)).Antwort<Gebucht>(typeof(Bestaetige)));
-
-        object Merke(Herkunft h, object x) { gesehen = h; return x; }
-
-        var eingang = Eingang("G", new Start(3));
-        (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig);
-        w.Gesendet.Select(x => x.Befehl).Should().Equal(new Buche(Konto, 3), new Bestaetige(Konto));
-        var antwort = Kettenvertrag.Antwort(AmKopf(eingang.Kennung, "G/A"), "G/A", 0, 0);
-        w.Gesendet.Last().Id.Should().Be(Kettenvertrag.Befehl(antwort, "G/A", 0, new Bestaetige(Konto)), "die Kennung der Antwort folgt aus Aufruf, Stelle und Nummer");
-        gesehen!.Stream.Should().Be(Konto.Wert, "die Herkunft einer Antwort ist das Ziel");
-        gesehen.Version.Should().Be(5);
+        w.Instanz("G", new K("A", Einzeln(a => new Buche(Konto, ((Start)a[0]!).Wert))) { Konfig = new FunktionsOrtKonfig(Wiederholungen: 0) }
+            .Op<Start>(typeof(Buche)));
+        (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Gescheitert, "kein Knoten, kein Kopf und keine Übersetzung nimmt Buche");
+        w.Gesendet.Should().BeEmpty("aus einer Funktion geht nichts direkt an ein Aggregat");
     }
 
     [Fact]
@@ -440,7 +422,7 @@ public class FunktionsLaufzeitTests
         await using var w = new Welt();
         var mal = 0;
         w.Ausgang = _ => Interlocked.Increment(ref mal) < 3 ? EmitAusgang.Unbekannt : EmitAusgang.Zugestellt;
-        w.Instanz("G", new K("A", Einzeln(_ => new Buche(Konto, 1))).Op<Start>(typeof(Buche)));
+        w.Instanz("G", new K("A", Einzeln(_ => new Summe(1))).Op<Start>(typeof(Summe)));
         (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Fertig);
         w.Gesendet.Select(x => x.Id).Distinct().Should().HaveCount(1, "dieselbe Id bei jedem Versuch — die Inbox verwirft Wiederholungen");
         w.Gesendet.Should().HaveCount(3);
@@ -456,15 +438,15 @@ public class FunktionsLaufzeitTests
             new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op<Start>(typeof(X)),
             new K("Vorschau", Einzeln(a => new Z(((X)a[0]!).Wert + 1))).Op<X>(typeof(Z)),
             new K("Daumen", Einzeln(a => new Z(((X)a[0]!).Wert + 2))).Op<X>(typeof(Z)),
-            new K("Melde", Einzeln(a => new Buche(Konto, ((Z)a[0]!).Wert))).Op<Z>(typeof(Buche)));
+            new K("Melde", Einzeln(a => new Summe(((Z)a[0]!).Wert))).Op<Z>(typeof(Summe)));
 
         var eingang = Eingang("G", new Start(10));
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig, "fertig erst, wenn beide Rechnungen von Melde fertig sind");
         w.Gesendet.Select(x => x.Befehl).Should().BeEquivalentTo([new Buche(Konto, 11), new Buche(Konto, 12)], "kein Wert wird verworfen");
         var a = AmKopf(eingang.Kennung, "G/A");
         w.Gesendet.Select(x => x.Id).Should().BeEquivalentTo([
-            Kettenvertrag.Befehl(Danach(Danach(a, "G/A", "G/Vorschau"), "G/Vorschau", "G/Melde"), "G/Melde", 0, new Buche(Konto, 11)),
-            Kettenvertrag.Befehl(Danach(Danach(a, "G/A", "G/Daumen"), "G/Daumen", "G/Melde"), "G/Melde", 0, new Buche(Konto, 12))],
+            Kettenvertrag.Befehl(Danach(Danach(a, "G/A", "G/Vorschau"), "G/Vorschau", "G/Melde"), "G/Buchung", 0, new Buche(Konto, 11)),
+            Kettenvertrag.Befehl(Danach(Danach(a, "G/A", "G/Daumen"), "G/Daumen", "G/Melde"), "G/Buchung", 0, new Buche(Konto, 12))],
             "jede Rechnung trägt die Kennung der Nachricht, aus der sie entstand — unabhängig davon, welche zuerst ankam");
     }
 
@@ -474,8 +456,8 @@ public class FunktionsLaufzeitTests
         await using var w = new Welt();
         w.Instanz("G",
             new K("W", Einzeln(a => ((Start)a[0]!).Wert > 0 ? new Links(1) : new Rechts(2))).Op<Start>(typeof(Links), typeof(Rechts)),
-            new K("L", Einzeln(a => new Buche(Konto, ((Links)a[0]!).Wert))).Op<Links>(typeof(Buche)),
-            new K("R", Einzeln(a => new Buche(Konto, ((Rechts)a[0]!).Wert))).Op<Rechts>(typeof(Buche)));
+            new K("L", Einzeln(a => new Summe(((Links)a[0]!).Wert))).Op<Links>(typeof(Summe)),
+            new K("R", Einzeln(a => new Summe(((Rechts)a[0]!).Wert))).Op<Rechts>(typeof(Summe)));
 
         (await Fertig(w, Eingang("G", new Start(5)))).Should().Be(Quittungsart.Fertig, "auf den Zweig, der nicht kam, wartet niemand");
         w.Gesendet.Select(x => x.Befehl).Should().Equal(new Buche(Konto, 1));
@@ -488,7 +470,7 @@ public class FunktionsLaufzeitTests
         w.Instanz("G",
             new K("Teile", (_, _, a, _, _, _) => Strom(Enumerable.Range(1, ((Start)a[0]!).Wert).Select(i => (object?)new Teil(i)).ToArray()))
                 .Op<Start>(typeof(Teil)),
-            new K("P", Einzeln(a => new Buche(Konto, ((Teil)a[0]!).Wert * 10))).Op<Teil>(typeof(Buche)));
+            new K("P", Einzeln(a => new Summe(((Teil)a[0]!).Wert * 10))).Op<Teil>(typeof(Summe)));
 
         (await Fertig(w, Eingang("G", new Start(3)))).Should().Be(Quittungsart.Fertig);
         w.Gesendet.Select(x => x.Befehl).Should().BeEquivalentTo([new Buche(Konto, 10), new Buche(Konto, 20), new Buche(Konto, 30)]);
@@ -504,9 +486,9 @@ public class FunktionsLaufzeitTests
         async IAsyncEnumerable<object> Haengt(object?[] a, [EnumeratorCancellation] CancellationToken ct)
         {
             await freigabe.Task.WaitAsync(ct);
-            yield return new Buche(Konto, ((X)a[0]!).Wert);
+            yield return new Summe(((X)a[0]!).Wert);
         }
-        var b = new K("B", (_, _, a, _, _, ct) => Haengt(a, ct)).Op<X>(typeof(Buche));
+        var b = new K("B", (_, _, a, _, _, ct) => Haengt(a, ct)).Op<X>(typeof(Summe));
         b.Verlierbar.Add("A");
         w.Instanz("G", new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op<Start>(typeof(X)), b);
 
@@ -524,11 +506,11 @@ public class FunktionsLaufzeitTests
         async IAsyncEnumerable<object> Langsam(object?[] a, [EnumeratorCancellation] CancellationToken ct)
         {
             await freigabe.Task.WaitAsync(ct);
-            yield return new Buche(Konto, ((Teil)a[0]!).Wert);
+            yield return new Summe(((Teil)a[0]!).Wert);
         }
         w.Instanz("G",
             new K("Teile", (_, _, a, _, _, _) => Strom(new Teil(1), new Teil(2), new Teil(3))).Op<Start>(typeof(Teil)),
-            new K("P", (_, _, a, _, _, ct) => Langsam(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 1, Warteschlange: 1) }.Op<Teil>(typeof(Buche)));
+            new K("P", (_, _, a, _, _, ct) => Langsam(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 1, Warteschlange: 1) }.Op<Teil>(typeof(Summe)));
 
         var quittung = w.StelleZuAsync(Eingang("G", new Start(0)), TimeSpan.FromSeconds(15), default);
         await Task.Delay(500);
@@ -546,7 +528,7 @@ public class FunktionsLaufzeitTests
         await using var w = new Welt();
         var versuche = 0;
         var kaputt = new K("Kaputt", (_, _, _, _, _, _) => { Interlocked.Increment(ref versuche); throw new InvalidOperationException("kaputt"); })
-            { Konfig = new FunktionsOrtKonfig(Wiederholungen: 2) }.Op<X>(typeof(Buche));
+            { Konfig = new FunktionsOrtKonfig(Wiederholungen: 2) }.Op<X>(typeof(Summe));
         w.Instanz("G", new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op<Start>(typeof(X)), kaputt);
 
         (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Gescheitert, "das „gescheitert“ reicht über die gesicherte Kante bis zum Kopf");
@@ -569,11 +551,11 @@ public class FunktionsLaufzeitTests
         async IAsyncEnumerable<object> Haengt(object?[] a, [EnumeratorCancellation] CancellationToken ct)
         {
             await freigabe.Task.WaitAsync(ct);
-            yield return new Buche(Konto, ((X)a[0]!).Wert + 1);
+            yield return new Summe(((X)a[0]!).Wert + 1);
         }
         w.Instanz("G",
-            new K("A", (_, _, a, _, _, _) => Strom(new Buche(Konto, ((Start)a[0]!).Wert), new X(((Start)a[0]!).Wert))).Op<Start>(typeof(Buche), typeof(X)),
-            new K("B", (_, _, a, _, _, ct) => Haengt(a, ct)).Op<X>(typeof(Buche)));
+            new K("A", (_, _, a, _, _, _) => Strom(new Summe(((Start)a[0]!).Wert), new X(((Start)a[0]!).Wert))).Op<Start>(typeof(Summe), typeof(X)),
+            new K("B", (_, _, a, _, _, ct) => Haengt(a, ct)).Op<X>(typeof(Summe)));
 
         var kopf = Eingang("G", new Start(5), Eingangsart.Durabel);
         (await Fertig(w, kopf)).Should().Be(Quittungsart.Angenommen);
@@ -604,11 +586,11 @@ public class FunktionsLaufzeitTests
         async IAsyncEnumerable<object> Buchen(object?[] a, [EnumeratorCancellation] CancellationToken ct)
         {
             if (((X)a[0]!).Wert == 2) await freigabe.Task.WaitAsync(ct);   // die zweite Kette hängt
-            yield return new Buche(Konto, ((X)a[0]!).Wert);
+            yield return new Summe(((X)a[0]!).Wert);
         }
         w.Instanz("G",
             new K("Quelle", (_, _, _, _, _, ct) => Lauschen(ct)).Lausche(typeof(X)),
-            new K("B", (_, _, a, _, _, ct) => Buchen(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 4) }.Op<X>(typeof(Buche)));
+            new K("B", (_, _, a, _, _, ct) => Buchen(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 4) }.Op<X>(typeof(Summe)));
         w.Halte("G", true);
 
         await Warte(() => w.Gesendet.Count == 2, "die Ketten 1 und 3 sind fertig, 2 hängt");
@@ -617,7 +599,7 @@ public class FunktionsLaufzeitTests
         freigabe.SetResult();
         await Warte(() => w.Zustaende.Je.GetValueOrDefault(("G", "Quelle"))?.Nummer == 3, "nach der zweiten Kette ist der Stand 3");
         var zwei = Herkunft.Ableite("quelle:G:2");
-        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(Danach(zwei, "G/Quelle", "G/B"), "G/B", 0, new Buche(Konto, 2)),
+        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(Danach(zwei, "G/Quelle", "G/B"), "G/Buchung", 0, new Buche(Konto, 2)),
             "die Kennung einer Quell-Kette folgt aus Instanz und Nummer");
 
         // Neustart: die Quelle beginnt mit ihrer gesicherten Nummer — das erste neue Element ist Nummer 4.
@@ -625,15 +607,15 @@ public class FunktionsLaufzeitTests
         await w.AbsturzAsync("G");
         w.Halte("G", true);
         await Warte(() => w.Gesendet.Count == 6, "nach dem Neustart meldet die Quelle wieder (hier dieselben drei Elemente)");
-        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(Danach(Herkunft.Ableite("quelle:G:4"), "G/Quelle", "G/B"), "G/B", 0, new Buche(Konto, 1)));
+        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(Danach(Herkunft.Ableite("quelle:G:4"), "G/Quelle", "G/B"), "G/Buchung", 0, new Buche(Konto, 1)));
     }
 
     [Fact]
     public async Task Ein_Knoten_mit_Zustand_sichert_ihn_mit_seinen_Kennungen_und_zaehlt_nach_einem_Absturz_nichts_doppelt()
     {
         await using var w = new Welt();
-        var zaehle = new K("Z", (u, _, a, _, _, _) => { var z = (Zaehler)u; z.N++; return Strom(new Buche(Konto, z.N)); })
-            { MitZustand = true, Konfig = new FunktionsOrtKonfig(Parallel: 1) }.Op<Start>(typeof(Buche));
+        var zaehle = new K("Z", (u, _, a, _, _, _) => { var z = (Zaehler)u; z.N++; return Strom(new Summe(z.N)); })
+            { MitZustand = true, Konfig = new FunktionsOrtKonfig(Parallel: 1) }.Op<Start>(typeof(Summe));
         w.Instanz("G", zaehle);
         var erster = Eingang("G", new Start(1));
         (await Fertig(w, erster)).Should().Be(Quittungsart.Fertig);
@@ -651,7 +633,7 @@ public class FunktionsLaufzeitTests
     public async Task Ein_Knoten_ohne_Zustand_sichert_nichts()
     {
         await using var w = new Welt();
-        w.Instanz("G", new K("A", Einzeln(a => new Buche(Konto, ((Start)a[0]!).Wert))).Op<Start>(typeof(Buche)));
+        w.Instanz("G", new K("A", Einzeln(a => new Summe(((Start)a[0]!).Wert))).Op<Start>(typeof(Summe)));
         (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Fertig);
         await Task.Delay(300);
         w.Zustaende.Je.Should().BeEmpty("ohne Zustand gibt es nichts zu sichern");

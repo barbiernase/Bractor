@@ -29,7 +29,7 @@ Exactly-once, Partition, offene Eingänge, Ketten, Orte), wählt der Generator a
 | **Aggregat** | entscheidet: Command rein, Events, Hinweise und Fristen raus, nie ein Command; einziger Schreiber seines Streams; darf direkt gefragt werden | virtueller Actor je `Id<T>` (Bündel, Inbox-Tabelle, Passivierung, Snapshot) — [03](03-schreibseite.md) |
 | **Projektion** | hört Events, schreibt ihren Store über Fähigkeiten, gibt nichts aus | `BatchLeser` je (Projektion, Partition) — [04](04-konsum-und-prozess-maschine.md) §4.1, §4.3 |
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
-| **Funktion** | ein Knoten: je `Auf` eine Nachricht rein, gerechnet je Ankunft (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
+| **Funktion** | ein Knoten: je `Auf` ein Command ohne Ziel rein, gerechnet je Ankunft, Commands ohne Ziel und Hinweise raus (immer asynchron); optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
 | **Graph** | nennt Knoten (Funktionen, Graphen, eine Funktion auch mehrfach); jede Kante als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; läuft als Instanz, je Kopf-Nachricht eine Kette; jede Kante gesichert oder verlierbar | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
 | **Quelle** | eine Funktion mit `Lausche` am Kopf eines Graphen (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | eine Quellinstanz genau einmal im Cluster, auf ihrem Rechner — §4.7 |
 | Store, Technik | Speicher hinter Projektion/Reader bzw. Technik im Konstruktor einer Funktion | – |
@@ -61,7 +61,8 @@ Funktion), **Herkunft** (Parameter: Stream, Version, Log-Zeit, Akteur, `NeueId`,
 
 ## 10.3 Wie schreibe ich …
 
-Rückgaben sind immer ein konkreter Typ, `OneOf<…>` konkreter Typen, `IEnumerable<…>` bzw. `IAsyncEnumerable<…>` (Strom), jeweils auch als `Task<…>`.
+Rückgaben sind immer ein konkreter Typ, `OneOf<…>` konkreter Typen, `IEnumerable<…>` bzw. `IAsyncEnumerable<…>` (Strom), jeweils auch als `Task<…>` —
+eine Funktion nur asynchron (`Task<T>`, `Task<OneOf<…>>`, `IAsyncEnumerable<…>`).
 **Was entstehen kann, steht nur in der Signatur** (R1); Generatoren, Extractor und Editor lesen keine Rümpfe.
 
 ### 10.3.1 … ein Aggregat
@@ -159,10 +160,10 @@ Eine Query hat genau ein Ziel — einen Reader **oder** ein Aggregat (R4).
 ### 10.3.4 … eine Funktion und einen Graphen
 
 ```csharp
-// Funktionen: Klassen, Ports = Typen (Sonde Gebuehren.cs.txt)
+// Funktionen: Klassen, Ports = Typen, immer asynchron (Sonde Katalog.Gebuehren.Funktionen.cs.txt)
 public sealed class Schadensaufnahme : IFunktion                                       // WAHL: genau einer der Fälle je Aufruf
 {
-    public OneOf<SchadenErfasst, BegutachteVorOrt, NichtSchaetzbar> Auf(SchaetzeSchaden s) => …;
+    public async Task<OneOf<SchadenErfasst, VorOrt, NichtSchaetzbar>> Auf(Schaetze s) => …;
 }
 public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion                 // KETTE, Schritt 1: Technik im Konstruktor
 {
@@ -174,8 +175,8 @@ public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion        
 }
 public sealed class MahnungNachSchaetzung : IFunktion                                  // Schritt 3: rechnet aus dem, was die Nachricht mitträgt
 {
-    public EroeffneMahnung Auf(GutachtenErhalten g, Herkunft h) => new(h.NeueId<Mahnvorgang>(), g.Betrag + g.Zuschlag);
-}
+    public async Task<Mahnbetrag> Auf(GutachtenErhalten g, Herkunft h) => new(h.NeueId("mahnung"), g.Betrag + g.Zuschlag);
+}   // „async ohne await“ unterdrückt der Analyzer für Auf und Lausche — eine reine Rechnung bleibt so schlicht
 
 // Graph: Knoten als Parameter, der Kopf als [Kopf], jede Kante als Von am nehmenden Knoten
 public sealed record Schadensbewertung(
@@ -187,15 +188,16 @@ public sealed record Schadensbewertung(
 
 - **Funktion:** eine Klasse `: IFunktion` (eine Schnittstelle mit `IFunktion` ist CQRS100). Je `Auf` genau **eine Nachricht** (ein Command
   ohne Ziel), dazu optional `Herkunft`, Lese-Fähigkeiten und ein `CancellationToken`; mehrere `Auf` sind mehrere Operationen desselben
-  Knotens, je Eingangstyp höchstens eines (R2). Ein Event hört eine Funktion nur als **Antwort** auf ihren eigenen Command an ein Aggregat (das Ziel
-  entschied es, CQRS108), einen Hinweis nie.
+  Knotens, je Eingangstyp höchstens eines (R2). Ein Event oder einen Hinweis hört eine Funktion nie; was nach der Entscheidung eines Aggregats
+  gerechnet wird, bringt eine Antwort-Übersetzung an den Kopf eines Graphen.
 - **Ein Eingang je Auf (GR-EINGANG):** ein `Auf` rechnet je ankommender Nachricht; mehrere Nachrichten, `T?`, `OneOf<…>` oder
   `IReadOnlyList<T>` als Eingang sind CQRS100 mit Hinweis. Zusammenführen: die Nachricht trägt mit, was danach gebraucht wird; sonst je Nachricht
   ein `Auf` und der Zustand des Knotens hält die erste bis zur zweiten; was fachlich zählt (alle Elemente, fremde Rückmeldungen), zählt ein
   Aggregat. Ein Ausgang `T` liefert genau einen, ein `OneOf`-Fall keinen oder einen, ein Strom keinen bis viele — je Element eine Nachricht.
   Folge, Gabel, Wahl und Je sind so Formen der Ausgaben; Zusammenführen, Sammeln, Rennen und Warten stehen im Logik-Code.
-- **Ausgaben:** Commands und Hinweise — kein Event, kein `void`, kein `T?`, kein `ValueTask`; ein leerer Strom heißt „nichts“ (CQRS100). Ein Strom
-  (`IAsyncEnumerable`): jede Ausgabe geht hinaus, bevor die nächste kommt.
+- **Ausgaben:** Commands ohne Ziel und Hinweise, immer asynchron: `Task<T>` (genau eine), `Task<OneOf<…>>` (genau einer der Fälle) oder
+  `IAsyncEnumerable<…>` (keine bis viele) — kein Event, kein Command an ein Aggregat (dafür gibt es die Übersetzung), kein `void`, kein `T?`, kein
+  `ValueTask`, keine synchrone Form; ein leerer Strom heißt „nichts“ (CQRS100). Ein Strom: jede Ausgabe geht hinaus, bevor die nächste kommt.
 - **Graph:** `record X(Knoten …) : IGraph` in `Graphen.cs`; jeder Parameter ist ein Knoten (Name = Konfig-Schlüssel, Typ = eine Funktion — eine
   generische mit Typargument — oder ein Graph), die Reihenfolge bedeutet nichts; dieselbe Funktion darf mehrfach stehen (je Knoten eigene Konfig).
   **Kanten** stehen am nehmenden Knoten: `[Von(nameof(A), nameof(B))]` nennt die Knoten, von denen er bekommt, und jede genannte Quelle speist die
@@ -219,9 +221,9 @@ public sealed record Schadensbewertung(
 
   ```csharp
   // Pruefdomaene.Uebersetzungen/Messung/Uebersetzungen.cs — Client ↦ Katalog Rechenwerk (Kopf), dessen Ergebnis ↦ Aggregat
-  public sealed class HochrechnungAngefordert_Skalieren_1(Id<Messstelle> Stelle, double Wert) : ITranslate<HochrechnungAngefordert, Skalieren>
+  public sealed class HochrechnungAngefordert_Skalieren_1(HochrechnungAngefordert source) : ITranslate<HochrechnungAngefordert, Skalieren>
   {
-      public Skalieren Translate() => new(Bezug: Stelle.Wert, Wert: Wert);
+      public Skalieren Translate() => new(Bezug: source.Stelle.Wert, Wert: source.Wert);
   }
   ```
 - **Neue Ids** nur abgeleitet: `h.NeueId<T>()` bzw. `h.NeueId<T>(zweck)`, in einem Katalog ohne Aggregat-Typ `h.NeueId(zweck)` — ein `Guid`, den
@@ -319,7 +321,7 @@ Die Tabellen folgen der Grammatik (`DomainEditor/Grammatik.cs`, `Konsume` und `E
 |---|---|---|
 | Command an ein Aggregat | das Aggregat in seinem Typ | genau eins |
 | Command ohne Ziel | die Knoten desselben Graphen, die ihn nehmen; sonst den Kopf genau eines Graphen | genau ein Empfänger |
-| Event | Projektion; Akteur (`IHoert`: Reaktion oder Kenntnis); eine Funktion nur als Antwort auf ihren eigenen Command | beliebig viele |
+| Event | Projektion; Akteur (`IHoert`: Reaktion oder Kenntnis); eine Antwort-Übersetzung (an den Kopf eines Graphen) — nie eine Funktion | beliebig viele |
 | Event, vom Aggregat entschieden | sein `Apply` | genau das entscheidende Aggregat |
 | Hinweis | Akteur draußen (`IHoert`, über den Verteiler an seine Sitzungen) | beliebig viele; nie Funktion, Projektion, Aggregat |
 | Query | Reader **oder** Aggregat | genau eins |
@@ -356,7 +358,7 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R9 | Eine Projektion schreibt in genau einen Store | CQRS052 |
 | R10 | Technik nur im Konstruktor einer Funktion bzw. einer Umsetzung, bindbar und eindeutig gewählt | CQRS089–092, Start-Prüfung (`BindeTechnik`) |
 | R11 | Aggregate und Projektionen rechnen bei gleicher Eingabe gleich: keine Uhr, kein Zufall, kein `Guid.NewGuid()`, kein Lesen fremder Daten | CQRS102 |
-| R12 | Eine Funktion ist eine Klasse, liest nie das Log und gibt nie ein Event aus: Ports sind Commands (ein Event nur als Antwort auf den eigenen Command), Ausgaben Commands und Hinweise | CQRS100, CQRS108 |
+| R12 | Eine Funktion ist eine Klasse, liest nie das Log und gibt nie ein Event aus: Ports sind Commands ohne Ziel, Ausgaben Commands ohne Ziel und Hinweise, immer asynchron (`Task<…>`, `IAsyncEnumerable<…>`) | CQRS100 |
 | R13 | Neue Ids auf der Server-Seite nur abgeleitet (`Herkunft.NeueId`) | CQRS104 |
 | R14 | Jeder Store implementiert genau eine Store-Klasse; Klasse 3 nur mit `[MindestensEinmal]`; Schreib-Fähigkeiten eines Klasse-2-Stores nehmen die `Herkunft` | CQRS109, CQRS110, Start-Prüfung; Einhaltung: allgemeiner Store-Test |
 | R15 | Die Garantie folgt dem Eingang: Event → genau einmal, Hinweis → höchstens einmal, Query → keine Wirkung | folgt aus den Typen |
@@ -430,7 +432,7 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Modal — Graph, Aggregat und Store von innen, ein Glied (Decide, Auf, Projektion, Reader, eine Nachricht des Aggregats) in seinem Block gewählt,
   alles andere (Akteur, Client, Instanz, Umgebung, Funktion) als Formular. Ein Panel neben der Fläche gibt es nicht; Brotkrumen führen zurück.
 - **Kanten** laufen von Port zu Port und haben eine Art: schreiben, Quelle, lesen, Kenntnis (ein Event oder Hinweis an den Akteur, der es hört),
-  Rücklauf (die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store).
+  Rücklauf (die Event-Antwort an die Übersetzung, deren Command es entschied), liest (eine Lese-Fähigkeit am Store).
 - **Von innen** (Modal): ein Graph zeigt seine Komposition (`board.sicht.komposition`, `Sicht.Komposition.cs`: Knoten nach Tiefe, je `[Von]` eine
   Kante, Köpfe und Ausgänge, Technik und Konfig als Chips) mit dem Baukasten (`board.sicht.baukasten`) und seinen Instanzen; ein Aggregat
   Commands → Decide → Ergebnisse → Apply → Zustand; ein Store in zwei Bändern Eingang → Auf bzw. Frage → Fähigkeit → Umsetzung, dazu Read-Models
@@ -513,21 +515,32 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Readers, der zu einem anderen Store gehört, steht leise mit „gehört zu …“. Ein neuer Store wählt seine Klasse; die Umsetzung erbt die Basis
   aus `Storeklassen` (`MartenStore`, `DateiZiel`, `DateiSink`), bei Klasse 3 trägt die Projektion `[MindestensEinmal]`. Entfernen: ✕ Auf bzw.
   Frage an seiner Methode (die letzte nimmt die Klasse mit), ✕ Fähigkeit samt Schnittstelle, Umsetzung und Platz im Bündel, wenn sie niemand nimmt.
-- **Kataloge** (docs/10 §10.9): „📚 Kataloge“ in der Kopfleiste (und im Baukasten) öffnet das Katalog-Modal. Links
-  die Kataloge, darunter Funktionen und Graphen des gewählten; in der Mitte die gewählte Funktion als Reihe Input ─▶ ƒ ─▶ Outputs — je Input ein
-  `Auf`, mehrere Outputs sind ein `OneOf` (Vielfachheit 1 · 0..1 · 0..n, „Strom“ und „asynchron“ je Zeile), die Funktionskarte trägt den Konstruktor
-  („＋ Rahmen“) und „⤢ ausführlich“ (das Funktions-Modal unten); rechts die Command-Liste des Katalogs mit „nimmt n · gibt m“ bzw. „unverbunden“,
-  die des allgemeinen Katalogs (`Projektstruktur.AllgemeinerKatalog`, Commands, die alle Kataloge teilen) und die Commands der Quellen des Frameworks
-  (nur als Input). „＋ Input“ und „＋ Output“ bieten einen neuen Command (bzw. Hinweis), einen neuen im allgemeinen Katalog oder einen aus den
-  Listen; was neu entsteht, landet in der Liste, und wer einen Command aus der Liste als Input wählt, wird im Graphen zum Nachfolger jeder
-  Funktion, die ihn ausgibt. Ein Command aus dem allgemeinen Katalog setzt die Projektreferenz des Katalogs (Geste `/api/werkbank/katalog` mit
-  `nutzer`; der allgemeine Katalog entsteht beim ersten Gebrauch, `Kataloge.KatalogNutzt`, kein Kreis). ✎ an einem Command: Name, Felder,
-  Command ⇄ Hinweis; ✕ an Input bzw. Output löst ihn aus der Funktion (der Command bleibt in der Liste), ✕ in der Liste löscht ihn, solange ihn
-  keine Funktion mehr nimmt oder gibt. Welche Kataloge ein Katalog nutzt, steht im Rahmen (`Rahmen.KatalogNutzt`, aus seiner Projektdatei).
-- **Graphen im Katalog** (Stufe 2): „＋ ⬡ Graph“ im Katalog-Modal fragt Name und erste Funktion (neu, aus diesem oder einem anderen Katalog, oder ein
+- **Werkstatt (Kataloge):** „📚 Kataloge“ in der Kopfleiste (und im Baukasten) öffnet die Werkstatt — den einen Ort, an dem Funktionen, Quellen und
+  Technik entworfen werden; ein Doppelklick auf eine Funktion oder Technik (Fläche, Graph, Baukasten) öffnet sie dort. Links der **Navigator**: die
+  Kataloge, darunter Funktionen, Quellen, Graphen und Technik des gewählten, je mit „＋“ (`＋ ƒ Funktion`, `＋ ⟲ Quelle`, `＋ ⬡ Graph`, `＋ ⚙ Technik`).
+  In der Mitte steht die gewählte **Funktion als EINE Karte, wie ihre Klasse**: oben ihr Konstruktor als Chips (Konfig ▤, Technik ⚙, Zustand ◉,
+  Logger; ✕ nimmt heraus, „＋ Rahmen ▾“ nimmt neue oder vorhandene auf — auch eine neue Zustandsklasse), darunter je Operation (`Auf`) eine Zeile: links
+  der Eingang, darunter die Schalter Herkunft und Abbruch (`CancellationToken`), „⌕ liest“ (Lese-Fähigkeiten des Katalogs), die Form („genau eine“ bzw.
+  „eine von n“ = `Task<T>` bzw. `Task<OneOf<…>>`, „viele“ = `IAsyncEnumerable<…>`), rechts je Fall des Rückgabetyps ein Port mit Vielfachheit und
+  „＋ Ausgang“, unten der Rumpf aus der Datei (✎, 🤖); „＋ Operation“ legt ein weiteres `Auf` an. Eine Quelle hat statt der Zeilen ihr `Lausche`
+  (nimmt nichts, meldet je Element). Eigene Typen sind eigene Karten drumherum: links die Nachrichten, die sie nimmt, rechts die, die sie ausgibt
+  (Command ohne Ziel bzw. Hinweis, ✎: Name, Felder, Command ⇄ Hinweis), im Band „Rahmen“ darüber Konfig, Technik und Zustandsklasse (✎: Felder,
+  Methoden bzw. Eigenschaften mit Startwert), im Band „Liest“ darunter die Lese-Fähigkeiten mit dem Store, der sie umsetzt; gestrichelte Kanten führen
+  zum Chip, den sie betreffen. „＋ Ausgang“ hebt die passenden Nachrichten rechts hervor und bietet gestrichelt einen neuen Command, einen neuen
+  Hinweis, einen neuen Command im allgemeinen Katalog und vorhandene Commands des Katalogs (nie einen, den die Funktion selbst nimmt); die Spaltenköpfe
+  legen an („Nimmt“: eine neue Operation mit neuem oder vorhandenem Command, auch einem der Framework-Quellen; „Gibt aus“: Command bzw. Hinweis
+  unverbunden). Im ✎ der Funktion: Name und **Typparameter** (mit Einschränkung). Eine **Technik** öffnet sich für sich: in der Mitte die Schnittstelle
+  (bzw. Klasse) mit ihren Methoden (Signatur wie in C#), rechts ihre Umsetzungen mit Konstruktor und je Methode ihrem Rumpf („＋ Umsetzung“), links
+  wer sie im Konstruktor nimmt. Eine Funktion im Katalog kennt keine Domäne: kein Command an ein Aggregat, kein Event als Eingang (dafür gibt es
+  Übersetzungen). Ein Command aus dem allgemeinen Katalog (`Projektstruktur.AllgemeinerKatalog`) setzt die Projektreferenz des Katalogs (Geste
+  `/api/werkbank/katalog` mit `nutzer`; der allgemeine Katalog entsteht beim ersten Gebrauch, `Kataloge.KatalogNutzt`, kein Kreis). Eine **neue
+  Lese-Fähigkeit** fragt Interface, Methode (`Task<int> ZaehleAsync(Guid paar)`) und die Domäne des Stores — es entstehen das Interface im Bereich der
+  Funktion, der Parameter am Auf und der Store `<Wurzel>.Infrastructure/<Bereich>/<Name>.cs` mit Stub; der Speicher bekommt die Referenz auf den Katalog.
+  Das Modell kennt Funktion (`bausteinFunktionen`), Technik (`techniken`) und Zustandsklasse (`zustaende`) als drei Arten; jede Geste ist ein Patch.
+- **Graphen im Katalog** (Stufe 2): „＋ ⬡ Graph“ in der Werkstatt fragt Name und erste Funktion (neu, aus diesem oder einem anderen Katalog, oder ein
   Graph als Schachtel); der Graph entsteht im Bereich seiner ersten Funktion mit ihr als `[Kopf]`, baut sofort und öffnet sich im Graph-Modal über
   dem Katalog. Dort bietet „＋“ an einem Output gestrichelt jede Funktion aller Kataloge, deren Input genau dieser Command ist („ƒ X einsetzen“ →
-  `[Von]` am neuen Knoten), und „neue Funktion mit diesem Input“ (sie öffnet sich im Katalog-Modal); „＋“ an einem Input spiegelbildlich die
+  `[Von]` am neuen Knoten), und „neue Funktion mit diesem Input“ (sie öffnet sich in der Werkstatt, die erste Zeile schon gesetzt); „＋“ an einem Input spiegelbildlich die
   Funktionen, die ihn ausgeben (der neue Knoten nimmt von außen: `[Kopf]`), und „neue Funktion davor“. Eine Funktion aus einem anderen Katalog setzt
   die Projektreferenz mit. **Alles liegt auf einer Ebene:** steht ein Graph als Knoten in einem anderen, zeigt das Graph-Modal seine Knoten
   aufgefaltet im selben Bild (Pfad `Teil.Knoten`), umrahmt mit seinem Namen (Doppelklick auf den Rahmen: der Teilgraph für sich); die Sicht liefert
@@ -546,17 +559,6 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Übersetzung nimmt nach dem Typ jede solche Nachricht, aus jeder Instanz. **Übersetzungen stehen in ihrer eigenen Spalte** zwischen Graphen und
   Aggregaten, im Band ihrer Domäne: je Übersetzung eine Karte `↦ <Name>`, `TEin` links (Kante vom Port des Graphen bzw. vom Akteur), `TAus` rechts
   (Kante zum Command bzw. zum Kopf eines Graphen), dazu „✓ alle Felder zugeordnet“ bzw. „⚠ n offen“; Doppelklick öffnet die Feldzuordnung, ✕ an der
-  Karte entfernt sie. Doppelklick auf einen Graphen öffnet ihn im Graph-Modal, auf eine Funktion im Katalog-Modal. Im Aggregat-Modal steht an jedem
+  Karte entfernt sie. Doppelklick auf einen Graphen öffnet ihn im Graph-Modal, auf eine Funktion in der Werkstatt. Im Aggregat-Modal steht an jedem
   Command „＋ wer schickt ihn“: die offenen Ausgänge laufender Graphen (ein Klick übersetzt in den Command) und „＋ Graph an … binden“.
-- **Funktion von innen:** dieselbe Mechanik in vier Spalten — Eingänge · Auf · Ausgänge · Rahmen
-  (Konstruktor). Eingang ↔ Auf ist 1:1 (R2), Auf → Ausgänge frei; jeder Ausgang trägt seine Vielfachheit (1 Folge, 0..1 Wahl, 0..n Strom), im ✎ des
-  Auf stehen Strom, asynchron (`Task`/`IAsyncEnumerable`) und Herkunft, dazu der Rumpf. „＋ Ausgang“ bietet gestrichelt eine neue Nachricht und einen
-  neuen Hinweis; der Spaltenkopf Eingänge eine neue Nachricht mit Auf und eine vorhandene Nachricht; der Rahmen Konfig (neu oder vorhanden), Technik
-  (neu als Schnittstelle mit Umsetzung oder vorhanden) und den Logger. Eine Funktion im Katalog kennt keine Domäne: kein Command an ein Aggregat
-  (dafür gibt es die Übersetzung). **Lesen** über eine Lese-Fähigkeit des Katalogs (`: IReadStore` im Katalog, umgesetzt von einem Store im Speicher der
-  Anwendung, CQRS124): im ✎ des Auf bzw. im Katalog-Modal „⌕ liest ▾“ am Auf an- und abwählen; „＋ neue Lese-Fähigkeit …“ fragt Interface, Methode
-  (`Task<int> ZaehleAsync(Guid paar)`) und die Domäne des Stores — es entstehen das Interface im Bereich der Funktion, der Parameter am Auf und der
-  Store `<Wurzel>.Infrastructure/<Bereich>/<Name>.cs` mit Stub; der Speicher bekommt die Referenz auf den Katalog. Ein Auf übernimmt Herkunft und
-  Lese-Fähigkeiten auch an einer bestehenden Funktion (die Nachricht und ein `CancellationToken` bleiben). Ein Doppelklick auf eine Funktion (Komposition, Baukasten) öffnet dieses Modal; Technik
-  und alles Übrige („✎ Formular“) das bisherige Formular. Neue Zustandsklassen legt das Modal noch nicht an.
 - `--check` prüft die Fläche mit (Kanten an vorhandenen Ports, je Typ höchstens ein deklarierender Port).

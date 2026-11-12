@@ -97,7 +97,6 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             foreach (var (_, k, b, kk) in FunktionsBausteinWiring.Knoten(new GraphInstanzen([instanz])))
             {
                 var bindung = FunktionsBausteinWiring.BindungVon(b, kk, instanz.Ort(k.Name));
-                var antworten = b.Antworten();
                 var wiederholungen = bindung.Wiederholungen > 0 ? bindung.Wiederholungen : FunktionsOrtKonfig.StandardWiederholungen;
                 var kindLogger = logs?.CreateLogger("Funktion." + b.Name);
                 var knotenWege = new KnotenWege(instanz, k.Name);
@@ -115,7 +114,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 var bereich = new KnotenKontext(instanz.Name, k.Name, kk);
                 var ablage = dienste.GetService<IZustandsAblage>();
                 traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, b.Baue!, b.Zustand, b.Name, technikZustand, bereich, ablage,
-                    quelle: b.Lausche is not null), b.Rechne, b.Liest, antworten)
+                    quelle: b.Lausche is not null), b.Rechne, b.Liest)
                 { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Uebersetzungen = koepfe.Uebersetzungen,
                     Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
                 // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Rechner der Instanz (der Zustand ist ein Cache und soll alles sehen).

@@ -36,6 +36,10 @@ public sealed class DomainModel
     public List<EnumRaw> Enums { get; } = new();
     /// <summary>Funktionen (<c>Auf</c>, docs/10 §10.3): je Eingang die Ausgaben aus der Signatur.</summary>
     public List<BausteinFunktionRaw> BausteinFunktionen { get; } = new();
+    /// <summary>Technik (ohne Marker, was der Konstruktor einer Funktion nimmt): ihre Methoden und Umsetzungen.</summary>
+    public List<BausteinFunktionRaw> Techniken { get; } = new();
+    /// <summary>Zustandsklassen: die <c>T</c> aus <c>IZustand&lt;T&gt;</c> in einem Konstruktor — mit ihren Eigenschaften.</summary>
+    public List<ZustandRaw> Zustaende { get; } = new();
     /// <summary>
     /// Funktionen aus dem Katalog des Frameworks, die ein Graph der Domäne als Knoten nennt (<c>Core/Katalog</c>: Dateiwaechter, Taktgeber,
     /// Webhook) — nur gelesen: was sie melden und welche Konfig ihr Knoten in der Instanz trägt.
@@ -155,6 +159,8 @@ public sealed class BausteinFunktionRaw
     /// <summary>Als Klasse deklariert (läuft im Host); sonst Schnittstelle (draußen).</summary>
     public bool Klasse;
     public List<BausteinEingangRaw> Eingaenge = new();
+    /// <summary>Die Typparameter einer generischen Funktion: Name und Einschränkung wie geschrieben (<c>where T : …</c>), sonst null.</summary>
+    public List<(string Name, string? Einschraenkung)> Typparameter = new();
     /// <summary>Technik: ihre Methoden (Deklarations-Reihenfolge, Typen wie geschrieben).</summary>
     public List<FunktionsMethodeRaw> Methoden = new();
     /// <summary>Konstruktor der Klasse (Typ wie geschrieben, Name): Technik, Konfig-Records, Logger.</summary>
@@ -183,11 +189,19 @@ public sealed class BausteinFunktionRaw
     public string? Doku, Datei;
 }
 
+/// <summary>Eine Zustandsklasse (<c>IZustand&lt;T&gt;</c> im Konstruktor einer Funktion bzw. Technik): ihre Eigenschaften.</summary>
+public sealed class ZustandRaw
+{
+    public string Name = "", Full = "", Namespace = "";
+    public List<FieldInfo> Fields = new();
+    public string? Doku, Datei;
+}
+
 /// <summary>Ein Eingang (ein <c>Auf</c>) einer Funktion.</summary>
 public sealed class BausteinEingangRaw
 {
     public string EingangFull = "";
-    public bool Hinweis, Herkunft, Strom, Asynchron;
+    public bool Hinweis, Herkunft, Strom, Abbruch;
     public List<(string Typ, string Name)> Faehigkeiten = new();
     public List<string> AusgabenFull = new();
     /// <summary>Die Methode dieses <c>Auf</c> und ihr Rumpf (Rumpf-Edit, wie bei Decide und Apply).</summary>
@@ -712,6 +726,12 @@ public sealed partial class DomainExtractor
         var quell = DomainQuellTypen().ToList();
         // Technik (ohne Marker): was der Konstruktor einer Funktion nimmt — dieselbe Lesart wie der Generator (Funktionsform.Techniken).
         var technik = Infrastructure.SourceGeneration.Funktionsform.Techniken(quell);
+        // Zustandsklassen (Code-Fakt): was ein Konstruktor als IZustand<T> nimmt — gleich, ob Funktion, Technik oder Umsetzung.
+        var zustaende = new HashSet<string>(quell.Where(k => k.TypeKind == TypeKind.Class)
+            .SelectMany(k => Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(k)?.Parameters ?? System.Collections.Immutable.ImmutableArray<IParameterSymbol>.Empty)
+            .Select(p => p.Type).OfType<INamedTypeSymbol>()
+            .Where(x => x.IsGenericType && x.OriginalDefinition.ToDisplayString() == "Abstractions.IZustand<T>")
+            .Select(x => x.TypeArguments[0].Fq()), StringComparer.Ordinal);
         foreach (var t in quell)
         {
             if (t.TypeKind == TypeKind.Enum)
@@ -721,7 +741,14 @@ public sealed partial class DomainExtractor
             }
             // Funktion: Klasse im Host oder Schnittstelle — nur ihre Signatur zählt; Technik: ihre Methoden und Umsetzungen.
             if (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: false)); continue; }
-            if (t.ContainingType == null && technik.IstTechnik(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: true)); continue; }
+            if (t.ContainingType == null && technik.IstTechnik(t)) { m.Techniken.Add(ReadBausteinFunktion(t, technik: true)); continue; }
+            if (t.ContainingType == null && t.TypeKind == TypeKind.Class && zustaende.Contains(t.Fq()))
+            {
+                var zd = QuellDeklarationen(t).FirstOrDefault();
+                m.Zustaende.Add(new ZustandRaw { Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), Fields = Felder(t),
+                    Doku = zd == null ? null : Summary(zd), Datei = zd?.SyntaxTree.FilePath });
+                continue;
+            }
             // Client (record X : IClient): die Software an der Leitung.
             if (t.TypeKind != TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
             // Graph (record X(Knoten…) : IGraph): Knoten als Parameter, Kanten aus [Von], Köpfe aus [Kopf].
@@ -753,6 +780,8 @@ public sealed partial class DomainExtractor
         m.Responses.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.ReadModels.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.BausteinFunktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        m.Techniken.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        m.Zustaende.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
     }
 
     /// <summary>Die Methoden einer Technik (Deklarations-Reihenfolge), Typen wie geschrieben.</summary>
@@ -788,11 +817,16 @@ public sealed partial class DomainExtractor
             Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
             ZustandFull = form.Zustand?.Fq(),
         };
+        // Typparameter mit ihrer Einschränkung, wie geschrieben (where T : …).
+        var klausel = (decl as TypeDeclarationSyntax)?.ConstraintClauses;
+        foreach (var tp in t.TypeParameters)
+            f.Typparameter.Add((tp.Name, klausel?.FirstOrDefault(c => c.Name.Identifier.Text == tp.Name) is { } c
+                ? string.Join(", ", c.Constraints.Select(x => x.ToString())) : null));
         foreach (var a in form.Aufs)
         {
             var e = new BausteinEingangRaw
             {
-                EingangFull = a.Eingang.Fq(), Herkunft = a.MitHerkunft, Strom = a.Strom, Asynchron = a.Huelle == "Task" || a.StromAsync,
+                EingangFull = a.Eingang.Fq(), Herkunft = a.MitHerkunft, Strom = a.Strom, Abbruch = a.Parameter.Any(p => p.Art == "ct"),
                 AusgabenFull = a.Ausgaben.Select(x => x.Fq()).ToList(),
                 Ort = MethodenOrt(a.Methode), Rumpf = MethodBody(a.Methode),
             };
@@ -897,8 +931,9 @@ public sealed partial class DomainExtractor
         var storeImpls = m.Stores.SelectMany(s => s.ImplsFull).ToHashSet(StringComparer.Ordinal);
         // Funktionen und ihre Umsetzungen (docs/06 §6.5): ihre Konstruktor-Records sind Konfig aus Konfig:<Record> —
         //   bei einer Funktion die Klasse selbst bzw. die Umsetzungen der Schnittstelle.
-        storeImpls.UnionWith(m.BausteinFunktionen.Where(f => f.Klasse).Select(f => f.Full));
-        storeImpls.UnionWith(m.BausteinFunktionen.SelectMany(f => f.UmsetzungenFull));
+        storeImpls.UnionWith(m.BausteinFunktionen.Select(f => f.Full));
+        storeImpls.UnionWith(m.Techniken.Where(f => f.Klasse).Select(f => f.Full));
+        storeImpls.UnionWith(m.Techniken.SelectMany(f => f.UmsetzungenFull));
         var injiziert = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in _types)
         {

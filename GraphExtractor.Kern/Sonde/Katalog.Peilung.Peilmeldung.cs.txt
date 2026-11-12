@@ -5,5 +5,5 @@ namespace Sondenkatalog.Katalog.Peilung;
 /// <summary>Meldet eine gelungene Peilung als Hinweis.</summary>
 public sealed class Peilmeldung : IFunktion
 {
-    public Peilbericht Auf(Gepeilt g) => new(g.FrequenzMhz, g.RichtungGrad);
+    public async Task<Peilbericht> Auf(Gepeilt g) => new(g.FrequenzMhz, g.RichtungGrad);
 }
