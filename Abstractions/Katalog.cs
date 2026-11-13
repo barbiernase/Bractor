@@ -1,11 +1,11 @@
 namespace Abstractions;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// DIE MELDUNGEN DES FUNKTIONS-KATALOGS (docs/04 §4.7): was die Quellfunktionen des Frameworks melden (Core/Katalog). Eine Quelle ist heute eine
-// Funktion am Kopf eines Graphen, die lauscht (Lausche statt Auf); was sie meldet, ist ein Command ohne Ziel, den der nächste Knoten des Graphen
-// nimmt, und eine MELDUNG (IMeldung): sie nennt die Kennung ihres Elements, aus seinem Inhalt. Quell-Commands stehen nicht im Log — ob eine Quelle
-// Doppeltes vermeidet oder nach einem Neustart weitermacht, regelt sie über ihren gesicherten Zustand; die Kennung macht, dass dasselbe Element nach
-// einem Neustart dieselben Ids ergibt, gleich in welcher Reihenfolge es wiederkommt.
+// DIE MELDUNGEN DER QUELLARTEN DES FRAMEWORKS (docs/04 §4.7, Core/Katalog): was Dateiwächter, Taktgeber und Webhook melden. Eine MELDUNG (IMeldung)
+// ist kein Command: sie geht an keinen Knoten und keinen Kopf, eine Übersetzung der Akteur-Seite macht daraus eine Nachricht, die der Akteur des
+// Eingangs darf. Sie nennt die Kennung ihres Elements, aus seinem Inhalt. Meldungen stehen nicht im Log — ob eine Quelle Doppeltes vermeidet oder
+// nach einem Neustart weitermacht, regelt sie über ihren gesicherten Zustand; die Kennung macht, dass dasselbe Element nach einem Neustart dieselben
+// Ids ergibt, gleich in welcher Reihenfolge es wiederkommt.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>
@@ -30,13 +30,13 @@ public interface IMeldung
 /// <param name="GeaendertAm">Letzte Änderung laut Dateisystem.</param>
 /// <param name="ErkanntAm">Wann der Wächter sie als fertig erkannte.</param>
 public sealed record DateiGefunden(string Name, string Pfad, string RelativerPfad, long Groesse, DateTimeOffset GeaendertAm, DateTimeOffset ErkanntAm)
-    : ICommand, IMeldung
+    : IMeldung
 {
     string IMeldung.Kennung => $"{RelativerPfad.Replace('\\', '/')}|{Groesse}|{GeaendertAm.UtcTicks}";
 }
 
 /// <summary>Der Taktgeber meldet den Beginn eines Intervalls (auf das Intervall gerundet, UTC) — je Intervall einmal; seine Kennung ist dieser Beginn.</summary>
-public sealed record Takt(DateTimeOffset Zeitpunkt) : ICommand, IMeldung
+public sealed record Takt(DateTimeOffset Zeitpunkt) : IMeldung
 {
     string IMeldung.Kennung => Zeitpunkt.UtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture);
 }
@@ -45,4 +45,4 @@ public sealed record Takt(DateTimeOffset Zeitpunkt) : ICommand, IMeldung
 /// Der Webhook nahm einen Aufruf an: sein Inhalt (JSON, wie gesendet) und die Kennung, die der Absender mitgab (sonst eine neue) — sie ist die Kennung
 /// der Meldung: wiederholt der Absender mit derselben Kennung, wirkt der Aufruf einmal.
 /// </summary>
-public sealed record Aufruf(string Kennung, string Inhalt) : ICommand, IMeldung;
+public sealed record Aufruf(string Kennung, string Inhalt) : IMeldung;

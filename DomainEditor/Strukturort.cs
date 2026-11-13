@@ -30,11 +30,15 @@ public static class Strukturort
             Aggregate = m.Aggregate.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Schreibseite) }).ToList(),
             Enums = m.Enums.Select(e => e.Datei != null ? e : e with { Namespace = Flach(e.Namespace) }).ToList(),
             BausteinFunktionen = m.BausteinFunktionen.Select(f => f.Datei != null ? f : f with { Namespace = Flach(f.Namespace) }).ToList(),
+            Quellarten = m.Quellarten.Select(q => q.Datei != null || q.Framework ? q : q with { Namespace = Flach(q.Namespace) }).ToList(),
             Graphen = m.Graphen.Select(g => g.Datei != null ? g : g with { Namespace = Flach(g.Namespace) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
             Clients = m.Clients.Select(c => c.Datei != null ? c : c with { Namespace = Ns(c.Namespace, P.Rolle.Akteure) }).ToList(),
-            // Eine neue Übersetzung im Bereich einer Domäne: bei den Übersetzungen der Anwendung im selben Bereich (die Domäne bleibt rein).
-            Uebersetzungen = m.Uebersetzungen.Select(u => u.Datei != null ? u : u with { Namespace = Ns(u.Namespace, P.Rolle.Uebersetzungen) }).ToList(),
+            // Eine neue Übersetzung im Bereich einer Domäne: bei den Übersetzungen der Anwendung im selben Bereich (die Domäne bleibt rein); eine der
+            //   Akteur-Seite (ihre Quelle ist eine Meldung, eine Verwirklichung) bei den Akteuren, flach wie Akteure und Clients.
+            Uebersetzungen = m.Uebersetzungen.Select(u => u.Datei != null ? u
+                : AkteurSeite(m, u) ? u with { Namespace = Ns(u.Namespace, P.Rolle.Akteure), AkteurSeite = true }
+                : u with { Namespace = Ns(u.Namespace, P.Rolle.Uebersetzungen) }).ToList(),
             Lesen = lesen == null ? null : lesen with
             {
                 Stores = lesen.Stores.Select(s => (s.Datei != null ? s : s with { Namespace = Ns(s.Namespace, P.Rolle.Leseseite) }) with
@@ -46,6 +50,16 @@ public static class Strukturort
                 Reader = lesen.Reader.Select(r => r.Datei != null ? r : r with { Namespace = Ns(r.Namespace, P.Rolle.Leseseite) }).ToList(),
             },
         };
+    }
+
+    /// <summary>
+    /// Ist die Übersetzung eine der AKTEUR-SEITE (Primitive Verwirklichung)? Ihre Quelle ist eine Meldung: ein Record der Art <c>meldung</c> oder was eine
+    /// Quellart meldet (die Meldungen des Frameworks stehen nicht als Record im Modell).
+    /// </summary>
+    public static bool AkteurSeite(EditorModell m, Uebersetzung u)
+    {
+        var ein = Nachrichtenfluss.Basisname(u.Ein);
+        return u.AkteurSeite || m.Records.Any(r => r.Kind == RecordArt.Meldung && r.Name == ein) || m.Quellarten.Any(q => q.Meldet.Contains(ein));
     }
 
     /// <summary>
@@ -106,6 +120,7 @@ public static class Strukturort
         RecordArt.Antwort => P.Primitive.Antwort,
         RecordArt.ReadModel => P.Primitive.ReadModel,
         RecordArt.Konfig => P.Primitive.Konfig,
+        RecordArt.Meldung => P.Primitive.Meldung,
         _ => null,
     };
 

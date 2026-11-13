@@ -82,8 +82,6 @@ public sealed partial class Sicht
     {
         var g = Gr;
         if (RecByName(name) is not { } r) return null;
-        var qb = S(g, "quellBasis");
-        if (S(r, "kind") == "event" && (Wahr(r["treiber"]) || (qb.Length > 0 && L(r, "basen").Contains(qb)))) return "quelle";
         return S(g?["recordSorte"], S(r, "kind")) is { Length: > 0 } s ? s : null;
     }
     private List<(string? Dec, string? App, string? Reader, string Name)> GrKonsumenten(string name, string sorte, string baustein)

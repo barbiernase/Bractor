@@ -36,7 +36,7 @@ public static class FunktionsLaufzeitWiring
     }
 
     /// <summary>Rechnet ein Knoten der Instanz im Host mit Zustand — dem seiner Funktion oder dem einer Technik in der Konstruktor-Kette ihrer Umsetzung?</summary>
-    public static bool MitZustand(GraphInstanz instanz, IServiceProvider dienste) => instanz.Graph.Quelle is not null ||
+    public static bool MitZustand(GraphInstanz instanz, IServiceProvider dienste) =>
         FunktionsBausteinWiring.Knoten(new GraphInstanzen([instanz])).Any(x => MitZustand(x.Baustein, x.Konfig, instanz.Ort(x.Knoten.Name), dienste));
 
     /// <summary>Rechnet die Funktion mit dieser Konfig am Ort <paramref name="ort"/> (<c>instanz/knoten</c>) im Host mit Zustand?</summary>
@@ -114,10 +114,10 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 var technikZustand = dienste.GetService<TechnikWahl>()?.MitZustand(instanz.Ort(k.Name)) == true;
                 var bereich = new KnotenKontext(instanz.Name, k.Name, kk);
                 var ablage = dienste.GetService<IZustandsAblage>();
-                traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, b.Baue!, b.Zustand, b.Name, technikZustand, bereich, ablage,
-                    quelle: b.Lausche is not null), b.Rechne, b.Liest, antworten)
+                traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, b.Baue!, b.Zustand, b.Name, technikZustand, bereich, ablage),
+                    b.Rechne, b.Liest, antworten)
                 { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Uebersetzungen = koepfe.Uebersetzungen,
-                    Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
+                    Zeitlimit = kk.Zeitlimit };
                 // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Rechner der Instanz (der Zustand ist ein Cache und soll alles sehen).
                 if (mitZustand && (b.Zustand is not null || technikZustand))
                 {
@@ -132,14 +132,21 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             var i0 = instanz;
             var knoten0 = knoten;
             plaene.Add(new InstanzPlan(instanz.Name, () => new GraphActor(i0, knoten0, dienste.GetService<IOffeneEingaenge>(), hinweise, logger,
-                dienste.GetService<IZustandsAblage>(), async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t)), mitZustand, Quelle: instanz.Graph.Quelle is not null,
+                async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t)), mitZustand,
                 Festgelegt: instanz.Rechner is not null && !rechner.Einzelknoten));
         }
-        _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger)), FunktionenWurzel.Wurzelname);
+        // Die Eingänge aus Quellen, die dieser Host bedient (sein Rechner bzw. jeder im Einzelknoten-Betrieb): je einer ein Läufer (docs/04 §4.7).
+        var eingaenge = dienste.GetService<Infrastructure.Quellen.Eingaenge>() ?? Infrastructure.Quellen.Eingaenge.Keine;
+        var quellLogger = logs?.CreateLogger("Quellen");
+        var laeufer = eingaenge.Alle.Where(e => rechner.Bedient(e.Rechner)).Select(e => new LaeuferPlan(e.Ort,
+            () => new Infrastructure.Quellen.QuellLaeufer(e, dienste, async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t),
+                koepfe, dienste.GetService<IOffeneEingaenge>(), wege, dienste.GetService<IZustandsAblage>(), quellLogger),
+            Festgelegt: e.Rechner is not null && !rechner.Einzelknoten)).ToList();
+        _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger, laeufer)), FunktionenWurzel.Wurzelname);
         var wurzel = _wurzel;
         orte.Beobachte(doppelt => system.Root.Send(wurzel, new RechnerDoppelt(doppelt)));
         Console.WriteLine($"  ✓ Graphen {system.Address}/{FunktionenWurzel.Wurzelname}: " + string.Join(", ", plaene.Select(p => p.Instanz
-            + (p.MitZustand ? " (mit Zustand)" : ""))));
+            + (p.MitZustand ? " (mit Zustand)" : ""))) + (laeufer.Count > 0 ? " · Eingänge: " + string.Join(", ", laeufer.Select(l => l.Eingang)) : ""));
         return Task.CompletedTask;
     }
 

@@ -51,9 +51,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(FristGesetzt))]
 [JsonSerializable(typeof(LaufGescheitert))]
 // ── Domänen-Commands/Events/Queries (Domain.*) (gescannt) ──
-[JsonSerializable(typeof(global::Abstractions.Aufruf))]
-[JsonSerializable(typeof(global::Abstractions.DateiGefunden))]
-[JsonSerializable(typeof(global::Abstractions.Takt))]
 [JsonSerializable(typeof(global::Bildverarbeitung.Katalog.ResizeFastAuftrag))]
 [JsonSerializable(typeof(global::Bildverarbeitung.Katalog.ResizeFastErgebnis))]
 [JsonSerializable(typeof(global::Bildvorschau.Katalog.BildEingelesen))]
@@ -61,6 +58,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Bildvorschau.Katalog.BildNichtLesbar))]
 [JsonSerializable(typeof(global::Bildvorschau.Katalog.BildVerkleinert))]
 [JsonSerializable(typeof(global::Bildvorschau.Katalog.DateinameUnbekannt))]
+[JsonSerializable(typeof(global::Bildvorschau.Katalog.LiesBild))]
 [JsonSerializable(typeof(global::Bildvorschau.Katalog.VorschauErstellt))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzBereitsEingefroren))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzEingefroren))]

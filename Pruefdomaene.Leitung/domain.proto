@@ -19,24 +19,6 @@ message BelegDto {
     string nummer = 2;
 }
 
-message AufrufDto {
-    string kennung = 1;
-    string inhalt = 2;
-}
-
-message DateiGefundenDto {
-    string name = 1;
-    string pfad = 2;
-    string relativer_pfad = 3;
-    int64 groesse = 4;
-    int64 geaendert_am = 5;
-    int64 erkannt_am = 6;
-}
-
-message TaktDto {
-    int64 zeitpunkt = 1;
-}
-
 message FreizugebenDto {
     string rechnung = 1;
     string betrag = 2;

@@ -141,9 +141,9 @@ public sealed class KnotenKonfig
 }
 
 /// <summary>
-/// Eine Instanz eines Graphen (docs/04 §4.4): eine Datei <c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c> — der Graph (Name des Records), bei
-/// einem Quellkopf der Akteur, für den sie hineingibt, wie viele Ketten sie zugleich rechnet (<see cref="Straenge"/>) und je Knoten seine Werte.
-/// Dieselbe Blaupause läuft beliebig oft; ein Graph mit Command-Kopf je Umgebung genau einmal.
+/// Eine Instanz eines Graphen (docs/04 §4.4): eine Datei <c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c> — der Graph (Name des Records), wie
+/// viele Ketten sie zugleich rechnet (<see cref="Straenge"/>), wahlweise ihr Rechner und je Knoten seine Werte. Je Umgebung läuft ein Graph genau
+/// einmal; den Akteur einer Kette bringt ihr Auslöser mit.
 /// </summary>
 public sealed class GraphInstanzKonfig
 {
@@ -151,14 +151,13 @@ public sealed class GraphInstanzKonfig
     public const int StandardStraenge = 10_000;
 
     public string Graph { get; set; } = "";
-    public string? Akteur { get; set; }
     /// <summary>
     /// So viele Ketten rechnet die Instanz zugleich, je Host, der sie hält (docs/04 §4.4); ist die Zahl erreicht, heißt ein neuer Kopf „später“ — der
     /// durable Rand hält ihn, eine Quelle wartet. 1 = eine Kette nach der anderen (je Host der Reihe nach); 0 = der Standard
     /// (<see cref="StandardStraenge"/>). <c>Parallel</c> am Knoten bleibt die Obergrenze seiner Kinder.
     /// </summary>
     public int Straenge { get; set; }
-    /// <summary>Der Rechner, auf dem die Instanz läuft (sein <c>Cluster:Rechner</c>); ohne Angabe auf jedem Host. Pflicht mit Zustand oder Quelle im Cluster.</summary>
+    /// <summary>Der Rechner, auf dem die Instanz läuft (sein <c>Cluster:Rechner</c>); ohne Angabe auf jedem Host. Pflicht mit Zustand im Cluster.</summary>
     public string? Rechner { get; set; }
     public Dictionary<string, KnotenKonfig> Knoten { get; set; } = new(StringComparer.Ordinal);
 }
@@ -182,6 +181,37 @@ public sealed class WorkerKonfig
 }
 
 /// <summary>
+/// Ein EINGANG eines Clients aus einer Quelle (docs/04 §4.7, Abschnitt <c>Clients:&lt;Name&gt;:Eingaenge:&lt;eingang&gt;</c>): welche Quellart läuft
+/// (<see cref="Art"/>, Klassenname mit <c>IQuellart</c>), für welchen Akteur sie hineingibt (der Client verkörpert ihn; eine Übersetzung der
+/// Akteur-Seite macht aus ihrer Meldung eine Nachricht, die er darf), auf welchem Rechner sie lauscht und ihre Werte — die Felder ihrer Konfig-Records,
+/// flach wie am Knoten einer Instanz. Drei Verzeichnisse sind drei Eingänge. Struktur ist Code, Auswahl und Werte sind Konfig (W7).
+/// </summary>
+public sealed class EingangKonfig
+{
+    /// <summary>Die Schlüssel eines Eingangs, die keine Felder eines Konfig-Records sind.</summary>
+    public static readonly IReadOnlyList<string> Rahmenfelder = [nameof(Art), nameof(Akteur), nameof(Rechner), nameof(Offen), nameof(Technik)];
+
+    /// <summary>Der Standard für <see cref="Offen"/>.</summary>
+    public const int StandardOffen = 10_000;
+
+    /// <summary>Die Quellart (Klassenname, z. B. <c>Dateiwaechter</c>).</summary>
+    public string Art { get; set; } = "";
+    /// <summary>Der Akteur, für den der Eingang hineingibt (ein Akteur, den der Client verkörpert).</summary>
+    public string Akteur { get; set; } = "";
+    /// <summary>Der Rechner, auf dem die Quelle lauscht (sein <c>Cluster:Rechner</c>) — im Cluster Pflicht: eine Quelle lauscht genau einmal.</summary>
+    public string? Rechner { get; set; }
+    /// <summary>So viele hineingegebene Elemente dürfen offen sein (noch nicht fertig gerechnet), bevor die Quelle wartet; 0 = der Standard.</summary>
+    public int Offen { get; set; }
+    /// <summary>Je Technik im Konstruktor der Quellart die gewählte Umsetzung (nötig, wenn es mehrere gibt).</summary>
+    public Dictionary<string, string> Technik { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>Die Felder der Konfig-Records der Quellart (Schlüssel flach, eine Liste als <c>Feld:0</c>, <c>Feld:1</c> …).</summary>
+    public Dictionary<string, string?> Werte { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>Wie die Aktivierung der Quellart ihre Werte und ihre Technik-Wahl liest — dieselbe Form wie am Knoten einer Instanz.</summary>
+    public KnotenKonfig AlsKnoten() => new() { Technik = Technik, Werte = Werte };
+}
+
+/// <summary>
 /// Wie sich ein Client (<c>IClient</c>, Handshake-Name = Record-Name) in dieser Umgebung verbindet (Abschnitt <c>Clients:&lt;Name&gt;</c>): das
 /// Akteur-Token (Abschnitt <c>Identitaeten</c>; sein Akteur-Satz muss Akteure des Clients verkörpern), die Adresse des gRPC-Servers (leer =
 /// <c>http://localhost:&lt;Transport:GrpcPort&gt;</c>), die eigenen URLs (Blazor), die Verzeichnisse, aus denen er Dateien zeigen darf, und wie die
@@ -195,6 +225,8 @@ public sealed class ClientKonfig
     public string Adresse { get; set; } = "";
     public string Urls { get; set; } = "http://localhost:5010";
     public string[] Dateien { get; set; } = [];
+    /// <summary>Seine Eingänge aus Quellen (Name → Eingang): sie laufen im Host, je Eingang ein Läufer auf seinem Rechner.</summary>
+    public Dictionary<string, EingangKonfig> Eingaenge { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>

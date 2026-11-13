@@ -49,6 +49,9 @@ public static class ModellMapper
         // Konfigurations-Records (Ctor-Injektion).
         foreach (var r in dom.Konfigs)
             records.Add(AlsRecord(r.Name, RecordArt.Konfig, r.Fields, r.Meta, dom.Wurzel));
+        // Meldungen (IMeldung): was eine Quellart der Anwendung meldet.
+        foreach (var r in dom.Meldungen)
+            records.Add(AlsRecord(r.Name, RecordArt.Meldung, r.Fields, r.Meta, dom.Wurzel));
 
         var enums = dom.Enums.Select(e => new Enumeration
         {
@@ -135,7 +138,6 @@ public static class ModellMapper
                     Faehigkeiten = e.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                     Ausgaben = e.AusgabenFull.Select(Kurz).ToList(),
                 }).ToList(),
-                Lauscht = f.LauschtFull.Select(Kurz).ToList(),
                 Methoden = f.Methoden.Select(me => new FunktionsMethode
                 {
                     Name = me.Name, Rueckgabe = me.Rueckgabe, Doku = me.Doku,
@@ -149,6 +151,12 @@ public static class ModellMapper
                     Datei = Rel(f.UmsetzungsDateien.GetValueOrDefault(u)),
                     Rumpfe = f.UmsetzungsRumpfe.GetValueOrDefault(u, []).Select(r => new MethodenRumpf { Methode = r.Methode, Rumpf = r.Rumpf }).ToList(),
                 }).ToList(),
+            }).ToList(),
+            Quellarten = dom.Quellarten.Select(q => new Quellart
+            {
+                Name = q.Name, Namespace = q.Namespace, Meldet = q.MeldetFull.Select(Kurz).ToList(),
+                Konstruktor = q.Konstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
+                Zustand = q.ZustandFull is { } z ? Kurz(z) : null, Framework = q.Framework, Doku = q.Doku, Datei = Rel(q.Datei),
             }).ToList(),
             Akteure = dom.Akteure.Select(x => new Akteur
             {
@@ -165,13 +173,13 @@ public static class ModellMapper
             {
                 Name = x.Name, Namespace = x.Namespace, Knoten = x.Knoten.Select(k => new GraphKnoten { Typ = k.Typ, Name = k.Name, Kopf = k.Kopf, Von = k.Von, Verlierbar = k.Verlierbar })
                     .ToList(),
-                Koepfe = x.Koepfe, Ausgaenge = x.Ausgaenge, Kanten = x.Kanten.Select(k => new GraphKante(k.Von, k.Typ, k.Nach)).ToList(), Quelle = x.Quelle, Usings = x.Usings,
+                Koepfe = x.Koepfe, Ausgaenge = x.Ausgaenge, Kanten = x.Kanten.Select(k => new GraphKante(k.Von, k.Typ, k.Nach)).ToList(), Usings = x.Usings,
                 Doku = x.Doku, Datei = Rel(x.Datei),
             }).ToList(),
             Uebersetzungen = dom.Uebersetzungen.Select(x => new Uebersetzung
             {
                 Name = x.Name, Namespace = x.Namespace, Ein = x.Ein, Aus = x.Aus, Felder = x.Felder, Usings = x.Usings,
-                Quellen = x.Quellen, Ziele = x.Ziele, Fehler = x.Fehler, Doku = x.Doku, Datei = Rel(x.Datei),
+                Quellen = x.Quellen, Ziele = x.Ziele, Fehler = x.Fehler, AkteurSeite = x.AkteurSeite, Doku = x.Doku, Datei = Rel(x.Datei),
             }).ToList(),
             Lesen = Leseseite(dom),
         });
@@ -577,18 +585,6 @@ public static class ModellMapper
     /// </summary>
     private static void Orte(JsonObject root, DomainModel dom)
     {
-        // Der Katalog (Funktionen des Frameworks, die ein Graph nennt): nur gelesen — was er meldet bzw. nimmt und welche Konfig sein Knoten trägt.
-        root["katalog"] = new JsonArray(dom.Katalog.Select(f => (JsonNode)new JsonObject
-        {
-            ["name"] = f.Name, ["namespace"] = f.Namespace,
-            ["lauscht"] = new JsonArray(f.LauschtFull.Select(x => (JsonNode)Kurz(x)).ToArray()),
-            ["eingaenge"] = new JsonArray(f.Eingaenge.Select(e => (JsonNode)new JsonObject
-            {
-                ["eingang"] = Kurz(e.EingangFull), ["ausgaben"] = new JsonArray(e.AusgabenFull.Select(x => (JsonNode)Kurz(x)).ToArray()),
-            }).ToArray()),
-            ["zustand"] = f.ZustandFull is { } z ? Kurz(z) : null,
-            ["konfigs"] = KonfigsJson(f.Konfigs),
-        }).ToArray());
         IEnumerable<JsonObject> Alle(JsonNode? n) => (n as JsonArray ?? new JsonArray()).OfType<JsonObject>();
         string S(JsonObject o, string k) => (string?)o[k] ?? "";
         Ort? TypOrt(string full, string? datei)
@@ -612,7 +608,8 @@ public static class ModellMapper
         }
         var storeVon = dom.Stores.GroupBy(x => x.Namespace + "." + x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var bausteinVon = dom.BausteinFunktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "akteure", "clients", "graphen", "uebersetzungen", "readModels", "projektionen", "reader", "stores" })
+        var quellartVon = dom.Quellarten.GroupBy(q => q.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "quellarten", "akteure", "clients", "graphen", "uebersetzungen", "readModels", "projektionen", "reader", "stores" })
             foreach (var k in Alle(root[sammlung]))
             {
                 var full = S(k, "namespace") + "." + S(k, "name");
@@ -632,8 +629,6 @@ public static class ModellMapper
                     k["konfigs"] = KonfigsJson(bf.Konfigs);
                     foreach (var (u, ufull) in Alle(k["umsetzungen"]).Zip(bf.UmsetzungenFull))
                         u["konfigs"] = KonfigsJson(bf.UmsetzungsKonfigs.GetValueOrDefault(ufull) ?? []);
-                    if (OrtJson(dom, bf.LauscheOrt) is { } lo) k["_lausche"] = lo;
-                    if (bf.LauscheRumpf != null) k["lauscheRumpf"] = bf.LauscheRumpf;
                     foreach (var (m, mraw) in Alle(k["methoden"]).Zip(bf.Methoden)) if (OrtJson(dom, mraw.Ort) is { } mo) m["_ort"] = mo;
                     foreach (var (u, ufull) in Alle(k["umsetzungen"]).Zip(bf.UmsetzungenFull))
                     {
@@ -641,6 +636,15 @@ public static class ModellMapper
                         foreach (var (r, rraw) in Alle(u["rumpfe"]).Zip(bf.UmsetzungsRumpfe.GetValueOrDefault(ufull) ?? []))
                             if (OrtJson(dom, rraw.Ort) is { } ro) r["_rumpf"] = ro;
                     }
+                }
+                // Eine Quellart: die Konfig-Records ihres Konstruktors (die Werte eines Eingangs), der Ort und Rumpf von Lausche (Rumpf-Edit), ihr Katalog.
+                if (sammlung == "quellarten" && quellartVon.TryGetValue(full, out var qa))
+                {
+                    k["konfigs"] = KonfigsJson(qa.Konfigs);
+                    if (OrtJson(dom, qa.LauscheOrt) is { } lo) k["_lausche"] = lo;
+                    if (qa.LauscheRumpf != null) k["lauscheRumpf"] = qa.LauscheRumpf;
+                    if (!qa.Framework && Abstractions.Projektstruktur.KatalogVon(qa.Namespace) is { } kat) k["katalog"] = kat;
+                    if (qa.Fehler.Count > 0) k["fehler"] = new JsonArray(qa.Fehler.Select(x => (JsonNode)x).ToArray());
                 }
                 // Die Implementierung eines Stores gehört zu seiner Karte (wie die Umsetzungen einer Funktion).
                 if (sammlung == "stores" && storeVon.GetValueOrDefault(full) is { } st)
@@ -703,6 +707,7 @@ public static class ModellMapper
         foreach (var d in Alle(root["decider"])) d["_id"] = Abstractions.WirkerId.FuerDecide(S(d, "aggregat"), S(d, "command"));
         foreach (var a in Alle(root["applier"])) a["_id"] = "apply:" + S(a, "aggregat") + "/" + S(a, "event");
         foreach (var f in Alle(root["bausteinFunktionen"])) f["_id"] = Abstractions.WirkerId.FuerFunktion(S(f, "name"));
+        foreach (var q in Alle(root["quellarten"])) q["_id"] = "quellart:" + S(q, "name");
         foreach (var a in Alle(root["akteure"])) a["_id"] = Abstractions.WirkerId.FuerAkteur(S(a, "name"));
         foreach (var c in Alle(root["clients"])) c["_id"] = "client:" + S(c, "name");
         foreach (var g in Alle(root["graphen"])) g["_id"] = "graph:" + S(g, "name");

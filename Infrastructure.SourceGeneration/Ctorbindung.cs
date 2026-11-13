@@ -37,7 +37,7 @@ namespace Infrastructure.SourceGeneration
                 return Art.Zustand;
             if (p is INamedTypeSymbol { TypeKind: TypeKind.Class, IsRecord: true, IsAbstract: false } r && Vertragsassemblies.NutztVertrag(r.ContainingAssembly)) return Art.Konfig;
             if (p is INamedTypeSymbol { TypeKind: TypeKind.Interface or TypeKind.Class } t && Vertragsassemblies.NutztVertrag(t.ContainingAssembly)
-                && !Funktionsform.Hat(t, Funktionsform.IFunktion))
+                && !Funktionsform.Hat(t, Funktionsform.IFunktion) && !Funktionsform.Hat(t, Funktionsform.IQuellart))
                 return Art.Technik;
             return Art.Fremd;
         }

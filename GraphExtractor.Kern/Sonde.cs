@@ -19,8 +19,9 @@ namespace GraphExtractor;
 /// drei Klassen — und ALLE allgemeinen Primitive des Funktionsmodells (Plan „Commands und Funktionsgraphen“): Funktionen als Klassen (Technik als
 /// Schnittstelle und als Klasse, Konfig-Record, Zustand, Lese-Fähigkeit, Strom, Antwort auf den eigenen Command), Graphen mit jedem Muster aus
 /// Entscheidung 5 (Folge, Fork, Wahl, Join, Je + Sammeln, Rennen, Warten mit Frist), Graph im Graphen, eine generische Funktion mit Typargument als
-/// Knoten, Quellfunktionen (eigene und aus dem Katalog) am Kopf, Commands ohne Ziel von Akteuren an einen Graph-Kopf, Reaktionen (ein Akteur hört
-/// ein Fakt und darf den Command, der folgt — ein Decide gibt nur Fakten aus), Clients als Records, Hinweise nur als Ausgaben.
+/// Knoten, Quellarten (eine eigene mit Konfig, Zustand und Technik, eine aus dem Katalog des Frameworks) mit ihren Meldungen und den Übersetzungen der
+/// Akteur-Seite, die Akteure verwirklichen (aus der Meldung ein Kopf-Command, den der Akteur darf), Commands ohne Ziel von Akteuren an einen Graph-Kopf,
+/// Reaktionen (ein Akteur hört ein Fakt und darf den Command, der folgt — ein Decide gibt nur Fakten aus), Clients als Records, Hinweise nur als Ausgaben.
 ///
 /// Dazu Bausteine, die im Editor GEZEICHNET werden (<c>Sonde/Gezeichnet.gesten.json</c>: neuer Store mit einer im Panel benannten
 /// und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel, Akteur mit darf und hoert, Client als Record, eine neue
@@ -299,8 +300,8 @@ public static class Sonde
                 z.Add($"frage {S(a, "name")}.{S(f, "query")} -> {string.Join("|", A(f, "antworten").Select(x => (string?)x))}");
         string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
         // Funktionen (Entscheidung 4): eine Klasse mit typisierten Ports — Konstruktor (Technik, Konfig, Zustand), je Auf seine eine Nachricht
-        //   (GR-EINGANG), Herkunft, Lese-Fähigkeiten und die Ausgaben (Strom); eine Quelle lauscht (Lausche).
-        bool Gerufen(JsonNode f) => A(f, "methoden").Any() && !A(f, "eingaenge").Any() && !A(f, "lauscht").Any();
+        //   (GR-EINGANG), Herkunft, Lese-Fähigkeiten und die Ausgaben (Strom). Eine Funktion lauscht nie — das tut eine Quellart.
+        bool Gerufen(JsonNode f) => A(f, "methoden").Any() && !A(f, "eingaenge").Any();
         string Ausgaben(JsonNode e, string feld = "ausgaben") => A(e, feld).Any() ? string.Join("; ", A(e, feld).Select(x => (string?)x)) : "nichts";
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(f => !Gerufen(f)))
             z.Add($"funktion {S(f, "namespace")}.{S(f, "name")}{(f["klasse"]?.GetValue<bool>() == true ? Konstruktor(f) : " schnittstelle")}"
@@ -309,8 +310,11 @@ public static class Sonde
                 + string.Join(" || ", A(f, "eingaenge").Select(e => $"Auf({S(e, "eingang")})"
                     + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
                     + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")
-                    + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "") + Ausgaben(e))
-                    .Concat(A(f, "lauscht").Any() ? [$"Lausche -> strom {Ausgaben(f, "lauscht")}"] : Array.Empty<string>())));
+                    + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "") + Ausgaben(e))));
+        // Quellarten (docs/04 §4.7): eine Klasse mit IQuellart — Konstruktor (Konfig, Zustand, Technik) und was Lausche meldet; nie ein Knoten.
+        foreach (var q in A(b, "quellarten").Where(Sonde))
+            z.Add($"quellart {S(q, "namespace")}.{S(q, "name")}{Konstruktor(q)}" + (q["zustand"] is { } zu ? $" zustand={zu}" : "")
+                  + (q["katalog"] is { } ka ? $" katalog={ka}" : "") + $" | Lausche -> strom {Ausgaben(q, "meldet")}");
         // Technik (docs/06 §6.5, ohne Marker: was der Konstruktor einer Funktion nimmt): Klasse oder Schnittstelle, Signatur (Methoden) und Umsetzungen.
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(Gerufen))
             z.Add($"technik {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
@@ -367,15 +371,14 @@ public static class Sonde
         foreach (var g in A(b, "graphen").Where(Sonde))
         {
             z.Add($"graph {S(g, "namespace")}.{S(g, "name")} | knoten {string.Join(", ", A(g, "knoten").Select(Knoten))}"
-                  + $" | koepfe {Namen(g, "koepfe")} | aus {Namen(g, "ausgaenge")}"
-                  + (g["quelle"] is { } q ? $" | quelle {q}" : ""));
+                  + $" | koepfe {Namen(g, "koepfe")} | aus {Namen(g, "ausgaenge")}");
             foreach (var k in A(g, "kanten"))
                 z.Add($"kante {S(g, "name")} | {S(k, "von")} -{S(k, "typ")}-> {S(k, "nach")}");
         }
         // Übersetzungen (docs/04 §4.4): ihre Verdrahtung (Ziel=Feld der Quelle) und je Parameter von TAus seine Quelle und Regel — was die ↦-Karte
-        //   zeigt.
+        //   zeigt; eine der Akteur-Seite (ihre Quelle ist eine Meldung) trägt „akteurseite“.
         foreach (var u in A(b, "uebersetzungen").Where(Sonde))
-            z.Add($"uebersetzung {S(u, "namespace")}.{S(u, "name")} | {S(u, "ein")} -> {S(u, "aus")}"
+            z.Add($"uebersetzung {S(u, "namespace")}.{S(u, "name")}{(u["akteurSeite"]?.GetValue<bool>() == true ? " akteurseite" : "")} | {S(u, "ein")} -> {S(u, "aus")}"
                   + (A(u, "felder").Any() ? $" [Feld {string.Join("+", A(u, "felder").Select(f => S(f, "ziel") + "=" + S(f, "quelle")))}]" : "") + " | "
                   + string.Join(", ", A(u, "ziele").Select(x => $"{S(x, "name")}={(S(x, "quelle") is { Length: > 0 } q ? q : "")}({(S(x, "regel") is { Length: > 0 } r ? r : "offen")})")));
         // Regel Z: Zustandsfelder der zustandslosen Übersetzer (Symbol-Fakt, im Build CQRS083 GR-ZUSTAND).
@@ -396,10 +399,17 @@ public static class Sonde
             z.Add($"sicht {S(k.Ref, "namespace")}.{k.Name} {k.Art} domaene={sicht.Domaene(k)} block={sicht.Block(k)}"
                   + (sicht.Inseln.Contains(k.Id) ? " insel" : ""));
 
+        // Die Verwirklichung (docs/04 §4.7): je Akteur der Sonde die Quellarten (auch die des Frameworks), die ihn über eine Übersetzung der Akteur-Seite
+        //   verwirklichen können — aus den Typen (Meldung ↦ eine Nachricht seines IDarf), wie die Sicht sie dem Editor gibt.
+        foreach (var q in A(b, "quellarten").OfType<JsonObject>())
+            foreach (var (ak, us) in sicht.Verwirklicht(q).Where(x => Sonde(x.Akteur)))
+                z.Add($"verwirklicht {S(ak, "namespace")}.{S(ak, "name")} <- {S(q, "name")}{(q["framework"]?.GetValue<bool>() == true ? " (framework)" : "")} | "
+                      + string.Join(", ", us.Select(u => S(u, "name"))));
+
         // Der Besitz (Hierarchie Anwendung → Blöcke → Glieder): je Typ, der kein Block ist, sein Besitzer — aus den Signaturen.
         string Eltern(string id) => id.StartsWith('§') ? id : sicht.KarteVon.TryGetValue(id, out var e) ? $"{e.Art}:{e.Name}" : id;
         foreach (var k in sicht.Karten.Where(k => k.Art is "command" or "event" or "rejection" or "valueobject" or "query" or "queryresponse" or "konfig"
-                                                       or "enum" or "readmodel" or "projektion" or "reader" or "code" && Sonde(k.Ref)))
+                                                       or "meldung" or "enum" or "readmodel" or "projektion" or "reader" or "code" && Sonde(k.Ref)))
             z.Add($"besitz {S(k.Ref, "namespace")}.{k.Name} {k.Art} -> {Eltern(sicht.Besitzer(k))}{(sicht.Mehrdeutig(k) ? " mehrdeutig" : "")}");
 
         // Code-Karten (Werkbank P7.4): Hilfscode ohne Baustein-Rolle, roh — mit der Zahl seiner Deklarationen (partial: _ort + _teile).

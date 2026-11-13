@@ -151,24 +151,6 @@ message ImagePairFilterDto {
     int32 seiten_groesse = 11;
 }
 
-message AufrufDto {
-    string kennung = 1;
-    string inhalt = 2;
-}
-
-message DateiGefundenDto {
-    string name = 1;
-    string pfad = 2;
-    string relativer_pfad = 3;
-    int64 groesse = 4;
-    int64 geaendert_am = 5;
-    int64 erkannt_am = 6;
-}
-
-message TaktDto {
-    int64 zeitpunkt = 1;
-}
-
 message ResizeFastAuftragDto {
     // Keine Parameter
 }
@@ -209,6 +191,13 @@ message BildVerkleinertDto {
     string verkleinert = 5;
     int32 breite_pixel = 6;
     int32 hoehe_pixel = 7;
+}
+
+message LiesBildDto {
+    string name = 1;
+    string pfad = 2;
+    int64 groesse = 3;
+    int64 erkannt_am = 4;
 }
 
 message VorschauErstelltDto {

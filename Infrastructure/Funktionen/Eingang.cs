@@ -5,7 +5,7 @@ namespace Infrastructure.Funktionen;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // EINGÄNGE EINER INSTANZ (docs/04 §4.4): Funktionen sind Knoten von Graphen VOR dem Aggregat und lesen nie das Log. Ein Eingang kommt am Kopf einer
 // Instanz an — von einem durablen Rand (ein Command ohne Ziel aus einem Decide oder von einem Akteur — offen in cqrs_eingaenge, der Zusteller bringt
-// ihn), vom Knoten eines anderen Graphen (ein Command ohne Ziel) oder aus ihrer Quelle — und startet eine Kette. Er trägt eine
+// ihn) oder vom Knoten eines anderen Graphen (ein Command ohne Ziel) — und startet eine Kette. Er trägt eine
 // abgeleitete Kennung: der Graph-Actor erkennt einen doppelten Eingang an ihr; jede Nachricht der Kette leitet ihre Kennung aus der ab, aus der sie
 // entstand (Knoten, Stelle) — die Inbox verwirft Wiederholungen. Zwischen Knoten desselben Graphen reist ein Aufruf von Parent zu Parent (Kette.cs).
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -17,8 +17,6 @@ public enum Eingangsart
     Durabel = 0,
     /// <summary>Aus einer Kette: die Antwort kommt, wenn der Eingang fertig ist (seine Commands beantwortet, seine Nachfolger fertig) — oder sofort „später“.</summary>
     Kette = 1,
-    /// <summary>Ein Element einer Quelle der Instanz selbst (kein Absender wartet; gesichert ist es mit dem Zustand der Quelle).</summary>
-    Quelle = 3,
 }
 
 /// <summary>
@@ -60,13 +58,11 @@ public static class Kettenvertrag
     public static Guid Aufruf(Guid nachricht, string ort, int auf) => Herkunft.Ableite($"aufruf:{ort}:{nachricht:N}:{auf}");
 
     /// <summary>
-    /// Die Kennung der Kette, die ein Element einer Quelle der Instanz <paramref name="instanz"/> startet — aus der Kennung seiner Meldung
-    /// (<see cref="IMeldung"/>), nie aus einer Reihenfolge: meldet die Quelle nach einem Neustart dasselbe Element, auch an anderer Stelle, ergibt es
-    /// dieselben Ids. Ein Element ohne Meldung (eine eigene Quelle, die noch keine nennt) zählt bis zum Umbau der Quellen nach seiner laufenden
-    /// <paramref name="nummer"/> (docs/plan-clients-und-quellen.md, Schritt 3: dann ist jedes Element eine Meldung).
+    /// Die Kennung eines Elements, das die Quelle des Eingangs <paramref name="eingang"/> (<c>Client/Eingang</c>) meldet — aus der Kennung seiner Meldung,
+    /// nie aus einer Reihenfolge: meldet die Quelle nach einem Neustart dasselbe Element, auch an anderer Stelle, ergibt es dieselben Ids. Aus ihr leitet
+    /// der Läufer die Ids der Nachrichten ab, die er dafür hineingibt.
     /// </summary>
-    public static Guid Quelle(string instanz, object element, long nummer) =>
-        Herkunft.Ableite(element is IMeldung m ? $"quelle:{instanz}:meldung:{m.Kennung}" : $"quelle:{instanz}:{nummer}");
+    public static Guid Element(string eingang, IMeldung meldung) => Herkunft.Ableite($"eingang:{eingang}:{meldung.Kennung}");
 
     /// <summary>Die Kennung der Nachricht an <paramref name="stelle"/>, die der Aufruf <paramref name="aufruf"/> am <paramref name="ort"/> an Knoten desselben Graphen gibt.</summary>
     public static Guid Weiter(Guid aufruf, string ort, int stelle) => Herkunft.Ableite($"weiter:{ort}:{aufruf:N}:{stelle}");

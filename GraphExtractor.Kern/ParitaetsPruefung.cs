@@ -126,7 +126,7 @@ public static class ParitaetsPruefung
             $"Soll aus dem Code: {soll.Aggregate.Count} Aggregate ({soll.Aggregate.Values.Sum(a => a.Decide.Count)} Decide, " +
             $"{soll.Aggregate.Values.Sum(a => a.Apply.Count)} Apply), {soll.Commands.Count} Commands, {soll.Events.Count} Events, " +
             $"{soll.Ablehnungen.Count} Ablehnungen, {soll.ValueObjects.Count} VOs, {soll.Konfigs.Count} Konfigs, {soll.Stores.Count} Stores, {soll.Enums.Count} Enums, " +
-            $"{soll.Funktionen.Count} Funktionen, {soll.Queries.Count} Queries, {soll.Responses.Count} Responses, " +
+            $"{soll.Funktionen.Count} Funktionen, {soll.Quellarten.Count} Quellarten, {soll.Meldungen.Count} Meldungen, {soll.Queries.Count} Queries, {soll.Responses.Count} Responses, " +
             $"{soll.ReadModels.Count} ReadModels, {soll.Projektionen.Count} Projektionen, {soll.Readers.Count} Reader, " +
             $"{soll.Akteure.Count} Akteure ({soll.AkteurRechte.Values.Sum(x => x.Count)} Befugnisse), "
             + $"{soll.Clients.Count} Clients ({soll.Clients.Values.Sum(x => x.Count)} verkörperte Akteure), {soll.Graphen.Count} Graphen ({soll.Graphen.Values.Sum(x => x.Count)} Knoten)."));
@@ -143,6 +143,8 @@ public static class ParitaetsPruefung
         Vergleiche("Ablehnung", soll.Ablehnungen, BoardRecords(RecordArt.Rejection), befunde);
         Vergleiche("Value Object", soll.ValueObjects, BoardRecords(RecordArt.ValueObject), befunde);
         Vergleiche("Funktion", soll.Funktionen, BoardListe("bausteinfunktion"), befunde);
+        Vergleiche("Quellart", soll.Quellarten, BoardListe("quellart"), befunde);
+        Vergleiche("Meldung", soll.Meldungen, BoardRecords(RecordArt.Meldung), befunde);
         Vergleiche("Konfiguration", soll.Konfigs, BoardRecords("konfig"), befunde);
         Vergleiche("Store", soll.Stores, BoardListe("store"), befunde);
         Vergleiche("Query", soll.Queries, BoardRecords("query"), befunde);
@@ -242,7 +244,7 @@ public static class ParitaetsPruefung
     {
         public HashSet<string> Commands = new(), Events = new(), Ablehnungen = new(), ValueObjects = new(),
             Queries = new(), Responses = new(), Enums = new(), ReadModels = new(), Readers = new(),
-            Projektionen = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new();
+            Projektionen = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new(), Quellarten = new(), Meldungen = new();
         /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
         public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
         /// <summary>Akteur → was er hört (IHoert-Ziele, einfache Namen) — aus der Basisliste.</summary>
@@ -271,7 +273,7 @@ public static class ParitaetsPruefung
             var iWert = Get(Vertrag.IWertobjekt);
             var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iHoert = Get(Vertrag.IHoert);
             var iClient = Get(Vertrag.IClient); var iVerkoerpert = Get(Vertrag.IVerkoerpert);
-            var iFunktion = Get(Vertrag.IFunktion);
+            var iFunktion = Get(Vertrag.IFunktion); var iQuellart = Get(Vertrag.IQuellart); var iMeldung = Get(Vertrag.IMeldung);
             bool Domäne(IAssemblySymbol? a) => a != null && domänen.Contains(a.Name);
 
             // Fähigkeiten, die ein Bündel (IStore) erbt — die sind KEIN eigener Store.
@@ -305,6 +307,8 @@ public static class ParitaetsPruefung
                             inv.Funktionen.Add(full);
                             if (t.TypeKind == TypeKind.Interface) continue;   // eine Klasse zählt unten weiter (Konfig im Konstruktor)
                         }
+                        // Quellart (IQuellart): eine Klasse, die lauscht — ein eigener Baustein, nie ein Knoten.
+                        if (t.ContainingType == null && Infrastructure.SourceGeneration.Funktionsform.IstQuellart(t)) inv.Quellarten.Add(full);
                         // Client (Record mit IClient): wen er verkörpert, aus der Basisliste (direkt).
                         if (iClient != null && t.ContainingType == null && Sym.Implements(t, iClient))
                         {
@@ -354,6 +358,7 @@ public static class ParitaetsPruefung
                             inv.AkteurHoert[full] = t.AllInterfaces.Where(i => iHoert != null && i.OriginalDefinition.Fq() == iHoert.Fq() && Domäne(i.TypeArguments[0].ContainingAssembly))
                                 .Select(i => i.TypeArguments[0].Name).ToHashSet(StringComparer.Ordinal);
                         }
+                        else if (iMeldung != null && Sym.Implements(t, iMeldung)) inv.Meldungen.Add(full);
                         else if (Sym.Implements(t, iCmd)) inv.Commands.Add(full);
                         else if (Sym.Implements(t, iTr)) inv.Ablehnungen.Add(full);
                         else if (Sym.Implements(t, iEvt)) inv.Events.Add(full);
@@ -373,7 +378,8 @@ public static class ParitaetsPruefung
                         // Projektion/Reader/Store-Impl: Records im öffentlichen Ctor = Konfiguration.
                         var istStoreImpl = t.TypeKind != TypeKind.Interface && (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore));
                         // … ebenso Funktionen im Host, ihre Umsetzungen und Technik-Umsetzungen (docs/06 §6.5: ihre Records kommen aus Konfig:<Record>).
-                        var istImpl = t.TypeKind == TypeKind.Class && (iFunktion != null && Sym.Implements(t, iFunktion) || technik.IstUmsetzung(t));
+                        var istImpl = t.TypeKind == TypeKind.Class && (iFunktion != null && Sym.Implements(t, iFunktion) || iQuellart != null && Sym.Implements(t, iQuellart)
+                                                                       || technik.IstUmsetzung(t));
                         if (istProjektion || istReader || istStoreImpl || istImpl)
                             foreach (var c in t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public))
                                 foreach (var prm in c.Parameters)

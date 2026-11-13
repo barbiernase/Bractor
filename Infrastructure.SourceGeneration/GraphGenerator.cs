@@ -69,7 +69,7 @@ namespace Infrastructure.SourceGeneration
                 var koepfe = g.Koepfe.OrderBy(x => T(x.Typ), System.StringComparer.Ordinal)
                     .Select(x => $"[typeof({T(x.Typ)})] = new[] {{ {string.Join(", ", x.Knoten.Select(k => S(k.Name)))} }}");
                 sb.AppendLine($"                new Dictionary<Type, string[]> {{ {string.Join(", ", koepfe)} }},");
-                sb.AppendLine($"                {Typen(g.Ausgaenge.Select(x => (ITypeSymbol)x.Typ))}, Quelle: {(g.Quelle != null ? S(g.Quelle.Name) : "null")}),");
+                sb.AppendLine($"                {Typen(g.Ausgaenge.Select(x => (ITypeSymbol)x.Typ))}),");
             }
             sb.AppendLine("        };");
             sb.AppendLine("    }");

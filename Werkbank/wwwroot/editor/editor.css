@@ -635,7 +635,6 @@
 /* ── Fläche in sechs Spalten (docs/10 §10.9): Karten mit Ports, Spaltenköpfe, Bänder der Domänen, Store-Gruppen ── */
 #de .gnode2.fk{width:auto;min-width:210px;max-width:340px;cursor:pointer}
 #de .gnode2.fk .ghead{cursor:pointer}
-#de .gnode2.fk-quelle{border-color:#9a7230}
 #de .fk-ports{padding:4px 0 6px}
 #de .fk-port{position:relative;display:flex;align-items:center;padding:1px 12px;font:11px ui-monospace,monospace;color:#9aa6bb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #de .fk-port.aus{justify-content:flex-end}
@@ -965,3 +964,24 @@
 #de .gnode2.n-gegenueber{border-style:dashed;opacity:.85}#de .gnode2.n-gegenueber .ghead{background:#3a4258}
 #de .gnode2.n-reaktion{border-color:#2f8f6a}#de .gnode2.n-reaktion .ghead{background:#5dcaa5}#de .gnode2.n-reaktion .ghead .gk,#de .gnode2.n-reaktion .ghead .gn{color:#0b2a20}
 #de .kom-mark.s-stand-fehlt{color:#e0b46a}#de .kom-mark.s-stand-geschrieben{color:#57b673}#de .kom-mark.s-stand-leer{color:#8f9bb0}
+/* ── Spalte Clients der Fläche: je Client seine Eingänge in der aktiven Umgebung (docs/10 §10.9) ── */
+#de .gnode2.n-client{border-color:#8a7fd0;width:250px}
+#de .gnode2.n-client .ghead{background:#a99ef0;color:#14121f}
+#de .fl-cl-plus{margin-left:auto;margin-right:4px}
+#de .fl-cl{display:flex;flex-direction:column;gap:4px;padding:6px}
+#de .fl-cl-z{border:1px solid #3a4560;border-radius:6px;padding:4px 6px;background:#151a26;cursor:pointer}
+#de .fl-cl-z:hover{border-color:#5fae8a}
+#de .fl-cl-z.app{border-style:dashed;cursor:default}
+#de .fl-cl-z.befund{border-color:#d9a400}
+#de .fl-cl-t{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#dfe6f2}
+#de .fl-cl-art{font-weight:400;color:#8fd0ad;font-size:11px}
+#de .fl-cl-t .ag-los{margin-left:auto}
+#de .fl-cl-t .gdiag{margin-left:auto}
+#de .fl-cl-t .gdiag+.ag-los{margin-left:0}
+#de .fl-cl-w{font-size:10.5px;color:#aeb8ca;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px}
+#de .fl-cl-w.leise{color:#7f8aa0}
+#de .gnode2.n-verwirklichung{border-color:#5fae8a}
+#de .gnode2.n-verwirklichung .ghead{background:#5fae8a;color:#0f1a14}
+#de .av-stand{color:#8fd0ad;font-size:11px}
+#de .av-stand.offen{color:#ffb35c}
+#de .gnode2.n-client .ghead .fl-cl-plus{color:#14121f;border-color:#14121f66;background:#ffffff40;font-weight:600}

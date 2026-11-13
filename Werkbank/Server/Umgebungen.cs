@@ -43,10 +43,20 @@ public sealed class Umgebungen(string slnRoot)
     /// <summary>Die Umgebung aufgelöst, wie der Host sie mit <c>CQRS_BRANCH</c> = Branch sieht.</summary>
     public UmgebungKonfig Aufgeloest(string name) => MitKonfig(name, (u, _) => u);
 
-    /// <summary>Der beobachtete Pfad je Instanz mit einem Quellknoten, der einen <c>Pfad</c> hat (ein Dateiwächter; aufgelöst) — Schlüssel ist die Instanz.</summary>
-    public IReadOnlyDictionary<string, string> QuellPfade(string name) => MitKonfig(name, (u, _) => u.Graphen
-        .SelectMany(i => i.Value.Knoten.Values.Where(k => k.Werte.TryGetValue("Pfad", out var p) && !string.IsNullOrWhiteSpace(p)).Select(k => (i.Key, k.Werte["Pfad"])))
-        .GroupBy(x => x.Key).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal));
+    /// <summary>Die Quellart, deren Eingänge Dateien aus einem Verzeichnis melden (Katalog des Frameworks, <c>Core/Katalog</c>).</summary>
+    public const string DateiQuellart = "Dateiwaechter";
+
+    /// <summary>
+    /// Der beobachtete Pfad je Eingang eines Clients mit einem Dateiwächter (<c>Clients:&lt;Client&gt;:Eingaenge:&lt;eingang&gt;</c>, Art
+    /// <see cref="DateiQuellart"/>, Wert <c>Pfad</c>; aufgelöst) — Schlüssel ist <c>Client/Eingang</c>.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> EingangsPfade(string name) => MitKonfig(name, (u, _) => u.Clients
+        .SelectMany(c => c.Value.Eingaenge.Where(e => e.Value.Art == DateiQuellart && e.Value.Werte.TryGetValue("Pfad", out var p) && !string.IsNullOrWhiteSpace(p))
+            .Select(e => (Schluessel: EingangsSchluessel(c.Key, e.Key), Pfad: e.Value.Werte["Pfad"]!)))
+        .ToDictionary(x => x.Schluessel, x => x.Pfad, StringComparer.Ordinal));
+
+    /// <summary>Der Schlüssel eines Eingangs: <c>Client/Eingang</c> (wie in seiner Wirker-Id <c>eingang:Client/Eingang</c>).</summary>
+    public static string EingangsSchluessel(string client, string eingang) => client + "/" + eingang;
 
     /// <summary>
     /// <c>Identitaeten:Tokens</c>: Token → Akteur(e) — gelesen wie im Host (<c>AkteurOptionen</c>: Wert oder Liste, je Eintrag

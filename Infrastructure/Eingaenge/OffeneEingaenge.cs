@@ -33,6 +33,9 @@ public interface IOffeneEingaenge
     /// (der Einblick zeigt sie; wer den Fehler behoben hat, gibt sie frei).
     /// </summary>
     Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct);
+
+    /// <summary>Welche dieser Kennungen noch offen sind (nicht fertig, auch geparkt) — der Gegendruck eines Eingangs aus einer Quelle.</summary>
+    Task<IReadOnlyCollection<Guid>> NochOffenAsync(IReadOnlyCollection<Guid> kennungen, CancellationToken ct);
 }
 
 /// <summary>
@@ -131,6 +134,19 @@ public sealed class OffeneEingaenge(IDocumentStore store) : IOffeneEingaenge
             eingaenge.Select(e => e.Daten).ToList(), eingaenge.Select(_ => stream).ToList(), eingaenge.Select(e => e.Version).ToList(),
             eingaenge.Select(e => e.Akteur).ToList(), eingaenge.Select(e => e.Korrelation).ToList());
         await session.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyCollection<Guid>> NochOffenAsync(IReadOnlyCollection<Guid> kennungen, CancellationToken ct)
+    {
+        if (kennungen.Count == 0) return Array.Empty<Guid>();
+        await using var conn = store.Storage.Database.CreateConnection();
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand($"select kennung from {Name(store)} where kennung = any($1)", conn);
+        cmd.Parameters.Add(new NpgsqlParameter { Value = kennungen.ToArray() });
+        var offen = new List<Guid>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct)) offen.Add(r.GetGuid(0));
+        return offen;
     }
 
     public async Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct)

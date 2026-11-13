@@ -1,0 +1,12 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog;
+
+// SONDE — die MELDUNGEN des fremden Katalogs (docs/04 §4.7): was seine Quellarten melden. Eine Meldung ist kein Command — kein Auf und kein Kopf nimmt
+// sie; sie nennt die Kennung ihres Elements aus seinem Inhalt (derselbe Sensor zur selben Zeit ist dasselbe Element, auch nach einem Neustart).
+
+/// <summary>Ein gelesener Wert eines Sensors, wie die Sensorabfrage ihn meldet.</summary>
+public record Rohwert(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : IMeldung
+{
+    string IMeldung.Kennung => $"{Sensor:N}|{GemessenAm.UtcTicks}";
+}

@@ -1,0 +1,14 @@
+{
+  "Graph": "Bildaufbereitung",
+  "Einlesen": {
+    "Wiederholungen": 1
+  },
+  "Verkleinern": {
+    "Wiederholungen": 1,
+    "AusgabePfad": "${env:HOME}/cqrs-sim/${branch}/preprocessed"
+  },
+  "Kontrast": {
+    "Wiederholungen": 1,
+    "AusgabePfad": "${env:HOME}/cqrs-sim/${branch}/preprocessed"
+  }
+}

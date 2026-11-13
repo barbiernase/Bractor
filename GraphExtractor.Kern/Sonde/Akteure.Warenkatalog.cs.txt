@@ -1,0 +1,18 @@
+using Abstractions;
+using Sondenkatalog.Katalog;
+
+// SONDE — die Ablage und ihre VERWIRKLICHUNG (docs/04 §4.7): sie gibt jede abgelegte Katalog-Datei an den Kopf der Dateiannahme (eine Nachricht des
+// Katalogs, darum bei den Akteuren — die Domäne bleibt rein). Verwirklicht wird sie durch den Dateiwächter, eine Quellart AUS DEM KATALOG DES FRAMEWORKS
+// (Core.Katalog): die Übersetzung der Akteur-Seite macht aus seiner Meldung (DateiGefunden) den Kopf-Command, den sie darf.
+
+namespace Warenkatalog.Import;
+
+#pragma warning disable CS9113
+
+public sealed record Ablage : IAkteur, IDarf<NimmKatalogdateiAn>;
+
+/// <summary>Was der Dateiwächter der Ablage findet, gibt sie an die Dateiannahme — Feld für Feld.</summary>
+public sealed class DateiGefunden_NimmKatalogdateiAn_1(DateiGefunden source) : ITranslate<DateiGefunden, NimmKatalogdateiAn>
+{
+    public NimmKatalogdateiAn Translate() => new(Pfad: source.Pfad, RelativerPfad: source.RelativerPfad);
+}

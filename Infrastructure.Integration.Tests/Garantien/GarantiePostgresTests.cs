@@ -159,6 +159,9 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         (await Eingaenge()).Should().Be((1, 1));
         await eingaenge.LegeAsync([Eingang(kennung, 2)], k, default);
         (await Eingaenge()).Should().Be((1, 1), "dieselbe Kennung legt keinen zweiten Eingang");
+        var andere = Guid.NewGuid();
+        (await eingaenge.NochOffenAsync([kennung, andere], default)).Should().Equal([kennung],
+            "der Gegendruck eines Eingangs aus einer Quelle sieht, was noch in der Tabelle liegt — eine unbekannte Kennung ist nicht offen");
 
         (await eingaenge.FaelligeAsync(10_000, default)).Should().NotContain(e => e.Kennung == kennung,
             "fällig erst nach dem Fenster des schnellen Wegs (Zustellung direkt nach dem Commit)");
@@ -167,8 +170,11 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         faellig.Should().Match<Infrastructure.Eingaenge.OffenerEingang>(e => e.Instanz == "Probe" && e.Stream == k && e.Version == 1 && e.Versuche == 1);
         await eingaenge.VerschiebeAsync([kennung], TimeSpan.FromHours(1), default);
         (await eingaenge.FaelligeAsync(10_000, default)).Should().NotContain(e => e.Kennung == kennung, "verschoben ist er erst in einer Stunde fällig");
+        await eingaenge.ParkeAsync([(kennung, "Probe gescheitert")], default);
+        (await eingaenge.NochOffenAsync([kennung], default)).Should().Equal([kennung], "geparkt bleibt er offen — er zählt gegen die Grenze des Eingangs");
         await eingaenge.ErledigtAsync([kennung], default);
         (await Eingaenge()).Anzahl.Should().Be(0, "fertig verlässt er die Tabelle");
+        (await eingaenge.NochOffenAsync([kennung], default)).Should().BeEmpty("fertig ist er nicht mehr offen — der Läufer nimmt die nächste Meldung");
     }
 
     [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)

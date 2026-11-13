@@ -39,13 +39,13 @@ public sealed class Gesehen
 }
 
 /// <summary>
-/// Der DATEIWÄCHTER (Katalog des Frameworks, docs/04 §4.7): eine Quellfunktion am Kopf eines Graphen. Er LIEST nur — er legt nichts an, verschiebt und
+/// Der DATEIWÄCHTER (Katalog des Frameworks, docs/04 §4.7): eine Quellart (IQuellart), läuft als Eingang eines Clients. Er LIEST nur — er legt nichts an, verschiebt und
 /// löscht nichts. Ein Weckruf (Intervall oder, bei <see cref="DateiErkennung.EreignisUndAbfrage"/>, ein Dateisystem-Ereignis) löst einen Scan aus; der
 /// Scan entscheidet (Inv. 2); je fertige, noch nicht gesehene Datei ein <see cref="DateiGefunden"/> — ein neuer Lauf. Was er gemeldet hat, steht in
 /// seinem Zustand: gesichert, sobald der Lauf der Datei fertig ist; nach einem Neustart meldet er, was danach kam. Ein unlesbares Verzeichnis heißt
 /// eine wachsende Pause (bis eine Minute); der nächste Scan holt alles nach.
 /// </summary>
-public sealed class Dateiwaechter(Dateiwaechterkonfig konfig, IZustand<Gesehen> gesehen) : IFunktion
+public sealed class Dateiwaechter(Dateiwaechterkonfig konfig, IZustand<Gesehen> gesehen) : IQuellart
 {
     private static readonly TimeSpan MaxPause = TimeSpan.FromMinutes(1);
 

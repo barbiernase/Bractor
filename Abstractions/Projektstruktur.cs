@@ -80,6 +80,13 @@ static class Projektstruktur
         Technik,
         /// <summary>Ein Akteur (<c>record … : IAkteur</c>) bzw. ein Client (<c>record … : IClient</c>): beim Rand, in <c>Akteure.cs</c> bzw. <c>Clients.cs</c>.</summary>
         Akteur, Client,
+        /// <summary>Eine Quellart (Klasse mit <c>IQuellart</c> und <c>Lausche</c>, docs/04 §4.7): im Katalog, je Quellart eine eigene Datei — nie ein Knoten.</summary>
+        Quellart,
+        /// <summary>Eine Meldung einer Quellart (<c>record … : IMeldung</c>): im Katalog, in <c>Meldungen.cs</c>.</summary>
+        Meldung,
+        /// <summary>Die Übersetzung der Akteur-Seite (<c>ITranslate&lt;TMeldung, TZiel&gt;</c> mit einer Meldung als Quelle): wie ein Akteur aus dem, was
+        /// eine Quellart meldet, eine Nachricht macht, die er darf — bei den Akteuren, in <c>Uebersetzungen.cs</c>.</summary>
+        Verwirklichung,
         StoreImplementierung,
         /// <summary>Kein Rollen-Marker: liegt im Bereichs-Ordner seines Projekts, in eigener Datei oder einer Sammeldatei des Projekts.</summary>
         Hilfscode,
@@ -142,7 +149,7 @@ static class Projektstruktur
         new Eintrag(Rolle.Uebersetzungen, ".Uebersetzungen", true, new[] { Rolle.Schreibseite },
             new[] { "Uebersetzungen.cs" }),
         new Eintrag(Rolle.Akteure, ".Akteure", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Uebersetzungen },
-            new[] { "Akteure.cs", "Clients.cs" }),
+            new[] { "Akteure.cs", "Clients.cs", "Uebersetzungen.cs" }),
         new Eintrag(Rolle.Speicher, ".Infrastructure", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
             new string[0]),
         new Eintrag(Rolle.Leitung, ".Leitung", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Uebersetzungen },
@@ -263,8 +270,10 @@ static class Projektstruktur
             case Primitive.Funktion: case Primitive.Graph:
             case Primitive.Konfig: case Primitive.Technik:
                 return new[] { Rolle.Katalog };
-            case Primitive.Akteur: case Primitive.Client:
+            case Primitive.Akteur: case Primitive.Client: case Primitive.Verwirklichung:
                 return new[] { Rolle.Akteure };
+            case Primitive.Quellart: case Primitive.Meldung:
+                return new[] { Rolle.Katalog };
             case Primitive.StoreImplementierung:
                 return new[] { Rolle.Speicher };
             case Primitive.Enum:
@@ -282,7 +291,8 @@ static class Projektstruktur
             case Primitive.Command: case Primitive.KnotenCommand: return "Commands.cs";
             case Primitive.Event: case Primitive.Hinweis: return "Events.cs";
             case Primitive.Graph: return "Graphen.cs";
-            case Primitive.Uebersetzung: return "Uebersetzungen.cs";
+            case Primitive.Uebersetzung: case Primitive.Verwirklichung: return "Uebersetzungen.cs";
+            case Primitive.Meldung: return "Meldungen.cs";
             case Primitive.Wertobjekt: return "ValueObjects.cs";
             case Primitive.Enum: return "Enums.cs";
             case Primitive.ReadModel: return "ReadModels.cs";
@@ -392,6 +402,9 @@ static class Projektstruktur
             case Primitive.Konfig: return "ein Konfig-Record";
             case Primitive.Akteur: return "ein Akteur";
             case Primitive.Client: return "ein Client";
+            case Primitive.Quellart: return "eine Quellart";
+            case Primitive.Meldung: return "eine Meldung";
+            case Primitive.Verwirklichung: return "eine Übersetzung der Akteur-Seite";
             case Primitive.StoreImplementierung: return "eine Store-Implementierung";
             default: return "Hilfscode";
         }

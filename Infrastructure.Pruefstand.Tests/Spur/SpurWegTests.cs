@@ -12,10 +12,10 @@ namespace Infrastructure.Pruefstand.SpurPruefung;
 /// </summary>
 public class SpurWegTests
 {
-    // Was im Log steht: Aggregat-Events (Wirker = Decide) — die Commands zwischen Knoten und die Elemente einer Quelle stehen nicht darin.
+    // Was im Log steht: Aggregat-Events (Wirker = Decide) — die Commands zwischen Knoten und die Elemente eines Eingangs aus einer Quelle stehen nicht darin.
     private static readonly Dictionary<string, SpurWeg.Eintrag> Log = new()
     {
-        ["p:1"] = new("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "knoten:linienimport/Aufbereitung.Eingang"),
+        ["p:1"] = new("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "uebersetzung:BildGedeutet_NimmBildAuf_1"),
     };
 
     private static SpurWeg.Eintrag? Nachschlagen(string u) => Log.GetValueOrDefault(u);
@@ -23,14 +23,14 @@ public class SpurWegTests
     private static string[] Paare(SpurWeg w) => w.Paare.Select(p => p[0] + " → " + p[1]).ToArray();
 
     [Fact]
-    public void Aggregat_Event_laeuft_ueber_den_Knoten_der_den_Command_gab_und_den_Decider()
+    public void Aggregat_Event_laeuft_ueber_die_Uebersetzung_die_den_Command_gab_und_den_Decider()
     {
-        // Der Lauf einer Quelle hat keinen Log-Eintrag: der Knoten, der den Command gab, ist die Wurzel des Wegs.
-        var w = SpurWeg.Aus("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "knoten:linienimport/Aufbereitung.Eingang", null, Nachschlagen);
+        // Das Element eines Eingangs hat keinen Log-Eintrag: die Übersetzung, die den Command aus dem Ausgang der Bildaufbereitung gab, ist die Wurzel.
+        var w = SpurWeg.Aus("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "uebersetzung:BildGedeutet_NimmBildAuf_1", null, Nachschlagen);
 
-        w.Karten.Should().Equal("knoten:linienimport/Aufbereitung.Eingang", "rec:NimmBildAuf", "decide:ImagePair/NimmBildAuf", "rec:ImagePairErstellt");
+        w.Karten.Should().Equal("uebersetzung:BildGedeutet_NimmBildAuf_1", "rec:NimmBildAuf", "decide:ImagePair/NimmBildAuf", "rec:ImagePairErstellt");
         Paare(w).Should().Equal(
-            "knoten:linienimport/Aufbereitung.Eingang → rec:NimmBildAuf",
+            "uebersetzung:BildGedeutet_NimmBildAuf_1 → rec:NimmBildAuf",
             "rec:NimmBildAuf → decide:ImagePair/NimmBildAuf",
             "decide:ImagePair/NimmBildAuf → rec:ImagePairErstellt");
     }

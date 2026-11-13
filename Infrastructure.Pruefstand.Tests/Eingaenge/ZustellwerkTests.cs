@@ -33,6 +33,8 @@ public class ZustellwerkTests
         }
         public Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct) => Task.CompletedTask;
         public Task LegeAsync(IReadOnlyList<EingangOffen> eingaenge, Guid stream, CancellationToken ct) => Task.CompletedTask;
+        public Task<IReadOnlyCollection<Guid>> NochOffenAsync(IReadOnlyCollection<Guid> kennungen, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyCollection<Guid>>(kennungen.Where(k => !Erledigt.Contains(k)).ToList());
     }
 
     private sealed class Zustellung(Func<OffenerEingang, Zustellausgang> ausgang) : IEingangsZustellung

@@ -33,7 +33,8 @@ public sealed record FunktionsEingang(Type Typ, bool Strom, IReadOnlyList<Type> 
 /// <param name="Dienste">Was der Konstruktor der Klasse braucht (Dienste, Konfig-Records) — für die Boot-Prüfung der Bindung.</param>
 /// <param name="Rechne">Die Rechnung: Eingang → Strom der Ausgaben (Commands, Hinweise), wie die Signatur sie zulässt (null = draußen).</param>
 /// <param name="Zustand">Der Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4), gesichert je Instanz und Knoten — null = ohne Zustand.</param>
-/// <param name="Lausche">Eine Quellfunktion: die Nummer, unter der die Rechnung ihr <c>Lausche</c> ruft (null = keine Quelle).</param>
+/// <param name="Lausche">Eine Quellart (<c>IQuellart</c>): die Nummer, unter der die Rechnung ihr <c>Lausche</c> ruft (null = eine Funktion).</param>
+/// <param name="Meldet">Was eine Quellart meldet (ihre Meldungen, <c>IMeldung</c>).</param>
 public sealed record FunktionsBaustein(
     Type Typ,
     string Name,
@@ -42,7 +43,8 @@ public sealed record FunktionsBaustein(
     IReadOnlyList<Type> Dienste,
     FunktionsRechnung? Rechne,
     FunktionsZustandsform? Zustand = null,
-    int? Lausche = null)
+    int? Lausche = null,
+    IReadOnlyList<Type>? Meldet = null)
 {
     /// <summary>Der Wirker im Log (Spur): <c>funktion:&lt;Name&gt;</c>.</summary>
     public string Wirker => WirkerId.FuerFunktion(Name);

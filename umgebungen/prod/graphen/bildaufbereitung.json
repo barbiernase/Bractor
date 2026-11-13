@@ -1,0 +1,15 @@
+{
+  "Graph": "Bildaufbereitung",
+  "Rechner": "prod-1",
+  "Einlesen": {
+    "Wiederholungen": 1
+  },
+  "Verkleinern": {
+    "Wiederholungen": 1,
+    "AusgabePfad": "/home/wirksam/cqrs-data/preprocessed"
+  },
+  "Kontrast": {
+    "Wiederholungen": 1,
+    "AusgabePfad": "/home/wirksam/cqrs-data/preprocessed"
+  }
+}

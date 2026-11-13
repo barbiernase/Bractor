@@ -79,10 +79,10 @@ services:
     environment:
       <<: *cluster-env
       Cluster__AdvertisedHost: grpc1
-      Cluster__Rechner: grpc1   # der Linienimport (Quelle) läuft hier (umgebungen/multinode/graphen/linienimport.json)
+      Cluster__Rechner: grpc1   # der Dateiwächter (Eingang linie1 des Linienrechners) und die Bildaufbereitung laufen hier (umgebungen/multinode)
     ports:
       - "127.0.0.1:5001:5001"   # nur grpc1 nach außen (h2c) — für optionale externe Checks
-      - "127.0.0.1:5002:5002"   # Einblick-Port (HTTP/1.1): /health und der Webhook der Datei-Quelle (Quellen:DateiErkannt:Webhook)
+      - "127.0.0.1:5002:5002"   # Einblick-Port (HTTP/1.1): /health und die Webhooks (Eingänge der Art Webhook)
     depends_on:
       <<: *infra-deps
       migrate:

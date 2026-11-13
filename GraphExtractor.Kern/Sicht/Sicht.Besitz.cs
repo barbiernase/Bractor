@@ -4,17 +4,18 @@ using System.Text.RegularExpressions;
 namespace GraphExtractor;
 
 // Der BESITZ je Karte — die Hierarchie Anwendung → Blöcke → Glieder, nur aus den Signaturen (nie aus Namespace oder Name):
-//   - Blöcke: das Aggregat, die Funktion (mit Eingängen oder gerufen), die Sicht (Anker: das Store-Bündel); dazu Begriffe und Rand der Anwendung.
+//   - Blöcke: das Aggregat, die Funktion (mit Eingängen oder gerufen), die Quellart, die Sicht (Anker: das Store-Bündel); dazu Begriffe und Rand der
+//     Anwendung. Eine Meldung gehört der Quellart, die sie meldet.
 //   - Ein Command gehört dem Aggregat, auf das er zielt; was eine Methode zurückgibt, dem Typ der Methode; eine Query dem, dessen Frage sie
 //     nimmt; ein Typ, der nur als Feld bzw. im Konstruktor vorkommt, seinem einzigen Nutzer (mehrere → Begriffe); was von außen kommt
-//     (Quelle, Befugnis eines Akteurs ohne Erzeuger im Code), dem Rand.
+//     (Befugnis eines Akteurs ohne Erzeuger im Code), dem Rand.
 public sealed partial class Sicht
 {
     public const string Anwendung = "§anwendung";
     public const string Begriffe = "§begriffe";
     public const string Rand = "§rand";
 
-    private static readonly HashSet<string> BlockArten = ["aggregate", "bausteinfunktion", "store", "graph"];
+    private static readonly HashSet<string> BlockArten = ["aggregate", "bausteinfunktion", "quellart", "store", "graph"];
 
     /// <summary>Die Graphen (Karten-Ids), die einen Knoten vom Typ <paramref name="typ"/> nennen (generische mit ihrem Typargument).</summary>
     private IEnumerable<string?> GraphenMitKnoten(string typ) => _graphen
@@ -55,6 +56,10 @@ public sealed partial class Sicht
             //   seinen Knoten beisammen. Technik (gerufen) und Knoten mehrerer Graphen bleiben eigene Blöcke der Anwendung.
             case "bausteinfunktion": return IstGerufen(r) ? Anwendung : Einer(n, GraphenMitKnoten(name), leer: Anwendung, mehrdeutig: false);
             case "graph": return Einer(n, GraphenMitKnoten(name).Where(g => g != n.Id), leer: Anwendung, mehrdeutig: false);
+            // Eine Quellart steht in keinem Graphen: ein eigener Block der Anwendung (wie Technik).
+            case "quellart": return Anwendung;
+            // Eine Meldung gehört der Quellart, die sie meldet (Signatur von Lausche) — eine ohne Quellart der Anwendung dem Rand.
+            case "meldung": return Einer(n, MeldendeQuellarten(name).Select(QuellartKarte), leer: Rand);
             case "akteur": case "client": return Rand;
             case "state": case "decider": case "applier": return AggId(S(r, "aggregat")) ?? Begriffe;
             case "handle": return n.Besitzer?.Id ?? Begriffe;
@@ -63,16 +68,15 @@ public sealed partial class Sicht
             case "command":
             {
                 if ((AggId(S(r, "aggregat")) ?? AggId(RecordAgg(name))) is { } agg) return agg;
-                // Ein Command, den nur Knoten einander geben: er gehört der Funktion, die ihn ausgibt (bzw. als Quelle meldet).
+                // Ein Command, den nur Knoten einander geben: er gehört der Funktion, die ihn ausgibt.
                 static string Basis(string t) => t.IndexOf('<') is > 0 and var i ? t[..i] : t;   // Geglaettet<TFenster> → Geglaettet
-                var erzeuger = _bausteinFunktionen.Where(f => Alle(f["eingaenge"]).Any(e => L(e, "ausgaben").Any(a => Basis(a) == name)) || L(f, "lauscht").Contains(name))
+                var erzeuger = _bausteinFunktionen.Where(f => Alle(f["eingaenge"]).Any(e => L(e, "ausgaben").Any(a => Basis(a) == name)))
                     .Select(f => (string?)("fb:" + S(f, "_id"))).ToList();
                 if (erzeuger.Count > 0) return Einer(n, erzeuger);
                 return VonAussen(name) ? Rand : Begriffe;
             }
             case "event": case "rejection":
             {
-                if (GrNachrichtSorte(name) == "quelle") return Rand;
                 var erzeuger = _decider.Where(d => Alle(d["ergibt"]).Any(o => S(o, "event") == name)).Select(d => AggId(S(d, "aggregat")))
                     .Concat(_bausteinFunktionen.Where(f => Alle(f["eingaenge"]).Any(e => L(e, "ausgaben").Contains(name))).Select(f => (string?)("fb:" + S(f, "_id"))))
                     .ToList();
@@ -130,6 +134,7 @@ public sealed partial class Sicht
         foreach (var f in _bausteinFunktionen.Where(f => Felder(f, "konstruktor") || Alle(f["umsetzungen"]).Any(u => Felder(u, "konstruktor"))
                                                          || Alle(f["methoden"]).Any(m => Nutzt(S(m, "rueckgabe")) || Felder(m, "parameter"))))
             nutzer.Add("fb:" + S(f, "_id"));
+        foreach (var q in _quellarten.Where(q => !B(q, "framework") && Felder(q, "konstruktor"))) nutzer.Add("qa:" + S(q, "_id"));
         foreach (var st in _stores.Where(s => Alle(s["writeFns"]).Concat(Alle(s["readFns"])).Any(f => Felder(f, "params") || Nutzt(S(f["sig"], "rueckgabe")))))
             nutzer.Add("sto:" + S(st, "_id"));
         return Einer(n, nutzer, mehrdeutig: false);

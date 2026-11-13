@@ -39,7 +39,7 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     /// <param name="technikZustand">Trägt eine Technik in der Konstruktor-Kette Zustand (<see cref="TechnikWahl.MitZustand"/>)?</param>
     /// <param name="knoten">Der Knoten der Instanz, für den gebaut wird: seine Konfig-Records und seine Technik-Wahl (<see cref="KnotenBereich"/>).</param>
     /// <param name="ablage">Wo der Zustand gesichert ist (null: ein Prüfstand — frisch bei jeder Aktivierung).</param>
-    /// <param name="quelle">Eine Quellfunktion: sie sichert ihre laufende Nummer auch ohne Zustand.</param>
+    /// <param name="quelle">Eine Quellart (der Läufer eines Eingangs): sie sichert ihre laufende Nummer auch ohne Zustand.</param>
     public FunktionsAktivierung(IServiceProvider wurzel, Func<IServiceProvider, object?, object> baue, FunktionsZustandsform? zustand = null,
         string name = "", bool technikZustand = false, KnotenKontext? knoten = null, IZustandsAblage? ablage = null, bool quelle = false)
     {

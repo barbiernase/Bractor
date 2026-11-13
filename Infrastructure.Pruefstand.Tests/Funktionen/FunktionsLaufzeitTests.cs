@@ -20,18 +20,15 @@ namespace Infrastructure.Pruefstand.Funktionen;
 /// Kopf), je Knoten ein Parent (ein Schritt der Kette: Warteschlange, Kinder bis Parallel, Wiederholungen, Wegtabelle, „fertig“ erst nach den gesicherten
 /// Ausgaben), je Umsetzung ein Kind (Commands mit Ids aus Aufruf, Ort und Stelle). Die Pläne baut der Test von Hand wie der Generator (Wege aus den
 /// Typen, verlierbar je Quelle); der Emitter ist eine Naht. Bewiesen: die Folge mit ihren Ids, zwei Werte an einem Schritt (zweimal gerechnet), Wahl,
-/// Strom, eine verlierbare Kante (hält den Kopf nicht auf), Rückstau, der gescheiterte Kopf, der Neustart vom Kopf mit denselben Ids, die Quelle und ein
-/// Zustand, der nach einem Absturz nichts doppelt zählt.
+/// Strom, eine verlierbare Kante (hält den Kopf nicht auf), Rückstau, der gescheiterte Kopf, der Neustart vom Kopf mit denselben Ids und ein Zustand,
+/// der nach einem Absturz nichts doppelt zählt. Quellen sind keine Knoten mehr: ihren Läufer prüft <c>QuellLaeuferTests</c>.
 /// </summary>
 public class FunktionsLaufzeitTests
 {
     private sealed class Ziel : IState { public int Version { get; set; } public Guid Id { get; set; } }
     private sealed record Buche(Id<Ziel> AggregateId, int Wert) : ICommand<Ziel>;
     private sealed record Start(int Wert) : ICommand;
-    private sealed record X(int Wert) : ICommand, IMeldung
-    {
-        string IMeldung.Kennung => "x" + Wert;
-    }
+    private sealed record X(int Wert) : ICommand;
     private sealed record Z(int Wert) : ICommand;
     private sealed record Links(int Wert) : ICommand;
     private sealed record Rechts(int Wert) : ICommand;
@@ -60,15 +57,6 @@ public class FunktionsLaufzeitTests
         public HashSet<string> Verlierbar { get; } = new();
         /// <summary>Mit Zustand: ein <see cref="Zaehler"/>, die Umsetzung ist er selbst.</summary>
         public bool MitZustand { get; set; }
-        /// <summary>Eine Quelle: die Nummer ihres Lausche (eine Operation ohne Eingang).</summary>
-        public int? Lauscht { get; private set; }
-
-        public K Lausche(params Type[] aus)
-        {
-            Lauscht = Ops.Count + Antworten.Count;
-            Ops.Add((Lauscht.Value, null, aus));
-            return this;
-        }
 
         public K Op<TEingang>(params Type[] aus)
         {
@@ -98,7 +86,7 @@ public class FunktionsLaufzeitTests
         var erzeugt = knoten.SelectMany(k => k.Ops.SelectMany(o => o.Aus)).ToHashSet();
         var koepfe = knoten.SelectMany(k => k.Ops.Where(o => o.Eingang is not null && !erzeugt.Contains(o.Eingang)).Select(o => (o.Eingang!, k.Name)))
             .GroupBy(x => x.Item1).ToDictionary(g => g.Key, g => g.Select(x => x.Name).Distinct().ToArray());
-        return new GraphPlan(name, typeof(object), plaene, koepfe, Array.Empty<Type>(), knoten.FirstOrDefault(k => k.Lauscht is not null)?.Name);
+        return new GraphPlan(name, typeof(object), plaene, koepfe, Array.Empty<Type>());
     }
 
     /// <summary>Eine Übersetzung der Domäne wie der Generator sie erzeugt: <typeparamref name="TEin"/> → genau eine Nachricht (wohin, sagt der Typ).</summary>
@@ -133,15 +121,14 @@ public class FunktionsLaufzeitTests
         public GraphInstanz Instanz(string name, UebersetzungPlan[] uebersetzungen, params K[] knoten)
         {
             var plan = Plan(name, knoten);
-            var instanz = new GraphInstanz(name, plan, null, knoten.ToDictionary(k => k.Name, k => k.Knoten), Straenge: Straenge);
+            var instanz = new GraphInstanz(name, plan, knoten.ToDictionary(k => k.Name, k => k.Knoten), Straenge: Straenge);
             var parents = knoten.ToDictionary(k => k.Name, k =>
             {
                 var traeger = new FunktionsTraeger(k.Name, sp => new FunktionsAktivierung(sp, (_, z) => { k.BeimBau?.Invoke(); return z ?? new object(); },
-                        k.MitZustand ? ZaehlerForm : null, name: k.Name, knoten: new KnotenKontext(name, k.Name, k.Knoten), ablage: Zustaende,
-                        quelle: k.Lauscht is not null),
+                        k.MitZustand ? ZaehlerForm : null, name: k.Name, knoten: new KnotenKontext(name, k.Name, k.Knoten), ablage: Zustaende),
                     k.Rechne, Antworten: k.Antworten)
                 { Instanz = name, Knoten = k.Name, ImGraphen = plan.ImGraphen(k.Name), Uebersetzungen = new Uebersetzungen(uebersetzungen),
-                    Zeitlimit = k.Knoten.Zeitlimit, Lausche = k.Lauscht };
+                    Zeitlimit = k.Knoten.Zeitlimit };
                 return (Func<FunktionsParent>)(() => new FunktionsParent(traeger, k.Konfig, () => new FunktionsKindActor(traeger, _dienste, this, Koepfe, SendeAsync,
                     hinweise: Hinweise.Enqueue), new KnotenWege(instanz, k.Name), k.MitZustand ? Zustaende : null));
             });
@@ -154,10 +141,7 @@ public class FunktionsLaufzeitTests
 
         private void Starte(GraphInstanz instanz, Dictionary<string, Func<FunktionsParent>> parents) =>
             _instanzen[instanz.Name] = System.Root.SpawnNamed(Props.FromProducer(() => new GraphActor(instanz, parents, new Offene(this), Hinweise.Enqueue,
-                ablage: Zustaende, sende: SendeAsync)), FunktionenWurzel.Name(instanz.Name) + "-" + Guid.NewGuid().ToString("N")[..6]);
-
-        /// <summary>Dieser Cluster-Knoten hält die Instanz (bzw. nicht mehr): ihre Quelle lauscht.</summary>
-        public void Halte(string name, bool halten) => System.Root.Send(_instanzen[name], new QuelleHalten(halten));
+                sende: SendeAsync)), FunktionenWurzel.Name(instanz.Name) + "-" + Guid.NewGuid().ToString("N")[..6]);
 
         /// <summary>Der Cluster-Knoten fällt aus: der Graph-Actor samt Parents und Kindern ist fort, ein neuer beginnt leer.</summary>
         public async Task AbsturzAsync(string name)
@@ -211,6 +195,7 @@ public class FunktionsLaufzeitTests
             }
             public Task VerschiebeAsync(IReadOnlyCollection<Guid> kennungen, TimeSpan nach, CancellationToken ct) => throw new NotSupportedException();
             public Task LegeAsync(IReadOnlyList<EingangOffen> eingaenge, Guid stream, CancellationToken ct) => throw new NotSupportedException();
+            public Task<IReadOnlyCollection<Guid>> NochOffenAsync(IReadOnlyCollection<Guid> kennungen, CancellationToken ct) => throw new NotSupportedException();
             public Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct)
             {
                 foreach (var g in geparkt) w.Geparkt.Enqueue(g);
@@ -593,81 +578,7 @@ public class FunktionsLaufzeitTests
         ids.Distinct().Should().HaveCount(2, "A rechnet nach dem Absturz neu — mit derselben Id, genau einmal wirksam");
     }
 
-    // ── Quelle und gesicherter Zustand ───────────────────────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Eine_Quelle_startet_je_Element_eine_Kette_sichert_ihren_Stand_danach_und_rechnet_dasselbe_Element_nach_einem_Neustart_mit_denselben_Ids()
-    {
-        await using var w = new Welt();
-        var freigabe = new TaskCompletionSource();
-        async IAsyncEnumerable<object> Lauschen([EnumeratorCancellation] CancellationToken ct)
-        {
-            for (var i = 1; i <= 3; i++) yield return new X(i);
-            await Task.Delay(Timeout.Infinite, ct);
-        }
-        async IAsyncEnumerable<object> Buchen(object?[] a, [EnumeratorCancellation] CancellationToken ct)
-        {
-            if (((X)a[0]!).Wert == 2) await freigabe.Task.WaitAsync(ct);   // die zweite Kette hängt
-            yield return new Buche(Konto, ((X)a[0]!).Wert);
-        }
-        w.Instanz("G",
-            new K("Quelle", (_, _, _, _, _, ct) => Lauschen(ct)).Lausche(typeof(X)),
-            new K("B", (_, _, a, _, _, ct) => Buchen(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 4) }.Op<X>(typeof(Buche)));
-        w.Halte("G", true);
-
-        await Warte(() => w.Gesendet.Count == 2, "die Ketten 1 und 3 sind fertig, 2 hängt");
-        await Task.Delay(300);
-        w.Zustaende.Je.GetValueOrDefault(("G", "Quelle"))?.Nummer.Should().Be(1, "gesichert wird in der Reihenfolge der Elemente — 3 wartet auf 2");
-        freigabe.SetResult();
-        await Warte(() => w.Zustaende.Je.GetValueOrDefault(("G", "Quelle"))?.Nummer == 3, "nach der zweiten Kette ist der Stand 3");
-        var zwei = Kettenvertrag.Quelle("G", new X(2), 0);
-        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(Danach(zwei, "G/Quelle", "G/B"), "G/B", 0, new Buche(Konto, 2)),
-            "die Kennung einer Quell-Kette folgt aus Instanz und Kennung der Meldung");
-
-        // Neustart: die Quelle meldet hier dieselben drei Elemente noch einmal — dieselben Ids, die Inbox der Ziele verwirft sie.
-        w.Halte("G", false);
-        await w.AbsturzAsync("G");
-        w.Halte("G", true);
-        await Warte(() => w.Gesendet.Count == 6, "nach dem Neustart meldet die Quelle wieder (hier dieselben drei Elemente)");
-        w.Gesendet.Select(x => x.Id).Distinct().Should().HaveCount(3, "dasselbe Element ergibt nach einem Neustart dieselben Ids");
-    }
-
-    [Fact]
-    [Trait("Kategorie", "Garantie")]
-    public async Task Meldet_eine_Quelle_nach_einem_Neustart_dieselben_Elemente_in_anderer_Reihenfolge_traegt_jede_Id_dasselbe_Element()
-    {
-        // Vor dem Absturz: A und B, A hängt (nichts gesichert), B ist gewirkt. Danach meldet die Quelle B vor A (ein Scan sortiert anders, als die
-        //   Dateien fertig wurden). Mit Ids aus einer laufenden Nummer bekäme B die Ids von A — die Inbox verwürfe A als Wiederholung, B wirkte doppelt.
-        await using var w = new Welt();
-        var laeufe = 0;
-        var freigabe = new TaskCompletionSource();
-        async IAsyncEnumerable<object> Lauschen([EnumeratorCancellation] CancellationToken ct)
-        {
-            var erster = Interlocked.Increment(ref laeufe) == 1;
-            foreach (var x in erster ? new[] { new X(1), new X(2) } : new[] { new X(2), new X(1) }) yield return x;
-            await Task.Delay(Timeout.Infinite, ct);
-        }
-        async IAsyncEnumerable<object> Buchen(object?[] a, [EnumeratorCancellation] CancellationToken ct)
-        {
-            if (((X)a[0]!).Wert == 1) await freigabe.Task.WaitAsync(ct);   // A hängt bis nach dem Neustart
-            yield return new Buche(Konto, ((X)a[0]!).Wert);
-        }
-        w.Instanz("G",
-            new K("Quelle", (_, _, _, _, _, ct) => Lauschen(ct)).Lausche(typeof(X)),
-            new K("B", (_, _, a, _, _, ct) => Buchen(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 4) }.Op<X>(typeof(Buche)));
-        w.Halte("G", true);
-        await Warte(() => w.Gesendet.Count == 1, "B ist gewirkt, A hängt");
-
-        w.Halte("G", false);
-        await w.AbsturzAsync("G");
-        freigabe.SetResult();
-        w.Halte("G", true);
-        await Warte(() => w.Gesendet.Count == 3, "nach dem Neustart: B noch einmal, A zum ersten Mal");
-
-        foreach (var je in w.Gesendet.GroupBy(x => x.Id))
-            je.Select(x => x.Befehl).Distinct().Should().ContainSingle("eine Id trägt immer dasselbe Element — sonst verwürfe die Inbox ein anderes");
-        w.Gesendet.Select(x => x.Id).Distinct().Should().HaveCount(2, "zwei Elemente, zwei Ids — B wirkt über die Inbox einmal");
-    }
+    // ── Gesicherter Zustand ──────────────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task Ein_Knoten_mit_Zustand_sichert_ihn_mit_seinen_Kennungen_und_zaehlt_nach_einem_Absturz_nichts_doppelt()

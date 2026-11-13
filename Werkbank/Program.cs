@@ -191,7 +191,7 @@ app.MapGet("/api/werkbank/schema", async (CancellationToken ct) =>
     return Results.Content(Werkbank.Server.Schema.Umgebung(board).ToJsonString(), "application/json");
 });
 app.MapGet("/api/werkbank/umgebung/{name}", (string name) => Results.Content(werkbank.Umgebungen.Roh(name).ToJsonString(), "application/json"));
-// Umgebungs-Werte sind eine Geste (Verlauf, ↶, Branch-Sperre); die Werte gehören zum Board (Quellkarte, Webhook, Wahl der Dienste) — die Geste
+// Umgebungs-Werte sind eine Geste (Verlauf, ↶, Branch-Sperre); die Werte gehören zum Board (Eingänge der Clients, Webhook) — die Geste
 //   liest sofort neu.
 app.MapPost("/api/werkbank/umgebung/{name}", async (string name, System.Text.Json.Nodes.JsonObject inhalt, CancellationToken ct) =>
 {
@@ -214,6 +214,29 @@ app.MapGet("/api/werkbank/instanzschema", async (string graph, CancellationToken
     try { return Results.Content(Werkbank.Server.Instanzen.Schema(werkbank.Arbeitsbereich.Board!, graph).ToJsonString(), "application/json"); }
     catch (ArgumentException e) { return Results.Json(new { fehler = e.Message }); }
 });
+// ── EINGÄNGE der Clients (docs/04 §4.7): je Umgebung Clients:<Client>:Eingaenge:<eingang> in umgebung.json — setzen und entfernen als Geste (die Spalte
+//    Clients der Fläche); ihr Formular leitet der Server aus der Quellart ab (Konfig-Felder, Wahl der Technik).
+app.MapGet("/api/werkbank/eingangschema", async (string art, CancellationToken ct) =>
+{
+    await werkbank.Arbeitsbereich.LiesAsync(ct);
+    try { return Results.Content(Werkbank.Server.Instanzen.EingangSchema(werkbank.Arbeitsbereich.Board!, art).ToJsonString(), "application/json"); }
+    catch (ArgumentException e) { return Results.Json(new { fehler = e.Message }); }
+});
+async Task<IResult> EingangGeste(string umgebung, string client, string eingang, System.Text.Json.Nodes.JsonObject? inhalt, CancellationToken ct)
+{
+    string text;
+    try { text = instanzen.MitEingang(umgebung, client, eingang, inhalt); }
+    catch (ArgumentException e) { return Results.Json(new { ok = false, fehler = e.Message }); }
+    var a = await werkbank.Gesten.UmgebungAsync($"Eingang {client}/{eingang}{(inhalt == null ? " entfernt" : "")} ({umgebung})", werkbank.Umgebungen.RelativeDatei(umgebung), text, ct);
+    if (a.Ok) werkbank.Fortschritt.Melde("umgebung", new { name = umgebung });
+    return GestenErgebnis(a);
+}
+app.MapPost("/api/werkbank/eingang/{umgebung}/{client}/{eingang}", (string umgebung, string client, string eingang, System.Text.Json.Nodes.JsonObject inhalt, CancellationToken ct) =>
+    EingangGeste(umgebung, client, eingang, inhalt, ct));
+app.MapDelete("/api/werkbank/eingang/{umgebung}/{client}/{eingang}", (string umgebung, string client, string eingang, CancellationToken ct) =>
+    EingangGeste(umgebung, client, eingang, null, ct));
+// Wo welche Umsetzung einer Technik gewählt ist (Instanzen und Eingänge aller Umgebungen) — „gewählt in …“ im Katalog-Modal.
+app.MapGet("/api/werkbank/technikwahl", () => Results.Content(instanzen.TechnikWahl().ToJsonString(), "application/json"));
 app.MapGet("/api/werkbank/struktur", () => Results.Content(Werkbank.Server.Instanzen.Struktur().ToJsonString(), "application/json"));
 app.MapPost("/api/werkbank/aktiv/{name}", (string name) => { werkbank.Aktiv = name; return Results.Json(werkbank.Zustand(), werkbankJson); });
 app.MapPost("/api/werkbank/kreislauf", async (bool? zuruecksetzen, CancellationToken ct) =>
@@ -268,7 +291,7 @@ app.MapPost("/api/werkbank/uhr", async (string versatz) =>
     }
     catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }); }
 });
-// ── DURCHSPIELEN (CLAUDE.md W6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Datei in den Pfad der Quelle legen,
+// ── DURCHSPIELEN (CLAUDE.md W6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Datei in den Pfad eines Eingangs legen,
 //   Uhr vorstellen, externe Worker starten (die Clients, die auf Fakten reagieren). Die Formulare kommen aus dem gelesenen Code.
 var durchspielen = new Werkbank.Server.Durchspielen(werkbank);
 var worker = new Werkbank.Server.Worker(slnRoot);
@@ -286,12 +309,15 @@ app.MapMethods("/api/werkbank/eingang/{**pfad}", ["GET", "POST"], async (HttpCon
     var (status, antwort) = await durchspielen.EingangAsync(ctx.Request.Method, pfad, ctx.Request.Headers["akteur-token"].FirstOrDefault(), inhalt, ct);
     return Results.Content(antwort, "application/json", System.Text.Encoding.UTF8, status);
 });
-app.MapGet("/api/werkbank/quelle/{quelle}", (string quelle) => Results.Json(new { quelle, umgebung = werkbank.Aktiv, pfad = durchspielen.QuellPfad(quelle) }));
-app.MapPost("/api/werkbank/quelle/{quelle}/datei", async (HttpContext ctx, string quelle, string name, CancellationToken ct) =>
+// Ein Eingang eines Clients aus einer Quelle (Clients:<Client>:Eingaenge:<eingang>): der Pfad seines Dateiwächters, eine Datei hineinlegen.
+//   (Eigener Präfix „eingaenge“ — unter „eingang/“ liegt der JSON-Eingang des Hosts.)
+app.MapGet("/api/werkbank/eingaenge/{client}/{eingang}", (string client, string eingang) =>
+    Results.Json(new { client, eingang, umgebung = werkbank.Aktiv, pfad = durchspielen.EingangsPfad(client, eingang) }));
+app.MapPost("/api/werkbank/eingaenge/{client}/{eingang}/datei", async (HttpContext ctx, string client, string eingang, string name, CancellationToken ct) =>
 {
     // Bilder dürfen groß sein (TIFF) — die Grenze von Kestrel (30 MB) gilt hier nicht.
     if (ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } grenze) grenze.MaxRequestBodySize = null;
-    try { return Results.Json(await durchspielen.LegeAbAsync(quelle, name, ctx.Request.Body, ct)); }
+    try { return Results.Json(await durchspielen.LegeAbAsync(client, eingang, name, ctx.Request.Body, ct)); }
     catch (Exception e) when (e is not OperationCanceledException) { return Results.Json(new { ok = false, fehler = e.Message }); }
 });
 app.MapPost("/api/werkbank/uhr/vor", async (string um) =>

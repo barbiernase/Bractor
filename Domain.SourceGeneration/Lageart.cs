@@ -38,7 +38,7 @@ internal sealed class Lageart
                     foreach (var a in f.Antworten) _aggregatAntworten.Add(Name(a));
                 }
             // Konfig-Records: was der Konstruktor einer Funktion oder einer Technik-Umsetzung als Konfig bindet (Ctorbindung, CQRS090).
-            if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (Hat(t, "IFunktion") || technik.IstUmsetzung(t)))
+            if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (Hat(t, "IFunktion") || Hat(t, "IQuellart") || technik.IstUmsetzung(t)))
                 foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? Enumerable.Empty<IParameterSymbol>())
                     if (Infrastructure.SourceGeneration.Ctorbindung.ArtVon(p.Type) == Infrastructure.SourceGeneration.Ctorbindung.Art.Konfig
                         && p.Type is INamedTypeSymbol k) _konfigs.Add(Name(k));
@@ -64,7 +64,10 @@ internal sealed class Lageart
             return Projektstruktur.Primitive.Hilfscode;
         }
         if (Hat(t, "IState")) return Projektstruktur.Primitive.Aggregat;
-        if (Infrastructure.SourceGeneration.Uebersetzungsform.Ist(t)) return Projektstruktur.Primitive.Uebersetzung;
+        if (Infrastructure.SourceGeneration.Uebersetzungsform.Marker(t) is { } u)
+            return Infrastructure.SourceGeneration.Funktionsform.IstMeldung(u.TypeArguments[0]) ? Projektstruktur.Primitive.Verwirklichung
+                : Projektstruktur.Primitive.Uebersetzung;
+        if (Hat(t, "IMeldung")) return Projektstruktur.Primitive.Meldung;
         if (Hat(t, "IAggregatCommand")) return Projektstruktur.Primitive.Command;
         // Ein Command ohne Ziel geht an einen Knoten bzw. den Kopf eines Graphen (ein Decide gibt keinen aus, CQRS114): er liegt bei den Abläufen.
         if (Hat(t, "ICommand")) return Projektstruktur.Primitive.KnotenCommand;
@@ -77,6 +80,7 @@ internal sealed class Lageart
         if (Hat(t, "IQueryResponse")) return _aggregatAntworten.Contains(Name(t)) ? Projektstruktur.Primitive.AggregatAntwort : Projektstruktur.Primitive.Antwort;
         if (Hat(t, "IProjektion")) return Projektstruktur.Primitive.Projektion;
         if (Hat(t, "IReader")) return Projektstruktur.Primitive.Reader;
+        if (Hat(t, "IQuellart")) return Projektstruktur.Primitive.Quellart;
         if (Hat(t, "IFunktion")) return Projektstruktur.Primitive.Funktion;
         if (Hat(t, "IAkteur")) return Projektstruktur.Primitive.Akteur;
         if (Hat(t, "IClient")) return Projektstruktur.Primitive.Client;

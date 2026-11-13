@@ -5,7 +5,7 @@ namespace Werkbank.Server;
 
 /// <summary>
 /// Durchspielen (CLAUDE.md W6, Werkbank P5): nur echte Eingänge — die Werkbank ist Client des laufenden Hosts (JSON-Eingang
-/// hinter dem Akteur-Tor), legt Dateien dorthin, wo der echte Treiber sie findet, und stellt die Uhr der
+/// hinter dem Akteur-Tor), legt Dateien dorthin, wo der Dateiwächter eines Eingangs sie findet, und stellt die Uhr der
 /// Sim-DB vor. Was der Editor dafür braucht (Formular-Schema eines Records, Tokens, Sandbox-Pfad), kommt fertig von hier (Frontend-Bauregel).
 /// </summary>
 public sealed partial class Durchspielen(WerkbankServer werkbank)
@@ -52,19 +52,20 @@ public sealed partial class Durchspielen(WerkbankServer werkbank)
         tokens = werkbank.Umgebungen.Tokens(werkbank.Aktiv).Select(t => new { token = t.Key, akteure = t.Value }).ToList(),
     };
 
-    // ── Datei-Drop auf die Quellkarte ──
+    // ── Datei in den Pfad eines Eingangs legen (ein Dateiwächter eines Clients) ──
 
-    /// <summary>Der Pfad, den der Dateiwächter der Instanz <paramref name="quelle"/> in der gewählten Umgebung beobachtet.</summary>
-    public string? QuellPfad(string quelle)
-        => werkbank.Umgebungen.QuellPfade(werkbank.Aktiv).GetValueOrDefault(quelle);
+    /// <summary>Der Pfad, den der Dateiwächter des Eingangs <paramref name="eingang"/> des Clients <paramref name="client"/> in der gewählten Umgebung beobachtet.</summary>
+    public string? EingangsPfad(string client, string eingang)
+        => werkbank.Umgebungen.EingangsPfade(werkbank.Aktiv).GetValueOrDefault(Umgebungen.EingangsSchluessel(client, eingang));
 
     /// <summary>
-    /// Legt eine Datei in den Pfad der Quelle — fertig geschrieben (erst daneben, dann umbenannt), damit der Treiber nie eine halbe sieht.
-    /// Gemeldet wird sie vom ECHTEN Treiber, nicht von hier.
+    /// Legt eine Datei in den Pfad des Eingangs — fertig geschrieben (erst daneben, dann umbenannt), damit der Dateiwächter nie eine halbe sieht.
+    /// Gemeldet wird sie vom ECHTEN Dateiwächter im Host, nicht von hier.
     /// </summary>
-    public async Task<object> LegeAbAsync(string quelle, string dateiname, Stream inhalt, CancellationToken ct)
+    public async Task<object> LegeAbAsync(string client, string eingang, string dateiname, Stream inhalt, CancellationToken ct)
     {
-        var pfad = QuellPfad(quelle) ?? throw new InvalidOperationException($"Umgebung {werkbank.Aktiv}: die Instanz {quelle} hat keinen Dateiwächter mit Pfad.");
+        var pfad = EingangsPfad(client, eingang) ?? throw new InvalidOperationException(
+            $"Umgebung {werkbank.Aktiv}: der Client {client} hat keinen Eingang {eingang} mit {Umgebungen.DateiQuellart} und Pfad.");
         var name = Path.GetFileName(dateiname);
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Dateiname fehlt.");
         Directory.CreateDirectory(pfad);
@@ -75,8 +76,9 @@ public sealed partial class Durchspielen(WerkbankServer werkbank)
         var ziel = Path.Combine(pfad, name);
         File.Move(zwischen, ziel, overwrite: true);
         var groesse = new FileInfo(ziel).Length;
-        werkbank.Fortschritt.Melde("datei", new { quelle, ziel, groesse });
-        return new { ok = true, quelle, ziel, groesse, hostLaeuft = werkbank.Host.Laeuft };
+        var schluessel = Umgebungen.EingangsSchluessel(client, eingang);
+        werkbank.Fortschritt.Melde("datei", new { eingang = schluessel, ziel, groesse });
+        return new { ok = true, eingang = schluessel, ziel, groesse, hostLaeuft = werkbank.Host.Laeuft };
     }
 
     // ── ⏩ Uhr vorstellen ──

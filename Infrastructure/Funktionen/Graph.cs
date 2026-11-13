@@ -7,7 +7,7 @@ namespace Infrastructure.Funktionen;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // GRAPHEN UND INSTANZEN (docs/04 §4.4): ein Graph ist eine Blaupause (generiert aus dem Record, GeneratedGraphen) — Knoten, ihre Wegtabelle aus
 // den [Von], Köpfe. Er läuft erst als INSTANZ: eine Datei je Instanz in der Umgebung (umgebungen/<name>/graphen/<instanz>.json) mit dem Graphen, bei einem
-// Quellkopf dem Akteur und je Knoten seinen Werten. Dieselbe Blaupause läuft beliebig oft; ein Graph mit Command-Kopf je Umgebung genau einmal.
+// Strängen und je Knoten seinen Werten. Je Umgebung läuft ein Graph genau einmal; eine Quelle ist kein Knoten, sie läuft als Eingang eines Clients.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>
@@ -60,17 +60,14 @@ public sealed class Uebersetzungen(IReadOnlyList<UebersetzungPlan> alle)
 /// Ein Graph (generiert, <c>GeneratedGraphen</c>): Knoten mit ihrer Wegtabelle, Köpfe (Eingangstyp → Knoten, die ihn von außen nehmen) und was ihn
 /// verlässt. Zur Laufzeit wird nur nachgeschlagen: wohin geht eine Ausgabe dieses Typs von diesem Knoten? Ein Graph kennt keine Übersetzung.
 /// </summary>
-/// <param name="Quelle">Der Quellknoten (eine Funktion, die lauscht): er ist der Kopf, jedes seiner Elemente startet eine Kette; null = keiner.</param>
 public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> Knoten, IReadOnlyDictionary<Type, string[]> Koepfe,
-    IReadOnlyList<Type> Ausgaenge, string? Quelle = null)
+    IReadOnlyList<Type> Ausgaenge)
 {
     private IReadOnlyDictionary<(string, int, Type), WegPlan[]>? _wege;
     private IReadOnlyDictionary<string, IReadOnlySet<Type>>? _imGraphen;
 
     public KnotenPlan? KnotenNamens(string name) => Knoten.FirstOrDefault(k => k.Name == name);
 
-    /// <summary>Hat der Graph einen Command-Kopf (einen Command ohne Ziel als Eingang)? Dann läuft er je Umgebung genau einmal.</summary>
-    public bool MitCommandKopf => Koepfe.Keys.Any(t => typeof(ICommand).IsAssignableFrom(t));
 
     /// <summary>
     /// Die Wege einer Ausgabe <paramref name="typ"/> der Operation <paramref name="auf"/> von <paramref name="knoten"/> an die Parents anderer Knoten
@@ -87,10 +84,10 @@ public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> 
 }
 
 /// <summary>
-/// Eine Instanz: Name (Datei), Graph, der Akteur ihrer Quellköpfe (null: er folgt dem Auslöser), je Knoten seine Konfig, der Rechner, auf dem sie
+/// Eine Instanz: Name (Datei), Graph, je Knoten seine Konfig, der Rechner, auf dem sie
 /// läuft (null: auf jedem Host), und ihre Stränge (0: der Standard).
 /// </summary>
-public sealed record GraphInstanz(string Name, GraphPlan Graph, string? Akteur, IReadOnlyDictionary<string, KnotenKonfig> Knoten, string? Rechner = null,
+public sealed record GraphInstanz(string Name, GraphPlan Graph, IReadOnlyDictionary<string, KnotenKonfig> Knoten, string? Rechner = null,
     int Straenge = 0)
 {
     /// <summary>Die Konfig eines Knotens (ohne Eintrag: die Standards).</summary>
@@ -103,15 +100,14 @@ public sealed record GraphInstanz(string Name, GraphPlan Graph, string? Akteur, 
     public IReadOnlyList<string> KopfFuer(Type typ) => Graph.Koepfe.TryGetValue(typ, out var k) ? k : Array.Empty<string>();
 
     /// <summary>
-    /// So viele Ketten rechnet die Instanz auf diesem Cluster-Knoten zugleich — ihre Stränge, für jeden Kopf und ihre Quelle gleich (erreicht → „später“
-    /// bzw. die Quelle wartet).
+    /// So viele Ketten rechnet die Instanz auf diesem Cluster-Knoten zugleich — ihre Stränge, für jeden Kopf gleich (erreicht → „später“).
     /// </summary>
     public int Gleichzeitig => Straenge > 0 ? Straenge : GraphInstanzKonfig.StandardStraenge;
 }
 
 /// <summary>
 /// Die Instanzen dieses Hosts, beim Start gegen die Graphen geprüft (<see cref="Aus"/>): der Graph existiert, jeder Knoten-Schlüssel ist ein Knoten,
-/// der Akteur existiert und darf, was den Graphen verlässt, und ein Graph mit Command-Kopf läuft nur einmal.
+/// und ein Graph läuft je Umgebung nur einmal.
 /// </summary>
 public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmgebung = false)
 {
@@ -130,22 +126,18 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmg
 
     /// <summary>
     /// Je Graph eine Instanz unter seinem Namen — für Prüfstände ohne Umgebung (Tests); jeder Knoten mit den Standards bzw. der Konfig, die
-    /// <paramref name="jeFunktion"/> für seine Funktion nennt. Ein Graph mit Quelle läuft nur, wenn sie für seine Quelle eine Konfig nennt (eine Quelle
-    /// braucht ihre Werte — welches Verzeichnis, welcher Takt).
+    /// <paramref name="jeFunktion"/> für seine Funktion nennt.
     /// </summary>
     public static GraphInstanzen JeGraphEine(IReadOnlyList<GraphPlan> graphen, IReadOnlyDictionary<string, KnotenKonfig>? jeFunktion = null) =>
-        new(graphen.Where(g => g.Quelle is not { } q || jeFunktion?.ContainsKey(g.KnotenNamens(q)!.Funktion) == true)
-            .Select(g => new GraphInstanz(g.Name, g, null, g.Knoten
+        new(graphen
+            .Select(g => new GraphInstanz(g.Name, g, g.Knoten
                 .Where(k => jeFunktion?.ContainsKey(k.Funktion) == true)
                 .ToDictionary(k => k.Name, k => jeFunktion![k.Funktion]))).ToList());
 
     /// <summary>
-    /// Die Instanzen aus der Umgebung, geprüft; ein Fehler ist ein Boot-Fehler mit der Datei als Karte. Mit <paramref name="akteure"/> wird der Akteur
-    /// einer Instanz geprüft: er darf, was sie verlässt — nach der Übersetzung (<paramref name="uebersetzungen"/>): die Commands an Aggregate, die aus
-    /// ihren Ausgängen werden.
+    /// Die Instanzen aus der Umgebung, geprüft; ein Fehler ist ein Boot-Fehler mit der Datei als Karte.
     /// </summary>
-    public static GraphInstanzen Aus(IReadOnlyDictionary<string, GraphInstanzKonfig> konfig, IReadOnlyList<GraphPlan> graphen,
-        IReadOnlyDictionary<string, Infrastructure.Akteure.AkteurRechte>? akteure = null, Uebersetzungen? uebersetzungen = null)
+    public static GraphInstanzen Aus(IReadOnlyDictionary<string, GraphInstanzKonfig> konfig, IReadOnlyList<GraphPlan> graphen)
     {
         var alle = new List<GraphInstanz>();
         foreach (var (name, k) in konfig.OrderBy(x => x.Key, StringComparer.Ordinal))
@@ -156,23 +148,14 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmg
                     Karte());
             foreach (var fremd in k.Knoten.Keys.Where(n => g.KnotenNamens(n) is null))
                 throw new BootFehler($"Instanz {name}: '{fremd}' ist kein Knoten von {g.Name} (Knoten: {string.Join(", ", g.Knoten.Select(x => x.Name))}).", Karte());
-            if (k.Akteur is { Length: > 0 } akteur && akteure is not null)
-            {
-                if (!akteure.TryGetValue(akteur, out var rechte))
-                    throw new BootFehler($"Instanz {name}: Akteur '{akteur}' gibt es nicht.", Karte());
-                var verlassen = g.Ausgaenge.SelectMany(t => (uebersetzungen ?? Uebersetzungen.Leer).Fuer(t) is { Length: > 0 } u ? u.Select(x => x.Aus) : [t]);
-                foreach (var aus in verlassen.Distinct().Where(t => typeof(IAggregatCommand).IsAssignableFrom(t) && !rechte.Commands.Contains(t)))
-                    throw new BootFehler($"Instanz {name}: der Akteur {akteur} darf {aus.Name} nicht (kein IDarf<{aus.Name}>) — was den Graphen verlässt, gibt "
-                        + "er hinein.", Karte());
-            }
             if (k.Rechner is { } r && (r.Length == 0 || r.Trim() != r || r.Any(c => c is ',' or '*' or '?' || char.IsWhiteSpace(c))))
                 throw new BootFehler($"Instanz {name}: Rechner '{r}' ist kein Name — ein Rechner ist genau ein Name (kein Muster, keine Liste).", Karte());
             if (k.Straenge < 0)
                 throw new BootFehler($"Instanz {name}: Straenge {k.Straenge} — eine Zahl ab 0 (0 = Standard).", Karte());
-            alle.Add(new GraphInstanz(name, g, string.IsNullOrEmpty(k.Akteur) ? null : k.Akteur, k.Knoten, k.Rechner, k.Straenge));
+            alle.Add(new GraphInstanz(name, g, k.Knoten, k.Rechner, k.Straenge));
         }
-        foreach (var doppelt in alle.Where(i => i.Graph.MitCommandKopf).GroupBy(i => i.Graph.Name).Where(x => x.Count() > 1))
-            throw new BootFehler($"Der Graph {doppelt.Key} hat einen Command-Kopf und läuft je Umgebung genau einmal — Instanzen: "
+        foreach (var doppelt in alle.GroupBy(i => i.Graph.Name).Where(x => x.Count() > 1))
+            throw new BootFehler($"Der Graph {doppelt.Key} läuft je Umgebung genau einmal — Instanzen: "
                 + string.Join(", ", doppelt.Select(i => i.Name)) + " (ein Command hat genau einen Empfänger).", "instanz:" + doppelt.Last().Name);
         return new GraphInstanzen(alle, ausUmgebung: true);
     }

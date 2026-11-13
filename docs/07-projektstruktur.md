@@ -23,7 +23,7 @@
 | `Domain` | die Domäne, **rein** (kennt keinen Katalog): Aggregate (State, Decider, Applier), Commands an Aggregate, Commands ohne Ziel eines Clients (an eine Kopf-Übersetzung), Events, Hinweise eines Decide, Wertobjekte, Enums; Queries an ein Aggregat und ihre Antworten (`Frage` im Decider — er sieht die Leseseite nicht) | Abstractions, Core |
 | `Domain.Projections` | ReadModels, Queries an Reader, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reader — ebenfalls ohne Katalog | Domain |
 | `Domain.Uebersetzungen` | die **Übersetzungen** (`class …(TSource source) : ITranslate<TSource, TTarget>`): die eine Naht zwischen Katalogen und Domäne | Domain, die Kataloge, die die Anwendung nutzt |
-| `Domain.Akteure` | Akteure, Clients | Domain, Domain.Projections, Domain.Uebersetzungen |
+| `Domain.Akteure` | Akteure, Clients und die Übersetzungen der Akteur-Seite (eine Meldung einer Quellart ↦ eine Nachricht, die ein Akteur darf) | Domain, Domain.Projections, Domain.Uebersetzungen |
 | `Domain.Infrastructure` | Store-Implementierungen — auch die einer Lese-Fähigkeit, die ein Katalog deklariert (CQRS124) | Domain, Domain.Projections, Kataloge |
 | `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Uebersetzungen |
 | `Domain.Laufzeit` | die Komposition: alle Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs` der Hosts, die STJ-Kontexte — nichts Handgeschriebenes | alle Rollen-Projekte + Infrastructure |
@@ -75,13 +75,14 @@ hören (`IHoert`); ein Client nennt nur Akteure.
 | `Domain.Projections/<Bereich>/` | `ReadModels.cs`, `Queries.cs`, `Responses.cs` | Read-Models, Queries, Antworten |
 | | `I<Store>.cs` | Store-Bündel mit seinen Fähigkeiten |
 | | `<Projektion>.cs`, `<Reader>.cs` | je Klasse eine Datei |
-| `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure (`record … : IAkteur`); Clients (`record … : IClient`) |
+| `Domain.Akteure/` | `Akteure.cs`, `Clients.cs`, `Uebersetzungen.cs` | Akteure (`record … : IAkteur`); Clients (`record … : IClient`); Übersetzungen der Akteur-Seite (Primitive `Verwirklichung`, `ITranslate<TMeldung, TZiel>`) |
 | `Domain.Uebersetzungen/<Bereich>/` | `Uebersetzungen.cs` | Übersetzungen (Primitive `Uebersetzung`, `class {Quelle}_{Ziel}_{n}(TSource source) : ITranslate<TSource, TTarget>`) |
 | `Domain.Infrastructure/<Bereich>/` | `<Store>.cs`, `<Store>.Lesen.cs` | Store-Implementierung (Schreib- und Leseteil) |
 | `<Name>.Katalog/` | `<Funktion>.cs` | je Funktion eine Datei (Primitive `Funktion`, eine Klasse mit Rumpf) |
 | | `<Technik>.cs` | je Technik (Schnittstelle oder Klasse im Konstruktor einer Funktion) und je Umsetzung eine Datei (Primitive `Technik`) |
 | | `I<Fähigkeit>.cs` | Lese-Fähigkeiten, die seine Funktionen nehmen (umgesetzt im Speicher der Anwendung) |
-| | `Commands.cs`, `Events.cs` | Commands ohne Ziel (Primitive `KnotenCommand`); Hinweise (Primitive `Hinweis`) |
+| | `Commands.cs`, `Events.cs`, `Meldungen.cs` | Commands ohne Ziel (Primitive `KnotenCommand`); Hinweise (Primitive `Hinweis`); Meldungen einer Quellart (Primitive `Meldung`, `IMeldung`) |
+| | `<Quellart>.cs` | je Quellart (`IQuellart`, `Lausche`) eine Datei (Primitive `Quellart`) |
 | | `Graphen.cs`, `Konfigs.cs`, `ValueObjects.cs`, `Enums.cs` | Graphen (Primitive `Graph`, `record … : IGraph`), Konfig-Records, Wertobjekte, Enums |
 
 Typnamen sind frei; Klassen tragen ihren Namen als Dateinamen, Sammeldateien (`Commands.cs` …) bündeln Records einer Art — im Katalog je Art eine
@@ -102,7 +103,8 @@ Editor als Code-Karte.
 | `--sonde` | die fremde Sonden-Domäne liegt absichtlich in einem Projekt (ihr Katalog, ihre Übersetzungen, Akteure mit Katalog-Nachrichten und Stores in ihren eigenen): die Lage-Prüfung muss jeden falsch liegenden Typ ins Projekt seiner Rolle weisen (`soll.txt`, `lage …`) | `GraphExtractor.Kern/Sonde.cs` |
 
 WAS ein Typ ist (die Primitive), bestimmt `Domain.SourceGeneration/Lageart.cs` nur aus Markern und Signaturen: ein Command ohne Ziel ist immer
-ein `KnotenCommand` und liegt im Katalog oder in der Domäne (ein Decide gibt keinen aus, CQRS114); eine Klasse mit `IFunktion` ist eine Funktion,
+ein `KnotenCommand` und liegt im Katalog oder in der Domäne (ein Decide gibt keinen aus, CQRS114); eine Klasse mit `IFunktion` ist eine Funktion, eine mit
+`IQuellart` eine Quellart, ein Record mit `IMeldung` eine Meldung, eine Übersetzung mit einer Meldung als Quelle eine `Verwirklichung` (bei den Akteuren),
 ein Record mit `IGraph` ein Graph, eine Klasse mit `ITranslate<,>` eine Übersetzung; Technik und Konfig-Records folgen aus den Konstruktoren der Funktionen und ihrer Umsetzungen (gelesen über
 `Infrastructure.SourceGeneration/Funktionsform.cs`, dieselbe Lesart wie Generator und Extractor), Fähigkeiten aus dem Bündel — dieselbe Lesart für
 Analyzer und `--check`.

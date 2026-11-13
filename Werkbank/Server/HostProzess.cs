@@ -4,7 +4,10 @@ using System.Text.Json;
 
 namespace Werkbank.Server;
 
-/// <summary>Ein Boot-Fehler des Hosts, möglichst an einer Karte (<c>funktion:X</c>, <c>quelle:X</c>, <c>host:Abschnitt</c>).</summary>
+/// <summary>
+/// Ein Boot-Fehler des Hosts, möglichst an einer Karte (<c>funktion:X</c>, <c>eingang:Client/Eingang</c> — der Editor zeigt ihn am Client —,
+/// <c>host:Abschnitt</c>).
+/// </summary>
 public sealed record BootMeldung(string Text, string? Karte);
 
 /// <summary>

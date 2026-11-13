@@ -72,7 +72,7 @@ public sealed class TechnikAnalyzer : DiagnosticAnalyzer
             : null;
         // Eine Funktion als Klasse ist ihre eigene Umsetzung; eine Technik-Umsetzung nimmt geschachtelt selbst Technik.
         var istImpl = t.TypeKind == TypeKind.Class && !t.IsAbstract
-            && (Funktionsform.IstFunktion(t) || technik.IstUmsetzung(t) || technikVon != null);
+            && (Funktionsform.IstFunktion(t) || Funktionsform.IstQuellart(t) || technik.IstUmsetzung(t) || technikVon != null);
 
         // CQRS092: eine Umsetzung, die die generierte Bindung nicht bauen kann. Eine generische Funktion ist eine Blaupause: gebaut wird sie je
         //   Typargument eines Knotens (Entscheidung 4) — sie muss nur öffentlich sein.

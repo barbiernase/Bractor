@@ -53,6 +53,7 @@ from . import (
     LabelBildRegionDto,
     LabelEinzelBildDto,
     LabelPhysischesProduktDto,
+    LiesBildDto,
     MarkiereAlsInspiziertDto,
     MeldeFortschrittDto,
     MeldeTeilFertigDto,
@@ -281,6 +282,17 @@ class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
         ...
 
 
+class LinienrechnerBasis(ClientVertragBasis[S]):
+    """Client Domain.Akteure.Linienrechner — verkörpert KameraSystem."""
+
+    CLIENT: ClassVar[str] = "Linienrechner"
+    AKTEURE: ClassVar[tuple] = ("KameraSystem",)
+    VERTRAG_HASH: ClassVar[str] = "60c6a9e05a08791a"
+    HOERT: ClassVar[dict] = {}
+    SPONTAN: ClassVar[tuple] = (LiesBildDto,)   # IDarf der Akteure: Commands und Hinweise
+    FRAGT: ClassVar[tuple] = ()   # IDarf der Akteure: ihre Queries
+
+
 class ReaktionsWorkerBasis(ClientVertragBasis[S]):
     """Client Domain.Akteure.ReaktionsWorker — verkörpert Datensatzpfleger, Teilmelder."""
 
@@ -332,6 +344,7 @@ class TrainingsWorkerBasis(ClientVertragBasis[S]):
 __all__ = [
     "ArbeitsplatzBasis",
     "KlassifikationsWorkerBasis",
+    "LinienrechnerBasis",
     "ReaktionsWorkerBasis",
     "TrainingsWorkerBasis",
 ]

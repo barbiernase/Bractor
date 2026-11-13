@@ -29,3 +29,9 @@ public sealed record ReaktionsWorker : IClient, IVerkoerpert<Datensatzpfleger>, 
 /// muss einer von ihnen hören.
 /// </summary>
 public sealed record Arbeitsplatz : IClient, IVerkoerpert<Inspekteur>, IVerkoerpert<Produktpruefer>, IVerkoerpert<KIOperator>, IVerkoerpert<Modellfreigeber>;
+
+/// <summary>
+/// Der Rechner an der Linie: er verkörpert das Kamerasystem und hat keine Leitung — seine Eingänge sind Dateiwächter auf den Verzeichnissen der Kameras
+/// (in der Umgebung: Clients:Linienrechner:Eingaenge, je Verzeichnis einer).
+/// </summary>
+public sealed record Linienrechner : IClient, IVerkoerpert<KameraSystem>;

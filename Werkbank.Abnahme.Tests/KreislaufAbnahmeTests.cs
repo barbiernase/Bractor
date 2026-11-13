@@ -10,10 +10,10 @@ namespace Werkbank.Abnahme.Tests;
 /// <list type="number">
 /// <item>⟳: alle Schritte grün, Board-Stand = Lauf-Stand = Stand, den der Host an die Spur stempelt;</item>
 /// <item>als Akteur über den JSON-Eingang ein Command, die Projektion antwortet auf die Query; Vorgang und Spur über die Spur-API;</item>
-/// <item>die Fläche in sechs Spalten und die Komposition stehen in der Sicht; Gesten der Fläche (ein Akteur darf) und der Komposition (eine
+/// <item>die Fläche in sieben Spalten und die Komposition stehen in der Sicht; Gesten der Fläche (ein Akteur darf) und der Komposition (eine
 ///   Kante verlierbar) landen im Code, in der Sicht und bauen — ↶ stellt beide Dateien byte-gleich wieder her;</item>
-/// <item>„▶ Worker“: ein Python-Client verkörpert den Klassifizierer; ein Bildpaar in der Quelle läuft durch den Linienimport bis zu seiner Beurteilung; die Spur
-///   nennt den Knoten, der NimmBildAuf gab, und der Graph steht als Karte im Board;</item>
+/// <item>„▶ Worker“: ein Python-Client verkörpert den Klassifizierer; ein Bildpaar im Verzeichnis eines Eingangs des Linienrechners läuft durch die
+///   Bildaufbereitung bis zu seiner Beurteilung; die Spur nennt die Übersetzung, die NimmBildAuf gab, und der Graph steht als Karte im Board;</item>
 /// <item>Formular und Tokens aus Board bzw. Umgebung; Umgebungs-Werte und 🤖-Übernahmen sind Gesten mit ↶ (docs/13 W11-1, WB-1);</item>
 /// <item>Geste (Feld mit Standardwert an einem Event) → ⟳ grün (verträglich, der Host siegelt das neue Proto) → ↶ (Code byte-gleich) →
 ///   ⟳ „Daten prüfen“ meldet das entfernte Feld → ⟳ mit Zurücksetzen startet wieder.</item>
@@ -89,15 +89,23 @@ public class KreislaufAbnahmeTests
         (schritt["karten"] as JsonArray).Should().NotBeEmpty("der Schritt liegt auf Karten des Boards");
 
         var board = JsonNode.Parse(await w.Http.GetStringAsync("/api/editor/model"))!.AsObject();
-        // ── 2b. Die Fläche in sechs Spalten und die Komposition (docs/10 §10.9): Karten, Ports, Kanten aus dem Code ──
+        // ── 2b. Die Fläche in sieben Spalten und die Komposition (docs/10 §10.9): Karten, Ports, Kanten aus dem Code, die Eingänge der Clients aus der Umgebung ──
         var flaeche = board["sicht"]!["flaeche"]!.AsObject();
         var flKarten = flaeche["karten"]!.AsArray().OfType<JsonObject>().ToList();
         string Spalte(string id) => (string)flKarten.Single(k => (string?)k["id"] == id)["spalte"]!;
-        Spalte("gr:graph:Linienimport").Should().Be("graphen");
+        Spalte("gr:graph:Bildaufbereitung").Should().Be("graphen");
         Spalte("agg:ImagePair").Should().Be("aggregate");
         Spalte("akt:akteur:Klassifizierer|aus").Should().Be("ausgang");
         Spalte("akt:akteur:Klassifizierer|ein").Should().Be("eingang");
-        flKarten.Should().Contain(k => (string?)k["spalte"] == "quellen" && (string?)k["name"] == "Dateiwaechter", "die Quelle des Linienimports");
+        flKarten.Should().NotContain(k => (string?)k["spalte"] == "quellen", "ein Graph kennt keine Quelle — der Dateiwächter ist ein Eingang des Linienrechners");
+        Spalte("cl:client:Linienrechner").Should().Be("clients");
+        // Der Eingang linie1 des Linienrechners (sim-main) gibt über seine Verwirklichung LiesBild an das KameraSystem — eine Kante, ohne Befund.
+        var sim = flaeche["eingaenge"]!["sim-main"]!.AsObject();
+        var linie1 = sim["karten"]!["cl:client:Linienrechner"]!["eingaenge"]!.AsArray().OfType<JsonObject>().Single(e => (string?)e["name"] == "linie1");
+        ((string?)linie1["art"]).Should().Be("Dateiwaechter");
+        linie1["befunde"]!.AsArray().Should().BeEmpty();
+        sim["kanten"]!.AsArray().OfType<JsonObject>().Should().Contain(k => (string?)k["eingang"] == "linie1"
+            && (string?)k["nach"] == "akt:akteur:KameraSystem|aus" && (string?)k["typ"] == "LiesBild");
         FlaechenKanten(board).Should().Contain(["agg:ImagePair -ImagePairKomplett/kenntnis-> akt:akteur:Klassifizierer|ein"]);
         KompositionsKanten(board, "Bildaufbereitung").Should().Contain("Verkleinern -BildVerkleinert-> Kontrast");
 
@@ -123,7 +131,7 @@ public class KreislaufAbnahmeTests
         foreach (var d in gestenDateien.Distinct())
             (await File.ReadAllBytesAsync(Path.Combine(w.Kopie, d))).Should().Equal(vorGesten[d], $"{d}: ↶ stellt die Datei byte-gleich wieder her");
 
-        // ── 3. ▶ Worker: der Klassifikations-Worker (ein Python-Client) verkörpert den Klassifizierer; ein Bildpaar läuft durch den Linienimport ──
+        // ── 3. ▶ Worker: der Klassifikations-Worker (ein Python-Client) verkörpert den Klassifizierer; ein Bildpaar läuft durch die Bildaufbereitung ──
         var (_, worker) = await w.SendeAsync("/api/werkbank/worker/KlassifikationsWorker/start");
         ((bool?)worker["ok"]).Should().BeTrue(worker.ToJsonString());
         async Task<string> WorkerLog() => string.Join("\n", (JsonNode.Parse(await w.Http.GetStringAsync("/api/werkbank/worker/KlassifikationsWorker/log")) as JsonArray ?? [])
@@ -132,11 +140,16 @@ public class KreislaufAbnahmeTests
             "Der Python-Worker hat die Arbeit des Klassifizierers nicht angenommen.");
 
         var t = new DateTimeOffset(2026, 10, 15, 8, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
+        // Die Datei landet im Verzeichnis des Eingangs linie1 des Linienrechners (Clients:Linienrechner:Eingaenge:linie1, ein Dateiwächter) — gemeldet
+        //   vom echten Dateiwächter im Host, nicht von der Werkbank.
+        var eingang = await w.HoleAsync("/api/werkbank/eingaenge/Linienrechner/linie1");
+        ((string?)eingang["pfad"]).Should().NotBeNullOrEmpty("der Eingang linie1 hat einen Dateiwächter mit Pfad: " + eingang.ToJsonString());
         foreach (var version in new[] { "DC0", "DC2" })
         {
-            var (_, abgelegt) = await w.SendeAsync($"/api/werkbank/quelle/linienimport/datei?name={t:yyyy_MM_dd_HH_mm_ss_fff}_{version}.tiff",
+            var (_, abgelegt) = await w.SendeAsync($"/api/werkbank/eingaenge/Linienrechner/linie1/datei?name={t:yyyy_MM_dd_HH_mm_ss_fff}_{version}.tiff",
                 new ByteArrayContent(Werkbanklauf.Tiff(96, 64)));
             ((bool?)abgelegt["ok"]).Should().BeTrue(abgelegt.ToJsonString());
+            ((string?)abgelegt["eingang"]).Should().Be("Linienrechner/linie1");
         }
 
         // Der Vorgang des Paars beginnt mit ImagePairErstellt (der Dateiwächter schreibt nicht ins Log); er endet mit der Beurteilung des Workers.
@@ -153,15 +166,16 @@ public class KreislaufAbnahmeTests
         (bild!["schritte"] as JsonArray)!.Select(s => (string?)s?["name"]).Should().Contain("BildVerfuegbar").And.Contain("ImagePairKomplett");
         (await WorkerLog()).Should().Contain("ImagePairKomplett", "auf genau dieses Fakt hat der Python-Worker reagiert");
 
-        // Der Weg durch den Graphen: NimmBildAuf gab die Übersetzung „Aufnehmen“ der Instanz linienimport — ein gegangener Draht von seinem Knoten aus.
+        // Der Weg durch den Graphen: NimmBildAuf gab die Übersetzung der Domäne aus BildGedeutet (dem Ausgang der Bildaufbereitung) — ein gegangener
+        //   Draht von ihrer Karte aus; die Kette begann am Element des Eingangs (es steht nicht im Log).
         (bild["schritte"] as JsonArray)!.SelectMany(s => s?["paare"] as JsonArray ?? []).Select(p => (string?)p?[0])
-            .Should().Contain("knoten:linienimport/Aufnehmen", "der Wirker eines Schritts ist sein Knoten");
+            .Should().Contain("uebersetzung:BildGedeutet_NimmBildAuf_1", "der Wirker eines Schritts ist seine Karte (W9)");
         board = JsonNode.Parse(await w.Http.GetStringAsync("/api/editor/model"))!.AsObject();
-        var linie = (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(g => (string?)g["name"] == "Linienimport");
-        linie["quelle"]!.GetValue<string>().Should().Be("Eingang", "der Graph steht als Karte im Board, mit seiner Quelle am Kopf");
-        linie["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(bool?)k["kopf"]}:{string.Join("+", k["von"]!.AsArray().Select(v => (string?)v))}")
-            .Should().Equal(["Eingang:False:", "Aufbereitung:False:Eingang"], "die Quelle trägt weder Kopf noch Von, sie speist die Aufbereitung über Von");
-        linie["koepfe"]!.AsArray().Should().BeEmpty("ein Graph mit Quelle hat sonst keinen Kopf");
+        var aufbereitet = (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(g => (string?)g["name"] == "Bildaufbereitung");
+        aufbereitet["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(bool?)k["kopf"]}:{string.Join("+", k["von"]!.AsArray().Select(v => (string?)v))}")
+            .Should().Equal(["Einlesen:True:", "Verkleinern:False:Einlesen", "Kontrast:False:Verkleinern", "Deuten:False:Kontrast"],
+                "der Graph steht als Karte im Board — ohne Quellknoten, sein Kopf nimmt LiesBild");
+        aufbereitet["koepfe"]!.AsArray().Select(k => (string?)k).Should().Equal(["LiesBild"], "was der Dateiwächter findet, gibt das Kamerasystem als LiesBild an den Kopf");
 
         // ── 4. Durchspielen liest das warme Board; Tokens wie im Host ──
         var formular = await w.HoleAsync("/api/werkbank/formular?typ=ErstelleDatensatz");
@@ -177,28 +191,25 @@ public class KreislaufAbnahmeTests
         umg["Umgebung"]!["Python"] = "python3";
         var (_, umgGeste) = await w.SendeAsync($"/api/werkbank/umgebung/{Werkbanklauf.Umgebung}", umg);
         ((bool?)umgGeste["ok"]).Should().BeTrue(umgGeste.ToJsonString());
-        (await File.ReadAllTextAsync(umgDatei)).Should().Contain("\"Slots\": 3");
+        (await File.ReadAllTextAsync(umgDatei)).Should().Contain("\"Python\": \"python3\"");
         ((bool?)(await w.HoleAsync("/api/werkbank/zustand"))["umgebungGeaendert"]).Should().BeTrue("der laufende Host kennt den neuen Wert erst nach ⟳");
         var (_, umgZurueck) = await w.SendeAsync("/api/werkbank/rueckgaengig");
         ((bool?)umgZurueck["ok"]).Should().BeTrue(umgZurueck.ToJsonString());
         (await File.ReadAllBytesAsync(umgDatei)).Should().Equal(umgVorher, "↶ nimmt auch Umgebungs-Werte zurück");
 
-        // ── 6. 🤖-Übernahme = Rumpf-Geste (derselbe Weg wie ✎): Methode und Fluss-Lambda, je mit ↶ ──
+        // ── 6. 🤖-Übernahme = Rumpf-Geste (derselbe Weg wie ✎): ein Decide und ein Auf einer Katalogfunktion, je mit ↶ ──
         var slots = JsonNode.Parse(await w.Http.GetStringAsync("/api/llm/slots"))!.AsArray().OfType<JsonObject>().ToList();
-        foreach (var (art, teil) in new[] { ("decide", "ErstelleDatensatz"), ("fluss", "Dateinamendeutung") })
+        foreach (var (art, teil) in new[] { ("decide", "ErstelleDatensatz"), ("funktion", "Dateinamendeutung") })
         {
             var id = (string)slots.First(x => (string?)x["art"] == art && ((string?)x["id"])!.Contains(teil, StringComparison.Ordinal))["id"]!;
             var aktuell = (await w.HoleAsync($"/api/llm/slot?id={Uri.EscapeDataString(id)}"))["aktuell"]!;
             var rumpf = (string)aktuell["body"]!;
             var datei = Path.Combine(w.Kopie, (string)aktuell["pfad"]!);
             var vorher = await File.ReadAllBytesAsync(datei);
-            // Ein Lambda bekommt einen anderen, gleichwertigen Text (sonst wäre der Patch leer); eine Methode die Prompt-Zeile.
-            var neu = art == "fluss" ? rumpf.Replace("=>", "=>  ") : rumpf;
-            var (_, ueb) = await w.SendeAsync("/api/llm/uebernehmen", new { id, rumpf = neu, auftrag = "Abnahme", basisHash = (string?)aktuell["hash"] });
+            // Eine Methode bekommt die Prompt-Zeile (so ist der Patch nie leer).
+            var (_, ueb) = await w.SendeAsync("/api/llm/uebernehmen", new { id, rumpf, auftrag = "Abnahme", basisHash = (string?)aktuell["hash"] });
             ((bool?)ueb["ok"]).Should().BeTrue($"{id}: {ueb.ToJsonString()}");
-            var text = await File.ReadAllTextAsync(datei);
-            if (art == "decide") text.Should().Contain("// 🤖 Prompt: Abnahme");
-            else text.Should().Contain(neu.Trim());
+            (await File.ReadAllTextAsync(datei)).Should().Contain("// 🤖 Prompt: Abnahme");
             var (_, llmZurueck) = await w.SendeAsync("/api/werkbank/rueckgaengig");
             ((string?)llmZurueck["titel"]).Should().Be($"↶ 🤖 {id}", "die Übernahme steht im Verlauf der Werkbank");
             (await File.ReadAllBytesAsync(datei)).Should().Equal(vorher, $"{id}: ↶ stellt die Datei byte-gleich wieder her");

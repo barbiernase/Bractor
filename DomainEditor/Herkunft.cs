@@ -27,11 +27,12 @@ public static class Herkunft
     {
         f.Name, f.Klasse,
         Eingaenge = f.Eingaenge.Select(e => new { e.Eingang, e.Hinweis, e.Herkunft, e.Strom, e.Asynchron, e.Ausgaben, e.Faehigkeiten }).ToList(),
-        f.Lauscht,
         Methoden = f.Methoden.Select(m => new { m.Name, m.Rueckgabe, m.Parameter }).ToList(),
         f.Konstruktor,
         Umsetzungen = f.Umsetzungen.Select(u => new { u.Name, u.Konstruktor }).ToList(),
     });
+    // Eine Quellart: was sie meldet und ihr Konstruktor — der Rumpf von Lausche gehört dem Code.
+    public static string Von(Quellart q) => Hash(new { q.Name, q.Meldet, q.Konstruktor });
     public static string Von(Faehigkeit f) => Hash(new { f.Name, f.Methode, f.Lesen, f.Rueckgabe, f.Parameter });
     public static string Von(Handle h) => Hash(new { h.Eingang, h.Ueber, h.Faehigkeiten, h.Ausgaenge, h.Rueckgabe });
     public static string Von(Konsument k) => Hash(new { k.MindestensEinmal, k.Basen });
@@ -49,6 +50,7 @@ public static class Herkunft
             Aggregate = m.Aggregate.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Decider = m.Decider.Select(d => d with { Herkunft = Von(d) }).ToList(),
             BausteinFunktionen = m.BausteinFunktionen.Select(f => f with { Herkunft = Von(f) }).ToList(),
+            Quellarten = m.Quellarten.Select(q => q with { Herkunft = Von(q) }).ToList(),
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
             Graphen = m.Graphen.Select(g => g with { Herkunft = Von(g) }).ToList(),
@@ -72,6 +74,7 @@ public static class Herkunft
         foreach (var a in m.Aggregate) Pruefe(a.Herkunft, Von(a), $"state {a.Namespace}.{a.Name}");
         foreach (var d in m.Decider) Pruefe(d.Herkunft, Von(d), $"decide {d.Aggregat}.{d.Command}");
         foreach (var f in m.BausteinFunktionen) Pruefe(f.Herkunft, Von(f), $"funktion {f.Namespace}.{f.Name}");
+        foreach (var q in m.Quellarten.Where(q => !q.Framework)) Pruefe(q.Herkunft, Von(q), $"quellart {q.Namespace}.{q.Name}");
         foreach (var a in m.Akteure) Pruefe(a.Herkunft, Von(a), $"akteur {a.Namespace}.{a.Name}");
         foreach (var c in m.Clients) Pruefe(c.Herkunft, Von(c), $"client {c.Namespace}.{c.Name}");
         var l = m.Lesen;

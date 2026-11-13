@@ -160,7 +160,7 @@ public sealed class Projektlage
     private static readonly string[] DomänenRollen =
     {
         Vertrag.IState, Vertrag.IDecider, Vertrag.IApplier, Vertrag.ICommand, Vertrag.IEvent, Vertrag.IQuery, Vertrag.IQueryResponse,
-        Vertrag.IReadModel, Vertrag.IWriteStore, Vertrag.IReadStore, Vertrag.IProjektion, Vertrag.IReader, Vertrag.IFunktion, Vertrag.IGraph, Vertrag.IUebersetzung,
+        Vertrag.IReadModel, Vertrag.IWriteStore, Vertrag.IReadStore, Vertrag.IProjektion, Vertrag.IReader, Vertrag.IFunktion, Vertrag.IQuellart, Vertrag.IMeldung, Vertrag.IGraph, Vertrag.IUebersetzung,
         Vertrag.IWertobjekt, Vertrag.IAkteur, Vertrag.IClient,
     };
 

@@ -27,6 +27,20 @@
         "/mnt/unlabeledgewebebilder/SNP/IO",
         "/home/wirksam/cqrs-data/preprocessed"
       ]
+    },
+    "Linienrechner": {
+      "Eingaenge": {
+        "linie1": {
+          "Art": "Dateiwaechter",
+          "Akteur": "KameraSystem",
+          "Rechner": "prod-1",
+          "Pfad": "/mnt/unlabeledgewebebilder/SNP/IO",
+          "Intervall": "00:00:01",
+          "Fertig": "Stabil",
+          "Fenster": "00:00:01",
+          "Kennung": "NameGroesse"
+        }
+      }
     }
   }
 }

@@ -3,7 +3,8 @@ using Abstractions;
 // SONDE — fremdes Szenario 2 (docs/12 §12.6): SENSOR-STROM MIT ALARM — die Domäne.
 //
 // Viele Messwerte, wenige Fakten: ein Sensor zählt Überschreitungen seines Grenzwerts hintereinander (Zähl-Aggregat) und löst nach N den
-// Alarm aus; ein Messwert im Rahmen ändert nichts. Die Domäne ist rein: die Messkette (eine EIGENE QUELLFUNKTION am Kopf, ein Graph im Graphen),
+// Alarm aus; ein Messwert im Rahmen ändert nichts. Die Domäne ist rein: die Messkette (ein Graph im Graphen; an ihren Kopf gibt das Sensornetz, das
+// eine EIGENE QUELLART des Katalogs verwirklicht — Akteure.Messnetz.cs.txt),
 // die Störungsöffnung und die Alarmierung sind Graphen des fremden Katalogs (Katalog.*.cs.txt, Teil Messung); die Übersetzungen (Uebersetzungen.Messnetz.cs.txt)
 // machen aus ihren Ergebnissen Commands an Sensor und Störungsfall und aus den Nachrichten der Schichtleitung ihre Köpfe. Ein Decide gibt nur Fakten
 // aus (Schritt 6): auf den Alarm öffnet die Schichtleitung die Störung desselben Sensors, auf die geöffnete Störung alarmiert sie die Bereitschaft.
@@ -107,11 +108,9 @@ public partial class Stoerungsfall : IState
     }
 }
 
-// Wer hineingibt: das Sensornetz (Akteur der Instanz der Messkette — es darf, was sie verlässt); die Schichtleitung richtet ein und quittiert;
-// sie REAGIERT auf Alarm und Störung mit den Köpfen der Störungsöffnung und der Alarmierung.
-public sealed record Sensornetz : IAkteur, IDarf<MeldeMesswert>;
+// Wer hineingibt: die Schichtleitung richtet ein und quittiert; sie REAGIERT auf Alarm und Störung mit den Köpfen der Störungsöffnung und der
+// Alarmierung. (Das Sensornetz gibt an den Kopf der Messkette, eine Nachricht des Katalogs — es steht bei den Akteuren, Akteure.Messnetz.cs.txt.)
 public sealed record Schichtleitung : IAkteur, IDarf<RichteSensorEin>, IDarf<QuittiereStoerung>,
     IHoert<AlarmAusgeloest>, IHoert<StoerungGeoeffnet>, IDarf<OeffneStoerungFuer>, IDarf<AlarmiereBereitschaft>;
 
-public sealed record SensorGateway : IClient, IVerkoerpert<Sensornetz>;
 public sealed record Leitstand : IClient, IVerkoerpert<Schichtleitung>;

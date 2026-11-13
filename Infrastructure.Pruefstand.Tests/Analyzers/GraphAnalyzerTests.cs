@@ -52,9 +52,10 @@ public class GraphAnalyzerTests
         public sealed class Kachle : IFunktion { public IEnumerable<Kachel> Auf(Bild b) => []; }
         public sealed class Pruefe : IFunktion { public Befund Auf(Kachel k) => default!; }
         public sealed class Melde : IFunktion { public Buche Auf(Klein k) => default!; }
-        public sealed class Waechter : IFunktion
+        public record Gefunden(string Kennung) : IMeldung;
+        public sealed class Waechter : IQuellart
         {
-            public async IAsyncEnumerable<Start> Lausche([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct)
+            public async IAsyncEnumerable<Gefunden> Lausche([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct)
             { await Task.CompletedTask; yield break; }
         }
         """;
@@ -113,18 +114,17 @@ public class GraphAnalyzerTests
     }
 
     [Fact]
-    public async Task Eine_Quelle_ist_der_Kopf_ihres_Graphen_und_einzige()
+    public async Task Eine_Quellart_ist_kein_Knoten_und_jeder_Graph_hat_einen_Kopf()
     {
+        // Was eine Quelle meldet, gibt ihr Akteur über eine Übersetzung an einen Kopf (docs/04 §4.7) — ein Graph kennt keine Quelle.
         (await Befunde("""
             public sealed record Vorschau([Kopf] Lies L, [Von(nameof(L))] Verkleinere V) : IGraph;
             public sealed record Linie(Waechter Eingang, [Von(nameof(Eingang))] Vorschau Vorschau, [Von(nameof(Vorschau))] Melde M) : IGraph;
-            """)).Should().BeEmpty("der Wächter speist den Kopf der Schachtel; ein Graph mit Quelle braucht keinen Kopf");
-        (await Befunde("""
-            public sealed class Fremd : IFunktion { public Buche Auf(Kachel k) => default!; }
-            public sealed record Gemischt(Waechter Eingang, [Von(nameof(Eingang))] Lies L, [Kopf] Fremd F) : IGraph;
-            """)).Should().ContainSingle().Which.Should().Contain("Quellknoten Eingang").And.Contain("Kachel");
-        (await Befunde("public sealed record Laut([Kopf] Waechter Eingang, [Von(nameof(Eingang))] Lies L) : IGraph;"))
-            .Should().ContainSingle().Which.Should().Contain("'Eingang' ist eine Quelle").And.Contain("weder [Kopf] noch [Von]");
+            """)).Should().Contain(b => b.Contains("der Knoten 'Eingang' ist eine Quellart (Waechter)") && b.Contains("kein Knoten eines Graphen"));
+        (await Befunde("public sealed record Laut([Kopf] Waechter Eingang, [Kopf] Lies L) : IGraph;"))
+            .Should().Contain(b => b.Contains("'Eingang' ist eine Quellart"), "auch als [Kopf] — eine Quellart nimmt nichts und steht in keinem Graphen");
+        (await Befunde("public sealed record Ohne(Verkleinere V, [Von(nameof(V))] Melde M) : IGraph;"))
+            .Should().Contain(b => b.Contains("hat keinen Kopf"));
     }
 
     // ── GR-GRAPH: jeder Knoten trägt [Kopf] oder [Von]; Von nennt per nameof andere Knoten desselben Records ──

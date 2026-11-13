@@ -16,11 +16,11 @@ public sealed class Taktstand
 }
 
 /// <summary>
-/// Der TAKTGEBER (Katalog des Frameworks, docs/04 §4.7): eine Quellfunktion am Kopf eines Graphen — je Intervall ein <see cref="Takt"/> mit dem Beginn des
+/// Der TAKTGEBER (Katalog des Frameworks, docs/04 §4.7): eine Quellart (IQuellart), läuft als Eingang eines Clients — je Intervall ein <see cref="Takt"/> mit dem Beginn des
 /// Intervalls (gezählt ab der Unix-Epoche, UTC), je Intervall genau ein Lauf. Was er gemeldet hat, steht in seinem Zustand; ein Intervall, das während
 /// einer Pause verstrich, kommt nicht nach (der nächste Takt ist der des laufenden Intervalls).
 /// </summary>
-public sealed class Taktgeber(Taktkonfig konfig, IZustand<Taktstand> stand) : IFunktion
+public sealed class Taktgeber(Taktkonfig konfig, IZustand<Taktstand> stand) : IQuellart
 {
     /// <summary>Der Beginn des Intervalls, in dem <paramref name="zeit"/> liegt.</summary>
     public static DateTimeOffset IntervallBeginn(DateTimeOffset zeit, TimeSpan intervall) =>

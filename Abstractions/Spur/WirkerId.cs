@@ -29,12 +29,14 @@ static class WirkerId
     public const string Projektion = "projektion";
     public const string Akteur = "akteur";
     public const string Uebersetzung = "uebersetzung";
+    /// <summary>Ein Eingang eines Clients aus einer Quelle (<c>eingang:Client/Eingang</c>): er gibt im Namen seines Akteurs hinein, was die Quelle meldet.</summary>
+    public const string Eingang = "eingang";
 
     /// <summary>Der Wirker der Uhr des Frameworks (sie sendet fällige Fristen; eine Karte hat sie nicht).</summary>
     public const string Uhr = "uhr";
 
     /// <summary>Die Arten in fester Reihenfolge.</summary>
-    public static readonly string[] Arten = { Decide, Funktion, Knoten, Projektion, Akteur, Uebersetzung };
+    public static readonly string[] Arten = { Decide, Funktion, Knoten, Projektion, Akteur, Uebersetzung, Eingang };
 
     public static string FuerDecide(string aggregat, string command) => Decide + ":" + aggregat + "/" + command;
     public static string FuerFunktion(string funktion) => Funktion + ":" + funktion;
@@ -43,6 +45,7 @@ static class WirkerId
     public static string FuerProjektion(string typ) => Projektion + ":" + typ;
     public static string FuerAkteur(string akteur) => Akteur + ":" + akteur;
     public static string FuerUebersetzung(string uebersetzung) => Uebersetzung + ":" + uebersetzung;
+    public static string FuerEingang(string client, string eingang) => Eingang + ":" + client + "/" + eingang;
 
     /// <summary>Art und Rest einer Wirker-Id (<c>funktion:Bildeingang</c> → <c>(funktion, Bildeingang)</c>); <c>null</c>, wenn sie keine ist.</summary>
     public static bool Zerlege(string? id, out string art, out string rest)

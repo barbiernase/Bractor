@@ -26,6 +26,17 @@
         "/data/input",
         "/data/preprocessed"
       ]
+    },
+    "Linienrechner": {
+      "Eingaenge": {
+        "linie1": {
+          "Art": "Dateiwaechter",
+          "Akteur": "KameraSystem",
+          "Rechner": "grpc1",
+          "Pfad": "/data/input",
+          "Kennung": "PfadGroesseZeit"
+        }
+      }
     }
   }
 }

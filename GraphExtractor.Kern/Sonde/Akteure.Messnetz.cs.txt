@@ -1,0 +1,21 @@
+using Abstractions;
+using Sondenkatalog.Katalog;
+
+// SONDE — das Sensornetz und seine VERWIRKLICHUNG (docs/04 §4.7): es gibt Messwerte an den Kopf der Messkette (eine Nachricht des Katalogs, darum bei den
+// Akteuren — die Domäne bleibt rein). Verwirklicht wird es durch die Sensorabfrage, eine eigene Quellart des Katalogs: die Übersetzung der Akteur-Seite
+// macht aus ihrer Meldung (Rohwert) den Kopf-Command, den es darf. Laufen tut die Quelle als Eingang des Gateways in der Umgebung.
+
+namespace Anlagen.Messung;
+
+#pragma warning disable CS9113
+
+public sealed record Sensornetz : IAkteur, IDarf<NimmMesswert>;
+
+/// <summary>Das Gateway am Feldbus: es verkörpert das Sensornetz; seine Eingänge (je Abfrage einer) stehen in der Umgebung.</summary>
+public sealed record SensorGateway : IClient, IVerkoerpert<Sensornetz>;
+
+/// <summary>Was die Sensorabfrage meldet, gibt das Sensornetz an den Kopf der Messkette — Feld für Feld.</summary>
+public sealed class Rohwert_NimmMesswert_1(Rohwert source) : ITranslate<Rohwert, NimmMesswert>
+{
+    public NimmMesswert Translate() => new(Sensor: source.Sensor, Wert: source.Wert, GemessenAm: source.GemessenAm);
+}

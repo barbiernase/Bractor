@@ -4,13 +4,13 @@ namespace Infrastructure.Integration.Tests;
 
 /// <summary>
 /// Die Instanzen der Graphen der Beispieldomäne für die Hosts der Integrations-Tests (je Graph eine, wie <c>umgebungen/sim-main/graphen</c>): die
-/// Bildaufbereitung (aus dem Katalog) mit Parallel und Wiederholungen ihrer drei Bild-Knoten und dem Ausgabe-Pfad — mit <paramref name="eingang"/> im
-/// Linienimport unter einem Dateiwächter auf diesem Verzeichnis, sonst für sich (Kopf DateiGefunden) —, die übrigen mit den Standards. Das gedeutete
-/// Bild übersetzt die Domäne (Domain.ImagePair.Aufnehmen).
+/// Bildaufbereitung (aus dem Katalog, Kopf <c>LiesBild</c>) mit Parallel und Wiederholungen ihrer drei Bild-Knoten und dem Ausgabe-Pfad, die übrigen
+/// mit den Standards. Das gedeutete Bild übersetzt die Domäne (Domain.Uebersetzungen); was ein Dateiwächter findet, gibt ein Eingang eines Clients
+/// hinein (Clients:Linienrechner:Eingaenge), nicht die Instanz.
 /// </summary>
 internal static class Graphinstanzen
 {
-    public static Dictionary<string, GraphInstanzKonfig> Beispieldomaene(string? ausgabe, int parallel = 0, int wiederholungen = 0, string? eingang = null)
+    public static Dictionary<string, GraphInstanzKonfig> Beispieldomaene(string? ausgabe, int parallel = 0, int wiederholungen = 0)
     {
         KnotenKonfig Bild(bool mitPfad)
         {
@@ -18,21 +18,11 @@ internal static class Graphinstanzen
             if (mitPfad && ausgabe is not null) k.Werte["AusgabePfad"] = ausgabe;
             return k;
         }
-        var vor = eingang is null ? "" : "Aufbereitung.";
         var bild = new GraphInstanzKonfig
         {
-            Graph = eingang is null ? "Bildaufbereitung" : "Linienimport",
-            Akteur = eingang is null ? null : "KameraSystem",
-            Knoten = { [vor + "Einlesen"] = Bild(false), [vor + "Verkleinern"] = Bild(true), [vor + "Kontrast"] = Bild(true) },
+            Graph = "Bildaufbereitung",
+            Knoten = { ["Einlesen"] = Bild(false), ["Verkleinern"] = Bild(true), ["Kontrast"] = Bild(true) },
         };
-        if (eingang is not null)
-        {
-            var w = new KnotenKonfig();
-            w.Werte["Pfad"] = eingang;
-            w.Werte["Intervall"] = "00:00:00.200";
-            w.Werte["Fenster"] = "00:00:00.300";
-            bild.Knoten["Eingang"] = w;
-        }
-        return new Dictionary<string, GraphInstanzKonfig>(StringComparer.Ordinal) { [eingang is null ? "bildaufnahme" : "linienimport"] = bild };
+        return new Dictionary<string, GraphInstanzKonfig>(StringComparer.Ordinal) { ["bildaufbereitung"] = bild };
     }
 }

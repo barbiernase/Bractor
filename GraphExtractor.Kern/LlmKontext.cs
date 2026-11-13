@@ -369,8 +369,9 @@ public sealed class KontextBauer
                 yield return "jede Ausgabe geht über den Typ an den Knoten, der sie im Graphen nimmt ([Von]), sonst verlässt sie den Graphen — kein Ziel im Code";
                 break;
             case "funktion" when s.Methode!.Name == Abstractions.Funktionsvertrag.Lausche:
-                yield return $"Quelle: meldet {{{string.Join(", ", aus.Select(a => a.Name))}}} als Strom — je Element eine Kette, nichts im Log; endet nur über das CancellationToken";
-                yield return "Gesehenes nur über IZustand<T> sichern (gesichert, wenn die Kette des Elements fertig ist)";
+                yield return $"Quellart: meldet {{{string.Join(", ", aus.Select(a => a.Name))}}} als Strom (Meldungen, IMeldung) — nichts im Log; endet nur über das CancellationToken";
+                yield return "je Element eine Meldung mit der Kennung aus seinem Inhalt (dasselbe Element ⇒ dieselbe Kennung, auch nach einem Neustart)";
+                yield return "Gesehenes nur über IZustand<T> sichern (gesichert, sobald ihre Nachricht durabel hineingegeben ist) — Analyzer CQRS105";
                 break;
             case "funktion":
                 yield return "Technik: Signatur von der Schnittstelle vorgegeben — Compiler; die Funktion, die sie im Konstruktor nimmt, ruft sie";
@@ -675,6 +676,13 @@ public sealed class KontextBauer
                 if (st.MehrdeutigeImpls.Count > 0) yield return $"mehrere Implementierungen: {string.Join(", ", st.MehrdeutigeImpls.Select(x => x.Split('.').Last()))}";
                 break;
             }
+            case "funktion" when s.Methode!.Name == Abstractions.Funktionsvertrag.Lausche:
+                // Eine Quellart ist kein Knoten: ihre Meldung macht eine Übersetzung der Akteur-Seite zu einer Nachricht, die ein Akteur darf.
+                yield return "Quellart: in keinem Graphen — sie läuft als Eingang eines Clients; ihr Akteur gibt hinein, was die Übersetzung der Akteur-Seite aus der Meldung macht";
+                foreach (var o in Ausgänge(s))
+                    foreach (var u in _dom.Uebersetzungen.Where(u => u.Ein.Split('.').Last() == o.Name))
+                        yield return $"{o.Name} wird übersetzt von {u.Name} zu {u.Aus.Split('.').Last()} (Akteur-Seite)";
+                break;
             case "funktion":
             {
                 // In welchen Graphen die Funktion ein Knoten ist; was ihren Eingang speist und wer ihre Ausgaben nimmt (Kanten aus [Von]).

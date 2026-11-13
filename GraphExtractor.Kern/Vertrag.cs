@@ -37,6 +37,10 @@ public static class Vertrag
     public static readonly string IVerkoerpert = typeof(IVerkoerpert<>).FullName!;
     public static readonly string IWertobjekt = typeof(IWertobjekt).FullName!;
     public static readonly string IFunktion = typeof(IFunktion).FullName!;
+    /// <summary>Eine Quellart (docs/04 §4.7): lauscht und meldet je Element eine <see cref="IMeldung"/> — nie ein Knoten eines Graphen.</summary>
+    public static readonly string IQuellart = typeof(IQuellart).FullName!;
+    /// <summary>Was eine Quellart meldet: kein Command, eine Übersetzung der Akteur-Seite macht daraus eine Nachricht.</summary>
+    public static readonly string IMeldung = typeof(IMeldung).FullName!;
     public static readonly string IGraph = typeof(IGraph).FullName!;
     public static readonly string IUebersetzung = typeof(ITranslate<,>).FullName!;
     public static readonly string IMessagePayload = typeof(IMessagePayload).FullName!;

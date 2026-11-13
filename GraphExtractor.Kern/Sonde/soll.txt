@@ -2,9 +2,10 @@
 # Ein Fakt je Zeile. Was der Editor über die unbekannte Domäne wissen MUSS (Reihenfolge egal).
 #
 # Zeilen: record/enum/aggregat/decide/apply/frage (Schreibseite) · funktion (Klasse mit Konstruktor; je Auf die Ports — ein Command bzw. wie
-# geschrieben —, Herkunft, Lese-Fähigkeiten, Ausgaben, Strom; Lausche einer Quelle) · technik (ohne Marker) · graph (Knoten = Parameter mit [Kopf] und
-# [Von …]; Köpfe, Ausgänge, Quelle daraus) und kante (aus den Von, aufgefaltet) · akteur (darf | hoert) · client (verkoerpert) · Leseseite · sicht/besitz/code
-# (die Sicht des Editors) · lage (Projektstruktur, docs/07).
+# geschrieben —, Herkunft, Lese-Fähigkeiten, Ausgaben, Strom) · quellart (Klasse mit IQuellart: Konstruktor, Zustand, Katalog, was Lausche meldet) ·
+# technik (ohne Marker) · graph (Knoten = Parameter mit [Kopf] und [Von …]; Köpfe, Ausgänge daraus) und kante (aus den Von, aufgefaltet) · uebersetzung
+# (akteurseite: ihre Quelle ist eine Meldung) · akteur (darf | hoert) · client (verkoerpert) · verwirklicht (Akteur <- Quellart über eine Übersetzung der
+# Akteur-Seite) · Leseseite · sicht/besitz/code (die Sicht des Editors) · lage (Projektstruktur, docs/07).
 
 # ══ LEIHWESEN ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -361,11 +362,13 @@ besitz Kundenportal.Konten.AdresseVergeben event -> aggregate:Adresse
 besitz Kundenportal.Konten.Kontostatus enum -> aggregate:Benutzer
 besitz Kundenportal.Konten.Adressschluessel code -> §begriffe
 
-# ── Anlagen (Messnetz.cs.txt): SENSOR-STROM MIT ALARM — Zähl-Aggregat; eine EIGENE QUELLFUNKTION (Lausche) mit Konfig, gesichertem Zustand und
-#    Technik am Kopf der Messkette, dahinter ein GRAPH IM GRAPHEN (aufgefaltete Kanten Aufbereitung.Plausi …); der Alarm öffnet die Störung über einen
+# ── Anlagen (Messnetz.cs.txt, Akteure.Messnetz.cs.txt): SENSOR-STROM MIT ALARM — Zähl-Aggregat; eine EIGENE QUELLART (Katalog.Sensorabfrage.cs.txt:
+#    IQuellart mit Konfig, gesichertem Zustand und Technik) meldet Rohwerte (eine MELDUNG, Katalog.Meldungen.cs.txt); die Übersetzung der Akteur-Seite
+#    macht daraus den Kopf der Messkette, den das Sensornetz darf (so verwirklicht die Quellart den Akteur); hinter der Annahme ein GRAPH IM GRAPHEN
+#    (aufgefaltete Kanten Aufbereitung.Plausi …); der Alarm öffnet die Störung über einen
 #    Graphen, auf die Störung alarmiert die Schichtleitung (sie reagiert auf beide Fakten) über zwei Wege nebeneinander. Die Domäne ist rein: die drei
 #    Graphen liegen im Katalog (Katalog.*.cs.txt Teil Messung, Guid statt Id), fünf Übersetzungen binden sie an Sensor, Störungsfall und Schichtleitung ──
-besitz Sondenkatalog.Katalog.Abfragestand code -> bausteinfunktion:Sensorabfrage
+besitz Sondenkatalog.Katalog.Abfragestand code -> quellart:Sensorabfrage
 besitz Sondenkatalog.Katalog.Alarm command -> §begriffe
 besitz Sondenkatalog.Katalog.AlarmVerteilt command -> bausteinfunktion:Alarmverteilung
 besitz Sondenkatalog.Katalog.Alarmiere command -> §begriffe
@@ -373,32 +376,37 @@ besitz Sondenkatalog.Katalog.Erreicht command -> bausteinfunktion:Alarmquittung
 besitz Sondenkatalog.Katalog.Geprueft command -> bausteinfunktion:Messwertpruefung
 besitz Sondenkatalog.Katalog.PerAnrufErreicht command -> bausteinfunktion:Anrufkette
 besitz Sondenkatalog.Katalog.PerFunkErreicht command -> bausteinfunktion:Funkruf
+besitz Sondenkatalog.Katalog.Messwert command -> bausteinfunktion:Messwertannahme
+besitz Sondenkatalog.Katalog.NimmMesswert command -> §rand
 besitz Sondenkatalog.Katalog.Plausibel command -> bausteinfunktion:Plausibilisierung
-besitz Sondenkatalog.Katalog.Rohwert command -> bausteinfunktion:Sensorabfrage
-besitz Sondenkatalog.Katalog.SensorabfrageKonfig konfig -> bausteinfunktion:Sensorabfrage
+besitz Sondenkatalog.Katalog.Rohwert meldung -> quellart:Sensorabfrage
+besitz Sondenkatalog.Katalog.SensorabfrageKonfig konfig -> quellart:Sensorabfrage
 besitz Sondenkatalog.Katalog.Stoerung command -> bausteinfunktion:StoerungBeiAlarm
 code Sondenkatalog.Katalog.Abfragestand class teile=1 domaene=Sondenkatalog.Katalog block=§geteilt
 funktion Sondenkatalog.Katalog.Alarmquittung() | Auf(PerAnrufErreicht) -> Erreicht || Auf(PerFunkErreicht) -> Erreicht
 funktion Sondenkatalog.Katalog.Alarmverteilung() | Auf(Alarmiere) -> AlarmVerteilt
 funktion Sondenkatalog.Katalog.Anrufkette(telefonie:ITelefonie) | Auf(AlarmVerteilt) -> PerAnrufErreicht
 funktion Sondenkatalog.Katalog.Funkruf() | Auf(AlarmVerteilt) -> PerFunkErreicht
+funktion Sondenkatalog.Katalog.Messwertannahme() | Auf(NimmMesswert) -> Messwert
 funktion Sondenkatalog.Katalog.Messwertpruefung() | Auf(Plausibel) -> Geprueft
-funktion Sondenkatalog.Katalog.Plausibilisierung() | Auf(Rohwert) -> strom Plausibel
-funktion Sondenkatalog.Katalog.Sensorabfrage(konfig:SensorabfrageKonfig, stand:IZustand<Abfragestand>, bus:ISensorbus) zustand=Abfragestand | Lausche -> strom Rohwert
+funktion Sondenkatalog.Katalog.Plausibilisierung() | Auf(Messwert) -> strom Plausibel
+quellart Sondenkatalog.Katalog.Sensorabfrage(konfig:SensorabfrageKonfig, stand:IZustand<Abfragestand>, bus:ISensorbus) zustand=Abfragestand katalog=Sondenkatalog.Katalog | Lausche -> strom Rohwert
 funktion Sondenkatalog.Katalog.StoerungBeiAlarm() | Auf(Alarm) -> Stoerung
 graph Sondenkatalog.Katalog.Alarmierung | knoten Verteilung:Alarmverteilung [Kopf], Anruf:Anrufkette [Von Verteilung], Funk:Funkruf [Von Verteilung], Quittung:Alarmquittung [Von Anruf+Funk] | koepfe Alarmiere | aus Erreicht
-graph Sondenkatalog.Katalog.Messkette | knoten Abfrage:Sensorabfrage, Aufbereitung:Messwertaufbereitung [Von Abfrage] | koepfe - | aus Geprueft | quelle Abfrage
-graph Sondenkatalog.Katalog.Messwertaufbereitung | knoten Plausi:Plausibilisierung [Kopf], Pruefung:Messwertpruefung [Von Plausi] | koepfe Rohwert | aus Geprueft
+graph Sondenkatalog.Katalog.Messkette | knoten Annahme:Messwertannahme [Kopf], Aufbereitung:Messwertaufbereitung [Von Annahme] | koepfe NimmMesswert | aus Geprueft
+graph Sondenkatalog.Katalog.Messwertaufbereitung | knoten Plausi:Plausibilisierung [Kopf], Pruefung:Messwertpruefung [Von Plausi] | koepfe Messwert | aus Geprueft
 graph Sondenkatalog.Katalog.Stoerungsoeffnung | knoten Oeffnung:StoerungBeiAlarm [Kopf] | koepfe Alarm | aus Stoerung
 record Sondenkatalog.Katalog.Alarm command | Sensor:Guid, Wert:double
 record Sondenkatalog.Katalog.AlarmVerteilt command | Fall:Guid
 record Sondenkatalog.Katalog.Alarmiere command | Fall:Guid
 record Sondenkatalog.Katalog.Erreicht command | Fall:Guid, Weg:string
 record Sondenkatalog.Katalog.Geprueft command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Sondenkatalog.Katalog.Messwert command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Sondenkatalog.Katalog.NimmMesswert command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
 record Sondenkatalog.Katalog.PerAnrufErreicht command | Fall:Guid, Nummer:string
 record Sondenkatalog.Katalog.PerFunkErreicht command | Fall:Guid, Kanal:string
 record Sondenkatalog.Katalog.Plausibel command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
-record Sondenkatalog.Katalog.Rohwert command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Sondenkatalog.Katalog.Rohwert meldung | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
 record Sondenkatalog.Katalog.SensorabfrageKonfig konfig | Sensoren:string[], Intervall:TimeSpan
 record Sondenkatalog.Katalog.Stoerung command | Fall:Guid, Wert:double
 technik Sondenkatalog.Katalog.ISensorbus schnittstelle | LiesAsync(sensor:Guid, ct:CancellationToken):Task<double?> | umsetzung Feldbus()
@@ -406,6 +414,7 @@ technik Sondenkatalog.Katalog.ITelefonie schnittstelle | RufeAsync(fall:Guid):Ta
 uebersetzung Anlagen.Messung.Erreicht_VermerkeAlarmierung_1 | Erreicht -> VermerkeAlarmierung [Feld AggregateId=Fall+Weg=Weg] | AggregateId=Fall(feld), Weg=Weg(name)
 uebersetzung Anlagen.Messung.AlarmiereBereitschaft_Alarmiere_1 | AlarmiereBereitschaft -> Alarmiere [Feld Fall=Fall] | Fall=Fall(name)
 uebersetzung Anlagen.Messung.Geprueft_MeldeMesswert_1 | Geprueft -> MeldeMesswert [Feld AggregateId=Sensor+Wert=Wert+GemessenAm=GemessenAm] | AggregateId=Sensor(feld), Wert=Wert(name), GemessenAm=GemessenAm(name)
+uebersetzung Anlagen.Messung.Rohwert_NimmMesswert_1 akteurseite | Rohwert -> NimmMesswert [Feld Sensor=Sensor+Wert=Wert+GemessenAm=GemessenAm] | Sensor=Sensor(name), Wert=Wert(name), GemessenAm=GemessenAm(name)
 uebersetzung Anlagen.Messung.OeffneStoerungFuer_Alarm_1 | OeffneStoerungFuer -> Alarm [Feld Sensor=Sensor+Wert=Wert] | Sensor=Sensor(name), Wert=Wert(name)
 uebersetzung Anlagen.Messung.Stoerung_OeffneStoerung_1 | Stoerung -> OeffneStoerung [Feld AggregateId=Fall+Wert=Wert] | AggregateId=Fall(feld), Wert=Wert(name)
 aggregat Anlagen.Messung.Sensor | Grenzwert:double, AlarmNach:int, Hintereinander:int, Alarm:bool
@@ -439,19 +448,21 @@ record Anlagen.Messung.KeineStoerung rejection aggregat=Stoerungsfall | SensorId
 record Anlagen.Messung.VermerkeAlarmierung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Weg:string
 record Anlagen.Messung.AlarmierungVermerkt event aggregat=Stoerungsfall | Weg:string
 record Anlagen.Messung.AlarmiereBereitschaft command | Fall:Id<Stoerungsfall>
-# Die Quelle: Konstruktor mit Konfig, Zustand (gesichert mit dem Lauf; eine Code-Karte) und Technik; sie lauscht statt Auf
+# Die Quellart: Konstruktor mit Konfig (die Werte eines Eingangs), Zustand (eine Code-Karte) und Technik; sie lauscht und steht in keinem Graphen —
+#    ihr gehören ihre Meldung, ihre Konfig und ihr Zustand
 # ZWEI WEGE: beide nehmen AlarmVerteilt; die Quittung nimmt jeden in einem eigenen Auf
-# GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → MeldeMesswert); in der Messkette hinter der Quelle aufgefaltet
+# GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Messwert → Geprueft); in der Messkette hinter der Annahme aufgefaltet
 kante Messwertaufbereitung | Plausi -Plausibel-> Pruefung
-kante Messkette | Abfrage -Rohwert-> Aufbereitung.Plausi
+kante Messkette | Annahme -Messwert-> Aufbereitung.Plausi
 kante Messkette | Aufbereitung.Plausi -Plausibel-> Aufbereitung.Pruefung
 kante Alarmierung | Verteilung -AlarmVerteilt-> Anruf
 kante Alarmierung | Verteilung -AlarmVerteilt-> Funk
 kante Alarmierung | Anruf -PerAnrufErreicht-> Quittung
 kante Alarmierung | Funk -PerFunkErreicht-> Quittung
-# Das Sensornetz ist der Akteur der Instanz der Messkette (es darf, was sie verlässt); die Schichtleitung hört zwei Events, reagiert mit den Köpfen
-#    der Störungsöffnung und der Alarmierung und quittiert
-akteur Anlagen.Messung.Sensornetz | darf MeldeMesswert | hoert -
+# Das Sensornetz gibt an den Kopf der Messkette (eine Nachricht des Katalogs: es steht bei den Akteuren); verwirklicht wird es durch die Sensorabfrage
+#    über die Übersetzung der Akteur-Seite. Die Schichtleitung hört zwei Events, reagiert mit den Köpfen der Störungsöffnung und der Alarmierung und quittiert
+akteur Anlagen.Messung.Sensornetz | darf NimmMesswert | hoert -
+verwirklicht Anlagen.Messung.Sensornetz <- Sensorabfrage | Rohwert_NimmMesswert_1
 akteur Anlagen.Messung.Schichtleitung | darf RichteSensorEin, QuittiereStoerung, OeffneStoerungFuer, AlarmiereBereitschaft | hoert AlarmAusgeloest, StoerungGeoeffnet
 client Anlagen.Messung.SensorGateway | verkoerpert Sensornetz
 client Anlagen.Messung.Leitstand | verkoerpert Schichtleitung
@@ -475,9 +486,10 @@ besitz Anlagen.Messung.VermerkeAlarmierung command -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.AlarmierungVermerkt event -> aggregate:Stoerungsfall
 besitz Anlagen.Messung.AlarmiereBereitschaft command -> §rand
 
-# ── Warenkatalog (Katalogimport.cs.txt, Katalog.*.cs.txt Teil Import, Uebersetzungen.Warenkatalog.cs.txt): MASSEN-IMPORT MIT FORTSCHRITT — zwei Graphen im Katalog:
-#    die Dateiannahme mit einer QUELLFUNKTION AUS DEM KATALOG des Frameworks am Kopf (Dateiwächter, Core.Katalog) startet den Vorgang (übersetzt);
-#    seine ANTWORT wird der Kopf des Zeilenimports (eine Quelle hat keinen Kopf); ein Zeilenleser mit Technik als KLASSE gibt JE Zeile einen Unterlauf und zwischendurch
+# ── Warenkatalog (Katalogimport.cs.txt, Katalog.*.cs.txt Teil Import, Uebersetzungen.Warenkatalog.cs.txt, Akteure.Warenkatalog.cs.txt): MASSEN-IMPORT MIT
+#    FORTSCHRITT — zwei Graphen im Katalog: an den Kopf der Dateiannahme gibt die Ablage, die eine QUELLART AUS DEM KATALOG des Frameworks verwirklicht
+#    (Dateiwächter, Core.Katalog: DateiGefunden ↦ Kopf-Command, die Übersetzung der Akteur-Seite); die Annahme startet den Vorgang (übersetzt);
+#    seine ANTWORT wird der Kopf des Zeilenimports; ein Zeilenleser mit Technik als KLASSE gibt JE Zeile einen Unterlauf und zwischendurch
 #    den Fortschritt (eine Wahl im Strom); am Ende des Stroms schließt der Leser mit seiner Bilanz ab. Leseseite: Store der Klasse 2 (Dateien, jede
 #    Schreib-Fähigkeit nimmt die Herkunft) und der Klasse 3 (nur mit [MindestensEinmal]; ohne Herkunft, mit Abbruch) ──
 besitz Sondenkatalog.Katalog.Artikeldaten command -> bausteinfunktion:Artikelanlage
@@ -486,18 +498,19 @@ besitz Sondenkatalog.Katalog.CsvKonfig konfig -> bausteinfunktion:CsvZerleger
 besitz Sondenkatalog.Katalog.Fortschritt command -> bausteinfunktion:Zeilenleser
 besitz Sondenkatalog.Katalog.Importieren command -> bausteinfunktion:Katalogeingang
 besitz Sondenkatalog.Katalog.KatalogBereit command -> §begriffe
+besitz Sondenkatalog.Katalog.NimmKatalogdateiAn command -> §rand
 besitz Sondenkatalog.Katalog.Zeile command -> bausteinfunktion:Zeilenleser
 funktion Sondenkatalog.Katalog.Artikelanlage() | Auf(Zeile) herkunft -> Artikeldaten
-funktion Sondenkatalog.Katalog.Katalogeingang() | Auf(DateiGefunden) herkunft -> Importieren
+funktion Sondenkatalog.Katalog.Katalogeingang() | Auf(NimmKatalogdateiAn) herkunft -> Importieren
 funktion Sondenkatalog.Katalog.Zeilenleser(zerleger:CsvZerleger) | Auf(KatalogBereit) -> strom Zeile; Fortschritt; Bilanz
-graph Sondenkatalog.Katalog.Dateiannahme | knoten Eingang:Dateiwaechter, Annahme:Katalogeingang [Von Eingang] | koepfe - | aus Importieren | quelle Eingang
+graph Sondenkatalog.Katalog.Dateiannahme | knoten Annahme:Katalogeingang [Kopf] | koepfe NimmKatalogdateiAn | aus Importieren
 graph Sondenkatalog.Katalog.Zeilenimport | knoten Lesen:Zeilenleser [Kopf], Anlage:Artikelanlage [Von Lesen] | koepfe KatalogBereit | aus Fortschritt, Bilanz, Artikeldaten
-kante Dateiannahme | Eingang -DateiGefunden-> Annahme
 kante Zeilenimport | Lesen -Zeile-> Anlage
 record Sondenkatalog.Katalog.Artikeldaten command | Artikel:Guid, Nummer:string, Bezeichnung:string, Preis:decimal
 record Sondenkatalog.Katalog.Bilanz command | Import:Guid, Zeilen:int, Fehler:int
 record Sondenkatalog.Katalog.CsvKonfig konfig | Trenner:string=";"
 record Sondenkatalog.Katalog.Fortschritt command | Import:Guid, Zeilen:int
+record Sondenkatalog.Katalog.NimmKatalogdateiAn command | Pfad:string, RelativerPfad:string
 record Sondenkatalog.Katalog.Importieren command | Import:Guid, Pfad:string
 record Sondenkatalog.Katalog.KatalogBereit command | Import:Guid, Pfad:string
 record Sondenkatalog.Katalog.Zeile command | Import:Guid, Nummer:int, Felder:string[]
@@ -528,7 +541,9 @@ record Warenkatalog.Import.LegeArtikelAn command erzeugung aggregat=Artikel | Ag
 record Warenkatalog.Import.ArtikelAngelegt event aggregat=Artikel | Nummer:string, Bezeichnung:string, Preis:decimal
 record Warenkatalog.Import.ArtikelExistiert rejection aggregat=Artikel | ArtikelId:Id<Artikel>
 # Technik als Klasse (ohne Schnittstelle): ihre Methoden, ihr Konstruktor mit Konfig-Record
-akteur Warenkatalog.Import.Ablage | darf StarteImport, LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb | hoert -
+akteur Warenkatalog.Import.Ablage | darf NimmKatalogdateiAn | hoert -
+verwirklicht Warenkatalog.Import.Ablage <- Dateiwaechter (framework) | DateiGefunden_NimmKatalogdateiAn_1
+uebersetzung Warenkatalog.Import.DateiGefunden_NimmKatalogdateiAn_1 akteurseite | DateiGefunden -> NimmKatalogdateiAn [Feld Pfad=Pfad+RelativerPfad=RelativerPfad] | Pfad=Pfad(name), RelativerPfad=RelativerPfad(name)
 akteur Warenkatalog.Import.Katalogpflege | darf HoleImportstand | hoert ImportFortgeschritten, ImportAbgeschlossen
 client Warenkatalog.Import.KatalogpflegeOberflaeche | verkoerpert Katalogpflege
 readmodel Warenkatalog.Import.Importstand store=IImportUebersicht | Id:Guid { get; set; }, Pfad:string="" { get; set; }, Zeilen:int { get; set; }, Fertig:bool { get; set; }
@@ -692,11 +707,8 @@ lage Mahnportal -> Domain.Akteure
 lage Besucher -> Domain.Akteure
 lage Adresspruefer -> Domain.Akteure
 lage Registrierungsseite -> Domain.Akteure
-lage Sensornetz -> Domain.Akteure
 lage Schichtleitung -> Domain.Akteure
-lage SensorGateway -> Domain.Akteure
 lage Leitstand -> Domain.Akteure
-lage Ablage -> Domain.Akteure
 lage Katalogpflege -> Domain.Akteure
 lage KatalogpflegeOberflaeche -> Domain.Akteure
 # Leseseite → Projektionen; Store-Implementierungen → Infrastruktur

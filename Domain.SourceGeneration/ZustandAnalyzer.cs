@@ -64,7 +64,7 @@ public sealed class ZustandAnalyzer : DiagnosticAnalyzer
     {
         var t = (INamedTypeSymbol)ctx.Symbol;
         if (t.TypeKind != TypeKind.Class) return;
-        var baustein = !t.IsAbstract && Funktionsform.IstFunktion(t);
+        var baustein = !t.IsAbstract && (Funktionsform.IstFunktion(t) || Funktionsform.IstQuellart(t));
         var technikUmsetzung = !t.IsAbstract && technik.IstUmsetzung(t);
 
         // IZustand<T> außerhalb einer Funktions-Klasse bzw. Technik-Umsetzung.

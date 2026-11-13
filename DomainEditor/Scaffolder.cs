@@ -135,6 +135,11 @@ public static class Scaffolder
                 dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{u.Name}.cs", UmsetzungsDatei(f, u, modell), DateiArt.Typen));
         }
 
+        // ── Quellarten (IQuellart, docs/04 §4.7) → je NEUE ihre Klasse (eigene Datei im Katalog, throw-Stub von Lausche); eine bestehende gehört dem
+        //    Code, eine des Frameworks schreibt der Editor nie ──
+        foreach (var q in modell.Quellarten.Where(q => q.Datei == null && !q.Framework))
+            dateien.Add(Platziert(null, Verzeichnis(modell, q.Namespace), $"{q.Name}.cs", QuellartDatei(q, modell), DateiArt.Typen));
+
         if (modell.Lesen is { } lesen) dateien.AddRange(LeseseitenDateien(modell, lesen));
 
         return dateien.OrderBy(d => d.Pfad, StringComparer.Ordinal).ToList();
@@ -181,6 +186,7 @@ public static class Scaffolder
             RecordArt.Antwort => "Responses.cs",
             RecordArt.ReadModel => "ReadModels.cs",
             RecordArt.Konfig => "Konfigs.cs",
+            RecordArt.Meldung => "Meldungen.cs",
             _ => "Enums.cs",
         };
         var v = Verzeichnis(m, ns);
@@ -476,14 +482,14 @@ public static class Scaffolder
         });
         // Leseseite: Queries, Responses, ReadModels — je Art ein Abschnitt mit ihrem Marker.
         foreach (var (art, marker) in new (string, string?)[] { (RecordArt.Query, IQuery), (RecordArt.Antwort, IQueryResponse), (RecordArt.ReadModel, IReadModel),
-                     (RecordArt.Konfig, null) })
+                     (RecordArt.Konfig, null), (RecordArt.Meldung, IMeldung) })
         {
             var liste = records.Where(r => r.Kind == art).ToList();
             if (liste.Count > 0) abschnitte.Add(() =>
             {
                 for (var i = 0; i < liste.Count; i++)
-                    RecordZeilen(b, liste[i], liste[i].Geteilt && art == RecordArt.ReadModel ? $"{marker}, {IGeteiltesReadModel}" : marker,
-                        i < liste.Count - 1);
+                    RecordZeilen(b, art == RecordArt.Meldung ? MitKennung(liste[i]) : liste[i],
+                        liste[i].Geteilt && art == RecordArt.ReadModel ? $"{marker}, {IGeteiltesReadModel}" : marker, i < liste.Count - 1);
             });
         }
 
@@ -492,6 +498,35 @@ public static class Scaffolder
             if (i > 0) b.AppendLine();
             abschnitte[i]();
         }
+        return b.ToString();
+    }
+
+    // ── Meldung (IMeldung) und Quellart (IQuellart, docs/04 §4.7) ─────────────────────────────────────────────────────────────
+    private static readonly string IMeldung = nameof(Abstractions.IMeldung);
+    private static readonly string IQuellart = nameof(Abstractions.IQuellart);
+    private static readonly string Kennung = nameof(Abstractions.IMeldung.Kennung);
+
+    /// <summary>
+    /// Eine NEUE Meldung ohne Kennung (kein Feld <c>Kennung</c>, kein Handcode): die Kennung ihres Elements kommt aus seinem Inhalt — als throw-Stub, bis
+    /// der Modellierer sie schreibt. Eine bestehende behält ihren Handcode (Zusatz).
+    /// </summary>
+    private static Record MitKennung(Record r) =>
+        r.Zusatz != null || r.Felder.Any(f => f.Name == Kennung) ? r
+            : r with { Zusatz = $"string {IMeldung}.{Kennung} => throw new NotImplementedException(\"TODO: {r.Name}.{Kennung} — die Kennung des Elements aus seinem Inhalt\");" };
+
+    /// <summary>
+    /// Eine NEUE Quellart: <c>public sealed class X(Konstruktor) : IQuellart</c> mit einem throw-Stub von <c>Lausche</c> — nie <c>IFunktion</c>, nie ein Knoten.
+    /// Was sie meldet, steht in der Signatur (ein asynchroner Strom ihrer Meldungen).
+    /// </summary>
+    private static string QuellartDatei(Quellart q, EditorModell modell)
+    {
+        var b = Kopf(q.Namespace, Usings(q.Namespace, modell, [modell.Rahmen.VertragsNamespace], q.Meldet.Concat(q.Konstruktor.Select(p => p.Typ)), []));
+        Doku(b, q.Doku, "");
+        var ctor = q.Konstruktor.Count > 0 ? $"({ParameterListe(q.Konstruktor)})" : "";
+        b.AppendLine($"public sealed class {q.Name}{ctor} : {IQuellart}");
+        b.AppendLine("{");
+        b.Append(LauscheStub(q, "    "));
+        b.AppendLine("}");
         return b.ToString();
     }
 
@@ -522,12 +557,12 @@ public static class Scaffolder
          .. (e.Herkunft ? [new Parameter { Typ = nameof(Abstractions.Herkunft), Name = "h" }] : Array.Empty<Parameter>()),
          .. e.Faehigkeiten];
 
-    /// <summary>Eine Quellfunktion lauscht so (Entscheidung 8): ein asynchroner Strom dessen, was sie meldet, mit dem Abbruch als einzigem Parameter.</summary>
-    public static string LauscheKopf(BausteinFunktion f) =>
-        $"async {Rueckgabe(f.Lauscht, strom: true, asynchron: true)} {Abstractions.Funktionsvertrag.Lausche}([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)";
+    /// <summary>Eine Quellart lauscht so (docs/04 §4.7): ein asynchroner Strom ihrer Meldungen, mit dem Abbruch als einzigem Parameter.</summary>
+    public static string LauscheKopf(Quellart q) =>
+        $"async {Rueckgabe(q.Meldet, strom: true, asynchron: true)} {Abstractions.Funktionsvertrag.Lausche}([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)";
 
-    private static string LauscheStub(BausteinFunktion f, string einzug) =>
-        $"{einzug}public {LauscheKopf(f)}\n{einzug}{{\n{einzug}    await Task.CompletedTask;\n{einzug}    throw new NotImplementedException(\"TODO: {f.Name}.Lausche\");\n"
+    private static string LauscheStub(Quellart q, string einzug) =>
+        $"{einzug}public {LauscheKopf(q)}\n{einzug}{{\n{einzug}    await Task.CompletedTask;\n{einzug}    throw new NotImplementedException(\"TODO: {q.Name}.Lausche\");\n"
         + $"{einzug}    yield break;\n{einzug}}}\n";
 
     public static string FunktionsKopf(BausteinEingang e) =>
@@ -539,7 +574,7 @@ public static class Scaffolder
 
     /// <summary>Die Typen, die eine Funktion nennt (Eingänge, Ausgaben, Lese-Fähigkeiten, gerufene Methoden) — für ihre usings.</summary>
     private static IEnumerable<string> FunktionsTypen(BausteinFunktion f) =>
-        f.Eingaenge.SelectMany(e => FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben)).Concat(f.Lauscht)
+        f.Eingaenge.SelectMany(e => FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben))
             .Concat(f.Methoden.SelectMany(m => m.Parameter.Select(p => p.Typ).Append(m.Rueckgabe)));
 
     private static string FunktionsDatei(BausteinFunktion f, EditorModell modell)
@@ -547,7 +582,7 @@ public static class Scaffolder
         var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], FunktionsTypen(f).Concat(f.Konstruktor.Select(p => p.Typ)), []));
         Doku(b, f.Doku, "");
         // Technik (Methoden, kein Eingang) trägt keinen Marker — sie ist, was der Konstruktor einer Funktion nimmt (docs/10 §10.3).
-        var basis = f.Methoden.Count > 0 && f.Eingaenge.Count == 0 && f.Lauscht.Count == 0 ? "" : $" : {IFunktion}";
+        var basis = f.Methoden.Count > 0 && f.Eingaenge.Count == 0 ? "" : $" : {IFunktion}";
         if (f.Klasse)
         {
             var ctor = f.Konstruktor.Count > 0 ? $"({ParameterListe(f.Konstruktor)})" : "";
@@ -574,8 +609,7 @@ public static class Scaffolder
     /// <summary>Die throw-Stubs einer Klasse: je Eingang ein Auf, je gerufene Methode die Methode.</summary>
     private static string Stubs(BausteinFunktion f, string klasse)
     {
-        var teile = f.Eingaenge.Select(e => FunktionsStub(klasse, e, "    ")).Concat(f.Methoden.Select(m => MethodenStub(klasse, m, "    ")))
-            .Concat(f.Lauscht.Count > 0 ? [LauscheStub(f, "    ")] : Array.Empty<string>());
+        var teile = f.Eingaenge.Select(e => FunktionsStub(klasse, e, "    ")).Concat(f.Methoden.Select(m => MethodenStub(klasse, m, "    ")));
         return string.Join("\n", teile);
     }
 

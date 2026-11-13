@@ -108,24 +108,53 @@ public static partial class UmgebungLader
         foreach (var g in konfig.GetSection(UmgebungsAbschnitte.Graphen).GetChildren())
             u.Graphen[g.Key] = Instanz(g);
         foreach (var c in konfig.GetSection(UmgebungsAbschnitte.Clients).GetChildren())
-            u.Clients[c.Key] = c.Get<ClientKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new ClientKonfig();
+            u.Clients[c.Key] = Client(c);
         return u;
     }
 
     /// <summary>
-    /// Bindet eine Instanz: <c>Graph</c>, <c>Akteur</c>, <c>Rechner</c>, <c>Straenge</c> und jeder andere Schlüssel ein Knoten — seine Rahmenfelder streng
+    /// Bindet einen Client streng — seine Eingänge von Hand (<see cref="Eingang"/>): ihre Werte sind die Felder der Konfig-Records ihrer Quellart, flach
+    /// wie am Knoten einer Instanz, geprüft beim Start gegen die Quellart.
+    /// </summary>
+    public static ClientKonfig Client(IConfigurationSection c)
+    {
+        var ohne = new ConfigurationBuilder().AddInMemoryCollection(c.AsEnumerable(makePathsRelative: true)
+            .Where(kv => kv.Value != null && kv.Key.Split(':')[0] != nameof(ClientKonfig.Eingaenge))).Build();
+        var k = ohne.Get<ClientKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new ClientKonfig();
+        foreach (var e in c.GetSection(nameof(ClientKonfig.Eingaenge)).GetChildren()) k.Eingaenge[e.Key] = Eingang(c.Key, e);
+        return k;
+    }
+
+    /// <summary>Bindet einen Eingang: <c>Art</c>, <c>Akteur</c>, <c>Rechner</c>, <c>Offen</c>, <c>Technik</c> — jeder andere Schlüssel ein Wert.</summary>
+    public static EingangKonfig Eingang(string client, IConfigurationSection e)
+    {
+        var k = new EingangKonfig
+        {
+            Art = e[nameof(EingangKonfig.Art)] ?? "", Akteur = e[nameof(EingangKonfig.Akteur)] ?? "", Rechner = e[nameof(EingangKonfig.Rechner)],
+        };
+        if (e[nameof(EingangKonfig.Offen)] is { } offen)
+            k.Offen = int.TryParse(offen, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= 0
+                ? n : throw new InvalidOperationException($"Umgebung: Clients:{client}:Eingaenge:{e.Key}: Offen „{offen}“ ist keine Zahl ab 0 (0 = Standard).");
+        foreach (var t in e.GetSection(nameof(EingangKonfig.Technik)).GetChildren()) k.Technik[t.Key] = t.Value ?? "";
+        foreach (var (key, wert) in e.AsEnumerable(makePathsRelative: true).Where(kv => kv.Value != null && !EingangKonfig.Rahmenfelder.Contains(kv.Key.Split(':')[0])))
+            k.Werte[key] = wert;
+        return k;
+    }
+
+    /// <summary>
+    /// Bindet eine Instanz: <c>Graph</c>, <c>Rechner</c>, <c>Straenge</c> und jeder andere Schlüssel ein Knoten — seine Rahmenfelder streng
     /// (<see cref="KnotenKonfig.Rahmenfelder"/>), alles andere als Werte seiner Konfig-Records (geprüft beim Start gegen den Graphen).
     /// </summary>
     public static GraphInstanzKonfig Instanz(IConfigurationSection g)
     {
         var i = new GraphInstanzKonfig
         {
-            Graph = g[nameof(GraphInstanzKonfig.Graph)] ?? "", Akteur = g[nameof(GraphInstanzKonfig.Akteur)], Rechner = g[nameof(GraphInstanzKonfig.Rechner)],
+            Graph = g[nameof(GraphInstanzKonfig.Graph)] ?? "", Rechner = g[nameof(GraphInstanzKonfig.Rechner)],
         };
         if (g[nameof(GraphInstanzKonfig.Straenge)] is { } straenge)
             i.Straenge = int.TryParse(straenge, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= 0
                 ? n : throw new InvalidOperationException($"Umgebung: Instanz {g.Key}: Straenge „{straenge}“ ist keine Zahl ab 0 (0 = Standard).");
-        foreach (var k in g.GetChildren().Where(k => k.Key is not (nameof(GraphInstanzKonfig.Graph) or nameof(GraphInstanzKonfig.Akteur)
+        foreach (var k in g.GetChildren().Where(k => k.Key is not (nameof(GraphInstanzKonfig.Graph)
                      or nameof(GraphInstanzKonfig.Rechner) or nameof(GraphInstanzKonfig.Straenge))))
         {
             var knoten = new KnotenKonfig();

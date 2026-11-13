@@ -45,18 +45,6 @@ public sealed record KnotenRueckmeldung(Guid Kennung, Rueckmeldeart Art, string?
 /// </summary>
 public sealed record KnotenAusgabe(int Stelle, object Nachricht, string? Ueber = null);
 
-/// <summary>An den Graph-Actor einer Quellinstanz: dieser Cluster-Knoten hält sie (die Quelle lauscht hier) bzw. nicht mehr.</summary>
-public sealed record QuelleHalten(bool Halten);
-
-/// <summary>An den Parent des Quellknotens: lauschen bzw. aufhören.</summary>
-public sealed record Lausche(bool An);
-
-/// <summary>
-/// Die Quelle meldet ein Element (Kind des Quellknotens → Graph-Actor): seine laufende Nummer, der Schnappschuss ihres Zustands danach und die Zusage,
-/// die der Graph-Actor erfüllt, sobald er die Kette annimmt (Gegendruck: die Quelle meldet das nächste erst danach).
-/// </summary>
-public sealed record QuellMeldung(object Nachricht, long Nummer, byte[] Zustand, TaskCompletionSource Angenommen);
-
 /// <summary>Die Wege eines Parents: sein Knoten in der Instanz und die Adressen seiner Nachbarn (Parents desselben Graph-Actors).</summary>
 public sealed record KnotenWege(GraphInstanz Instanz, string Knoten)
 {

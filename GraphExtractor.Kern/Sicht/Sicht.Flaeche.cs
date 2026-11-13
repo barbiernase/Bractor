@@ -3,30 +3,32 @@ using DomainEditor;
 
 namespace GraphExtractor;
 
-// Die FLÄCHE der Werkbank (docs/10 §10.9): sechs Spalten in der Reihenfolge des Ablaufs — was Akteure hineingeben, Quellen,
-//   Graphen, Aggregate, Projektionen, was zu Akteuren kommt —, die Domänen als Bänder über die Spalten ② bis ⑤, Nachrichten als Ports an den
-//   Karten und Kanten von Port zu Port mit ihrer Art. Gerechnet nur aus dem Board (Code-Fakten); der Editor ordnet innerhalb der Zellen an.
+// Die FLÄCHE der Werkbank (docs/10 §10.9): sieben Spalten in der Reihenfolge des Ablaufs — die Clients mit ihren Eingängen, was Akteure
+//   hineingeben, Graphen, Übersetzungen, Aggregate, Projektionen, was zu Akteuren kommt —, die Domänen als Bänder über die mittleren Spalten,
+//   Nachrichten als Ports an den Karten und Kanten von Port zu Port mit ihrer Art. Eine Quelle ist kein Knoten eines Graphen: sie verwirklicht einen
+//   Akteur (Übersetzung der Akteur-Seite) und läuft als Eingang eines Clients — der steht je Umgebung an der Karte des Clients (Sicht.Clients.cs).
+//   Gerechnet nur aus dem Board (Code-Fakten) und den Umgebungen (Konfig); der Editor ordnet innerhalb der Zellen an.
 public sealed partial class Sicht
 {
     /// <summary>Die Spalten der Fläche von links nach rechts.</summary>
-    public static readonly string[] Spalten = ["ausgang", "quellen", "graphen", "uebersetzungen", "aggregate", "projektionen", "eingang"];
+    public static readonly string[] Spalten = ["clients", "ausgang", "graphen", "uebersetzungen", "aggregate", "projektionen", "eingang"];
 
     /// <summary>
     /// Ein Port: Typ der Nachricht, Richtung (<c>ein</c>/<c>aus</c>), Sorte (<c>command</c>, <c>event</c>, <c>hinweis</c>, <c>query</c>,
-    /// <c>antwort</c>, <c>frist</c>) und ob die Karte den Typ deklariert (<c>eigen</c>: sie ist sein Besitzer) oder nur auf ihn verweist.
+    /// <c>antwort</c>, <c>frist</c>, <c>meldung</c>) und ob die Karte den Typ deklariert (<c>eigen</c>: sie ist sein Besitzer) oder nur auf ihn verweist.
     /// </summary>
     public sealed record FlaechenPort(string Typ, string Richtung, string Sorte, bool Eigen);
 
     /// <summary>
     /// Eine Karte der Fläche: Id (eindeutig auf der Fläche; ein Akteur steht zweimal, <c>…|aus</c> und <c>…|ein</c>), die Karte der Sicht dahinter
-    /// (Panel; leer bei einer Katalog-Quelle), Art, Name, Spalte, Band (Domäne; Akteure haben keins), Gruppe (der Store einer Projektion bzw. eines
+    /// (Panel), Art, Name, Spalte, Band (Domäne; Akteure haben keins), Gruppe (der Store einer Projektion bzw. eines
     /// Readers, der Client eines Akteurs) und Ports.
     /// </summary>
     public sealed record FlaechenKarte(string Id, string Karte, string Art, string Name, string Spalte, string? Band, string? Gruppe, List<FlaechenPort> Ports);
 
     /// <summary>
     /// Eine Kante von einem Ausgangsport (<paramref name="Von"/>, Typ) zu einem Eingangsport (<paramref name="Nach"/>, Typ). Art: <c>schreiben</c>,
-    /// <c>lesen</c>, <c>kenntnis</c>, <c>ruecklauf</c>, <c>quelle</c>; <c>liest</c> verbindet einen Graphen mit der Gruppe eines Stores
+    /// <c>lesen</c>, <c>kenntnis</c>, <c>ruecklauf</c>; <c>liest</c> verbindet einen Graphen mit der Gruppe eines Stores
     /// (Typ = die Lese-Fähigkeit, keine Ports), <c>reaktion</c> die Gruppe eines Clients rechts mit seiner Gruppe links (Typ = die Klasse seiner
     /// Implementierung, keine Ports).
     /// </summary>
@@ -56,13 +58,13 @@ public sealed partial class Sicht
             "rejection" => "hinweis",
             "query" => "query",
             "queryresponse" => "antwort",
+            "meldung" => "meldung",
             _ => "command",
         };
     }
 
-    // ── Graphen: Knoten, innere Funktionen, Quelle ──
+    // ── Graphen: Knoten, innere Funktionen ──
     private JsonObject? GraphNamens(string name) => _graphen.FirstOrDefault(g => S(g, "name") == name);
-    private JsonObject? KatalogNamens(string name) => Alle(_board["katalog"]).FirstOrDefault(k => S(k, "name") == name);
     /// <summary>Die Funktionen eines Graphen, transitiv durch Graphen im Graphen.</summary>
     internal IEnumerable<JsonObject> InnereFunktionen(JsonObject g, HashSet<string>? gesehen = null)
     {
@@ -75,25 +77,11 @@ public sealed partial class Sicht
             else if (GraphNamens(basis) is { } inner) foreach (var x in InnereFunktionen(inner, gesehen)) yield return x;
         }
     }
-    /// <summary>Was ein Quellknoten meldet: die Katalogfunktion bzw. die Funktion mit <c>Lausche</c>.</summary>
-    private List<string> Meldet(string typ) =>
-        (KatalogNamens(Basis(typ)) is { } k ? L(k, "lauscht") : BausteinFunktion(Basis(typ)) is { } f ? L(f, "lauscht") : []).ToList();
-    /// <summary>Die Quellknoten eines Graphen (transitiv): je Knoten der Graph, in dem er steht, sein Name und sein Typ.</summary>
-    private IEnumerable<(JsonObject Graph, string Knoten, string Typ)> Quellknoten(JsonObject g, HashSet<string>? gesehen = null)
-    {
-        gesehen ??= new HashSet<string>(StringComparer.Ordinal);
-        if (!gesehen.Add(S(g, "name"))) yield break;
-        foreach (var kn in Alle(g["knoten"]))
-        {
-            var typ = S(kn, "typ");
-            if (Meldet(typ).Count > 0) yield return (g, S(kn, "name"), typ);
-            else if (GraphNamens(Basis(typ)) is { } inner) foreach (var x in Quellknoten(inner, gesehen)) yield return x;
-        }
-    }
     /// <summary>
     /// Steht der Graph auf der Fläche? Ein Graph gehört keinem anderen Graphen (sonst steht er in dessen Komposition), und liegt er in einem Katalog,
-    /// bindet die Anwendung ihn an (docs/04 §4.4): eine Übersetzung nimmt einen seiner Ausgänge oder gibt an seinen Kopf, ein Akteur
-    /// gibt an seinen Kopf, oder er hat eine Quelle (eine Instanz liest sie). Ein Graph ohne Anbindung ist eine Blaupause im Katalog-Modal.
+    /// bindet die Anwendung ihn an (docs/04 §4.4): eine Übersetzung nimmt einen seiner Ausgänge oder gibt an seinen Kopf (auch eine der Akteur-Seite,
+    /// die aus der Meldung einer Quellart seinen Kopf-Command macht), oder ein Akteur gibt an seinen Kopf. Ein Graph ohne Anbindung ist eine Blaupause im
+    /// Katalog-Modal.
     /// </summary>
     private bool AufFlaeche(JsonObject g)
     {
@@ -101,8 +89,7 @@ public sealed partial class Sicht
         if (Abstractions.Projektstruktur.KatalogVon(S(g, "namespace")) == null) return true;
         var uebersetzt = _uebersetzungen.Select(u => Basis(S(u, "ein"))).ToHashSet(StringComparer.Ordinal);
         var gegeben = _uebersetzungen.Select(u => Basis(S(u, "aus"))).Concat(_akteure.SelectMany(a => L(a, "darf"))).ToHashSet(StringComparer.Ordinal);
-        return L(g, "ausgaenge").Any(t => uebersetzt.Contains(Basis(t))) || L(g, "koepfe").Any(t => gegeben.Contains(Basis(t)))
-               || Quellknoten(g).Any();
+        return L(g, "ausgaenge").Any(t => uebersetzt.Contains(Basis(t))) || L(g, "koepfe").Any(t => gegeben.Contains(Basis(t)));
     }
 
     // ── Band (Domäne) ──
@@ -134,7 +121,7 @@ public sealed partial class Sicht
         var kanten = new List<FlaechenKante>();
         // Karte der Sicht → Karte der Fläche (für den Besitz eines Typs: wer ihn deklariert).
         var flaecheVon = new Dictionary<string, string>(StringComparer.Ordinal);
-        // Ports, die nicht über den Typ verbunden werden (Quellen und ihre Eingänge, Antworten an Akteure): ihre Kanten stehen ausdrücklich.
+        // Ports, die nicht über den Typ verbunden werden (Antworten an Akteure): ihre Kanten stehen ausdrücklich.
         var ausdruecklich = new HashSet<(string, string)>();
 
         // ① und ⑥: je Akteur zwei Karten, gruppiert unter dem Client, der ihn verkörpert (der erste nach Namen; keiner: „ohne Client“). Die Gruppe
@@ -171,11 +158,15 @@ public sealed partial class Sicht
         }
         // Eine Reaktion: der Client reagiert auf, was seine Akteure hören, mit dem, was sie dürfen — ein Rücklauf von seiner Gruppe rechts zu
         //   seiner Gruppe links, je Client einer (Typ = die Klassen seiner Implementierungen).
+        // ⓪ Je Client eine Karte in der Spalte Clients (ohne Ports: was hineingeht, sind seine Eingänge je Umgebung, EingaengeJson), auf der Höhe
+        //   seiner Gruppe.
+        foreach (var c in _clients)
+            karten.Add(new("cl:" + S(c, "_id"), "cl:" + S(c, "_id"), "client", ClientAnzeige(c), "clients", null, null, []));
         foreach (var c in _clients)
             if (Alle(c["implementierungen"]).Select(i => S(i, "klasse")).Distinct().ToList() is { Count: > 0 } kl)
                 kanten.Add(new("cl:" + S(c, "_id") + "|ein", "cl:" + S(c, "_id") + "|aus", string.Join(", ", kl), "reaktion"));
 
-        // ③ Graphen (nur die obersten) und ② ihre Quellen.
+        // ② Graphen (nur die obersten).
         foreach (var g in _graphen.Where(AufFlaeche))
         {
             var gid = "gr:" + S(g, "_id");
@@ -190,30 +181,15 @@ public sealed partial class Sicht
             foreach (var f in InnereFunktionen(g))
                 foreach (var e in Alle(f["eingaenge"]))
                     if (Sorte(S(e, "eingang")) == "event") Port(S(e, "eingang"), "ein");
-            foreach (var (qg, knoten, typ) in Quellknoten(g))
-            {
-                var qid = "q:" + S(qg, "_id") + ":" + knoten;
-                var fb = BausteinFunktion(Basis(typ));
-                var meldet = Meldet(typ);
-                karten.Add(new(qid, fb != null ? "fb:" + S(fb, "_id") : "", "quelle", typ, "quellen", band, null,
-                    meldet.Select(t => new FlaechenPort(t, "aus", Sorte(t), false)).ToList()));
-                if (fb != null) flaecheVon["fb:" + S(fb, "_id")] = qid;
-                foreach (var t in meldet)
-                {
-                    Port(t, "ein");
-                    ausdruecklich.Add((qid, t));
-                    ausdruecklich.Add((gid, t));
-                    kanten.Add(new(qid, gid, t, "quelle"));
-                }
-            }
             foreach (var t in L(g, "ausgaenge")) Port(t, "aus");
             karten.Add(new(gid, gid, "graph", S(g, "name"), "graphen", band, null, ports));
             flaecheVon[gid] = gid;
         }
-        // ③½ Übersetzungen der Domänen (docs/04 §4.4): je Record eine Karte im Band ihrer Domäne — der des Aggregats, an das sie schreibt
+        // ③ Übersetzungen der Domänen (docs/04 §4.4): je Record eine Karte im Band ihrer Domäne — der des Aggregats, an das sie schreibt
         //   bzw. dessen Antwort sie nimmt, sonst der ihres Namespace. Die Kanten folgen dem Typ: von dem Graphen, der TEin ausgibt (bzw. vom Akteur, der
-        //   es gibt, vom Aggregat, das so antwortet), zu dem, der TAus nimmt.
-        foreach (var u in _uebersetzungen)
+        //   es gibt, vom Aggregat, das so antwortet), zu dem, der TAus nimmt. Eine Übersetzung der Akteur-Seite steht nicht hier: sie verwirklicht einen
+        //   Akteur (aus der Meldung einer Quellart wird, was er darf) und gehört zu ihm — auf der Fläche gibt der Akteur, was er darf.
+        foreach (var u in _uebersetzungen.Where(u => !B(u, "akteurSeite")))
         {
             var uid = "ue:" + S(u, "_id");
             var (ein, aus) = (S(u, "ein"), S(u, "aus"));
@@ -221,15 +197,6 @@ public sealed partial class Sicht
             karten.Add(new(uid, uid, "uebersetzung", S(u, "name"), "uebersetzungen", band, null,
                 [new FlaechenPort(ein, "ein", Sorte(ein), false), new FlaechenPort(aus, "aus", Sorte(aus), false)]));
             flaecheVon[uid] = uid;
-        }
-
-        // Eine Funktion mit Lausche, die (noch) in keinem Graphen steht: eine Quelle ohne Graph.
-        foreach (var f in _bausteinFunktionen.Where(f => L(f, "lauscht").Any() && !_graphen.Any(g => Alle(g["knoten"]).Any(k => Basis(S(k, "typ")) == S(f, "name")))))
-        {
-            var fid = "fb:" + S(f, "_id");
-            karten.Add(new("q:" + fid, fid, "quelle", S(f, "name"), "quellen", BandVon(fid), null,
-                L(f, "lauscht").Select(t => new FlaechenPort(t, "aus", Sorte(t), false)).ToList()));
-            flaecheVon[fid] = "q:" + fid;
         }
 
         // ④ Aggregate: links die Commands und Queries, rechts was das Decide ergibt und die Antworten.
@@ -364,6 +331,8 @@ public sealed partial class Sicht
         JsonObject Karte(FlaechenKarte k)
         {
             var o = new JsonObject { ["id"] = k.Id, ["karte"] = k.Karte, ["art"] = k.Art, ["name"] = k.Name, ["spalte"] = k.Spalte };
+            // Ein Client: was „＋ Eingang“ an ihm anbietet (Quellarten, die einen verkörperten Akteur verwirklichen).
+            if (k.Art == "client" && _clients.FirstOrDefault(c => "cl:" + S(c, "_id") == k.Id) is { } cl) o["kandidaten"] = ClientKandidaten(cl);
             if (k.Band != null) o["band"] = k.Band;
             if (k.Gruppe != null) o["gruppe"] = k.Gruppe;
             o["ports"] = new JsonArray(k.Ports.Select(p =>
@@ -389,6 +358,8 @@ public sealed partial class Sicht
             ["karten"] = new JsonArray(f.Karten.Select(k => (JsonNode)Karte(k)).ToArray()),
             ["kanten"] = new JsonArray(f.Kanten.Select(k => (JsonNode)new JsonObject { ["von"] = k.Von, ["nach"] = k.Nach, ["typ"] = k.Typ, ["art"] = k.Art }).ToArray()),
             ["anschluss"] = Anschluss(f),
+            // Je Umgebung die Eingänge der Clients samt ihren Kanten zum Akteur (Konfig) — der Editor nimmt die der aktiven Umgebung.
+            ["eingaenge"] = EingaengeJson(),
         };
     }
 
@@ -459,7 +430,8 @@ public sealed partial class Sicht
             if (eigen.Count > 1) yield return ("error", $"Fläche: {g.Key} wird an {eigen.Count} Ports deklariert ({string.Join(", ", eigen)})");
             else if (eigen.Count == 0) yield return ("info", $"Fläche: {g.Key} hat keinen deklarierenden Port auf der Fläche");
         }
-        foreach (var k in f.Karten.Where(k => k.Spalte is "quellen" or "graphen" or "uebersetzungen" or "aggregate" or "projektionen" && k.Band == null))
+        foreach (var k in f.Karten.Where(k => k.Spalte is "graphen" or "uebersetzungen" or "aggregate" or "projektionen" && k.Band == null))
             yield return ("warning", $"Fläche: {k.Name} ({k.Art}) steht in keinem Band");
+        foreach (var b in EingangsKantenBefunde(f)) yield return b;
     }
 }

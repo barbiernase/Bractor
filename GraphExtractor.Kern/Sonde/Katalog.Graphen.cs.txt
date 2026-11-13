@@ -1,5 +1,4 @@
 using Abstractions;
-using Core.Katalog;
 
 namespace Sondenkatalog.Katalog;
 
@@ -15,10 +14,9 @@ public sealed record Schadensbewertung(
 
 // ── Import ──
 
-// Die Quelle am Kopf (Dateiwächter, Katalog des Frameworks) → der Eingang; was zurückkommt, nimmt der Zeilenimport am Kopf.
-public sealed record Dateiannahme(
-    Dateiwaechter Eingang,
-    [Von(nameof(Eingang))] Katalogeingang Annahme) : IGraph;
+// Der Eingang am Kopf (eine Quelle ist kein Knoten: was der Dateiwächter der Ablage meldet, übersetzt ihre Akteur-Seite in den Kopf-Command);
+// was zurückkommt, nimmt der Zeilenimport am Kopf.
+public sealed record Dateiannahme([Kopf] Katalogeingang Annahme) : IGraph;
 
 public sealed record Zeilenimport(
     [Kopf] Zeilenleser Lesen,
@@ -30,9 +28,10 @@ public sealed record Adresspruefung([Kopf] Registrierung Reservierung) : IGraph;
 
 // ── Messung ──
 
-// GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → Geprueft), die Messkette setzt die Quelle davor.
+// GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Messwert → Geprueft), die Messkette setzt die Annahme davor — an deren Kopf gibt
+// das Sensornetz (eine Quelle ist kein Knoten: was die Sensorabfrage meldet, übersetzt seine Akteur-Seite in den Kopf-Command).
 public sealed record Messwertaufbereitung([Kopf] Plausibilisierung Plausi, [Von(nameof(Plausi))] Messwertpruefung Pruefung) : IGraph;
-public sealed record Messkette(Sensorabfrage Abfrage, [Von(nameof(Abfrage))] Messwertaufbereitung Aufbereitung) : IGraph;
+public sealed record Messkette([Kopf] Messwertannahme Annahme, [Von(nameof(Annahme))] Messwertaufbereitung Aufbereitung) : IGraph;
 
 public sealed record Stoerungsoeffnung([Kopf] StoerungBeiAlarm Oeffnung) : IGraph;
 

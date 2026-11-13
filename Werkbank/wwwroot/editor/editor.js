@@ -4,7 +4,7 @@
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],};
-  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],states:[],readModels:[],stores:[],projektionen:[],reader:[],codeKarten:[],graphen:[],katalog:[],bausteinFunktionen:[]};
+  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],states:[],readModels:[],stores:[],projektionen:[],reader:[],codeKarten:[],graphen:[],quellarten:[],bausteinFunktionen:[]};
   let NID=1;
   // Die ANSICHT (Werkbank P7.2): Positionen, Domänen-Filter, Akteur-Reihenfolge und die 🤖-Knoten — eine Datei auf dem Server
   //   (.werkbank/ansicht.json, Schlüssel = Karten-Id). Sie gehört weder zum Code noch zum Board; der Code ist die einzige Wahrheit.
@@ -34,10 +34,11 @@
     m.bausteinFunktionen=m.bausteinFunktionen||[];m.bausteinFunktionen.forEach(f=>{f.eingaenge=f.eingaenge||[];f.umsetzungen=f.umsetzungen||[];
       f.methoden=f.methoden||[];f.methoden.forEach(x=>{x.parameter=x.parameter||[];});f.umsetzungen.forEach(u=>{u.konstruktor=u.konstruktor||[];});});
     // Graph (docs/04 §4.4): record X(Knoten…) : IGraph — je Knoten Typ, Name, [Kopf], [Von(nameof(…))] (verlierbar je Quelle). Köpfe, Ausgänge und
-    //   Kanten liefert der Server (abgeleitet). Katalog: die Funktionen des Frameworks (Dateiwaechter …), die ein Graph als Knoten nennen kann.
+    //   Kanten liefert der Server (abgeleitet). Ein Graph kennt keine Quelle: Quellarten (IQuellart) laufen als Eingänge eines Clients.
     m.graphen=m.graphen||[];m.graphen.forEach(g=>{if(!g._id)g._id="graph:"+g.name;g.knoten=g.knoten||[];g.knoten.forEach(k=>{k.von=k.von||[];k.verlierbar=k.verlierbar||[];});});
     m.uebersetzungen=m.uebersetzungen||[];m.uebersetzungen.forEach(u=>{if(!u._id)u._id="uebersetzung:"+u.name;u.felder=u.felder||[];});
-    m.katalog=m.katalog||[];
+    // Quellart (IQuellart, docs/04 §4.7): was sie meldet (IMeldung), ihr Konstruktor, ihr Katalog — framework = Core/Katalog. Kein Knoten eines Graphen.
+    m.quellarten=m.quellarten||[];m.quellarten.forEach(q=>{q.meldet=q.meldet||[];q.konstruktor=q.konstruktor||[];});
     m.clients=m.clients||[];m.clients.forEach(c=>{if(!c._id)c._id="cl"+(NID++);c.verkoerpert=c.verkoerpert||[];c.kenntnis=c.kenntnis||[];});
     // Jedes Objekt-Feld bekommt eine stabile _id → Feld-Ports eindeutig (auch bei gleichnamigen Feldern) und rename-fest.
     const stampFelder=arr=>(arr||[]).forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});
@@ -165,7 +166,6 @@
     else if(kind==="reader")MODEL.reader.push({_id:"rd"+(NID++),name:uniq("NeuReader"),namespace:defaultNs(),stores:[],trackDeps:true,handles:[],...pos});
     else if(kind==="funktion")neueFunktion(defaultNs(),pos);
     else if(kind==="gerufen")neueGerufene(defaultNs(),pos);
-    else if(kind==="quelle")neueQuellFunktion(defaultNs(),pos);
     else MODEL.records.push({name:uniq((opt&&opt.name)||"Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],
       // Ein Command, der im Block eines Aggregats entsteht, zielt auf es (ICommand<TAggregat>) — damit gehört er ihm.
       ...(kind==="command"&&AGG&&opt&&opt.reg?{aggregat:AGG}:{}),...pos});
@@ -303,7 +303,7 @@
     // Zwei Seiten je Nachricht (konzept-editor-pipelines §12): ◀ kommt aus (⊕ Erzeuger) · geht an ▶ (⊕ Konsument). Auf der Fläche nur die Ports (Kanten),
     //   im Panel dazu die Partner-Listen. Ein transientes Event (Ablehnung) hat jetzt auch einen Ausgang (→ Projektion/Reaktion/Pipeline).
     {let ein=null,aus=null;
-     if(r.kind==="command"){ein=h("div",{},slotRow("sagacmd","+ Erzeuger ⊕ (Funktion · Quelle)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name),
+     if(r.kind==="command"){ein=h("div",{},slotRow("sagacmd","+ Erzeuger ⊕ (Funktion)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name),
          r.aggregat?null:slotRow("command","+ Erzeuger ⊕ (Decide — ohne Ziel)","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
        aus=slotRow("command","+ Konsument ⊕ ("+(r.aggregat?"Decider":"Funktion")+") ▶","r",{type:"cmd",dir:"out",rec:r.name},"cmd:out:"+r.name);}
      else if(r.kind==="event"||r.kind==="rejection"){const c=r.kind==="event"?"event":"rejection";
@@ -404,9 +404,10 @@
       // Gerufene Funktion (Technik): je Umsetzung je Methode ihr Rumpf (aus der Datei); Platz „funktion|Umsetzung|Methode“ — ✎ und 🤖 wie überall.
       case "bausteinfunktion":return istGerufen(r)?(r.umsetzungen||[]).flatMap((u,ii)=>(u.rumpfe||[]).map(x=>T(u.name+"."+x.methode,x.rumpf,x._rumpf,"funktion|"+u.name+"|"+x.methode,true,
         {kachel:u.name+"."+x.methode,impl:ii,methode:x.methode})))
-        // Funktion: je Auf sein Rumpf, bei einer Quelle der von Lausche; Platz „funktion|Klasse|Eingang“ bzw. „…|Lausche“ — ✎ und 🤖 wie überall.
-        :[...(r.eingaenge||[]).map((e,ei)=>T("Auf("+e.eingang+")",e.rumpf,e._ort,"funktion|"+r.name+"|"+e.eingang,true,{kachel:r.name+".Auf("+e.eingang+")",ein:ei})),
-          ...((r.lauscht||[]).length?[T("Lausche",r.lauscheRumpf,r._lausche,"funktion|"+r.name+"|Lausche",true,{kachel:r.name+".Lausche",lausche:true})]:[])];
+        // Funktion: je Auf sein Rumpf; Platz „funktion|Klasse|Eingang“ — ✎ und 🤖 wie überall.
+        :(r.eingaenge||[]).map((e,ei)=>T("Auf("+e.eingang+")",e.rumpf,e._ort,"funktion|"+r.name+"|"+e.eingang,true,{kachel:r.name+".Auf("+e.eingang+")",ein:ei}));
+      // Quellart (IQuellart, eigene im Katalog): ihr Lausche-Rumpf — Platz „funktion|Klasse|Lausche“ (SlotInventar), ✎ und 🤖 wie überall.
+      case "quellart":return [T("Lausche",r.lauscheRumpf,r._lausche,"funktion|"+r.name+"|Lausche",true,{kachel:r.name+".Lausche"})];
       case "client":return (r.implementierungen||[]).length?(r.implementierungen||[]).flatMap(im=>(im.rumpfe||[]).map(x=>T(im.klasse+"."+x.methode,x.rumpf,null,
         "zusage|"+clientAnzeige(r)+"|"+x.event+"@"+im.klasse,im.klasse+"."+x.methode,{python:{datei:im.datei,klasse:im.klasse,methode:x.methode,signatur:x.signatur||null},event:x.event,impl:im}))):null;
     }
@@ -659,10 +660,6 @@
   //    Deklariert (Name, Felder) wird ein Typ nur an seiner Karte — nie im Knoten, der ihn benutzt (auch nicht am rufenden Fluss-Knoten).
   // Eine neue Funktion — EIN Weg (Palette, Fluss, Prozess): I<Stamm> mit Auftrag <Stamm>Auftrag und einem Ergebnis <Stamm>Erledigt.
   // Eine neue Funktion (IFunktion): als Klasse im Host, noch ohne Eingang — Eingänge und Ausgaben verbindet man an ihrer Karte (⊕).
-  // Eine Quelle ist eine Funktion mit Lausche statt Auf (docs/10 §10.3.5): was sie meldet, ist ein Command ohne Ziel — als eigene Karte angelegt.
-  function neueQuellFunktion(ns,pos){const nm=uniq("NeueQuelle"),cmd=uniq(nm+"Gemeldet");
-    MODEL.records.push({name:cmd,kind:"command",namespace:ns,felder:[]});
-    MODEL.bausteinFunktionen.push({_id:"fb"+(NID++),name:nm,namespace:ns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[],lauscht:[cmd],...(pos||{})});return nm;}
   function neueFunktion(ns,pos){const nm=uniq("NeueFunktion");
     MODEL.bausteinFunktionen.push({_id:"fb"+(NID++),name:nm,namespace:ns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[],...(pos||{})});return nm;}
   const neuKnopf=(titel,on,txt)=>h("button",{class:"rm",title:titel,onclick:on},txt||"＋");
@@ -708,12 +705,12 @@
         neuerKnoten("konfig",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:(f.name||"").replace(/^I(?=[A-ZÄÖÜ])/,"")+"Konfig"});
         const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){ctorVon(f,impl).push({typ:neu.name,name:"konfig"});render();}}),
       h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"＋ Konfig")));}
-  // ƒ FUNKTION (IFunktion, ein Block der Hierarchie): je Eingang ein Auf — ◀ Eingang ⊕ (Event · Hinweis · Quelle), Ausgaben ▶ ⊕ (Command bzw.
+  // ƒ FUNKTION (IFunktion, ein Block der Hierarchie): je Eingang ein Auf — ◀ Eingang ⊕ (Command ohne Ziel · Antwort), Ausgaben ▶ ⊕ (Command bzw.
   //   Event/Hinweis) oder ＋ ein neues Ergebnis-Event, das ihr gehört. Die Ausgaben stehen in der Signatur (CQRS050). Ohne Auf ist sie gerufen:
   //   frei benannte Methoden, ihr Halter nimmt sie im Konstruktor (◀ genutzt von). Eine Klasse läuft im Host und nimmt im Konstruktor gerufene
   //   Funktionen und Konfig. Eine Funktion ist immer eine Klasse; eine Schnittstelle gibt es nur als Technik, mit Umsetzungen (Wahl: Instanz).
   // ⬡ GRAPH (docs/04 §4.4, docs/10 §10.3.4): record X(Knoten…) : IGraph. Je Knoten eine Zeile — Name (Konfig-Schlüssel der Instanz), Typ (Funktion,
-  //   Graph im Graphen oder Katalogfunktion), [Kopf] und von wem er bekommt ([Von(nameof(…))], je Quelle gesichert oder verlierbar). Köpfe, Ausgänge
+  //   Graph im Graphen), [Kopf] und von wem er bekommt ([Von(nameof(…))], je Quelle gesichert oder verlierbar). Köpfe, Ausgänge
   //   und die Typen auf den Kanten leitet der Server aus dem Code ab; die Kanten stehen auf der Fläche zwischen den Karten der Knoten.
   const typBasis=t=>String(t||"").split("<")[0].trim();
   function graphKnotenKarte(t){const b=typBasis(t),f=MODEL.bausteinFunktionen.find(x=>x.name===b);if(f)return "fb:"+f._id;
@@ -732,26 +729,25 @@
     return z.length?[...new Set(z)].join(", "):"⚠ niemand gibt es hinein";}
   function neuerGraphKnoten(g,typ){const stamm=typBasis(typ).replace(/^I(?=[A-ZÄÖÜ])/,"");let nm=stamm,i=2;
     while((g.knoten||[]).some(k=>k.name===nm))nm=stamm+(i++);
-    const kat=(MODEL.katalog||[]).some(x=>x.name===typBasis(typ)),quelle=kat||((MODEL.bausteinFunktionen.find(x=>x.name===typBasis(typ))||{}).lauscht||[]).length>0;
-    (g.knoten=g.knoten||[]).push({typ,name:nm,kopf:!g.knoten.length&&!quelle,von:[],verlierbar:[]});gTitel(g.name+": Knoten "+nm);render();}
+    (g.knoten=g.knoten||[]).push({typ,name:nm,kopf:!g.knoten.length,von:[],verlierbar:[]});gTitel(g.name+": Knoten "+nm);render();}
   function graphKarte(body,g){
     body.append(h("div",{class:"gsec"},"Name · Namespace"));
     body.append(nameInp(g,"name","Graph",null));
     if(!g.datei)body.append(h("input",{value:g.namespace??"",oninput:e=>g.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     body.append(h("div",{class:"gsec",title:"von außen: was keine Quelle im Graphen speist — aus einem Decide, von einem Akteur, vom Ausgang eines anderen Graphen"},"▶ Köpfe (von außen, abgeleitet)"));
     if((g.koepfe||[]).length)g.koepfe.forEach(t=>body.append(h("div",{class:"gp-row",style:"cursor:pointer",title:"Klick: "+t+" öffnen",onclick:()=>zeigeLadend("rec:"+t)},"▶ "+t+"  ← "+graphHerkunft(t,g))));
-    else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},g.quelle?"keine — ⚡ Quelle "+g.quelle+" am Kopf":"— (ein Knoten mit [Kopf] fehlt)"));
+    else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},"— (ein Knoten mit [Kopf] fehlt)"));
     body.append(h("div",{class:"gsec",title:"was ein Knoten ausgibt und kein Knoten über Von nimmt"},"Ausgänge ▶ (abgeleitet)"));
     if((g.ausgaenge||[]).length)g.ausgaenge.forEach(t=>body.append(h("div",{class:"gp-row",style:"cursor:pointer",title:"Klick: "+t+" öffnen",onclick:()=>zeigeLadend("rec:"+t)},t+"  → "+graphZiel(t,g))));
     else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},"—"));
     body.append(h("div",{class:"gsec",title:"jeder Parameter des Records ist ein Knoten; die Reihenfolge bedeutet nichts"},"Knoten · [Kopf] · bekommt von [Von]"));
-    (g.knoten||[]).forEach((k,i)=>{const id=graphKnotenKarte(k.typ),kat=!id&&(MODEL.katalog||[]).some(x=>x.name===typBasis(k.typ));
+    (g.knoten||[]).forEach((k,i)=>{const id=graphKnotenKarte(k.typ);
       body.append(h("div",{class:"frow"},
         h("input",{value:k.name??"",placeholder:"Knoten",style:"max-width:130px",title:"Name des Knotens = Konfig-Schlüssel in der Instanz",
           onchange:e=>{const v=e.target.value.trim(),alt=k.name;if(!v||v===alt)return;k.name=v;
             (g.knoten||[]).forEach(x=>{x.von=(x.von||[]).map(z=>z===alt?v:z);x.verlierbar=(x.verlierbar||[]).map(z=>z===alt?v:z);});gTitel(g.name+": Knoten "+alt+" → "+v);render();}}),
-        h("span",{class:"slotlbl",style:"flex:1"+(id?";cursor:pointer":""),title:id?"Klick: Karte öffnen":kat?"Katalogfunktion des Frameworks":"⚠ Typ fehlt",
-          onclick:()=>{if(id)zeigeLadend(id);}},(kat?"⚡ ":id&&id.startsWith("gr:")?"⬡ ":id?"ƒ ":"⚠ ")+k.typ),
+        h("span",{class:"slotlbl",style:"flex:1"+(id?";cursor:pointer":""),title:id?"Klick: Karte öffnen":"⚠ Typ fehlt",
+          onclick:()=>{if(id)zeigeLadend(id);}},(id&&id.startsWith("gr:")?"⬡ ":id?"ƒ ":"⚠ ")+k.typ),
         h("label",{class:"cbx",title:"[Kopf]: nimmt von außen, was keine Quelle im Graphen speist — je Eingangstyp genau einer"},
           h("input",{type:"checkbox",onchange:e=>{k.kopf=e.target.checked;gTitel(g.name+": "+k.name+(k.kopf?" ist Kopf":" kein Kopf"));render();},...(k.kopf?{checked:"checked"}:{})}),"Kopf"),
         h("button",{class:"rm",title:"Knoten entfernen (seine Kanten gehen mit)",onclick:()=>{g.knoten.splice(i,1);
@@ -764,10 +760,10 @@
               onclick:()=>{k.von=an?ohneX(k.von,x.name):[...(k.von||[]),x.name];if(an)k.verlierbar=ohneX(k.verlierbar,x.name);gTitel(g.name+": "+k.name+(an?" nicht mehr":"")+" von "+x.name);render();}},(an?"✓ ":"")+x.name),
             an?h("button",{class:"akt-dom"+(vl?" an":""),title:"gesichert: der Absender wartet auf „fertig“ · verlierbar: einmal geschickt, hält den Kopf nicht auf",
               onclick:()=>{k.verlierbar=vl?ohneX(k.verlierbar,x.name):[...(k.verlierbar||[]),x.name];gTitel(g.name+": "+x.name+" → "+k.name+(vl?" gesichert":" verlierbar"));render();}},vl?"⇢ verlierbar":"gesichert"):null);})));});
-    // ＋ Knoten: Funktion, Quelle, Graph im Graphen oder Katalogfunktion — oder eine neue Funktion mit dem getippten Namen.
-    const such=h("input",{placeholder:"＋ Knoten: Funktion, Graph oder Katalog suchen — oder neuen Namen tippen"}),liste=h("div",{style:"display:flex;flex-wrap:wrap;gap:4px;margin:4px 0"});
-    const kandidaten=()=>[...MODEL.bausteinFunktionen.filter(f=>!istGerufen(f)).map(f=>({n:f.name,a:(f.lauscht||[]).length?"⚡":"ƒ"})),
-      ...(MODEL.graphen||[]).filter(x=>x!==g).map(x=>({n:x.name,a:"⬡"})),...(MODEL.katalog||[]).map(x=>({n:x.name,a:"⚡ Katalog ·"}))];
+    // ＋ Knoten: Funktion oder Graph im Graphen — oder eine neue Funktion mit dem getippten Namen.
+    const such=h("input",{placeholder:"＋ Knoten: Funktion oder Graph suchen — oder neuen Namen tippen"}),liste=h("div",{style:"display:flex;flex-wrap:wrap;gap:4px;margin:4px 0"});
+    const kandidaten=()=>[...MODEL.bausteinFunktionen.filter(f=>!istGerufen(f)).map(f=>({n:f.name,a:"ƒ"})),
+      ...(MODEL.graphen||[]).filter(x=>x!==g).map(x=>({n:x.name,a:"⬡"}))];
     const zeige=()=>{liste.innerHTML="";const q=such.value.trim(),ql=q.toLowerCase();
       kandidaten().filter(c=>!ql||c.n.toLowerCase().includes(ql)).slice(0,30).forEach(c=>liste.append(h("button",{class:"akt-dom",onclick:()=>neuerGraphKnoten(g,c.n)},c.a+" "+c.n)));
       if(q&&/^[A-Za-zÄÖÜäöüß_][\wÄÖÜäöüß]*$/.test(q)&&!kandidaten().some(c=>c.n===q))liste.append(h("button",{class:"akt-dom",title:"Neue Funktion (Klasse im Host) anlegen und als Knoten einsetzen",
@@ -779,16 +775,7 @@
     inst.forEach(([n])=>body.append(h("div",{class:"gp-row",style:"cursor:pointer",onclick:()=>waehle("host:inst:"+n)},"⬡ "+n)));
     const innen=(MODEL.graphen||[]).filter(x=>(x.knoten||[]).some(k=>typBasis(k.typ)===g.name));
     if(!inst.length)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},innen.length?"keine eigene — läuft als Knoten in "+innen.map(x=>x.name).join(", "):"⚠ keine — er läuft erst als Instanz"));
-    if(g.datei)body.append(h("button",{class:"add",onclick:()=>instanzAnlegen(g.name)},"＋ Instanz in „"+(WB.umgName||"?")+"“"));}
-  // Eine Quelle (Lausche statt Auf): was sie je Element meldet — Commands ohne Ziel; nichts davon steht im Log, was sie gesehen hat, hält ihr Zustand.
-  function quellAbschnitt(body,f){if(!(f.lauscht||[]).length&&(f.eingaenge||[]).length)return;
-    body.append(h("div",{class:"gsec",title:"IAsyncEnumerable<…> Lausche(CancellationToken) — eine Quelle steht am Kopf ihres Graphen"},"⚡ Quelle: meldet (Lausche) ▶"));
-    (f.lauscht||[]).forEach(a=>{const s=anchorDot("sagacmd");s.classList.add("o");
-      body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"nicht mehr melden",onclick:()=>{f.lauscht=ohneX(f.lauscht,a);render();}},"✕"),
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right;cursor:pointer",onclick:()=>zeigeLadend("rec:"+a)},"→ "+a),s));});
-    body.append(slotRow("sagacmd","+ meldet ⊕ (Command ohne Ziel) ▶","r",{type:"sagaCmd",dir:"out",fb:f._id,ein:"lauscht"},"fb:lauscht:"+f._id));
-    {const z=(f.konstruktor||[]).find(p=>/^IZustand</.test(p.typ||""));
-      body.append(h("div",{class:"gsec",style:"opacity:.8"},z?"Zustand: "+z.typ+" — gesichert je Instanz und Knoten":"ohne Zustand — was sie gesehen hat, wüsste sie nach einem Neustart nicht"));}}
+    if(g.datei&&!inst.length)body.append(h("button",{class:"add",onclick:()=>instanzAnlegen(g.name)},"＋ Instanz in „"+(WB.umgName||"?")+"“"));}
   function funktionsKarte(body,f){
     const gerufen=istGerufen(f);
     if(gerufen){body.append(topSlot("gerufen","◀ genutzt von ⊕ (Funktion · Umsetzung)",{type:"gerufen",dir:"in",fb:f._id,fk:f._id},"gr:in:"+f._id));
@@ -833,8 +820,7 @@
         neuerKnoten("command",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:stamm+"Auftrag",still:true});
         const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){(f.eingaenge=f.eingaenge||[]).push({eingang:neu.name,ausgaben:[]});gTitel("ƒ "+f.name+": Auf("+neu.name+")");render();}}),
       h("span",{class:"slotlbl",style:"flex:1"},"＋ neuer Eingang (Nachricht und Auf)")));
-    body.append(slotRow("event","+ Antwort ⊕ (Event, das ein eigener Command entschied)","l",{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:"open"},"fb:ein:"+f._id+":open"));
-    quellAbschnitt(body,f);}
+    body.append(slotRow("event","+ Antwort ⊕ (Event, das ein eigener Command entschied)","l",{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:"open"},"fb:ein:"+f._id+":open"));}
     if(f.klasse){body.append(h("div",{class:"gsec",title:"Konstruktor der Klasse: Konfig-Records (Werte am Knoten der Instanz), Technik, IZustand<T>, ILogger<T>"},"⚙ braucht (Konstruktor)"));
       ctorAbschnitt(body,f,null);}
     else umsetzungsAbschnitt(body,f,gerufen);}
@@ -854,7 +840,7 @@
       (f.methoden=f.methoden||[]).push({name:n,rueckgabe:"void",parameter:[]});render();}},"+ Methode"));}
   // Umsetzungen einer Schnittstelle: je Klasse ihr Konstruktor (⊕ gerufene Funktionen), bei einer gerufenen je Methode ihr Rumpf; ＋ weitere.
   function umsetzungsAbschnitt(body,f,gerufen){
-    body.append(h("div",{class:"gsec",title:"Klassen, die "+f.name+" implementieren — welche läuft, wählt die Umgebung (Funktionen:"+f.name+":Implementierung)"},"Umsetzungen"));
+    body.append(h("div",{class:"gsec",title:"Klassen, die "+f.name+" implementieren — welche läuft, wählt der Knoten einer Instanz bzw. ein Eingang (Technik:"+f.name+")"},"Umsetzungen"));
     if(!(f.umsetzungen||[]).length)body.append(h("div",{class:"gsec",style:"opacity:.7"},gerufen
       ?"⚠ keine — ohne Umsetzung bricht der Start, sobald eine Funktion sie braucht.":"⚠ eine Funktion ist eine Klasse (CQRS100) — draußen rechnet ein Client, der auf ein Fakt reagiert."));
     (f.umsetzungen||[]).forEach((u,ii)=>{
@@ -867,10 +853,12 @@
       body.append(h("div",{class:"frow"},ein,h("button",{class:"act",title:"Eine weitere Umsetzung (Klasse mit throw-Stubs) — z. B. ein Fake für die Sim-Umgebung",
         onclick:()=>{const n=ein.value.trim();if(!n||uniq(n)!==n){deFlash("⚠ Name fehlt oder ist vergeben",false);return;}
           (f.umsetzungen=f.umsetzungen||[]).push({name:n,konstruktor:[]});render();}},"＋ Umsetzung")));}
-    if(gerufen){const lo=Object.entries((MODEL.rahmen||{}).umgebungen||{}).map(([n,u])=>[n,((u||{}).Funktionen||{})[f.name]]);
-      const einzig=(f.umsetzungen||[]).length===1?f.umsetzungen[0].name:null;
-      if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Umsetzung je Umgebung: "+lo.map(([n,k])=>n+" = "+(k&&k.Implementierung?k.Implementierung
-        :einzig?einzig+" (die einzige)":"⚠ wählen")).join(" · ")+" — eingestellt im 🖥 Host-Rahmen (Funktionen)"));}}
+    if(gerufen){const wahl=technikWahl(f.name),einzig=(f.umsetzungen||[]).length===1?f.umsetzungen[0].name:null;
+      body.append(h("div",{class:"gsec",style:"opacity:.8"},einzig?"Umsetzung: "+einzig+" (die einzige) — läuft überall"
+        :wahl.length?"Gewählt: "+wahl.map(w=>w.umgebung+" · "+w.wo+" = "+w.umsetzung).join(" · ")+" — im Instanz-Formular (⚙) bzw. am Eingang"
+        :"In keiner Instanz gewählt — die Wahl steht am Knoten einer Instanz (⚙) bzw. an einem Eingang"));}}
+  // Wo welche Umsetzung einer Technik gewählt ist (Instanzen und Eingänge aller Umgebungen) — gerechnet im Server (/api/werkbank/technikwahl).
+  const technikWahl=T=>((WB.technikWahl||{})[T]||[]);
   const recArt=nm=>(recByName(nm)||{}).kind||"";
   // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2 und §8) ══
   //   Deklariert ist nur IDarf (direkt); alles Abgeleitete (Kette, Akteur-Menge je Karte, Akteur-Rahmen, Reihenfolge, Pfade) rechnet der Server
@@ -1088,9 +1076,8 @@
     }else if(kind==="record"){
       // Akteure dürfen bzw. hören den Typ unter seinem neuen Namen (IDarf<T>, IHoert<T> folgen dem Typ).
       MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);a.hoert=(a.hoert||[]).map(x=>x===old?nv:x);});
-      // Funktionen: Eingänge, Ausgaben und was eine Quelle meldet.
-      MODEL.bausteinFunktionen.forEach(f=>{(f.eingaenge||[]).forEach(e=>{if(e.eingang===old)e.eingang=nv;e.ausgaben=(e.ausgaben||[]).map(x=>x===old?nv:x);});
-        f.lauscht=(f.lauscht||[]).map(x=>x===old?nv:x);});
+      // Funktionen: Eingänge und Ausgaben.
+      MODEL.bausteinFunktionen.forEach(f=>{(f.eingaenge||[]).forEach(e=>{if(e.eingang===old)e.eingang=nv;e.ausgaben=(e.ausgaben||[]).map(x=>x===old?nv:x);});});
       // … und die Kenntnis der Clients (IHoert folgt dem Typ).
       MODEL.clients.forEach(c=>{c.kenntnis=(c.kenntnis||[]).map(x=>x===old?nv:x);});
       if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
@@ -1227,7 +1214,7 @@
     {const nm=MODEL.records.includes(ref)&&(ref.kind==="event"||ref.kind==="rejection")?ref.name:null;
       if(nm)MODEL.clients.forEach(c=>{if((c.kenntnis||[]).includes(nm))c.kenntnis=ohneX(c.kenntnis,nm);});}
     // … und aus den Funktionen: ein gelöschtes Ergebnis fällt aus dem OneOf, ein gelöschter Auftrag lässt den Eingang offen.
-    if(MODEL.records.includes(ref)){MODEL.bausteinFunktionen.forEach(f=>{f.lauscht=ohneX(f.lauscht,ref.name);(f.eingaenge||[]).forEach(e=>{e.ausgaben=ohneX(e.ausgaben,ref.name);});
+    if(MODEL.records.includes(ref)){MODEL.bausteinFunktionen.forEach(f=>{(f.eingaenge||[]).forEach(e=>{e.ausgaben=ohneX(e.ausgaben,ref.name);});
       f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==ref.name);});MODEL.akteure.forEach(a=>{a.hoert=ohneX(a.hoert,ref.name);});}
     if(VIEW.heim&&VIEW.heim[n.id]){delete VIEW.heim[n.id];speichereAnsicht();}
     if(VIEW.heimBlk&&VIEW.heimBlk[n.id]){delete VIEW.heimBlk[n.id];speichereAnsicht();}
@@ -1393,8 +1380,6 @@
         const hin=recArt(O.rec)==="rejection",neu={eingang:O.rec,hinweis:hin,herkunft:!hin,strom:false,faehigkeiten:[],ausgaben:[]};
         if(I.ein==="open"){if(!f.eingaenge.some(e=>e.eingang===O.rec))f.eingaenge.push(neu);}
         else if(f.eingaenge[I.ein])Object.assign(f.eingaenge[I.ein],{eingang:O.rec,hinweis:hin,herkunft:!hin});}}
-    else if(O.type==="sagaCmd"&&O.fb&&O.ein==="lauscht"){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb);
-      if(f&&I.rec&&!(f.lauscht=f.lauscht||[]).includes(I.rec))f.lauscht.push(I.rec);}
     else if((O.type==="evtOut"||O.type==="sagaCmd")&&O.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),e=f&&(f.eingaenge||[])[O.ein];
       if(e&&I.rec&&!(e.ausgaben=e.ausgaben||[]).includes(I.rec))e.ausgaben.push(I.rec);}
     // 🧩 Eine gerufene Funktion in den Konstruktor einer Funktions-Klasse bzw. einer Umsetzung (O.impl).
@@ -1440,7 +1425,6 @@
     else if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
     else if(O.type==="evtOut"&&O.dec){const d=dec(O.dec);if(d)d.ergibt=(d.ergibt||[]).filter(x=>x.event!==I.rec);}
     else if(O.type==="evtUse"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f)f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==O.rec);}
-    else if(O.type==="sagaCmd"&&O.fb&&O.ein==="lauscht"){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb);if(f)f.lauscht=ohne(f.lauscht,I.rec);}
     else if((O.type==="evtOut"||O.type==="sagaCmd")&&O.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),e=f&&(f.eingaenge||[])[O.ein];if(e)e.ausgaben=ohne(e.ausgaben,I.rec);}
     else if(O.type==="gerufen"&&O.fb){const g=MODEL.bausteinFunktionen.find(x=>x._id===I.fb),f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),l=f&&ctorVon(f,O.impl);
       if(g&&l)l.splice(0,l.length,...l.filter(p=>gerufenByName(p.typ)!==g));}
@@ -1888,25 +1872,33 @@
       h("button",{title:"Geladene Domänen ändern",onclick:()=>deLaden()},"📂 "+(LADEN===null?"alles geladen":!LADEN.length?"leer":LADEN.map(letztesSeg).join(", "))),
       btn("⤢ Alles zeigen",false,"Ganze Fläche einpassen",()=>passeEin(flKarten().map(k=>k.id),1)),
       btn("🖥 Umgebung ▾",false,"Umgebung und Instanzen öffnen",e=>menue(e.clientX,e.clientY+20,"Umgebung "+(WB.umgName||""),
-        hostKnoten().map(n=>({t:n.name,fn:()=>komKarte(n.id)})))),
+        hostKnoten().filter(n=>!n.ref.eingang).map(n=>({t:n.name,fn:()=>komKarte(n.id)})))),
       h("span",{id:"gfokus",class:"gfokus",style:"display:none"}),
       btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
       h("span",{style:"margin-left:8px"},"Klick = Kette hervorheben · Doppelklick = öffnen und bearbeiten · vom Port ziehen = verbinden · Esc = fertig"));}
 
-  // ══ FLÄCHE IN SECHS SPALTEN (docs/10 §10.9): was Akteure hineingeben · Quellen · Graphen · Aggregate · Projektionen · was zu
-  //   Akteuren kommt. Karten, Ports, Bänder und Kanten rechnet der Server (board.sicht.flaeche); hier nur Anordnung und Zeichnen. Eine Karte der
-  //   Fläche öffnet (Doppelklick) die Karte der Sicht dahinter im Modal, ein Port den Typ seiner Nachricht; ein Klick hebt die Kette hervor.
-  const FL_SPALTE={ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf) — je Client gruppiert",neu:[]},quellen:{t:"Quellen",u:"lauschen am Kopf eines Graphen",neu:["quelle"]},
+  // ══ FLÄCHE IN SIEBEN SPALTEN (docs/10 §10.9): Clients (je Client seine Eingänge in der aktiven Umgebung) · was Akteure hineingeben · Graphen ·
+  //   Übersetzungen · Aggregate · Projektionen · was zu Akteuren kommt. Karten, Ports, Bänder und Kanten rechnet der Server (board.sicht.flaeche, die
+  //   Eingänge je Umgebung in flaeche.eingaenge); hier nur Auswahl der aktiven Umgebung, Anordnung und Zeichnen. Eine Karte der Fläche öffnet
+  //   (Doppelklick) die Karte der Sicht dahinter im Modal, ein Port den Typ seiner Nachricht; ein Klick hebt die Kette hervor.
+  const FL_SPALTE={clients:{t:"Clients",u:"je Client seine Eingänge in der Umgebung — ＋ Eingang an der Karte",neu:[]},
+    ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf) — je Client gruppiert",neu:[]},
     graphen:{t:"Graphen",u:"rechnen vor dem Aggregat",neu:["graph"]},
     uebersetzungen:{t:"Übersetzungen",u:"Nachricht ↦ Command — Ausgang anklicken, dann den Command am Aggregat",neu:[]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
     projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["store"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört) — je Client gruppiert",neu:[]}};
-  const FL_SYM={akteur:"👤",quelle:"⚡",graph:"⬡",uebersetzung:"↦",aggregate:"▣",projektion:"⇶",reader:"⌕",store:"🗄"};
+  const FL_SYM={client:"🔌",akteur:"👤",graph:"⬡",uebersetzung:"↦",aggregate:"▣",projektion:"⇶",reader:"⌕",store:"🗄"};
   const FL_SORTE={command:"",event:"",hinweis:"✉ ",query:"? ",antwort:"↩ ",frist:"⏱ "};
   // Kantenarten: Farbe, Strich, leise (tritt zurück, bis eine ihrer Karten gewählt ist).
-  const FL_KANTE={reaktion:{c:"#e08a3c",d:"8 5",leise:1},schreiben:{c:"#9aa6bb"},quelle:{c:"#9aa6bb"},lesen:{c:"#7aa2e0",d:"2 4",leise:1},kenntnis:{c:"#8a8f9c",d:"6 4",leise:1},
-    ruecklauf:{c:"#e08a3c",d:"8 5"},liest:{c:"#a07ad6",d:"1 4",leise:1}};
-  const FL_LEER={spalten:["ausgang","quellen","graphen","uebersetzungen","aggregate","projektionen","eingang"],baender:[],gruppen:[],karten:[],kanten:[]};
-  const FL=()=>SICHT().flaeche||FL_LEER;
+  const FL_KANTE={reaktion:{c:"#e08a3c",d:"8 5",leise:1},schreiben:{c:"#9aa6bb"},lesen:{c:"#7aa2e0",d:"2 4",leise:1},kenntnis:{c:"#8a8f9c",d:"6 4",leise:1},
+    ruecklauf:{c:"#e08a3c",d:"8 5"},liest:{c:"#a07ad6",d:"1 4",leise:1},eingang:{c:"#5fae8a"}};
+  const FL_LEER={spalten:["clients","ausgang","graphen","uebersetzungen","aggregate","projektionen","eingang"],baender:[],gruppen:[],karten:[],kanten:[]};
+  // Die aktive Umgebung (Kopfzeile) — ihre Eingänge stehen an den Client-Karten; die Kanten Eingang → Akteur kommen zu denen der Fläche dazu.
+  const flUmgebung=()=>{try{return WB.umgName||(WB.zustand||{}).aktiv||null;}catch(e){return null;}};
+  const FL_EING_LEER={karten:{},kanten:[],befunde:[],cluster:false};
+  const flEing=()=>((SICHT().flaeche||{}).eingaenge||{})[flUmgebung()]||FL_EING_LEER;
+  let FL_CACHE={f:null,u:null,v:null};
+  const FL=()=>{const f=SICHT().flaeche||FL_LEER,u=flUmgebung();if(FL_CACHE.f===f&&FL_CACHE.u===u)return FL_CACHE.v;
+    const e=(f.eingaenge||{})[u],v=e&&(e.kanten||[]).length?{...f,kanten:[...f.kanten,...e.kanten]}:f;FL_CACHE={f,u,v};return v;};
   // Aggregat und Store von innen (board.sicht.innen, GraphExtractor.Kern/Sicht/Sicht.Innen.cs): Verwendungen je Typ, was an einen „＋“ passt, die
   //   Read-Models je Fähigkeit. Regeln als Daten aus der Grammatik (rahmen.grammatik: Store-Klassen, Bündel, Typname). Der Editor schlägt nur nach (W3).
   const INNEN=()=>SICHT().innen||{verwendungen:{},aggregate:{},handles:{},readModels:{}};
@@ -1914,13 +1906,12 @@
   const typnameMuster=()=>String(GRAM().typname||"^$");
   const FL_KOPF=96, FL_BAND_PAD=30, FL_GAP_Y=16, FL_GR_KOPF=22, FL_GR_PAD=10;
   let FLGEO={spalten:{},baender:[],gruppen:new Map()}, FLKARTE=new Map();
-  // Die Panel-Karte einer Flächen-Karte: die Karte der Sicht dahinter; eine Katalog-Quelle öffnet ihren Graphen.
-  function flPanelId(fk){if(fk.karte)return fk.karte;const k=FL().kanten.find(x=>x.von===fk.id&&x.art==="quelle");return k?k.nach:null;}
-  // Der Graph einer Quelle bzw. ein Graph selbst (Name) — für seine Instanzen.
-  function flGraphName(fk){if(fk.art==="graph")return fk.name;if(fk.art!=="quelle")return null;
-    const k=FL().kanten.find(x=>x.von===fk.id&&x.art==="quelle"),g=k&&FLKARTE.get(k.nach);return g?g.name:null;}
+  // Die Panel-Karte einer Flächen-Karte: die Karte der Sicht dahinter.
+  function flPanelId(fk){return fk.karte||null;}
+  // Ein Graph (Name) — für seine Instanz.
+  function flGraphName(fk){return fk.art==="graph"?fk.name:null;}
   // Was gezeigt wird: die geladenen Domänen (Start-Dialog) — Akteure immer, sonst nach der Panel-Karte.
-  function flSichtbar(fk){if(fk.art==="akteur"||LADEN===null)return true;const n=NODEBY.get(flPanelId(fk)||"");return !n||geladen(n);}
+  function flSichtbar(fk){if(fk.art==="akteur"||fk.art==="client"||LADEN===null)return true;const n=NODEBY.get(flPanelId(fk)||"");return !n||geladen(n);}
   function flKarten(){return FL().karten.filter(flSichtbar);}
   // ── Fläche: anschließen über „＋“ am Port (nie Pfeile von Hand). Der „＋“ hebt die Ports hervor, die passen; ein Klick verbindet, Esc bricht ab.
   //   Akteur links „＋ darf“ → Eingänge (Command, Query) von Graphen, Aggregaten, Readern; Akteur rechts „＋ hört“ → Ausgänge (Event,
@@ -1953,6 +1944,9 @@
     if(!n){FLPORT=null;flMarkiere();}}
   function flLoesen(fk,p){if(fk.art==="projektion"){const pr=projektionVonKarte(fk);if(pr){pr.handles=(pr.handles||[]).filter(x=>x.event!==p.typ);gTitel(pr.name+": Auf("+p.typ+") entfernt");render();}}}
   const flLoesbar=(fk,p)=>!!p.loesbar;
+  // Esc schließt zuerst ein offenes Auswahlmenü bzw. eine Namensfrage (über Fläche und Modal) — erst ein weiteres Esc bricht ab bzw. schließt das Modal.
+  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;const m=document.querySelectorAll("#de .gmenue.fix");
+    if(m.length){e.stopImmediatePropagation();m.forEach(x=>x.remove());}},true);
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&FLPORT&&!KOM){e.stopImmediatePropagation();FLPORT=null;flMarkiere();}},true);
   // ══ EIN GRAPH AUF DER FLÄCHE, aufgeklappt (docs/04 §4.4): der Graph aus einem Katalog mit allen Funktionen, oben sein Eingang (wer
   //   an seinen Kopf gibt: ein Akteur, eine Kopf-Übersetzung der Domäne), an jedem Command-Port „＋ ↦“ — eine Übersetzung in einer Domäne nimmt die
@@ -1979,7 +1973,6 @@
       ue.forEach(u=>{const oe=()=>ueOeffne({karte:"ue:"+u._id});
         eing.append(h("div",{class:"fl-ab-ue",title:"↦ "+u.name+" — Klick: die Feldzuordnung",onclick:oe},
           h("div",{class:"fl-ab-ue-t"},"↦ "+u.name+" · "+u.ein+" ↦ "+komBasis(u.aus)),ueZuordnungEl(u,oe,true)));});});
-    d.knoten.filter(k=>k.quelle).forEach(k=>eing.append(h("div",{class:"fl-ab-z"},"⚡ "+k.name+" ("+k.typ+")")));
     if(d.koepfe.length)eing.append(h("button",{class:"fl-ab-plus",title:"Wer gibt an den Kopf: ein Akteur direkt, oder ein Client mit einer Nachricht seiner Domäne, die eine Übersetzung in den Eingang macht",
       onclick:e=>flEingang(ab,e)},"＋ Eingang"));
     box.append(eing);
@@ -2007,22 +2000,59 @@
         gr.append(sp);});
       box.append(gr);}
     return box;}
-  // ＋ Eingang an einem Graphen: ein Client gibt eine Nachricht seiner Domäne, die eine Kopf-Übersetzung in den Eingang macht, oder eine Quelle
-  //   aus dem Katalog des Frameworks speist den Kopf. Wer etwas hineingibt (IDarf), legt man im Modal „Akteure und Clients“ fest.
-  function flEingang(ab,ev){const {id,g,d}=ab,ein=d.koepfe.map(k=>k.typ),quellen=d.quellen||[];
+  // ＋ Eingang an einem Graphen: ein Client gibt eine Nachricht seiner Domäne, die eine Kopf-Übersetzung in den Eingang macht. Wer etwas
+  //   hineingibt (IDarf), legt man im Modal „Akteure und Clients“ fest; eine Quelle ist ein Eingang eines Clients, kein Knoten des Graphen.
+  function flEingang(ab,ev){const {g,d}=ab,ein=d.koepfe.map(k=>k.typ);
     menueFix(ev.clientX,ev.clientY,"Eingang von "+g.name,[{kopf:"Client — ein Akteur gibt hinein"},
       {t:"👤 Ein Akteur darf einen Eingang direkt … (im Modal Akteure und Clients)",fn:()=>aktOeffne(MODEL.akteure[0]?"akt:"+MODEL.akteure[0]._id:"")},
-      ...ein.map(t=>({t:"↦ "+t+" aus einer Nachricht einer Domäne …",fn:()=>komKopfUebersetzung(t,ev)})),
-      ...(quellen.length?[{trenn:1},{kopf:"Quelle — lauscht"},...quellen.map(q=>({t:"⚡ "+q.name+" → "+(q.meldet||[]).join(", "),fn:()=>{
-        const gm=komModell(id),z=(gm.knoten||[]).find(x=>d.koepfe.some(k=>k.knoten.includes(x.name)));if(!z)return;const qn=komKnotenName(gm,q.name);
-        gm.knoten.push({typ:q.name,name:qn,kopf:false,von:[],verlierbar:[]});z.von=[...(z.von||[]),qn];z.kopf=false;gTitel(gm.name+": Quelle "+q.name);render();}}))]:[])]);}
+      ...ein.map(t=>({t:"↦ "+t+" aus einer Nachricht einer Domäne …",fn:()=>komKopfUebersetzung(t,ev)}))]);}
+  // ══ CLIENTS AUF DER FLÄCHE (docs/10 §10.9): je Client eine Karte, darin je Eingang der aktiven Umgebung eine Zeile (Name, Quellart, Rechner, die
+  //   wichtigsten Werte, Befunde wie beim Start) und seine App-Verbindung; von jedem Eingang eine Kante zum Akteur, für den er hineingibt. Was dort
+  //   steht, rechnet der Server (flaeche.eingaenge[Umgebung].karten); „＋ Eingang“ an der Karte (nur Quellarten, die einen verkörperten Akteur
+  //   verwirklichen), Doppelklick auf einen Eingang öffnet sein Formular, ✕ entfernt ihn — jedes eine Geste an umgebung.json (↶).
+  const eingangId=(client,name)=>"host:eing:"+client+"/"+name;
+  const eingangPfad=(client,name)=>"/api/werkbank/eingang/"+encodeURIComponent(flUmgebung()||"")+"/"+encodeURIComponent(client)+"/"+encodeURIComponent(name);
+  const clientName=fk=>{const c=aktVonKarte(fk.karte);return c?c.name:fk.name;};
+  function flClientInnen(fk){const E=(flEing().karten||{})[fk.id]||{eingaenge:[]},box=h("div",{class:"fl-cl"}),cn=clientName(fk);
+    ["pointerdown"].forEach(x=>box.addEventListener(x,e=>e.stopPropagation()));
+    if(E.app){const a=E.app;box.append(h("div",{class:"fl-cl-z app",title:"App-Verbindung (Clients:"+cn+" im Host-Rahmen 🔌): "+Object.entries(a).map(([k,v])=>k+" "+v).join(" · ")},
+      h("div",{class:"fl-cl-t"},"📡 App"),h("div",{class:"fl-cl-w"},a.worker?"Worker "+a.worker:a.token?"Token "+a.token:a.adresse||a.urls||"")));}
+    (E.eingaenge||[]).forEach(e=>{const bef=e.befunde||[];
+      const z=h("div",{class:"fl-cl-z"+(bef.length?" befund":""),title:"Eingang "+e.name+" · "+e.art+" für "+e.akteur+(bef.length?"\n⚠ "+bef.join("\n⚠ "):"")+"\nDoppelklick: Formular",
+        ondblclick:ev=>{ev.stopPropagation();komKarte(eingangId(cn,e.name));},onclick:ev=>ev.stopPropagation()},
+        h("div",{class:"fl-cl-t"},h("span",{},"⚡ "+e.name),h("span",{class:"fl-cl-art"},e.art),
+          bef.length?h("span",{class:"gdiag warn"},"⚠ "+bef.length):null,
+          h("button",{class:"ag-los",title:"Eingang "+e.name+" entfernen",onclick:ev=>{ev.stopPropagation();
+            menueFix(ev.clientX,ev.clientY,"✕ Eingang "+e.name+" entfernen?",[{hinweis:"aus umgebungen/"+flUmgebung()+"/umgebung.json (↶ nimmt es zurück)"},
+              {t:"✕ entfernen",gefahr:1,fn:()=>instanzGeste(eingangPfad(cn,e.name),"DELETE",undefined,"⚡ Eingang "+cn+"/"+e.name+" entfernt")}]);}},"✕")),
+        h("div",{class:"fl-cl-w"},"🖥 "+(e.rechner||(flEing().cluster?"⚠ ohne Rechner":"auf dem Host"))+" · für 👤 "+(e.akteur||"?")),
+        ...(e.kurz||[]).map(k=>h("div",{class:"fl-cl-w leise",title:k},k)));
+      z.dataset.eingang=e.name;box.append(z);});
+    if(!E.app&&!(E.eingaenge||[]).length)box.append(h("div",{class:"fl-cl-w leise"},"in „"+(flUmgebung()||"?")+"“ ohne Eingang"));
+    return box;}
+  // ＋ Eingang: erst die Quellart (nur die, die einen verkörperten Akteur verwirklichen — der Server nennt sie), bei mehreren Akteuren der Akteur, dann der Name.
+  function flEingangNeu(fk,ev){const K=fk.kandidaten||{arten:[],ohne:[]},cn=clientName(fk),u=flUmgebung();
+    const ohne=(K.ohne||[]).map(an=>{const A=MODEL.akteure.find(x=>x.name===an);
+      return {t:"👤 "+an+": noch keine Verwirklichung — im Modal Akteure und Clients …",fn:()=>aktOeffne(A?"akt:"+A._id:fk.karte)};});
+    if(!u){deFlash("⚠ Keine Umgebung gewählt",false);return;}
+    if(!(K.arten||[]).length){menueFix(ev.clientX,ev.clientY,"＋ Eingang von "+cn,[{hinweis:"Keine Quellart verwirklicht einen Akteur von "+cn+" — eine Verwirklichung (Quellart ↦ Nachricht) legt man im Modal „Akteure und Clients“ an."},
+      ...ohne,...(ohne.length?[]:[{t:"🔌 "+cn+" im Modal öffnen …",fn:()=>aktOeffne(fk.karte)}])]);return;}
+    const benennen=(art,akteur)=>frageFix(ev.clientX,ev.clientY,"⚡ Neuer Eingang: "+art+" für "+akteur,"","Name des Eingangs in „"+u+"“ (Buchstaben, Ziffern, - und _)",n=>{
+      if(!/^[A-Za-z0-9_-]+$/.test(n))return "Ein Name aus Buchstaben, Ziffern, - und _";
+      if(((((WB.umg||{}).Clients||{})[cn]||{}).Eingaenge||{})[n])return n+" gibt es schon";
+      instanzGeste(eingangPfad(cn,n),"POST",{Art:art,Akteur:akteur},"⚡ Eingang "+cn+"/"+n+" angelegt").then(ok=>{if(ok)komKarte(eingangId(cn,n));});});
+    const art=a=>a.akteure.length===1?benennen(a.art,a.akteure[0])
+      :menueFix(ev.clientX,ev.clientY,"⚡ "+a.art+" — für welchen Akteur?",a.akteure.map(an=>({t:"👤 "+an,fn:()=>benennen(a.art,an)})));
+    menueFix(ev.clientX,ev.clientY,"＋ Eingang von "+cn+" in „"+u+"“ — welche Quellart?",[
+      ...K.arten.map(a=>({t:"⚡ "+a.art+(a.framework?" (Framework)":"")+" · für "+a.akteure.join(", "),fn:()=>art(a)})),
+      ...(ohne.length?[{trenn:1},...ohne]:[])]);}
   function flKarteEl(fk){
     const pid=flPanelId(fk),n=pid?NODEBY.get(pid):null;
     const dg=n?diagFuer(n.id):[],nurWarn=dg.length>0&&dg.every(x=>x.art==="warnung");
-    const el=h("div",{class:"gnode2 fk fk-"+fk.art+" n-"+(fk.art==="quelle"?"funktion":fk.art)+(dg.length?(nurWarn?" diagwarn":" diag"):"")});
+    const el=h("div",{class:"gnode2 fk fk-"+fk.art+" n-"+fk.art+(dg.length?(nurWarn?" diagwarn":" diag"):"")});
     el.dataset.id=fk.id;el.dataset.karte=pid||"";
     // Ein Akteur wird nur im Modal „Akteure und Clients“ gelöscht (je Absicht eine Geste); ⧉ öffnet ihn dort.
-    const loeschbar=n&&fk.art!=="quelle"&&fk.art!=="uebersetzung"&&fk.art!=="akteur"&&fk.spalte!=="eingang";
+    const loeschbar=n&&fk.art!=="uebersetzung"&&fk.art!=="akteur"&&fk.art!=="client"&&fk.spalte!=="eingang";
     const head=h("div",{class:"ghead"},
       h("span",{class:"gtitle hatname",title:(NODELABEL[n?n.kind:fk.art]||fk.art)+" · "+fk.name+(pid?" — Klick: Kette · Doppelklick: öffnen":"")},
         // Eine Übersetzung trägt keinen Kopf auf der Fläche — sie ist der Knoten zwischen Nachricht und Command; Name und Typen im Tooltip.
@@ -2031,20 +2061,22 @@
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
       fk.art==="uebersetzung"?h("span",{class:"gx",title:"Die Übersetzung entfernen — was sie nimmt, ist danach wieder offen",
         onclick:e=>{e.stopPropagation();menueFix(e.clientX,e.clientY,"✕ ↦ "+fk.name,[{t:"✕ Übersetzung entfernen",gefahr:1,fn:()=>ueEntfernen(fk.karte)}]);}},"✕"):null,
+      fk.art==="client"?h("button",{class:"fl-ab-plus fl-cl-plus",title:"Ein Eingang aus einer Quelle in „"+(flUmgebung()||"?")+"“: eine Quellart, die einen Akteur dieses Clients verwirklicht",
+        onclick:e=>{e.stopPropagation();flEingangNeu(fk,e);}},"＋ Eingang"):null,
       fk.art==="graph"||fk.art==="aggregate"||fk.gruppe?h("span",{class:"gx fk-kom",title:fk.art==="graph"?"Komposition öffnen (Doppelklick)":"Von innen öffnen (Doppelklick)",
         onclick:e=>{e.stopPropagation();flInnen(fk);}},"⧉"):null,
       loeschbar?h("span",{class:"gx",title:"Löschen",onclick:e=>{e.stopPropagation();delNode(n);}},"✕"):null);
     el.onclick=e=>{if(e.target.classList.contains("gx")||e.target.closest(".fk-port,.fk-chip"))return;e.stopPropagation();if(FLPORT){FLPORT=null;flMarkiere();return;}if(pid)waehle(pid);};
-    // Doppelklick: ein Graph öffnet seine Komposition, eine Quelle die ihres Graphen mit ihrem Knoten gewählt.
-    el.ondblclick=e=>{e.stopPropagation();if(fk.art!=="quelle"){flInnen(fk);return;}
-      else if(fk.art==="quelle"&&fk.id.startsWith("q:graph:")){const r=fk.id.slice(2),i=r.lastIndexOf(":");komOeffne("gr:"+r.slice(0,i),r.slice(i+1));}};
+    // Doppelklick: ein Graph öffnet seine Komposition, ein Aggregat oder Store sein Inneres.
+    el.ondblclick=e=>{e.stopPropagation();flInnen(fk);};
     el.append(head);
-    // Instanzen (graphen/<instanz>.json) an Graph und Quelle — Klick öffnet die Instanz im Panel.
+    // Die Instanz (graphen/<instanz>.json) am Graphen — Klick öffnet sie im Panel.
     const gname=flGraphName(fk);
     if(gname){const inst=Object.keys(WB.instanzen||{}).filter(i=>((WB.instanzen[i]||{}).Graph||"")===gname).sort();
       if(inst.length)el.append(h("div",{class:"fk-chips"},...inst.map(i=>h("button",{class:"fk-chip",title:"Instanz "+i+" — Klick: Panel",
         onclick:e=>{e.stopPropagation();komKarte("host:inst:"+i);}},"⬡ "+i))));}
     if(fk.art==="graph"){const inn=flAblaufInnen(fk);if(inn){el.classList.add("fk-ablauf");el.append(inn);}}
+    if(fk.art==="client")el.append(flClientInnen(fk));
     if(fk.art==="uebersetzung"){const u=ueVon(fk.karte);if(u)el.append(ueZuordnungEl(u,()=>ueOeffne(fk)));}
     const ports=h("div",{class:"fk-ports"});
     const zeile=p=>{const rid="rec:"+String(p.typ).split("<")[0],hat=NODEBY.has(rid);
@@ -2065,7 +2097,7 @@
     if(ports.childNodes.length)el.append(ports);
     return el;
   }
-  // Anordnung: Spalten nebeneinander (Breite = breiteste Karte), Domänen als Bänder über Quellen bis Projektionen, die Akteure links und rechts
+  // Anordnung: Spalten nebeneinander (Breite = breiteste Karte), Domänen als Bänder über Graphen bis Projektionen, die Akteure links und rechts
   //   über die ganze Höhe, Projektionen und Reader je Store gruppiert. In jeder Zelle rücken Karten zur mittleren Höhe ihrer Nachbarn (zwei Durchgänge).
   function packSpalten(){
     if(!world)return;
@@ -2077,11 +2109,11 @@
     const nb=new Map(),dazu=(a,b)=>{let l=nb.get(a);if(!l)nb.set(a,l=[]);l.push(b);};
     FL().kanten.forEach(k=>{dazu(k.von,k.nach);dazu(k.nach,k.von);});
     const baender=FL().baender.map(b=>b.id).filter(b=>ks.some(k=>k.band===b));
-    if(ks.some(k=>k.band==null&&k.art!=="akteur"))baender.push(null);
-    const zellen=new Map(),zk=(b,s)=>(s==="ausgang"||s==="eingang"?"§akt":String(b))+"|"+s;
+    if(ks.some(k=>k.band==null&&k.art!=="akteur"&&k.art!=="client"))baender.push(null);
+    const zellen=new Map(),zk=(b,s)=>(s==="ausgang"||s==="eingang"||s==="clients"?"§akt":String(b))+"|"+s;
     ks.forEach(k=>{const key=zk(k.band,k.spalte);let l=zellen.get(key);if(!l)zellen.set(key,l=[]);l.push(k);});
     const Y=new Map(),setze=(k,x,y)=>{const e=els.get(k.id);if(e){e.style.left=x+"px";e.style.top=y+"px";}Y.set(k.id,y+sz(k.id).h/2);};
-    const MITTE=["quellen","graphen","uebersetzungen","aggregate","projektionen"];
+    const MITTE=["graphen","uebersetzungen","aggregate","projektionen"];
     const lege=()=>{let y=FL_KOPF;FLGEO.baender=[];FLGEO.gruppen=new Map();
       baender.forEach(b=>{const y0=y;let hmax=0;
         MITTE.forEach(s=>{let cy=y0+FL_BAND_PAD;const zelle=zellen.get(zk(b,s))||[],sx=FLGEO.spalten[s].x;
@@ -2092,10 +2124,13 @@
               if(mit){FLGEO.gruppen.set(g,{x1:sx-FL_GR_PAD,y1:gy,x2:sx+FLGEO.spalten[s].w+3*FL_GR_PAD,y2:cy-FL_GAP_Y+FL_GR_PAD});cy+=FL_GR_PAD+FL_GAP_Y;}});}
           hmax=Math.max(hmax,cy-y0);});
         const hg=Math.max(hmax+FL_BAND_PAD-FL_GAP_Y,140);FLGEO.baender.push({id:b,y:y0,h:hg});y+=hg+44;});
-      // Die Akteure links und rechts, je Client eine Gruppe (Reihenfolge des Servers); beide Seiten eines Clients auf derselben Höhe.
+      // Die Akteure links und rechts, je Client eine Gruppe (Reihenfolge des Servers); beide Seiten eines Clients auf derselben Höhe, die Karte des
+      //   Clients (Spalte Clients) daneben auf der Höhe seiner Gruppe.
       {const basen=[];FL().gruppen.forEach(g=>{const m=/^(.*)\|(aus|ein)$/.exec(g.id);if(m&&!basen.includes(m[1]))basen.push(m[1]);});
         const SEITEN=[["ausgang","aus"],["eingang","ein"]];let cy=FL_KOPF+FL_BAND_PAD;
+        const clK=zellen.get(zk(null,"clients"))||[];
         basen.forEach(b=>{let hb=0;
+          const ck=clK.find(k=>k.id===b);if(ck&&FLGEO.spalten.clients){setze(ck,FLGEO.spalten.clients.x,cy);hb=sz(ck.id).h+FL_GAP_Y;}
           SEITEN.forEach(([s,seite])=>{const drin=(zellen.get(zk(null,s))||[]).filter(k=>k.gruppe===b+"|"+seite).sort((x,y)=>x.name.localeCompare(y.name,"de"));
             let y=cy+FL_GR_KOPF;drin.forEach(k=>{setze(k,FLGEO.spalten[s].x+FL_GR_PAD,y);y+=sz(k.id).h+FL_GAP_Y;});if(!drin.length)y+=24;hb=Math.max(hb,y-cy);});
           SEITEN.forEach(([s,seite])=>{const sx=FLGEO.spalten[s].x;FLGEO.gruppen.set(b+"|"+seite,{x1:sx-FL_GR_PAD,y1:cy,x2:sx+FLGEO.spalten[s].w+3*FL_GR_PAD,y2:cy+hb-FL_GAP_Y+FL_GR_PAD});});
@@ -2114,9 +2149,13 @@
   function flRahmen(ebene){const aus={x2:0,y2:0};
     FL().spalten.forEach(s=>{const g=FLGEO.spalten[s];if(!g)return;const d=FL_SPALTE[s];
       const neu=e=>{e.stopPropagation();if(d.neu[0]==="store"){stoNeuAnlegen(e);return;}if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
-      const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),d.neu.length?h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋"):null),h("div",{class:"fl-u"},d.u));
+      // Clients: die Eingänge stehen je Umgebung — der Kopf nennt die aktive und, was die Datei nennt, das es im Code nicht gibt.
+      const bef=s==="clients"?flEing().befunde||[]:[];
+      const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),d.neu.length?h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋"):null,
+          bef.length?h("span",{class:"gdiag warn",title:bef.join("\n")}," ⚠ "+bef.length):null),
+        h("div",{class:"fl-u"},s==="clients"?"in „"+(flUmgebung()||"?")+"“ — "+d.u:d.u));
       Object.assign(k.style,{left:g.x+"px",top:"0px",width:g.w+"px"});ebene.append(k);aus.x2=Math.max(aus.x2,g.x+g.w);});
-    const sq=FLGEO.spalten.quellen,sp=FLGEO.spalten.projektionen;
+    const sq=FLGEO.spalten.graphen,sp=FLGEO.spalten.projektionen;
     if(sq&&sp)FLGEO.baender.forEach(b=>{const x1=sq.x-40,x2=sp.x+sp.w+40,name=b.id?(FL().baender.find(x=>x.id===b.id)||{}).name||b.id:"ohne Domäne";
       const fr=h("div",{class:"fl-band"},h("span",{class:"fl-band-t",title:b.id||""},name));fr.style.setProperty("--dc","hsl("+domHue(b.id||"§")+" 45% 55%)");
       const sg=FLGEO.spalten.graphen;
@@ -2164,6 +2203,10 @@
       if(k.art==="reaktion"){const a=FLGEO.gruppen.get(k.von),b=FLGEO.gruppen.get(k.nach);if(!a||!b)return;
         const A={x:a.x1+40,y:a.y1},B={x:b.x2-40,y:b.y1},top=Math.min(A.y,B.y)-40;
         d="M"+A.x+","+A.y+" C"+A.x+","+top+" "+B.x+","+top+" "+B.x+","+B.y;}
+      // Eingang: von seiner Zeile in der Karte des Clients zum Port der Nachricht am Akteur (links an die Karte, auf die Höhe des Ports).
+      else if(k.art==="eingang"){const e=ELS.get(k.von),z=e&&e.querySelector('[data-eingang="'+CSS.escape(k.eingang)+'"]'),B0=punkt(k.nach,"aus",k.typ),eb=ELS.get(k.nach);
+        if(!e||!B0||!eb)return;const A=z?{...lage(e,z,"aus",true),x:e.offsetLeft+e.offsetWidth}:{x:e.offsetLeft+e.offsetWidth,y:e.offsetTop+14},B={x:eb.offsetLeft,y:B0.y};
+        const c=Math.max(40,Math.abs(B.x-A.x)*0.45);d="M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y;}
       else if(k.art==="liest"){const e=ELS.get(k.von),r=FLGEO.gruppen.get(k.nach);if(!e||!r)return;
         const A={x:e.offsetLeft+e.offsetWidth/2,y:e.offsetTop+e.offsetHeight},B={x:(r.x1+r.x2)/2,y:r.y1};
         d="M"+A.x+","+A.y+" C"+A.x+","+(A.y+120)+" "+B.x+","+(B.y-120)+" "+B.x+","+B.y;}
@@ -2190,12 +2233,12 @@
   //   Knoten mit Pfad als Namen, seinem lokalen Namen und dem Graphen, dem er gehört; Gesten treffen diesen Graphen (komOrt).
   const komFlach=id=>{const d=komDaten(id);return d&&d.flach?{...d,...d.flach}:d;};
   const komOrt=(id,k)=>({id:(k&&k.graph)||id,name:(k&&k.lokal)||(k&&k.name)});
-  const KOM_LEER={funktionen:[],graphen:[],katalog:[],technik:[],konfig:[],nachrichten:[]};
+  const KOM_LEER={funktionen:[],graphen:[],quellarten:[],technik:[],konfig:[],nachrichten:[]};
   const komBaukasten=()=>SICHT().baukasten||KOM_LEER;
   const komBasis=t=>String(t||"").split("<")[0];
   function komSorte(t){const r=MODEL.records.find(x=>x.name===komBasis(t)),k=r&&r.kind;
     return k==="event"?"event":k==="rejection"?"hinweis":k==="query"?"query":k==="queryresponse"?"antwort":"command";}
-  const KOM_SYM={funktion:"ƒ",graph:"⬡",katalog:"⚡",uebersetzung:"↦",fehlt:"⚠"};
+  const KOM_SYM={funktion:"ƒ",graph:"⬡",quellart:"⚡",uebersetzung:"↦",fehlt:"⚠"};
   // Wo zuletzt gezeigt wurde — für Namensfragen, die eine Geste ohne eigenes Ereignis stellt (＋ an einem Port im Modal).
   let ZEIGER={x:240,y:160};document.addEventListener("pointerdown",e=>{ZEIGER={x:e.clientX,y:e.clientY};},true);
   // Ein Graph, der gerade angelegt wurde und sich öffnen soll, sobald der Server seine Komposition liefert.
@@ -2253,7 +2296,7 @@
   function aktRecht(a,art,typ){a[art]=[...(a[art]||[]),typ];KOM.port=null;gTitel("👤 "+a.name+(art==="darf"?" darf ":" hört ")+typ);render();}
   function aktRechtWeg(a,art,typ){a[art]=ohneX(a[art],typ);gTitel("👤 "+a.name+(art==="darf"?" darf ":" hört ")+typ+" nicht mehr");render();}
   function aktVerkoerpert(c,name){c.verkoerpert=[...(c.verkoerpert||[]),name];KOM.port=null;gTitel("🔌 "+clientAnzeige(c)+" verkörpert "+name);render();}
-  const AKT_SYM={aggregate:"▣",graph:"⬡",uebersetzung:"↦",reader:"⌕",projektion:"⇶",quelle:"⚡",akteur:"👤"};
+  const AKT_SYM={aggregate:"▣",graph:"⬡",uebersetzung:"↦",reader:"⌕",projektion:"⇶",quellart:"⚡",akteur:"👤"};
   const aktGegenueberText=g=>(AKT_SYM[g.art]||"")+" "+g.name;
   // Ein Gegenüber in einer Spalte am Rand (nur Anzeige): je Typ, der zu ihm geht bzw. von ihm kommt, ein Port.
   function aktGegenueber(I,s,b,g,typ){const x="ag:"+s+":"+b+":"+g.id;
@@ -2277,6 +2320,12 @@
       hs.forEach(g=>{const gx=aktGegenueber(I,0,b,g,t);I.knoten.get(gx).seite="herkunft";I.kanten.push([gx,x]);});});
     (a.darf||[]).forEach(t=>{const zs=zielVon.get(t)||[],b=bandVon(zs[0]||null),x="ad:"+t;aktNachricht(I,x,2,b,t,{seite:"darf",wer:zs});
       zs.forEach(g=>{const gx=aktGegenueber(I,3,b,g,t);I.knoten.get(gx).seite="ziel";I.kanten.push([x,gx]);});});
+    // Seine Verwirklichungen (docs/04 §4.7) in der Spalte Herkunft, im Band der Nachricht, die sie erzeugen: Quellart ↦ Nachricht über eine Übersetzung
+    //   der Akteur-Seite; Doppelklick öffnet ihre Feldzuordnung, ✕ entfernt sie (der Server nennt die Eingänge, die sie brauchen).
+    (S.verwirklichungen||[]).forEach(v=>{const ziel=(a.darf||[]).find(t=>komBasis(t)===v.nachricht),dx=ziel?"ad:"+ziel:null,x="av:"+v.uebersetzung;
+      I.glieder.set(x,0);I.band.set(x,(dx&&I.band.get(dx))||I.baender[0]||bandVon(null));
+      I.knoten.set(x,{id:x,kind:"verwirklichung",name:(v.quellarten.length?v.quellarten.join(" · "):v.meldung)+" ↦ "+v.nachricht,v,seite:"verwirklichung"});
+      if(dx)I.kanten.push([x,dx]);});
     // Bänder nach Gegenüber (A–Z), „noch ohne Gegenüber“ zuletzt; ohne alles ein leeres Band für die gestrichelten Vorschläge.
     I.baender.sort((x,y)=>(x==="g:")-(y==="g:")||String(I.bandTitel[x]).localeCompare(String(I.bandTitel[y]),"de"));
     if(!I.baender.length){I.baender.push("g:");I.bandTitel["g:"]="noch nichts — ＋ im Spaltenkopf „hört“ bzw. „darf“";}
@@ -2285,7 +2334,10 @@
     innenZeige(de,"akteure:a:"+a.name,{I,knoten:kn,
       kopfExtra:()=>aktKopfAkteur(a,S),links:()=>aktLinksEl(a),band:x=>I.band.get(x)||"",
       fest:()=>true,
+      festKnopf:n=>n.kind==="verwirklichung"?loeschKnopf(aktVerwirklichungPlan(a,n.v),n.id):null,
+      oeffne:x=>{const n=kn(x);if(!n||n.kind!=="verwirklichung")return false;ueOeffne({karte:n.v.karte});return true;},
       ports:(n,x)=>{const ein=[],aus=[];aktPortsBasis(n,ein,aus);
+        if(n.kind==="verwirklichung")aus.push({key:n.v.nachricht,label:n.v.meldung+" ↦ "+n.v.nachricht,sorte:"command"});
         if(n.seite==="hoert")ein.push({key:n.name,label:n.name,sorte:komSorte(n.name),loese:()=>aktRechtWeg(a,"hoert",n.name)});
         if(n.seite==="darf")aus.push({key:n.name,label:n.name,sorte:komSorte(n.name),loese:()=>aktRechtWeg(a,"darf",n.name)});
         return {ein,aus};},
@@ -2301,12 +2353,33 @@
         if(n.seite==="hoert")box.append(n.wer.length?"von "+n.wer.map(aktGegenueberText).join(", "):"noch von niemandem erzeugt");
         else if(n.seite==="darf")box.append(n.wer.length?"an "+n.wer.map(aktGegenueberText).join(", "):"noch kein Empfänger");
         else if(n.kind==="gegenueber")box.append((NODELABEL[n.g.art==="aggregate"?"aggregate":n.g.art]||n.g.art||"")+(n.seite==="ziel"?" · nimmt es":" · erzeugt es"));
+        else if(n.kind==="verwirklichung"){const v=n.v;
+          box.append(h("div",{title:"Übersetzung der Akteur-Seite — Doppelklick: Felder zuordnen"},"↦ "+v.uebersetzung),
+            h("div",{class:"av-stand"+(v.offen||v.fehler?" offen":"")},v.fehler?"⚠ "+v.fehler+" Befund"+(v.fehler>1?"e":""):v.offen?"⚠ "+v.offen+" offen":"✓ alle Felder zugeordnet"));
+          if(v.gebraucht.length)box.append(h("div",{class:"kom-wo",title:v.gebraucht.join("\n")},"Eingänge: "+v.gebraucht.join(", ")));}
         return box;},
       bearbeiten:()=>h("div"),
       zeit:()=>0,name:x=>(kn(x)||{}).name||"",ein:()=>0,
-      koepfe:()=>[["Herkunft",null,"woher es kommt"],["hört",()=>wahl("hoert"),"＋"],["darf",()=>wahl("darf"),"＋"],["Ziel",null,"wohin es geht"]],
+      koepfe:()=>[["Herkunft",e=>aktVerwirklichungNeu(a,S,e),"＋ Verwirklichung"],["hört",()=>wahl("hoert"),"＋"],["darf",()=>wahl("darf"),"＋"],["Ziel",null,"wohin es geht"]],
       legen:{spalten:[0,1,2,3],baender:I.baender,bandTitel:I.bandTitel,alleTitel:true,y0:104,frei:[],folgen:[]},
       ansicht:AKT_ANSICHT});}
+  // ✕ an einer Verwirklichung: die Übersetzung fällt weg; Eingänge, die sie brauchen, starten danach nicht mehr (der Server nennt sie).
+  function aktVerwirklichungPlan(a,v){return {was:"Verwirklichung "+(v.quellarten.join(" · ")||v.meldung)+" ↦ "+v.nachricht+" ("+v.uebersetzung+")",
+    folgen:v.gebraucht.map(g=>"Eingang "+g+" hat danach keine Übersetzung mehr (startet nicht)"),grund:null,
+    tu:()=>{MODEL.uebersetzungen=(MODEL.uebersetzungen||[]).filter(u=>"ue:"+u._id!==v.karte);}};}
+  // ＋ Verwirklichung: erst die Quellart (alle), bei mehreren Meldungen die Meldung, dann ein Command seines IDarf — die Übersetzung entsteht als Code bei
+  //   den Akteuren ({Meldung}_{Ziel}_{n}, gleiche Namen gleich zugeordnet); danach steht sie in der Spalte Herkunft, Doppelklick ordnet die Felder zu.
+  function aktVerwirklichungNeu(a,S,ev){const K=((S.kandidaten||{}).verwirklichung)||{quellarten:[],nachrichten:[]};
+    const nachricht=(q,m)=>menueFix(ev.clientX,ev.clientY,"⚡ "+q.name+" · "+m.typ+" ↦ welche Nachricht von "+a.name+"?",K.nachrichten.length
+      ?K.nachrichten.map(t=>({t:"▶ "+t,fn:()=>{komUebersetzungAn(m.typ,komBasis(t),{felder:m.felder,ns:a.namespace});
+        deFlash("↦ Verwirklichung "+q.name+" ↦ "+t+" angelegt — Doppelklick ordnet die Felder zu",true);}}))
+      :[{hinweis:a.name+" darf noch keinen Command — erst ＋ im Spaltenkopf „darf“."}]);
+    const meldung=q=>(q.meldet||[]).length===1?nachricht(q,q.meldet[0])
+      :!(q.meldet||[]).length?menueFix(ev.clientX,ev.clientY,"⚡ "+q.name,[{hinweis:q.name+" meldet nichts (Lausche ohne Meldung)."}])
+      :menueFix(ev.clientX,ev.clientY,"⚡ "+q.name+" — welche Meldung?",q.meldet.map(m=>({t:"✉ "+m.typ,fn:()=>nachricht(q,m)})));
+    menueFix(ev.clientX,ev.clientY,"＋ Verwirklichung von "+a.name+" — welche Quellart?",K.quellarten.length
+      ?K.quellarten.map(q=>({t:"⚡ "+q.name+(q.framework?" (Framework)":"")+" · meldet "+(q.meldet||[]).map(m=>m.typ).join(", "),fn:()=>meldung(q)}))
+      :[{hinweis:"Keine Quellart im Code — eine eigene entsteht im Katalog-Modal."}]);}
   function aktKopfAkteur(a,S){const cs=MODEL.clients.filter(c=>(c.verkoerpert||[]).includes(a.name));
     const plan={was:"Akteur "+a.name,folgen:cs.map(c=>"🔌 "+clientAnzeige(c)+" verkörpert ihn nicht mehr"),
       tu:()=>{MODEL.akteure.splice(MODEL.akteure.indexOf(a),1);cs.forEach(c=>{c.verkoerpert=ohneX(c.verkoerpert,a.name);});KOM.aktId=null;}};
@@ -2364,6 +2437,7 @@
     const plan={was:"Client "+clientAnzeige(c),folgen:[],tu:()=>{MODEL.clients.splice(MODEL.clients.indexOf(c),1);AUF=null;KOM.aktId=null;}};
     const pk=(MODEL.rahmen||{}).pythonPaket,neu=(c.implementierungen||[]).filter(im=>im.neu);
     return h("span",{class:"kat-band"},h("b",{title:(c.namespace||"")+(c.doku?"\n"+c.doku:"")},"🔌 "+clientAnzeige(c)),
+      h("span",{class:"kat-band-wo",title:"Eingänge sind Konfig je Umgebung: auf der Fläche, Spalte Clients — ＋ Eingang an der Karte, Doppelklick öffnet einen"},"Eingänge: auf der Fläche"),
       h("button",{class:"kat-chip plus"+(an?" an":""),title:"Einen Akteur verkörpern (IVerkoerpert<A>): links leuchten die Akteure, die passen — ein Klick verbindet",
         onclick:ev=>{ev.stopPropagation();KOM.port=an?null:{art:"verkoerpert",client:id,rec:"verkoerpert"};komZeige();}},an?"Akteur links wählen … (Esc)":"＋ verkörpert"),
       ...impls.map(im=>h("span",{class:"kat-chip",title:im.datei},"🐍 "+im.klasse)),
@@ -2453,13 +2527,12 @@
     const imKnoten=(liste,t)=>liste.find(x=>x===t)||liste.find(x=>b(x)===b(t))||t;
     if(!f)return [{ein:null,aus:k.aus.map(t=>({typ:t,mult:""}))},...k.ein.map(t=>({ein:t,aus:[]}))];
     const g=(f.eingaenge||[]).map(e=>({ein:imKnoten(k.ein,e.eingang),aus:(e.ausgaben||[]).map(o=>({typ:imKnoten(k.aus,o),mult:funMult(e)}))}));
-    if((f.lauscht||[]).length)g.unshift({ein:null,aus:f.lauscht.map(o=>({typ:imKnoten(k.aus,o),mult:"0..n"}))});
     return g;}
   function komKnotenEl(id,k){
     const gewaehlt=KOM.wahl&&KOM.wahl.art==="knoten"&&KOM.wahl.name===k.name,P=KOM.port;
     const d=komFlach(id),bezug=P&&d?d.knoten.find(x=>x.name===P.knoten):null,O=komOrt(id,k),B=komOrt(id,bezug);
     const passt=!bezug?null:P.art==="von"?komPasst(d,k,bezug,P.typ):komNimmt(d,bezug,k,P.typ);
-    const el=h("div",{class:"gnode2 fk kom-k n-"+(k.art==="graph"?"graph":k.art==="uebersetzung"?"uebersetzung":k.art==="katalog"||k.quelle?"funktion":"bausteinfunktion")+(gewaehlt?" sel":"")+(passt?" kand":"")+(P&&!passt&&k.name!==P.knoten?" leise":""),
+    const el=h("div",{class:"gnode2 fk kom-k n-"+(k.art==="graph"?"graph":k.art==="uebersetzung"?"uebersetzung":k.art==="quellart"?"funktion":"bausteinfunktion")+(gewaehlt?" sel":"")+(passt?" kand":"")+(P&&!passt&&k.name!==P.knoten?" leise":""),
       title:passt?(P.art==="von"?"Klick: "+P.knoten+" bekommt von "+k.name+" ("+passt+")":"Klick: "+k.name+" bekommt "+P.typ+" von "+P.knoten)
         :"Klick: Kanten hervorheben · Doppelklick: "+(k.art==="graph"?"eine Ebene tiefer":k.karte?"von innen":"—")+" · Rechtsklick: Menü",
       onclick:()=>{if(passt){KOM.port=null;if(P.art==="von")komVerbinde(O.id,O.name,B.name);else komVerbinde(O.id,B.name,O.name);return;}
@@ -2468,7 +2541,7 @@
       oncontextmenu:e=>{e.preventDefault();komKnotenMenue(O.id,{...k,name:O.name},e);}});
     el.dataset.knoten=k.name;
     el.append(h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:k.typ},h("span",{class:"gk"},(KOM_SYM[k.art]||"")+" "+k.name+" "),h("span",{class:"gn"},k.typ)),
-      k.kopf?h("span",{class:"kom-mark",title:"[Kopf] — nimmt von außen"},"Kopf"):null,k.quelle?h("span",{class:"kom-mark",title:"Quelle — lauscht"},"Quelle"):null,
+      k.kopf?h("span",{class:"kom-mark",title:"[Kopf] — nimmt von außen"},"Kopf"):null,k.art==="quellart"?h("span",{class:"kom-mark",title:"Eine Quellart ist kein Knoten — sie läuft als Eingang eines Clients"},"⚠ Quellart"):null,
       h("span",{class:"gx",title:"Löschen: aus dem Graphen bzw. samt Funktion",onclick:e=>{e.stopPropagation();komKnotenLoeschen(O.id,{...k,name:O.name},e);}},"✕")));
     const chips=(k.konstruktor||[]).filter(c=>c.art!=="logger");
     const funktion=k.art==="funktion"&&k.karte;
@@ -2584,16 +2657,15 @@
   function komLeinwand(id,d){
     const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
     const P=KOM.port&&KOM.port.art==="von"?KOM.port:null,zk=P?d.knoten.find(x=>x.name===P.knoten):null,kopfMoeglich=!!zk&&!zk.kopf;
-    const g=komModell(id),hatQuelle=d.knoten.some(k=>k.quelle);
+    const g=komModell(id);
     const links=h("div",{class:"gnode2 fk kom-rand links"+(kopfMoeglich?" kand":"")+(KOM.port&&!kopfMoeglich?" leise":""),title:kopfMoeglich?"Klick: "+P.knoten+" nimmt "+P.typ+" von außen ([Kopf])":"",
       onclick:()=>{if(kopfMoeglich){KOM.port=null;const o=komOrt(id,zk);komVerbinde(o.id,null,o.name);}}},h("div",{class:"ghead"},h("span",{class:"gtitle"},"◀ von außen")));
     const lp=h("div",{class:"fk-ports"});
     d.koepfe.forEach(k=>{const her=komHerkunft(id,k.typ),pe=komPort("aus",k.typ,komSorte(k.typ),"Kopf "+k.typ+(her.length?" — von "+her.join(", "):""),komTypKlick(k.typ));
       lp.append(pe);
       lp.append(h("div",{class:"kom-wo"},her.length?"von "+her.join(", "):g&&funKatalog(g)?"Input des Graphen":"⚠ niemand gibt es hinein"));});
-    if(!d.koepfe.length)lp.append(h("div",{class:"kom-wo"},hatQuelle?"— eine Quelle lauscht":"— noch kein Kopf"));
-    // Eine Quelle steht nur in einem Graphen ohne Kopf (sie ist dann sein einziger Kopf).
-    if(!hatQuelle&&g&&!funKatalog(g))lp.append(h("button",{class:"ag-plus",title:"Ein Eingang an den Kopf: eine Quelle (sie lauscht) oder ein Client (ein Akteur gibt eine Nachricht hinein)",
+    if(!d.koepfe.length)lp.append(h("div",{class:"kom-wo"},"— noch kein Kopf"));
+    if(g&&!funKatalog(g))lp.append(h("button",{class:"ag-plus",title:"Ein Eingang an den Kopf: ein Client (ein Akteur gibt eine Nachricht hinein)",
       onclick:e=>{e.stopPropagation();komEingangPlus(id,g,d,e);}},"＋ Eingang"));
     links.append(lp);welt.append(links);
     const gk=g&&funKatalog(g);
@@ -2647,10 +2719,6 @@
       Object.assign(fr.style,{left:x1+"px",top:y1+"px",width:(x2-x1)+"px",height:(y2-y1)+"px"});welt.prepend(fr);});
     d.ausgaenge.forEach(a=>a.knoten.forEach(n=>{const k=d.knoten.find(x=>x.name===n)||{aus:[]};
       linie(punkt(el(n),"aus",k.aus.find(t=>komBasis(t)===komBasis(a.typ))||a.typ),punkt(rechts,"ein",a.typ),false,a.sorte,null,[n]);}));}
-  // „＋ Quelle“: eine Quelle aus dem Katalog des Frameworks (Dateiwächter, Taktgeber, Webhook) oder eine eigene Funktion, die lauscht.
-  function komQuellePlus(id,g,ev){const bk=komBaukasten();
-    menueFix(ev.clientX,ev.clientY,"Quelle an den Kopf von "+g.name,[{kopf:"Katalog des Frameworks"},...bk.katalog.map(k=>({t:"⚡ "+k.name+" → "+(k.meldet||[]).join(", "),fn:()=>neuerGraphKnoten(g,k.name)})),
-      ...(bk.funktionen.some(f=>f.quelle)?[{kopf:"eigene"},...bk.funktionen.filter(f=>f.quelle).map(f=>({t:"⚡ "+f.name,fn:()=>neuerGraphKnoten(g,f.name)}))]:[])]);}
   // „＋“ an einem Ausgang am rechten Rand: der Kopf eines anderen Graphen nimmt ihn (Verbindung, eigene Instanz) — ein vorhandener Knoten wird Kopf,
   //   oder ein neuer Graph entsteht mit einer Funktion, die ihn nimmt.
   function komEmpfaengerPlus(id,g,typ,ev){const items=[],t=komBasis(typ);
@@ -2745,12 +2813,13 @@
       case "fn":return [r.faehigkeit||"Fähigkeit",n.name];case "readmodel":return ["Read-Model",n.name];
       case "umsetzung":return ["Umsetzung",((n.st&&n.st.impl&&n.st.impl.name)||"neu")+"."+n.name];
       case "buendel":return ["⋈ Bündel",n.name];
-      case "auf":return ["Auf",r.eingang||n.name];case "lausche":return ["Lausche","Quelle"];
+      case "auf":return ["Auf",r.eingang||n.name];
       case "schnittstelle":return ["⚙",n.name];case "tumsetzung":return ["Umsetzung",n.name];case "faehigkeit":return ["Liest",n.name];
       case "leer":return ["ƒ "+n.name,"noch ohne Eingang"];
       case "gegenueber":return [AKT_SYM[n.g.art]||"",n.name];case "reaktion":return ["Reaktion",n.name];
       case "zustand":return ["Zustand",n.name];case "logger":return ["Logger",n.name];case "param":return ["Konstruktor",n.name];
       case "bausteinfunktion":return [istGerufen(r)?"⚙ Technik":"ƒ Funktion",n.name];
+      case "verwirklichung":return ["⚡ "+n.name,""];
       default:return [NODELABEL[n.kind]||n.kind,n.name];}}
   function blockZeige(de,id){const n0=NODEBY.get(id);if(!n0){KOM=null;return;}
     if(id.startsWith("sto:")){stoZeige(de,id,n0.ref);return;}
@@ -2945,7 +3014,7 @@
         onclick:e=>{if(kand){C.anschliessen(KOM.port,x);return;}if(KOM.port){KOM.port=null;komZeige();return;}
           if(e.detail<=1)KOM.klick={wahl:KOM.wahl};komWaehle(wahl===x?null:{art:"glied",id:x});},
         // Dem Doppelklick gehen zwei Klicks voraus, die die Wahl umgeschaltet haben — er stellt sie wieder her, wie sie vor dem ersten war.
-        ondblclick:e=>{e.stopPropagation();if(KOM.port)return;if(KOM.zu.has(x))KOM.zu.delete(x);else{KOM.zu.add(x);KOM.edit.delete(x);}
+        ondblclick:e=>{e.stopPropagation();if(KOM.port)return;if(C.oeffne&&C.oeffne(x)){KOM.klick=null;return;}if(KOM.zu.has(x))KOM.zu.delete(x);else{KOM.zu.add(x);KOM.edit.delete(x);}
           if(KOM.klick)KOM.wahl=KOM.klick.wahl;KOM.klick=null;komZeige();}},
         h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:(NODELABEL[n.kind]||n.kind)+" · "+t},
           h("span",{class:"gk"},(rec?(FL_SORTE[komSorte(n.name)]||"")+n.name:k)+" "),h("span",{class:"gn"},rec?"":t)),
@@ -3524,7 +3593,8 @@
   const projektionVonKarte=fk=>MODEL.projektionen.find(p=>"prj:"+p._id===fk.karte);
 
   // Klick auf eine Kante: lösen, was der Code als Liste trägt (darf, hört, Auf einer Projektion); den Typ öffnen.
-  function flKanteMenue(k,ev){if(k.art==="reaktion"){aktOeffne(k.von.replace(/\|ein$/,""));return;}const V=FLKARTE.get(k.von),N=FLKARTE.get(k.nach);if(!V||!N)return;const items=[];
+  function flKanteMenue(k,ev){if(k.art==="reaktion"){aktOeffne(k.von.replace(/\|ein$/,""));return;}
+    if(k.art==="eingang"){const V=FLKARTE.get(k.von);if(V)komKarte(eingangId(clientName(V),k.eingang));return;}const V=FLKARTE.get(k.von),N=FLKARTE.get(k.nach);if(!V||!N)return;const items=[];
     // Was ein Akteur darf und hört, ändert man im Modal „Akteure und Clients“ (je Absicht eine Geste).
     [V,N].filter(x=>x.art==="akteur").forEach(x=>items.push({t:"👤 "+x.name+" öffnen (darf · hört)",fn:()=>aktOeffne(x.karte)}));
     if(N.art==="projektion"&&k.art==="schreiben"){const p=projektionVonKarte(N);
@@ -3534,20 +3604,20 @@
     menueFix(ev.clientX,ev.clientY,k.typ+" · "+k.art+" · "+V.name+" → "+N.name,items);}
 
   // Die Katalog-Sicht des Servers (board.sicht.kataloge, GraphExtractor.Kern/Sicht/Sicht.Kataloge.cs): je Katalog seine Nachrichten mit wer gibt
-  //   und wer nimmt, was die Quellen melden, seine Funktionen (Konstruktor, Graphen, passende Ein- und Ausgänge) und Graphen; dazu die Arten von
+  //   und wer nimmt, seine Quellarten und was sie melden, seine Funktionen (Konstruktor, Graphen, passende Ein- und Ausgänge) und Graphen; dazu die Arten von
   //   Nachrichten, die ein Katalog hält (Projektstruktur × Grammatik). Der Editor rechnet nichts davon nach (W3).
   const KATS=()=>SICHT().kataloge||{arten:[],je:{}};
-  const katSicht=kat=>(KATS().je||{})[kat]||{nachrichten:[],quellen:[],funktionen:[],graphen:[]};
+  const katSicht=kat=>(KATS().je||{})[kat]||{nachrichten:[],quellarten:[],meldungen:[],funktionen:[],graphen:[]};
   const katListe=()=>Object.keys(KATS().je||{}).sort();
   const katFnSicht=(kat,name)=>katSicht(kat).funktionen.find(x=>x.name===name)||null;
-  const katNachricht=(kat,nm)=>katSicht(kat).nachrichten.find(x=>x.typ===nm)||katSicht(kat).quellen.find(x=>x.typ===nm)||null;
+  const katNachricht=(kat,nm)=>katSicht(kat).nachrichten.find(x=>x.typ===nm)||(katSicht(kat).meldungen||[]).find(x=>x.typ===nm)||null;
   // Die Funktionen eines Katalogs, wie der Server sie liest — dazu eine eben angelegte, die noch nicht geschrieben ist (sie hat noch keine Datei).
   const katFunktionen=kat=>{const namen=new Set(katSicht(kat).funktionen.map(x=>x.name));
     return MODEL.bausteinFunktionen.filter(f=>namen.has(f.name)||(!f.datei&&f.namespace===kat&&!f._neuTechnik)).sort((a,b)=>a.name.localeCompare(b.name));};
   // ══ KATALOG-MODAL (docs/10 §10.9): ein Modal je Katalog, der Katalog eine geschlossene Einheit. Oben die Wahl des Katalogs (Dropdown, darin
   //   „＋ neuer Katalog“), links seine Funktionen und Graphen, in der Mitte die gewählte Funktion — was sie braucht (Konstruktor), je Auf eine Zeile
   //   Eingang ─▶ Ausgänge, darunter wie viele herauskommen, was sie liest und ihr Rumpf —, rechts alle Nachrichten des Katalogs (Commands, Hinweise)
-  //   und die der Quellen des Frameworks. Verbunden wird über die Liste rechts: „＋ Eingang“ bzw. „＋ Ausgang“ hebt dort hervor, was passt, ein Klick
+  //   (eine Meldung einer Quellart ist kein Eingang einer Funktion). Verbunden wird über die Liste rechts: „＋ Eingang“ bzw. „＋ Ausgang“ hebt dort hervor, was passt, ein Klick
   //   verbindet; „＋ Command“/„＋ Hinweis“ legt eine Nachricht frei an (während einer Wahl gleich verbunden). Ein Katalog ist flach: alles liegt
   //   direkt in <Name>.Katalog. Ein gewählter Graph steht an derselben Stelle wie die Funktion — seine Leinwand in der Mitte, links „＋“ setzt ein.
   //   Pfad „kat:<Katalog>“, die Funktion in KOM.katFn, der Graph in KOM.katGr; eine laufende Wahl (＋) in KOM.port wie in jeder Innenansicht.
@@ -3559,15 +3629,15 @@
   function katGraphWaehlen(grId){const g=komModell(grId),kat=g&&funKatalog(g);if(!kat)return false;const id="kat:"+kat;
     if(!KOM)KOM={pfad:[id],reiter:"katalog",wahl:null};
     else if(KOM.pfad.length&&KOM.pfad[KOM.pfad.length-1].startsWith("kat:"))KOM.pfad[KOM.pfad.length-1]=id;else KOM.pfad.push(id);
-    KOM.katGr=grId;KOM.katWahl=null;KOM.port=null;KOM.wahl=null;return true;}
+    KOM.katGr=grId;KOM.katQa=null;KOM.katWahl=null;KOM.port=null;KOM.wahl=null;return true;}
   // Eine Funktion in der Mitte zeigen (statt eines Graphen).
-  function katWaehleFn(name){KOM.katFn=name;KOM.katGr=null;KOM.katWahl=null;KOM.port=null;KOM.wahl=null;}
+  function katWaehleFn(name){KOM.katFn=name;KOM.katGr=null;KOM.katQa=null;KOM.katWahl=null;KOM.port=null;KOM.wahl=null;}
   window.deKataloge=()=>katOeffne(null,null);
-  // ══ KATALOG VON INNEN (docs/10 §10.9): dieselbe Innenansicht wie Aggregat und Store — Spalten Eingänge · Auf · Lausche · Ausgänge · Liest · Technik ·
+  // ══ KATALOG VON INNEN (docs/10 §10.9): dieselbe Innenansicht wie Aggregat und Store — Spalten Eingänge · Auf · Ausgänge · Liest · Technik ·
   //   Umsetzung, je Funktion ein Band (im Kopf: was ihr Konstruktor nimmt, in welchen Graphen sie steht, ＋ Eingang, ✕). Eine Nachricht, die zwischen
   //   zwei Funktionen läuft, steht an beiden Enden (je Band eine Karte, „← ƒ …“ bzw. „→ ƒ …“). Was passt, sagt der Server (sicht.kataloge: je Funktion
   //   die passenden Eingänge, je Auf die passenden Ausgänge); ＋ am Port hebt es hervor, gestrichelt steht, was nicht im Bild ist oder neu entsteht.
-  //   Ids: ka:<fn>:<i> (Auf), kl:<fn> (Lausche), ke:<fn>:<Typ> (Eingang), ko:<fn>:<Typ> (Ausgang), kt:<fn>:<Typ> (Fähigkeit bzw. Technik),
+  //   Ids: ka:<fn>:<i> (Auf), ke:<fn>:<Typ> (Eingang), ko:<fn>:<Typ> (Ausgang), kt:<fn>:<Typ> (Fähigkeit bzw. Technik),
   //   ku:<fn>:<Technik>:<i> (Methode einer Umsetzung), kf:<Typ> (frei), kn:<fn> (noch ohne Eingang).
   const katFnVon=id=>MODEL.bausteinFunktionen.find(f=>f._id===id)||null;
   const katNimmtTechnik=(kat,T)=>katFunktionen(kat).some(f=>!istGerufen(f)&&katTechnikVon(kat,f).includes(T));
@@ -3589,8 +3659,6 @@
         (e.ausgaben||[]).forEach(o=>{const ox="ko:"+f._id+":"+o;nachricht(ox,2,b,o,f,"aus");kanten.push([ax,ox]);});
         (e.faehigkeiten||[]).forEach(p=>{const tx="kt:"+f._id+":"+p.typ;if(!glieder.has(tx)){setze(tx,3,b);knoten.set(tx,{id:tx,kind:"faehigkeit",name:p.typ,ref:p,f});}
           kanten.push([ax,tx]);});});
-      if((f.lauscht||[]).length){const lx="kl:"+f._id;aufs.push(lx);setze(lx,1,b);knoten.set(lx,{id:lx,kind:"lausche",name:"Lausche",ref:f,f});
-        f.lauscht.forEach(o=>{const ox="ko:"+f._id+":"+o;nachricht(ox,2,b,o,f,"aus");kanten.push([lx,ox]);});}
       if(!aufs.length){const nx="kn:"+f._id;aufs.push(nx);setze(nx,1,b);knoten.set(nx,{id:nx,kind:"leer",name:f.name,ref:f,f});}
       // Die Abhängigkeiten (Technik im Konstruktor): je eine ein Stapel über dem Band — unten die Schnittstelle (geht in jedes Auf), darüber ihre
       //   Umsetzungen, darüber, was eine Umsetzung selbst nimmt (ab Ebene 3 zu, bis man es an der Umsetzung aufklappt).
@@ -3607,7 +3675,7 @@
   //   geschrieben) alle Nachrichten des Katalogs, die diese Rolle haben können.
   function katPassend(kat,p){const f=katFnVon(p.fid);if(!f)return [];const x=katFnSicht(kat,f.name),S=katSicht(kat);
     const eingangsArt=new Set((KATS().arten||[]).filter(a=>a.eingang).map(a=>a.art));
-    if(p.art==="eingang")return x?(x.eingang||[]):[...S.nachrichten.filter(n=>eingangsArt.has(n.art)).map(n=>n.typ),...S.quellen.map(n=>n.typ)];
+    if(p.art==="eingang")return x?(x.eingang||[]):S.nachrichten.filter(n=>eingangsArt.has(n.art)).map(n=>n.typ);
     if(p.art==="ausgang"){const e=(f.eingaenge||[])[p.ei];if(!e)return [];const hat=new Set(e.ausgaben||[]);
       return (x&&(x.ausgang||{})[e.eingang]?x.ausgang[e.eingang]:S.nachrichten.map(n=>n.typ).filter(n=>n!==e.eingang)).filter(n=>!hat.has(n));}
     return [];}
@@ -3667,7 +3735,6 @@
       (e.faehigkeiten||[]).forEach(p=>aus.push({key:"t:"+p.typ,label:"liest "+p.typ,sorte:"faehigkeit",
         loese:()=>{e.faehigkeiten=(e.faehigkeiten||[]).filter(q=>q!==p);gTitel(t+": Auf("+e.eingang+") liest "+p.typ+" nicht mehr");render();}}));
       aus.push({key:"+liest",label:"liest",plus:{art:"liest",fid:f._id,ei:n.ei,rec:x+"#liest"}});}
-    else if(n.kind==="lausche")(f.lauscht||[]).forEach(o=>aus.push({key:o,label:o,sorte:s(o)}));
     else if(n.kind==="leer")ein.push({key:"+ein",label:"Eingang",plus:{art:"eingang",fid:f._id,rec:"band:"+f._id}});
     else if(n.kind==="faehigkeit")ein.push({key:n.name,label:n.name,sorte:n.kind});
     // Schnittstelle: ihre Methoden (✕ nimmt eine heraus — die Umsetzungen behalten ihren Code, der Build meldet ihn), ＋ Methode, ＋ Umsetzung.
@@ -3701,7 +3768,6 @@
   function katKurz(kat,n){const box=h("div",{class:"ag-kurz"});
     if(n.kind==="auf"){const e=n.ref,z=(e.ausgaben||[]).length;
       box.append([!z?"noch kein Ausgang":e.strom?"keiner bis viele":z>1?"einer davon":"genau eins",e.asynchron?"asynchron":"",e.herkunft?"Herkunft":""].filter(Boolean).join(" · "));}
-    else if(n.kind==="lausche")box.append("Quelle — je Element eine Kette");
     else if(n.kind==="leer")box.append("noch kein Eingang — ＋ am Port");
     else if(n.kind==="schnittstelle")box.append("Technik · im Konstruktor von "+(n.braucher?(n.braucher.g.umsetzungen[n.braucher.ui]||{}).name:n.f.name)
       +((n.t.methoden||[]).length?"":" · noch ohne Methode"));
@@ -3710,7 +3776,7 @@
     else if(n.kind==="faehigkeit")box.append("Lese-Fähigkeit — ein Store der Anwendung setzt sie um");
     else if(n.rec&&!n.fw)box.append((n.ref.felder||[]).map(x=>x.name).join(", ")||"noch ohne Felder — ✎");
     return box;}
-  // Bearbeiten (✎): ein Auf — wie viele herauskommen, asynchron, Herkunft und sein Rumpf (✎ Code oder 🤖 Auftrag); Lausche und die Methode einer
+  // Bearbeiten (✎): ein Auf — wie viele herauskommen, asynchron, Herkunft und sein Rumpf (✎ Code oder 🤖 Auftrag); die Methode einer
   //   Umsetzung — ihr Rumpf; eine Nachricht — Name, Felder, Art; Technik — aus dem Konstruktor nehmen.
   function katBearbeiten(kat,n,x){const box=h("div",{class:"ag-edit"}),f=n.f,t=f?"ƒ "+f.name:"";
     ["click","dblclick"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
@@ -3723,7 +3789,6 @@
         schalter("asynchron",e.asynchron,"Task bzw. IAsyncEnumerable — nötig, wenn der Rumpf await nutzt",v=>{e.asynchron=v;gTitel(ta+(v?" asynchron":" synchron"));}),
         schalter("Herkunft",e.herkunft,"Parameter Herkunft h: Stream, Zeit, Akteur, NeueId — für neue Ids",v=>{e.herkunft=v;gTitel(ta+(v?" mit":" ohne")+" Herkunft");})));
       box.append(katRumpfEl(f,n.ei));}
-    else if(n.kind==="lausche")box.append(katRumpfEl(f,(f.eingaenge||[]).length));
     else if(n.kind==="tumsetzung"&&n.g){const teile=rumpfTeile({kind:"bausteinfunktion",ref:n.g})||[],ctor=ctorVon(n.g,n.ui)||[];
       (n.ref.methoden||[]).forEach(m=>{const i=teile.findIndex(t=>t.impl===n.ui&&t.methode===m.name);
         box.append(i<0?h("div",{class:"kom-wo"},m.name+": wird geschrieben — danach steht hier der Rumpf"):katRumpfEl(n.g,i));});
@@ -3750,10 +3815,10 @@
   function katUmsetzungNeu(T,ev){const g=gerufenByName(T);if(!g)return;
     frageFix(ev.clientX,ev.clientY,"＋ Umsetzung von "+T,"","Eine Klasse : "+T+" — welche läuft, wählt die Umgebung",n=>{const fe=nameFehler(n);if(fe)return fe;
       if(uniq(n)!==n)return n+" gibt es schon";(g.umsetzungen=g.umsetzungen||[]).push({name:n,konstruktor:[]});gTitel("⚙ "+T+": Umsetzung "+n);render();});}
-  // Wo eine Umsetzung läuft: je Umgebung die gewählte (Funktionen:<Technik>:Implementierung), bei nur einer Umsetzung überall.
-  function katUmsetzungGewaehlt(g,name){if(!g)return "";const lo=Object.entries((MODEL.rahmen||{}).umgebungen||{}).map(([n,u])=>[n,((u||{}).Funktionen||{})[g.name]]);
-    if((g.umsetzungen||[]).length===1)return "läuft überall";const da=lo.filter(([,k])=>k&&k.Implementierung===name).map(([n])=>n);
-    return da.length?"gewählt in "+da.join(", "):"in keiner Umgebung gewählt";}
+  // Wo eine Umsetzung läuft: wo sie gewählt ist (Technik am Knoten einer Instanz bzw. an einem Eingang, vom Server), bei nur einer Umsetzung überall.
+  function katUmsetzungGewaehlt(g,name){if(!g)return "";if((g.umsetzungen||[]).length===1)return "läuft überall";
+    const da=technikWahl(g.name).filter(w=>w.umsetzung===name).map(w=>w.umgebung+" · "+w.wo);
+    return da.length?"gewählt in "+da.join(", "):"nirgends gewählt";}
   // Löschen (✕): ein Auf aus seiner Funktion; eine Nachricht nur, wenn sie nirgends mehr verwendet wird (Verwendungen vom Server).
   function katLoeschPlan(kat,n){if(n.kind==="schnittstelle"){const bu=n.braucher,u=bu&&(bu.g.umsetzungen||[])[bu.ui],ctor=u?(u.konstruktor||[]):ctorVon(n.f,null),wer=u?u.name:"ƒ "+n.f.name;
       return {was:n.name+" aus dem Konstruktor von "+wer,folgen:["die Technik selbst bleibt im Katalog"],grund:null,
@@ -3767,7 +3832,7 @@
       menueFix(ev.clientX,ev.clientY,"Ausgang für …",aufs.map((e,ei)=>({t:"Auf("+e.eingang+")",fn:()=>wahl({art:"ausgang",fid:f._id,ei,rec:"ka:"+f._id+":"+ei})})));};
     return [
       ["Eingänge",f&&!istGerufen(f)?()=>wahl({art:"eingang",fid:f._id,rec:"band:"+f._id}):null,f&&!istGerufen(f)?"＋":"","eingang"],
-      ["Auf · Lausche",null,"je Eingang eins"],
+      ["Auf",null,"je Eingang eins"],
       ["Ausgänge",aufs.length?aus:null,aufs.length?"＋":"","ausgang"],
       ["Liest",null,"＋ liest am Auf"]];}
   // Kopf des Modals: der Katalog (Dropdown, darin „＋ neuer Katalog“); Funktionen und Graphen wählt man links.
@@ -3779,7 +3844,7 @@
       ...alle.map(k=>h("option",{value:k},"📚 "+k.replace(/\.Katalog$/,""))),h("option",{value:"＋neu"},"＋ neuer Katalog …"));
     wahl.value=kat||"";
     return h("span",{class:"kat-wahl-kopf"},wahl);}
-  // Ein Rumpf der Funktion (Teil i ihrer Code-Teile: je Auf, Lausche, je Methode einer Umsetzung) — über dasselbe Werkzeug wie Decide, Apply,
+  // Ein Rumpf der Funktion (Teil i ihrer Code-Teile: je Auf, je Methode einer Umsetzung) — über dasselbe Werkzeug wie Decide, Apply,
   //   Handhabung und Store-Fn: Ausschnitt aus der Datei, ✎ Code (eine Geste ersetzt genau diesen Bereich) oder 🤖 Auftrag (claude -p → Prüfung im
   //   warmen Workspace → Datei), Vorschlag ✓/✗, ↶. Ein Teil ohne Ort wird gerade geschrieben — danach steht er hier.
   function katRumpfEl(f,i){const box=h("div",{class:"kat-rumpf rumpfport"}),teil=(rumpfTeile({kind:"bausteinfunktion",ref:f})||[])[i];
@@ -3807,7 +3872,22 @@
       links.append(zeile(b,schachtelbar?plus(x.name,"Als Schachtel in "+G.d.name+" einsetzen"):null));});
     links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Ein neuer Graph in "+kat+": Name und erste Funktion — er steht danach in der Mitte",
       onclick:e=>katGraphNeu(kat,e)},"＋ Graph")));
+    // Eigene Quellarten des Katalogs (IQuellart): keine Knoten — sie laufen als Eingang eines Clients; hier ihr Lausche.
+    const qas=katQuellarten(kat);
+    if(qas.length){links.append(h("div",{class:"kom-sec"},"Quellarten"));
+      qas.forEach(q=>links.append(h("button",{class:"kom-b"+(KOM.katQa===q.name?" on":""),title:"meldet "+((q.meldet||[]).join(", ")||"—")+" — läuft als Eingang eines Clients",
+        onclick:()=>{KOM.katQa=q.name;KOM.katFn=null;KOM.katGr=null;KOM.katWahl=null;KOM.port=null;KOM.wahl=null;komZeige();}},"⚡ "+q.name)));}
     return links;}
+  // Die eigenen Quellarten eines Katalogs (vom Server: sicht.kataloge.je[k].quellarten), als Board-Einträge.
+  const katQuellarten=kat=>(katSicht(kat).quellarten||[]).map(x=>(MODEL.quellarten||[]).find(q=>q.name===x.name&&!q.framework)).filter(Boolean);
+  // Eine Quellart in der Mitte: was sie meldet, wer sie verwirklicht (Akteur über eine Übersetzung der Akteur-Seite), ihr Konstruktor und ihr Lausche.
+  function katQuellartEl(kat,q){const x=(katSicht(kat).quellarten||[]).find(y=>y.name===q.name)||{},box=h("div",{class:"kat-graph"});
+    box.append(h("div",{class:"kat-fn-kopf kat-gr-kopf"},h("span",{class:"kat-fn-n"},"⚡ "+q.name),
+      h("span",{class:"kat-fn-u"},"meldet "+((q.meldet||[]).join(", ")||"—")+" · "+((x.verwirklicht||[]).length?"verwirklicht "+x.verwirklicht.map(a=>"👤 "+a).join(", "):"noch kein Akteur (eine Übersetzung der Akteur-Seite fehlt)"))));
+    if((q.konstruktor||[]).length)box.append(h("div",{class:"kat-fuss"},"Konstruktor:",...q.konstruktor.map(c=>h("span",{class:"kat-chip"},String(c.typ)))));
+    const teil=(rumpfTeile({kind:"quellart",ref:q})||[])[0],r=h("div",{class:"kat-rumpf rumpfport"});
+    if(!teil||!teil.ort)r.append(h("div",{class:"kom-wo"},"Lausche steht noch nicht im Code."));else rumpfWerkzeug(r,teil,q._id,0,true);
+    box.append(r);return box;}
   // Eine Funktion bzw. einen Graphen als Knoten in den gezeigten Graphen setzen (eine generische fragt ihr Typargument).
   function katEinsetzenInGraph(grId,name,e){const g=komModell(grId);if(!g)return;
     const x=(komBaukasten().funktionen||[]).find(y=>y.name===name)||{};
@@ -3819,7 +3899,7 @@
   function katGraphEl(G){const d=G.d,lw=komLeinwand(G.id,d);
     return h("div",{class:"kat-graph"},
       h("div",{class:"kat-fn-kopf kat-gr-kopf"},h("span",{class:"kat-fn-n"},"⬡ "+d.name),
-        h("span",{class:"kat-fn-u"},"Kopf nimmt "+(d.koepfe.map(k=>k.typ).join(", ")||"nichts von außen (Quelle)")+" · verlässt ihn: "+(d.ausgaenge.map(a=>a.typ).join(", ")||"nichts"))),
+        h("span",{class:"kat-fn-u"},"Kopf nimmt "+(d.koepfe.map(k=>k.typ).join(", ")||"nichts von außen")+" · verlässt ihn: "+(d.ausgaenge.map(a=>a.typ).join(", ")||"nichts"))),
       lw);}
   // ＋ neuer Katalog aus dem Dropdown: ein eigenes Projekt <Name>.Katalog; danach steht das Modal auf ihm.
   function katNeuHier(x,y){frageFix(x,y,"📚 Neuer Katalog","","Ein eigenes Projekt <Name>.Katalog — Funktionen, Graphen und ihre Nachrichten, ohne Domäne",n=>{
@@ -3832,7 +3912,8 @@
   function katZeige(de,kat){KOM.edit=KOM.edit||new Set();KOM.zu=KOM.zu||new Set();const alle=katListe();
     if(kat&&!alle.includes(kat))kat=alle[0]||"";
     const gr=KOM.katGr&&komModell(KOM.katGr),d=gr&&funKatalog(gr)===kat?komFlach(KOM.katGr):null,G=d?{id:KOM.katGr,d}:null;if(!G)KOM.katGr=null;KOM.katWahl=null;
-    const fns=kat?katFunktionen(kat):[],f=G?null:fns.find(x=>x.name===KOM.katFn)||fns.find(x=>!istGerufen(x))||fns[0]||null;
+    const qa=!G&&KOM.katQa?katQuellarten(kat).find(q=>q.name===KOM.katQa)||null:null;if(!qa)KOM.katQa=null;
+    const fns=kat?katFunktionen(kat):[],f=G||qa?null:fns.find(x=>x.name===KOM.katFn)||fns.find(x=>!istGerufen(x))||fns[0]||null;
     if(f){KOM.katFn=f.name;katInnenZeige(de,kat,f);return;}
     const m=h("div",{class:"kom"});["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     m.append(h("div",{class:"kom-kopf"},KOM.pfad.length>1?komKrumen():null,katWahlEl(kat),
@@ -3842,6 +3923,7 @@
       h("div",{class:"kom-reiter"},komZoomLeiste(),h("button",{class:"kom-x",title:"Schließen (Esc)",onclick:komSchliesse},"✕"))));
     const mitte=h("div",{class:"kat-mitte"+(G?" graph":"")});
     if(G)mitte.append(katGraphEl(G));
+    else if(qa)mitte.append(katQuellartEl(kat,qa));
     else mitte.append(h("div",{class:"kat-leer"},kat?"Dieser Katalog hat noch keine Funktion.":"Dieser Arbeitsbereich hat noch keinen Katalog."));
     m.append(h("div",{class:"kom-leib kat"},kat?katLinksEl(kat,null,G):h("div",{class:"kom-bk"}),mitte));
     de.append(m);
@@ -3871,7 +3953,7 @@
         "Eine Klasse : IFunktion in "+kat+" — danach ihren Eingang rechts wählen",fn=>{
         const fe2=nameFehler(fn);if(fe2&&!/gibt es schon/.test(fe2))return fe2;if(MODEL.bausteinFunktionen.some(x=>x.name===fn))return fn+" gibt es schon";
         MODEL.bausteinFunktionen.push({_id:"funktion:"+fn,name:fn,namespace:kat,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]});mit(fn,true);}),0);
-      const andere=katAlleFunktionen().filter(f=>funKatalog(f)!==kat),hier=katFunktionen(kat).filter(f=>!(f.lauscht||[]).length);
+      const andere=katAlleFunktionen().filter(f=>funKatalog(f)!==kat),hier=katFunktionen(kat);
       const graphen=(MODEL.graphen||[]).filter(g=>funKatalog(g));
       setTimeout(()=>menueFix(ev.clientX,ev.clientY,"Erste Funktion von "+n,[{t:"＋ ƒ neue Funktion …",fn:neueFn},
         ...(hier.length?[{trenn:1},{kopf:"aus "+kat},...hier.map(f=>({t:"ƒ "+f.name,fn:()=>vorhanden(f)}))]:[]),
@@ -3950,8 +4032,7 @@
         {hinweis:"Zustand (IZustand<T>): im Formular — die Zustandsklasse legt das Modal noch nicht an."}];}
   // Eine Nachricht (noch nicht geschrieben) umbenennen: alle Verweise der Funktionen ziehen mit (eine geschriebene geht über den Renamer).
   function funRecUmbenennen(r,neu){const alt=r.name;recUmbenennenLokal(r,neu);
-    MODEL.bausteinFunktionen.forEach(g=>{(g.eingaenge||[]).forEach(e=>{if(e.eingang===alt)e.eingang=neu;e.ausgaben=(e.ausgaben||[]).map(v=>v===alt?neu:v);});
-      g.lauscht=(g.lauscht||[]).map(v=>v===alt?neu:v);});render();}
+    MODEL.bausteinFunktionen.forEach(g=>{(g.eingaenge||[]).forEach(e=>{if(e.eingang===alt)e.eingang=neu;e.ausgaben=(e.ausgaben||[]).map(v=>v===alt?neu:v);});});render();}
   // ── Komposition: Knoten aus dem Baukasten, [Von] und [Kopf] durch Ziehen, Konstruktor durch Ablegen, Kanten lösen ──
   const komModell=id=>(MODEL.graphen||[]).find(g=>"gr:"+g._id===id);
   function komVerbinde(id,von,nach){const g=komModell(id);if(!g)return;const k=(g.knoten||[]).find(x=>x.name===nach);if(!k)return;
@@ -3972,7 +4053,7 @@
       {t:"✕ [Von("+von+")] lösen",gefahr:1,fn:()=>{k.von=ohneX(k.von,von);k.verlierbar=ohneX(k.verlierbar,von);gTitel(g.name+": "+nach+" nicht mehr von "+von);render();}}]);}
   function komKnotenEntfernen(id,name){const g=komModell(id);if(!g)return;g.knoten=(g.knoten||[]).filter(x=>x.name!==name);
     g.knoten.forEach(x=>{x.von=ohneX(x.von,name);x.verlierbar=ohneX(x.verlierbar,name);});gTitel(g.name+": Knoten "+name+" entfernt");if(KOM)KOM.wahl=null;render();}
-  // ══ EINGÄNGE UND ÜBERSETZUNGEN (docs/10 §10.9): nur Clients und Quellen stoßen Funktionen an. Eine Übersetzung
+  // ══ EINGÄNGE UND ÜBERSETZUNGEN (docs/10 §10.9): nur Clients (über eine App oder eine Quelle) stoßen Funktionen an. Eine Übersetzung
   //   (ITranslate<TSource, TTarget>) verbindet die Nachricht eines Clients mit dem Eingang eines Katalogs und die Ausgabe einer Funktion mit einem
   //   Command an ein Aggregat — Feld für Feld, verdrahtet auf der ↦-Karte. ══
   const komKnotenName=(g,stamm)=>{let n=stamm,i=2;while((g.knoten||[]).some(x=>x.name===n))n=stamm+(i++);return n;};
@@ -3982,11 +4063,9 @@
   const komFelderVon=(t,ohne,ns)=>((recByName(komBasis(t))||{}).felder||[]).filter(f=>!(ohne&&ohne(f))).map(f=>({_id:"f"+(NID++),name:f.name,
     typ:String(f.typ).replace(/\b([A-ZÄÖÜ]\w*)\b/g,(x,n)=>{const A=MODEL.aggregate.find(a=>a.name===n);
       return A&&ns&&ns.split(".").includes(n)&&!String(f.typ).includes(A.namespace+"."+n)?A.namespace+"."+n:x;})}));
-  // „＋ Eingang“ am linken Rand: eine QUELLE (nur ohne Kopf — sie ist dann der einzige) oder ein CLIENT: eine Nachricht der Anwendung, die ein Akteur
-  //   hineingibt (IDarf). Vorhanden ist, was im Bereich des Graphen liegt, keine Funktion ausgibt und noch kein Graph am Kopf nimmt.
-  function komEingangPlus(id,g,d,ev){const items=[],bk=komBaukasten();
-    if(!d.koepfe.length)items.push({kopf:"Quelle — lauscht"},...bk.katalog.map(k=>({t:"⚡ "+k.name+" → "+(k.meldet||[]).join(", "),fn:()=>neuerGraphKnoten(g,k.name)})),
-      ...bk.funktionen.filter(f=>f.quelle).map(f=>({t:"⚡ "+f.name,fn:()=>neuerGraphKnoten(g,f.name)})));
+  // „＋ Eingang“ am linken Rand: ein CLIENT — eine Nachricht der Anwendung, die ein Akteur hineingibt (IDarf; eine Quelle eines Clients gibt sie über
+  //   eine Übersetzung der Akteur-Seite). Vorhanden ist, was im Bereich des Graphen liegt, keine Funktion ausgibt und noch kein Graph am Kopf nimmt.
+  function komEingangPlus(id,g,d,ev){const items=[];
     const genommen=new Set((MODEL.graphen||[]).flatMap(x=>(x.koepfe||[]).map(komBasis))),gegeben=new Set(MODEL.bausteinFunktionen.flatMap(f=>(f.eingaenge||[]).flatMap(e=>e.ausgaben||[])).map(komBasis));
     const frei=MODEL.records.filter(r=>r.kind==="command"&&!r.aggregat&&r.namespace===g.namespace&&!genommen.has(r.name)&&!gegeben.has(r.name));
     items.push({kopf:"Client — ein Akteur gibt eine Nachricht hinein"},{t:"＋ neue Nachricht …",fn:()=>komClientKopf(id,g,d,null,ev)},
@@ -4027,19 +4106,19 @@
   //   dieses Aggregats, sonst ein Guid) — sonst bleibt sie offen, die ↦-Karte zeigt es.
   // Die neue Übersetzung (eine Klasse ITranslate<TSource, TTarget>, docs/04 §4.4): je Parameter des Ziels die Quelle mit gleichem Namen und Typ, dazu
   //   die Id des Ziels aus genau einem passenden Feld (eine Id dieses Aggregats, sonst ein Guid). Name {Quelle}_{Ziel}_{Zähler}.
-  function komUebersetzungAn(typ,cmd){const r=recNamens(cmd);if(!r)return;
-    const idFeld=aggIdFeld(),quelle=(recByName(komBasis(typ))||{}).felder||[],felder=[];
+  function komUebersetzungAn(typ,cmd,opt){const r=recNamens(cmd);if(!r)return;opt=opt||{};
+    const idFeld=aggIdFeld(),quelle=opt.felder||(recByName(komBasis(typ))||{}).felder||[],felder=[];
     (r.felder||[]).forEach(z=>{if(z.name===idFeld)return;const q=quelle.find(f=>f.name===z.name&&komBasis(f.typ)===komBasis(z.typ));if(q)felder.push({ziel:z.name,quelle:q.name});});
     if(!quelle.some(f=>f.name===idFeld)){const ids=quelle.filter(f=>f.typ==="Id<"+r.aggregat+">"),guids=quelle.filter(f=>/^(System\.)?Guid$/.test(f.typ));
       const w=ids.length===1?ids[0]:!ids.length&&guids.length===1?guids[0]:null;if(w)felder.unshift({ziel:idFeld,quelle:w.name});}
     else felder.unshift({ziel:idFeld,quelle:idFeld});
     const stamm=komBasis(typ)+"_"+cmd+"_";let n=1;while(nameFehler(stamm+n)||(MODEL.uebersetzungen||[]).some(u=>u.name===stamm+n))n++;
-    ueNeu(r.namespace,komBasis(typ),cmd,felder,stamm+n);}
+    ueNeu(opt.ns||r.namespace,komBasis(typ),cmd,felder,stamm+n,opt.felder);}
   // Eine neue Übersetzung als Record der Domäne (Name eindeutig unter allen Typen).
-  function ueNeu(ns,ein,aus,felder,stamm){const n=uniq(stamm||(ein+"_"+aus+"_1"));
+  function ueNeu(ns,ein,aus,felder,stamm,quellen){const n=uniq(stamm||(ein+"_"+aus+"_1"));
     // Felder von Quelle und Ziel, wie das Modell sie kennt — daraus schreibt der Server den Konstruktor und Translate(), bis er sie selbst gelesen hat.
     const fs=t=>((recByName(komBasis(t))||{}).felder||[]).map(f=>({name:f.name,typ:f.typ}));
-    (MODEL.uebersetzungen=MODEL.uebersetzungen||[]).push({_id:"uebersetzung:"+n,name:n,namespace:ns,ein,aus,felder,usings:[],quellen:fs(ein),ziele:[],fehler:[]});
+    (MODEL.uebersetzungen=MODEL.uebersetzungen||[]).push({_id:"uebersetzung:"+n,name:n,namespace:ns,ein,aus,felder,usings:[],quellen:quellen?quellen.map(f=>({name:f.name,typ:f.typ})):fs(ein),ziele:[],fehler:[]});
     gTitel("↦ "+n+": "+ein+" ↦ "+aus);render();return n;}
   // Aggregat von innen, „＋ wer schickt ihn“: ein offener Ausgang eines Graphen auf der Fläche wird in den Command übersetzt — oder ein Graph aus
   //   einem Katalog wird an die Domäne gebunden (wie „＋ Graph“ am Band der Fläche).
@@ -4049,7 +4128,7 @@
       ...offen.map(({ab,o})=>({t:"⬡ "+ab.g.name+" · "+o.typ+" ↦ "+cmd,fn:()=>komUebersetzungAn(o.typ,cmd)})),
       ...(offen.length?[]:[{hinweis:"Kein Graph auf der Fläche hat einen offenen Ausgang."}]),
       {trenn:1},{t:"＋ Graph an "+String(A.namespace).split(".").pop()+" binden …",fn:()=>flBandGraph(A.namespace,String(A.namespace).split(".").pop(),ev)}]);}
-  // Ein Graph entsteht mit seinem ersten Knoten (ein leerer baut nicht, CQRS115): eine Funktion, eine Quelle oder ein Graph. Er liegt in einem Katalog
+  // Ein Graph entsteht mit seinem ersten Knoten (ein leerer baut nicht, CQRS115): eine Funktion oder ein Graph. Er liegt in einem Katalog
   //   (docs/04 §4.4, eine Anwendung hat keine Graphen): in dem seines ersten Knotens, sonst im ersten genutzten.
   function graphNeuMitKnoten(ev,pos){const bk=komBaukasten();
     frageFix(ev.clientX,ev.clientY,"⬡ Neuer Graph",uniq("NeuerGraph"),"Danach: sein erster Knoten",n=>{const f=nameFehler(n);if(f)return f;
@@ -4057,24 +4136,22 @@
       const katNs=typ=>{const b=komBasis(typ),x=MODEL.bausteinFunktionen.find(y=>y.name===b)||(MODEL.graphen||[]).find(y=>y.name===b);
         if(x&&funKatalog(x)&&(bk.kataloge||[]).includes(funKatalog(x)))return x.namespace;
         return (bk.kataloge||[])[0]||null;};
-      const mit=(typ,quelle)=>{const ns=katNs(typ);if(!ns){deFlash("ℹ Erst einen Katalog anlegen — Graphen liegen nur in Katalogen",true);return;}(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,
-        knoten:[{typ,name:typBasis(typ).replace(/^I(?=[A-ZÄÖÜ])/,""),kopf:!quelle,von:[],verlierbar:[]}],...pos});KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+" mit "+typ);render();};
+      const mit=typ=>{const ns=katNs(typ);if(!ns){deFlash("ℹ Erst einen Katalog anlegen — Graphen liegen nur in Katalogen",true);return;}(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,
+        knoten:[{typ,name:typBasis(typ).replace(/^I(?=[A-ZÄÖÜ])/,""),kopf:true,von:[],verlierbar:[]}],...pos});KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+" mit "+typ);render();};
       // Eine neue Funktion als erster Knoten: in einem Katalog, mit Auftrag und Ergebnis.
       const neueFn=katalog=>{const weiter=fns=>frageFix(ev.clientX,ev.clientY,"ƒ Erste Funktion von "+n,n.replace(/(Graph|Ablauf)$/,"")+"Rechnung",
           "Nimmt einen neuen Auftrag und gibt ein Ergebnis — beides danach im Modal der Funktion",fn=>{
           const fe=nameFehler(fn);if(fe&&!/gibt es schon/.test(fe))return fe;if(MODEL.bausteinFunktionen.some(x=>x.name===fn))return fn+" gibt es schon";
           const f={_id:"funktion:"+fn,name:fn,namespace:fns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
           const auftrag=uniq(fn+"Auftrag"),ergebnis=uniq(fn+"Ergebnis");funRecordNeu(f,auftrag,"command");funRecordNeu(f,ergebnis,"command");
-          f.eingaenge.push({eingang:auftrag,ausgaben:[ergebnis]});MODEL.bausteinFunktionen.push(f);mit(fn,false);});
+          f.eingaenge.push({eingang:auftrag,ausgaben:[ergebnis]});MODEL.bausteinFunktionen.push(f);mit(fn);});
         setTimeout(()=>weiter(katalog),0);};
       setTimeout(()=>menueFix(ev.clientX,ev.clientY,"Erster Knoten von "+n,[
         ...(bk.kataloge||[]).map(k=>({t:"＋ ƒ neue Funktion in 📚 "+k+" …",fn:()=>neueFn(k)})),
         ...(bk.funktionen.length?[{kopf:"vorhanden"}]:[]),
-        ...bk.funktionen.filter(x=>!x.quelle).map(x=>({t:(x.katalog?"📚 "+x.katalog+" · ":"ƒ ")+x.name,fn:()=>mit(x.name,false)})),
-        ...(bk.katalog.length||bk.funktionen.some(x=>x.quelle)?[{kopf:"Quelle"}]:[]),
-        ...bk.katalog.map(k=>({t:"⚡ "+k.name,fn:()=>mit(k.name,true)})),...bk.funktionen.filter(x=>x.quelle).map(x=>({t:"⚡ "+x.name,fn:()=>mit(x.name,true)})),
-        ...(bk.graphen.length?[{kopf:"Graph (Schachtel)"}]:[]),...bk.graphen.map(x=>({t:"⬡ "+x.name,fn:()=>mit(x.name,false)}))]),0);});}
-  // Aus dem Baukasten abgelegt: Funktion, Graph oder Katalog auf der Leinwand = ein neuer Knoten (generisch: mit Typargument);
+        ...bk.funktionen.map(x=>({t:(x.katalog?"📚 "+x.katalog+" · ":"ƒ ")+x.name,fn:()=>mit(x.name)})),
+        ...(bk.graphen.length?[{kopf:"Graph (Schachtel)"}]:[]),...bk.graphen.map(x=>({t:"⬡ "+x.name,fn:()=>mit(x.name)}))]),0);});}
+  // Aus dem Baukasten abgelegt: Funktion oder Graph auf der Leinwand = ein neuer Knoten (generisch: mit Typargument);
   //   Technik oder Konfig auf einem Knoten = ein Konstruktor-Parameter seiner Funktion.
   function komAblegen(id,daten,zielKnoten,ev){const g=komModell(id);if(!g)return;const bk=komBaukasten();
     if(daten.gruppe==="technik"||daten.gruppe==="konfig"){if(!zielKnoten){deFlash("ℹ "+daten.name+" auf einen Knoten ziehen — es kommt in seinen Konstruktor",true);return;}
@@ -4085,7 +4162,7 @@
       if(daten.gruppe==="technik")nimmGerufene(liste,MODEL.bausteinFunktionen.find(x=>x.name===daten.name),f);
       else if(!liste.some(p=>p.typ===daten.name))liste.push({typ:daten.name,name:paramName(daten.name,liste.map(p=>p.name))});
       gTitel(f.name+" nimmt "+daten.name);render();return;}
-    if(daten.gruppe==="funktionen"||daten.gruppe==="graphen"||daten.gruppe==="katalog"){
+    if(daten.gruppe==="funktionen"||daten.gruppe==="graphen"){
       const x=(bk[daten.gruppe]||[]).find(e=>e.name===daten.name)||{};
       if((x.typargumente||[]).length)menueFix(ev.clientX,ev.clientY,daten.name+"‹…› — mit welchem Typargument?",x.typargumente.map(t=>({t:daten.name+"<"+t+">",fn:()=>neuerGraphKnoten(g,daten.name+"<"+t+">")})));
       else neuerGraphKnoten(g,daten.name);return;}
@@ -4152,7 +4229,7 @@
     const pick=h("div",{class:"gpick"});pick.style.left=sx+"px";pick.style.top=sy+"px";
     const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,wx,wy);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
-      opt("aggregate","Aggregat"),h("button",{onclick:e=>{pick.remove();graphNeuMitKnoten(e,{x:wx,y:wy});}},"⬡ Graph"),opt("funktion","ƒ Funktion"),opt("quelle","📥 Quelle"),opt("gerufen","⚙ Technik"),
+      opt("aggregate","Aggregat"),h("button",{onclick:e=>{pick.remove();graphNeuMitKnoten(e,{x:wx,y:wy});}},"⬡ Graph"),opt("funktion","ƒ Funktion"),opt("gerufen","⚙ Technik"),
       opt("projektion","Projektion"),
       h("button",{onclick:e=>{pick.remove();katalogNeu(e);}},"📚 Katalog"));
     canvas.append(pick);
@@ -4329,14 +4406,17 @@
   //   stehen an der Karte, die sie betreffen. Alle Daten kommen fertig vom Server (Frontend-Bauregel P3): das JS kennt kein
   //   Umgebungs-Modell, nur das Schema und die Datei, wie sie ist.
   const WB={zustand:null,schema:null,umg:null,umgName:null,dirty:false,uhr:null,diag:[],boot:[],letzter:null,refs:{},ver:0,es:null};
-  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Lebenszyklus","Konsum","Transport","Identitaeten","Quellen","Funktionen","Konfig"];
-  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Lebenszyklus:"⏳",Konsum:"📥",Transport:"🔗",Identitaeten:"🪪",Quellen:"📁",Funktionen:"ƒ",Konfig:"⚙",Uhr:"🕰"};
+  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Lebenszyklus","Konsum","Transport","Identitaeten","Clients","Stores"];
+  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Lebenszyklus:"⏳",Konsum:"📥",Transport:"🔗",Identitaeten:"🪪",Clients:"🔌",Stores:"📁",Uhr:"🕰"};
   function hostKnoten(){if(!WB.schema)return [];
     const ab=[...HOST_ORDNUNG.filter(k=>WB.schema[k]),...Object.keys(WB.schema).filter(k=>!HOST_ORDNUNG.includes(k)),"Uhr"];
     return [...ab.map(k=>({id:"host:"+k,name:(HOST_SYM[k]||"")+" "+k,kind:"host",ref:WB.refs[k]||(WB.refs[k]={abschnitt:k})})),
       // Instanzen der Graphen (docs/10 §10.3.5): je Datei graphen/<instanz>.json eine Karte, dazu eine zum Anlegen.
       ...Object.keys(WB.instanzen||{}).sort().map(i=>({id:"host:inst:"+i,name:"⬡ "+i,kind:"host",ref:WB.refs["inst:"+i]||(WB.refs["inst:"+i]={instanz:i})})),
-      {id:"host:inst-neu",name:"＋ Instanz",kind:"host",ref:WB.refs["inst-neu"]||(WB.refs["inst-neu"]={instanzNeu:true})}];}
+      {id:"host:inst-neu",name:"＋ Instanz",kind:"host",ref:WB.refs["inst-neu"]||(WB.refs["inst-neu"]={instanzNeu:true})},
+      // Eingänge der Clients (docs/04 §4.7): je Eingang der Datei eine Karte — ihr Formular öffnet ein Doppelklick in der Spalte Clients der Fläche.
+      ...Object.entries((WB.umg||{}).Clients||{}).flatMap(([c,v])=>Object.keys((v||{}).Eingaenge||{}).sort().map(e=>({id:eingangId(c,e),name:"⚡ "+c+"/"+e,kind:"host",
+        ref:WB.refs["eing:"+c+"/"+e]||(WB.refs["eing:"+c+"/"+e]={eingang:{client:c,name:e}})})))];}
   const wbJson=async(url,opt)=>{const r=await fetch(url,opt);if(!r.ok)throw new Error("HTTP "+r.status);return r.json();};
   // ── Panel: EIN generischer Formular-Renderer (Schema-Knoten → Steuerelement) ──
   //   art klasse → Felder; art je → je Schlüssel eine Klasse (+ anlegen/entfernen); art frei → JSON; typ enum/bool/zahl/dauer/string/liste/map.
@@ -4345,6 +4425,7 @@
     if(sch.art==="klasse")return wbKlasse(sch,wert||{},setze);
     if(sch.art==="je")return wbJe(sch,wert||{},setze);
     if(sch.art==="frei")return wbFrei(sch,wert,setze);
+    if(sch.art==="hinweis")return h("div",{class:"gi-hint"},sch.hilfe||"");
     const t=sch.typ,ph=sch.standard!=null?String(sch.standard):"";
     if(t==="enum"||t==="bool"){const werte=t==="bool"?["true","false"]:sch.werte||[];
       const sel=h("select",{onchange:e=>{const v=e.target.value;setze(v===""?undefined:t==="bool"?v==="true":v);}},
@@ -4397,6 +4478,7 @@
   function hostCard(body,n){if(!INSP)return;const k=n.ref.abschnitt,z=WB.zustand||{};
     if(n.ref.instanzNeu){instanzNeuPanel(body);return;}
     if(n.ref.instanz){instanzPanel(body,n.ref.instanz);return;}
+    if(n.ref.eingang){eingangPanel(body,n.ref.eingang.client,n.ref.eingang.name);return;}
     if(k==="Uhr"){wbUhrPanel(body,z);return;}
     const sch=(WB.schema||{})[k];if(!sch||!WB.umg){body.append(h("div",{class:"gi-hint"},"Umgebung nicht geladen."));return;}
     const knopf=h("button",{class:"act go",onclick:wbSpeichern},"💾 In umgebung."+WB.umgName+".json schreiben");knopf.disabled=!WB.dirty;
@@ -4415,10 +4497,10 @@
   // Umgebungs-Werte sind eine Geste (Verlauf, ↶, auf main gesperrt).
   async function wbSpeichern(){try{const a=await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(WB.umgName),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(WB.umg)});
       if(!a.ok){deFlash("⚠ nicht geschrieben: "+(a.fehler||"?"),false);return;}
-      WB.dirty=false;deFlash("💾 umgebung."+WB.umgName+".json geschrieben (↶ nimmt es zurück) — wirksam nach ⟳",true);await wbZustand();render();}
+      WB.dirty=false;deFlash("💾 umgebung."+WB.umgName+".json geschrieben (↶ nimmt es zurück) — wirksam nach ⟳",true);await wbLadeTechnikWahl();await wbZustand();render();}
     catch(e){deFlash("⚠ nicht geschrieben: "+e.message,false);}}
 
-  // ── Instanzen (docs/10 §10.3.5): eine Datei je Instanz — Graph, bei einer Quelle der Akteur, Rechner, je Knoten Rahmenfelder, Konfig-Werte und die
+  // ── Instanzen (docs/10 §10.3.5): eine Datei je Instanz — Graph, Rechner, Stränge, je Knoten Rahmenfelder, Konfig-Werte und die
   //    Wahl der Technik. Das Formular leitet der Server aus dem Graphen ab (/api/werkbank/instanzschema); geschrieben wird als Geste (↶). ──
   async function instanzGeste(pfad,methode,inhalt,titel){
     try{const r=await fetch(pfad,{method:methode,headers:{"content-type":"application/json"},body:inhalt===undefined?undefined:JSON.stringify(inhalt)});const a=await r.json();
@@ -4430,10 +4512,51 @@
     if(!name||!/^[A-Za-z0-9_-]+$/.test(name))return;
     if(await instanzGeste(instanzPfad(name),"POST",{Graph:graph},"⬡ Instanz "+name+" angelegt"))waehle("host:inst:"+name);}
   function instanzNeuPanel(body){
-    body.append(h("div",{class:"gi-hint"},"Welcher Graph soll in „"+(WB.umgName||"?")+"“ laufen? Ein Graph mit Quelle beliebig oft (je Linie, je Verzeichnis …), einer mit Command-Kopf genau einmal."));
-    const box=h("div",{style:"display:flex;flex-wrap:wrap;gap:4px"});
-    (MODEL.graphen||[]).filter(g=>g.datei).forEach(g=>box.append(h("button",{class:"akt-dom",onclick:()=>instanzAnlegen(g.name)},"⬡ "+g.name)));
+    body.append(h("div",{class:"gi-hint"},"Welcher Graph soll in „"+(WB.umgName||"?")+"“ laufen? Je Umgebung läuft ein Graph genau einmal; Quellen sind Eingänge eines Clients (Spalte Clients der Fläche)."));
+    const box=h("div",{style:"display:flex;flex-wrap:wrap;gap:4px"}),laeuft=new Set(Object.values(WB.instanzen||{}).map(v=>(v||{}).Graph));
+    (MODEL.graphen||[]).filter(g=>g.datei).forEach(g=>{const b=h("button",{class:"akt-dom",title:laeuft.has(g.name)?"läuft schon in „"+(WB.umgName||"?")+"“":"",onclick:()=>instanzAnlegen(g.name)},"⬡ "+g.name);
+      b.disabled=laeuft.has(g.name);box.append(b);});
     body.append(box);}
+  // Ein Wert im Formular einer Instanz bzw. eines Eingangs: Enum und bool als Auswahl, sonst Text; leer = Standard (der Schlüssel fällt aus der Datei).
+  const instSetze=(w,f,v)=>{if(v===""||v==null)delete w[f];else w[f]=v;};
+  function instFeld(w,f,typ,d){d=d||{};
+    if(d.werte||typ==="bool"){const werte=d.werte||["true","false"],s=h("select",{onchange:e=>instSetze(w,f,e.target.value===""?null:typ==="bool"?e.target.value==="true":e.target.value)},
+        h("option",{value:""},"— Standard"+(d.standard!=null?" ("+d.standard+")":"")));werte.forEach(x=>{const o=h("option",{value:x},x);if(String(w[f])===x)o.selected=true;s.append(o);});return s;}
+    return h("input",{style:"flex:1;min-width:0",value:Array.isArray(w[f])?w[f].join(", "):w[f]??"",placeholder:(typ==="TimeSpan"?"hh:mm:ss":typ)+(d.standard!=null?" · Standard "+d.standard:""),
+      oninput:e=>{const v=e.target.value;instSetze(w,f,v===""?null:/^(int|long)$/.test(typ)&&/^-?\d+$/.test(v)?Number(v):/\[\]$/.test(typ)?v.split(",").map(x=>x.trim()).filter(Boolean):v);}});}
+  const instSauber=o=>{if(Array.isArray(o))return o;if(o&&typeof o==="object"){const a={};for(const [k,v] of Object.entries(o)){const b=instSauber(v);
+    if(b==null||(typeof b==="object"&&!Array.isArray(b)&&!Object.keys(b).length))continue;a[k]=b;}return a;}return o;};
+  // ── Eingänge der Clients (docs/04 §4.7): Clients:<Client>:Eingaenge:<eingang> in umgebung.json — Art (fest), Akteur (unter den verkörperten, die
+  //    die Art verwirklicht), Rechner, Offen, die Wahl der Technik und die Felder der Konfig-Records der Quellart. Das Schema rechnet der Server
+  //    (/api/werkbank/eingangschema), die Akteure stehen an der Client-Karte der Fläche; Speichern und ✕ sind Gesten (↶). ──
+  function eingangPanel(body,client,name){const roh=((((WB.umg||{}).Clients||{})[client]||{}).Eingaenge||{})[name];
+    if(!roh){body.append(h("div",{class:"gi-hint"},"Einen Eingang "+client+"/"+name+" gibt es in „"+(WB.umgName||"?")+"“ nicht (mehr)."));return;}
+    const wert=JSON.parse(JSON.stringify(roh)),C=MODEL.clients.find(c=>c.name===client),fk=C?FLKARTE.get("cl:"+C._id)||FL().karten.find(k=>k.id==="cl:"+C._id):null;
+    const E=C?(((flEing().karten||{})["cl:"+C._id]||{}).eingaenge||[]).find(e=>e.name===name):null;
+    body.append(h("div",{class:"gi-hint"},"umgebungen/"+(WB.umgName||"?")+"/umgebung.json → Clients:"+client+":Eingaenge:"+name+" — leer = Standard; ${branch} und ${env:NAME} werden beim Start ersetzt. Wirksam nach ⟳."));
+    if(E&&(E.befunde||[]).length)body.append(h("div",{class:"gi-diag"},...E.befunde.map(t=>h("div",{class:"find warning"},"⚠ "+t))));
+    const box=h("div",{},h("div",{class:"gi-hint"},"lädt …"));body.append(box);
+    (async()=>{let sch;try{sch=await wbJson("/api/werkbank/eingangschema?art="+encodeURIComponent(wert.Art||""));}catch(e){sch={fehler:e.message};}
+      box.innerHTML="";const zeile=(t,el,tt)=>h("div",{class:"frow",title:tt||""},h("span",{class:"slotlbl",style:"min-width:110px"},t),el);
+      box.append(zeile("Art",h("b",{},"⚡ "+(wert.Art||"?")),"Die Quellart ist fest — ein anderer Eingang entsteht über ＋ Eingang an der Karte des Clients"));
+      if(sch.fehler){box.append(h("div",{class:"gi-hint",style:"color:#cf6f68"},sch.fehler));return;}
+      // Akteur: die verkörperten, die die Art verwirklicht (der Server nennt sie an der Client-Karte); ein anderer steht mit ⚠ dabei.
+      const passend=(((fk||{}).kandidaten||{}).arten||[]).find(a=>a.art===wert.Art),akteure=[...((passend||{}).akteure||[])];
+      if(wert.Akteur&&!akteure.includes(wert.Akteur))akteure.push(wert.Akteur);
+      const sa=h("select",{onchange:e=>instSetze(wert,"Akteur",e.target.value)},...(wert.Akteur?[]:[h("option",{value:""},"— wählen")]),
+        ...akteure.map(an=>{const o=h("option",{value:an},"👤 "+an+((passend&&passend.akteure.includes(an))?"":" ⚠ verwirklicht die Art nicht"));if(an===wert.Akteur)o.selected=true;return o;}));
+      box.append(zeile("Akteur",sa,"Für wen der Eingang hineingibt — ein Akteur, den "+client+" verkörpert und den "+wert.Art+" verwirklicht"));
+      box.append(zeile("Rechner",h("input",{style:"flex:1;min-width:0",value:wert.Rechner||"",placeholder:"Pflicht im Cluster",oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}}),
+        "Auf welchem Rechner die Quelle lauscht (sein Cluster:Rechner) — im Cluster Pflicht: eine Quelle lauscht genau einmal"));
+      box.append(zeile("Offen",h("input",{style:"flex:1;min-width:0",value:wert.Offen??"",placeholder:"Standard "+(sch.offenStandard??""),oninput:e=>{const v=e.target.value.trim();if(/^\d+$/.test(v)&&Number(v)>0)wert.Offen=Number(v);else delete wert.Offen;}}),
+        "So viele hineingegebene Elemente dürfen offen sein, bevor die Quelle wartet"));
+      (sch.technik||[]).forEach(t=>{wert.Technik=wert.Technik||{};const s=h("select",{onchange:e=>instSetze(wert.Technik,t.schnittstelle,e.target.value||null)},h("option",{value:""},"— wählen"));
+        t.umsetzungen.forEach(u=>{const o=h("option",{value:u},u);if(wert.Technik[t.schnittstelle]===u)o.selected=true;s.append(o);});box.append(zeile("⚙ "+t.schnittstelle,s));});
+      (sch.konfigs||[]).forEach(c=>{box.append(h("div",{class:"gsec",title:c.record},"▤ "+c.record+(c.umsetzung?" ("+c.umsetzung+")":"")));
+        (c.felder||[]).forEach(f=>box.append(zeile(f.feld,instFeld(wert,f.feld,f.typ.replace(/\?$/,""),{standard:f.standard,werte:f.werte}),c.record+" · "+f.typ)));});
+      box.append(h("div",{class:"frow"},h("button",{class:"act go",onclick:()=>instanzGeste(eingangPfad(client,name),"POST",instSauber(wert),"⚡ Eingang "+client+"/"+name)},"💾 Speichern"),
+        h("button",{class:"act",onclick:async()=>{if(!confirm("Eingang "+client+"/"+name+" aus „"+(WB.umgName||"?")+"“ entfernen?"))return;
+          if(await instanzGeste(eingangPfad(client,name),"DELETE",undefined,"⚡ Eingang "+client+"/"+name+" entfernt"))komSchliesse();}},"✕ Entfernen")));})();}
   function instanzPanel(body,name){const wert=JSON.parse(JSON.stringify((WB.instanzen||{})[name]||{}));
     body.append(h("div",{class:"gi-hint"},"umgebungen/"+(WB.umgName||"?")+"/graphen/"+name+".json — leer = Standard; ${branch} und ${env:NAME} werden beim Start ersetzt. Wirksam nach ⟳."));
     const box=h("div",{},h("div",{class:"gi-hint"},"lädt …"));body.append(box);
@@ -4441,42 +4564,34 @@
       box.innerHTML="";
       const g=(MODEL.graphen||[]).find(x=>x.name===wert.Graph);
       box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Graph"),h("button",{class:"akt-dom",onclick:()=>g&&waehle("gr:"+g._id)},"⬡ "+(wert.Graph||"?")),
-        sch.commandKopf?h("span",{class:"slotlbl",style:"opacity:.7"},"Command-Kopf: je Umgebung genau eine Instanz"):null));
+        h("span",{class:"slotlbl",style:"opacity:.7"},"je Umgebung genau eine Instanz")));
       if(sch.fehler){box.append(h("div",{class:"gi-hint",style:"color:#cf6f68"},sch.fehler));return;}
-      if(sch.quelle||wert.Akteur){const r=h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default;white-space:normal"},
-          h("span",{class:"slotlbl"},"Akteur"+(wert.Akteur?"":" ⚠ fehlt — eine Quelle gibt für einen Akteur hinein")));
-        MODEL.akteure.forEach(a=>r.append(h("button",{class:"akt-dom"+(wert.Akteur===a.name?" an":""),onclick:()=>{if(wert.Akteur===a.name)delete wert.Akteur;else wert.Akteur=a.name;
-          [...r.querySelectorAll("button")].forEach(b=>b.classList.toggle("an",b.textContent==="👤 "+wert.Akteur));}},"👤 "+a.name)));box.append(r);}
-      box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Rechner"),h("input",{value:wert.Rechner||"",placeholder:sch.rechnerPflicht?"Pflicht im Cluster (Zustand oder Quelle)":"ohne = auf jedem Host",
+      // Den Akteur einer Kette bringt ihr Auslöser mit — ein Akteur an der Instanz (alte Datei) fällt beim Schreiben weg.
+      if(wert.Akteur){box.append(h("div",{class:"gi-hint",style:"color:#cf6f68"},"⚠ Akteur „"+wert.Akteur+"“ steht nicht mehr an der Instanz (den Akteur bringt der Auslöser mit) — fällt beim Schreiben weg."));delete wert.Akteur;}
+      box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Rechner"),h("input",{value:wert.Rechner||"",placeholder:sch.rechnerPflicht?"Pflicht im Cluster (Zustand)":"ohne = auf jedem Host",
         oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}})));
       // Stränge: so viele Ketten rechnet die Instanz zugleich, je Host, der sie hält (1 = der Reihe nach); leer = der Standard.
       box.append(h("div",{class:"frow",title:"So viele Ketten rechnet die Instanz zugleich, je Host — 1 = eine nach der anderen; Parallel am Knoten bleibt seine Obergrenze"},
         h("span",{class:"slotlbl"},"Stränge"),h("input",{value:wert.Straenge??"",placeholder:"Standard "+(sch.straengeStandard??""),
         oninput:e=>{const v=e.target.value.trim();if(/^\d+$/.test(v)&&Number(v)>0)wert.Straenge=Number(v);else delete wert.Straenge;}})));
-      const setze=(w,f,v)=>{if(v===""||v==null)delete w[f];else w[f]=v;};
-      const feld=(w,f,typ,d)=>{d=d||{};
-        if(d.werte||typ==="bool"){const werte=d.werte||["true","false"],s=h("select",{onchange:e=>setze(w,f,e.target.value===""?null:typ==="bool"?e.target.value==="true":e.target.value)},
-            h("option",{value:""},"— Standard"+(d.standard!=null?" ("+d.standard+")":"")));werte.forEach(x=>{const o=h("option",{value:x},x);if(String(w[f])===x)o.selected=true;s.append(o);});return s;}
-        return h("input",{value:w[f]??"",placeholder:(typ==="TimeSpan"?"hh:mm:ss":typ)+(d.standard!=null?" · Standard "+d.standard:""),
-          oninput:e=>{const v=e.target.value;setze(w,f,v===""?null:/^(int|long)$/.test(typ)&&/^-?\d+$/.test(v)?Number(v):v);}});};
+      const setze=instSetze,feld=instFeld;
       (sch.knoten||[]).forEach(kn=>{const w=wert[kn.pfad]=wert[kn.pfad]||{};
-        box.append(h("div",{class:"gsec",title:kn.typ},(kn.quelle?"⚡ ":"ƒ ")+kn.pfad+" · "+kn.funktion+(kn.zustand?" · Zustand "+kn.zustand:"")+(kn.bekannt?"":" ⚠ unbekannt")));
+        box.append(h("div",{class:"gsec",title:kn.typ},"ƒ "+kn.pfad+" · "+kn.funktion+(kn.zustand?" · Zustand "+kn.zustand:"")+(kn.bekannt?"":" ⚠ unbekannt")));
         (sch.rahmenfelder||[]).forEach(r=>box.append(h("div",{class:"frow"},h("span",{class:"slotlbl",style:"min-width:110px"},r.feld),feld(w,r.feld,r.typ,{standard:r.typ==="bool"?"false":r.typ==="TimeSpan"?"ohne":"Standard"}))));
         (kn.technik||[]).forEach(t=>{w.Technik=w.Technik||{};const s=h("select",{onchange:e=>setze(w.Technik,t.schnittstelle,e.target.value||null)},h("option",{value:""},"— wählen"));
           t.umsetzungen.forEach(u=>{const o=h("option",{value:u},u);if(w.Technik[t.schnittstelle]===u)o.selected=true;s.append(o);});
           box.append(h("div",{class:"frow"},h("span",{class:"slotlbl",style:"min-width:110px"},"⚙ "+t.schnittstelle),s));});
         (kn.konfigs||[]).forEach(c=>(c.felder||[]).forEach(f=>box.append(h("div",{class:"frow",title:c.record+(c.umsetzung?" ("+c.umsetzung+")":"")+" · "+f.typ},
           h("span",{class:"slotlbl",style:"min-width:110px"},f.feld),feld(w,f.feld,f.typ.replace(/\?$/,""),{standard:f.standard,werte:f.werte})))));});
-      const sauber=o=>{if(Array.isArray(o))return o;if(o&&typeof o==="object"){const a={};for(const [k,v] of Object.entries(o)){const b=sauber(v);
-        if(b==null||(typeof b==="object"&&!Array.isArray(b)&&!Object.keys(b).length))continue;a[k]=b;}return a;}return o;};
+      const sauber=instSauber;
       box.append(h("div",{class:"frow"},h("button",{class:"act go",onclick:()=>instanzGeste(instanzPfad(name),"POST",sauber(wert),"⬡ Instanz "+name)},"💾 In "+name+".json schreiben"),
         h("button",{class:"act",onclick:async()=>{if(!confirm("Instanz "+name+" entfernen?"))return;if(await instanzGeste(instanzPfad(name),"DELETE",undefined,"⬡ Instanz "+name+" entfernt"))waehle(null);}},"Entfernen")));})();}
   // ── Befunde an der Karte: Compiler/Analyzer (Typ + Member aus dem Syntaxbaum) und Boot-Fehler (Karte im Wirker-Format) ──
   // Die Karte zu einer stabilen Id (Werkbank P4.8): Wirker-Ids und natürliche Schlüssel liefert der Server als _id (decide:A/C, fluss:P#k,
   //   prozess:P#A→C, funktion:F, projektion:P …); Karten mit Namens-Id (rec:/agg:/enum:/saga:/host:) sind schon die Karten-Id.
-  //   Eine Quelle ist ihr Nachrichten-Record.
-  function karteVonId(id){if(!id)return null;if(NODEBY.has(id))return id;
-    if(id.startsWith("quelle:"))return recByName(id.slice(7))?"rec:"+id.slice(7):null;
+  //   Ein Eingang eines Clients (eingang:Client/Eingang) liegt an der Karte seines Clients.
+  const eingangsClient=id=>id&&id.startsWith("eingang:")?"client:"+id.slice(8).split("/")[0]:id;
+  function karteVonId(id){if(!id)return null;if(NODEBY.has(id))return id;id=eingangsClient(id);
     const n=graphNodes().find(x=>x.ref&&x.ref._id===id&&x.kind!=="host");return n?n.id:null;}
   function wbZiel(d){
     if(d.karte)return d.karte.startsWith("host:")?d.karte:karteVonId(d.karte);
@@ -4523,7 +4638,9 @@
   async function wbZustand(){try{WB.zustand=await wbJson("/api/werkbank/zustand");}catch(e){WB.zustand=null;}wbKopf();}
   async function wbLadeUmgebung(){const n=WB.zustand&&WB.zustand.aktiv;if(!n)return;
     try{WB.umg=await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(n));WB.umgName=n;WB.dirty=false;}catch(e){WB.umg=null;}
-    try{WB.instanzen=await wbJson("/api/werkbank/instanzen/"+encodeURIComponent(n));}catch(e){WB.instanzen={};}}
+    try{WB.instanzen=await wbJson("/api/werkbank/instanzen/"+encodeURIComponent(n));}catch(e){WB.instanzen={};}
+    await wbLadeTechnikWahl();}
+  async function wbLadeTechnikWahl(){try{WB.technikWahl=await wbJson("/api/werkbank/technikwahl");}catch(e){WB.technikWahl={};}}
   async function wbLadeUhr(){try{WB.uhr=await wbJson("/api/werkbank/uhr");}catch(e){WB.uhr=null;}}
   async function wbLadeDiagnosen(){try{const d=await wbJson("/api/werkbank/diagnosen");WB.diag=d.diagnosen||[];WB.boot=d.boot||[];WB.ver++;}catch(e){}}
   async function wbAktiv(name){if(WB.dirty&&!confirm("Ungespeicherte Änderungen an umgebung."+WB.umgName+".json verwerfen?")){wbKopf();return;}
@@ -4696,7 +4813,7 @@
   async function dsWorkerLog(f){const out=wbOut(true);if(!out)return;let l=[];try{l=await wbJson("/api/werkbank/worker/"+encodeURIComponent(f)+"/log");}catch(e){}
     wbZeile(out,"▶ Worker "+f);out.append(h("pre",{class:"wb-log"},l.length?l.join("\n"):"(keine Ausgabe)"));}
 
-  // ── An den Karten: Funktion (Worker) und Quelle (Datei ablegen) ──
+  // ── An den Karten: Funktion (Worker) ──
   function dsBadge(n){if(n.kind!=="funktion"||!n.ref)return null;
     const w=DS.worker.find(x=>x.funktion===n.ref.name&&x.laeuft);
     if(!w)return null;
@@ -4761,7 +4878,7 @@
     if(!SPKN||SPKN.n!==NODEBY||SPKN.v!==VERTRETER){const m=new Map();NODEBY.forEach(n=>{if(n.kind!=="host"&&n.ref&&n.ref._id&&!m.has(n.ref._id))m.set(n.ref._id,n.id);});SPKN={n:NODEBY,v:VERTRETER,m,c:new Map()};}
     if(SPKN.c.has(id))return SPKN.c.get(id);
     let k=NODEBY.has(id)?id:SPKN.m.get(id)||null;
-    if(!k&&id.startsWith("quelle:"))k=recByName(id.slice(7))?"rec:"+id.slice(7):null;
+    if(!k&&id.startsWith("eingang:"))k=SPKN.m.get(eingangsClient(id))||null;
     const v=k?vertreterId(k):null;SPKN.c.set(id,v);return v;}
   const spSchritte=()=>{const bis=SP.bis??Infinity;return ((SP.vorgang||{}).schritte||[]).filter(s=>s.nr<=bis);};
   // Die Karten des Vorgangs bis zum Schieber — der Fokus „mit Vorgang".

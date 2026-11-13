@@ -112,7 +112,8 @@ Kommt nichts hinein, arbeiten nur die Takte (gemessen auf dem Messserver, Diagno
 - **Batch-Poll** alle 30 s je Projektion und Partition eine Weckung, ohne Neues eine Abfrage (Beispieldomäne: 5 Projektionen × 8 Partitionen =
   40 Abfragen je 30 s — er wächst mit Projektionen × Partitionen, PF-15);
 - **Zusteller** jede Sekunde je Knoten die fälligen offenen Eingänge (eine Abfrage über den Index von `cqrs_eingaenge`);
-- **Quellen** nach ihrer Art: der Dateiwächter scannt sein Verzeichnis je Intervall (Standard 1 s), der Taktgeber wartet auf sein Intervall;
+- **Eingänge aus Quellen** nach ihrer Art: der Dateiwächter scannt sein Verzeichnis je Intervall (Standard 1 s), der Taktgeber wartet auf sein
+  Intervall; bei voller Grenze sieht der Läufer alle 500 ms nach, was noch offen ist (eine Abfrage über den Schlüssel von `cqrs_eingaenge`);
 - **Uhr** jede Sekunde die DB-Uhr und die fälligen Fristen (eine Abfrage über den Index von `cqrs_fristen`).
 
 **Nachlauf.** Nach einer Last schreiben die Batch-Leser ihre Position über fremde Events einmal fest; danach ist der Host still.
@@ -144,7 +145,7 @@ Frage, die Projektionen dahinter (aus den Lese-Fähigkeiten: die Projektionen, d
 `Id<T>`-Felder von Antwort und Query) — ohne `ctx.Track` und ohne Reader-Attribut. Eine Query hat genau ein Ziel (R4): statt eines Readers kann
 sie ein Aggregat beantworten (`Frage` im Decider, exakter Stand mit seiner Version, ohne Projektion dahinter — [03](03-schreibseite.md) §3.1 (d)).
 
-Eine Funktion erkennt der `FunktionsBausteinGenerator` an `IFunktion` und den `Auf`-Methoden (bzw. `Lausche`), einen Graphen der
+Eine Funktion erkennt der `FunktionsBausteinGenerator` an `IFunktion` und den `Auf`-Methoden (eine Quellart an `IQuellart` und `Lausche`), einen Graphen der
 `GraphGenerator` am Record mit `IGraph` (§4.4). Eine Funktion darf Lese-Fähigkeiten nehmen, nie Schreib-Fähigkeiten: was sie bewirkt, geht als
 Command an ein Aggregat.
 
@@ -265,7 +266,7 @@ desselben Graphen, von denen er bekommt; eine genannte Quelle speist die Ports, 
 Typen allein entsteht innen keine Kante: ein neuer Knoten bekommt nichts, was er nicht nennt, und eine Kette gleichen Typs (`Bild → Bild → Bild`)
 ist kein Kreis. Ein **Kopf** trägt `[Kopf]` und nimmt von außen (von einem Client, vom Ausgang eines anderen Graphen), was keine
 genannte Quelle speist — je Eingangstyp genau einer; ein Knoten kann beides tragen (ein `Auf` von außen, eines von innen). Jeder Knoten trägt
-`[Kopf]`, `[Von]` oder beides; nur eine Quelle trägt keins, sie ist der einzige Kopf ihres Graphen. Was ein Knoten ausgibt und kein Knoten über `Von`
+`[Kopf]`, `[Von]` oder beides; ein Graph ohne Kopf ist ein Fehler (eine Quellart ist nie ein Knoten, §4.7). Was ein Knoten ausgibt und kein Knoten über `Von`
 von ihm nimmt, verlässt den Graphen — als Command an ein Aggregat oder an den Kopf eines anderen Graphen (zwischen den Bausteinen
 bleibt es beim Typ-Routing mit genau einem Empfänger, Invariante 3), als Hinweis an die Akteure, die ihn hören. Ein Graph ist kreisfrei über seine Knoten (einen Command an den eigenen Kopf darf er geben — das ist eine
 neue Kette). Seine **Signatur** ergibt sich (Eingänge = Köpfe, Ausgänge = was ihn verlässt), deshalb ist ein Graph als Knoten in einem anderen eine
@@ -281,8 +282,6 @@ public sealed record Bildaufbereitung(
     [Von(nameof(Einlesen))] Bildverkleinerung Verkleinern,
     [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast,
     [Von(nameof(Kontrast))] Dateinamendeutung Deuten) : IGraph;
-// Bildvorschau.Katalog/Graphen.cs — Quelle am Kopf, die Bildaufbereitung als Schachtel; das gedeutete Bild verlässt den Graphen
-public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] Bildaufbereitung Aufbereitung) : IGraph;
 ```
 Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.txt`, Kartenausgabe): dieselbe Funktion zweimal, eine Kette gleichen
 Typs, ein Knoten mit `[Kopf]` und `[Von]`, ein Graph im Graphen, dessen Ausgang ein anderer Knoten per `Von(nameof(Filter))` nimmt.
@@ -303,9 +302,11 @@ Event (eine Antwort), `TTarget` ein Command (CQRS121); ein Graph nennt eine Übe
   Command ohne Ziel gibt es an den Kopf genau eines Graphen. Ein Ausgang eines laufenden Katalog-Graphen ohne Empfänger ist CQRS120.
 - **Antwort:** antwortet das Aggregat auf den Command einer Übersetzung mit einem Event, das eine Übersetzung nimmt, rechnet das Kind sie gleich
   weiter (Antwort-Übersetzung; das Event muss eines sein, das das Decide des übersetzten Commands ausgeben kann, CQRS123). Ihr Ergebnis geht an den
-  Kopf eines Graphen — darum nimmt ein Graph mit Quelle keine Antwort (er hat keinen Kopf), sie geht an einen eigenen Graphen.
+  Kopf eines Graphen.
 - **Kopf:** einen Command ohne Ziel eines Clients (eine Nachricht der Domäne) übersetzt der Eingang in den Eingang eines Graphen
   (`Verkettung.Ziele`).
+- **Akteur-Seite:** eine Übersetzung mit einer **Meldung** als Quelle (`ITranslate<DateiGefunden, LiesBild>`, bei den Akteuren) rechnet der Läufer
+  eines Eingangs aus einer Quelle (§4.7).
 Der Wirker in der Spur ist die Übersetzung (`uebersetzung:<Name>`). Ein Graph eines Katalogs **läuft** in einer Anwendung, wenn eine Übersetzung oder
 ein Akteur ihn bindet.
 ```csharp
@@ -322,22 +323,20 @@ public sealed class Skaliert_MeldeAusreisser_1(Guid Bezug, double Wert) : ITrans
 ```
 
 **Instanz.** Ein Graph ist eine Blaupause und läuft erst als **Instanz**: eine Datei je Instanz, `umgebungen/<name>/graphen/<instanz>.json`, mit
-`Graph`, bei einem Quellkopf dem `Akteur` (er gibt hinein, was aus den Ausgängen des Graphen nach der Übersetzung entsteht), wahlweise dem `Rechner`, auf dem sie läuft, und den
+`Graph`, wahlweise dem `Rechner`, auf dem sie läuft, und den
 `Straenge` (so viele Ketten rechnet sie zugleich, je Host, der sie hält; Standard 10 000, 1 = eine nach der anderen), und je Knoten
 die Felder seiner Konfig-Records sowie
 `Parallel` (Standard 256), `Warteschlange` (10 000), `Wiederholungen` (3), `Vorwaermen`, `Zeitlimit` und `Technik` (die Umsetzung je Technik,
 nötig bei mehreren):
 ```json
-{ "Graph": "Linienimport", "Akteur": "KameraSystem",
-  "Eingang": { "Pfad": "${env:HOME}/cqrs-sim/${branch}/DateiErkannt", "Fertig": "Stabil", "Kennung": "PfadGroesseZeit" },
-  "Aufbereitung.Verkleinern": { "Wiederholungen": 1, "AusgabePfad": "${env:HOME}/cqrs-sim/${branch}/preprocessed" } }
+{ "Graph": "Bildaufbereitung", "Straenge": 4,
+  "Verkleinern": { "Wiederholungen": 1, "AusgabePfad": "${env:HOME}/cqrs-sim/${branch}/preprocessed" } }
 ```
-Dieselbe Blaupause läuft beliebig oft (zwei Dateiwächter auf zwei Verzeichnissen sind zwei Instanzen des Linienimports). Der Start prüft jede
-Instanz (`GraphInstanzen.Aus`): den Graphen gibt es, jeder Schlüssel ist ein Knoten, der Akteur existiert und darf jeden Command, der aus einem
-Ausgang nach der Übersetzung entsteht (`IDarf`), und ein Graph mit Command-Kopf läuft je Umgebung genau einmal. Die Werte der Konfig-Records und die Wahl der Technik bindet
+Je Umgebung läuft ein Graph genau einmal (ein Command hat genau einen Empfänger); was je Linie oder Verzeichnis verschieden ist, sind Eingänge eines
+Clients (§4.7), die Nachricht trägt es mit. Der Start prüft jede Instanz (`GraphInstanzen.Aus`): den Graphen gibt es, jeder Schlüssel ist ein Knoten,
+der Rechner ist ein Name, und kein Graph läuft zweimal. Die Werte der Konfig-Records und die Wahl der Technik bindet
 `BindeTechnik` streng (fehlend, unbekannt, mehrdeutig, Kreis über Technik: Boot-Fehler). Ohne Umgebung (Prüfstände, Tests) läuft je Graph eine
-Instanz unter seinem Namen, ein Graph mit Quelle nur, wenn der Test die Konfig der Quelle nennt. Den Akteur einer Instanz mit Command-Kopf erbt
-die Kette vom Auslöser; eine Quellinstanz trägt den Akteur ihrer Datei.
+Instanz unter seinem Namen. Den Akteur erbt die Kette von ihrem Auslöser (einem Client, dem Eingang einer Quelle, einer Kette).
 
 **Kette.** Eine Nachricht am Kopf startet eine **Kette** (`Infrastructure/Funktionen/Kette.cs`). Jeder Schritt — der Parent eines Knotens — nimmt
 eine Nachricht als **Aufruf**, lässt ein Kind sein `Auf` rechnen und schlägt jede Ausgabe in der **Wegtabelle** nach (generiert aus den `[Von]`,
@@ -355,9 +354,9 @@ sofort. Haltbar ist allein der Kopf: fehlt sein „fertig“ (Absturz, Umzug), k
 eines Aufrufs aus der Kennung seiner Nachricht, dem Ort (`instanz/knoten`) und der Operation (`Kettenvertrag.Aufruf`); die Nachricht, die er an
 Knoten desselben Graphen gibt, aus Aufruf, Ort und Stelle (`Kettenvertrag.Weiter`); die Command-Id aus Aufruf, Stelle, Typ und Ziel
 (`Kettenvertrag.Befehl`; die Stelle zählt über den ganzen Aufruf, auch Ausgaben auf Antworten). Am Kopf ist die Nachricht der Eingang, bei einer
-Quelle Instanz und Kennung ihrer Meldung (`IMeldung`, `Kettenvertrag.Quelle`: aus dem Inhalt des Elements, nie aus seiner Stelle). Neue Aggregat-Ids
+Eingang aus einer Quelle seine Kennung aus Eingang und Kennung der Meldung (`Kettenvertrag.Element`, aus dem Inhalt des Elements, nie aus seiner Stelle). Neue Aggregat-Ids
 leitet die Funktion über `h.NeueId<T>(zweck)` ab (R13). `Herkunft` nennt bei einem Eingang eines Clients, der auf ein Fakt reagiert, dessen Stream und
-Version, aus einer Quelle die Kennung ihrer Kette als Stream (Version 0) und die Zeit, dazu den Akteur der Kette.
+Version, aus einer Quelle die Kennung ihres Elements als Stream (Version 0) und die Zeit, dazu den Akteur der Kette.
 
 **Fehler und Rückstau.** Das `Zeitlimit` eines Knotens begrenzt eine Rechnung (danach gilt sie als gescheitert). Wirft ein Knoten, rechnet ihn der
 Parent bis `Wiederholungen` erneut; danach antwortet er „gescheitert“, das über die gesicherten Kanten bis zum Kopf reicht: der durable Kopf wird
@@ -390,10 +389,9 @@ beim Stoppen wird erst die Umsetzung, dann der Bereich mit seiner Technik freige
 gesicherten Zustand — je Instanz und Knoten eine Zeile in `cqrs_zustaende` (`ZustandsAblage`; das Bild aus eigenem und Technik-Zustand, ohne
 Reflection gepackt). Die Aktivierung lädt ihn beim Beginn; nach jedem Aufruf geht ein Schnappschuss an den Parent, der den letzten sichert, dessen
 Aufruf und alle früheren beendet sind — mit den Kennungen dieser Aufrufe (`§gesehen`). Kommt nach einem Absturz einer davon erneut, antwortet der
-Parent „fertig“, ohne neu zu rechnen: was der Stand enthält, zählt nicht doppelt. Ein Schreiber: eine Instanz mit Zustand oder
-Quelle nennt im Cluster ihren **Rechner** (Pflicht, sonst Boot-Fehler) und läuft nur dort — eine Quelle an ihrer Steuerung, ein Modell auf seiner
-GPU. Fällt der Rechner aus, zieht nichts um: die durablen Eingänge warten in `cqrs_eingaenge`, die Quelle setzt nach dem Neustart ab ihrem
-gesicherten Stand fort. Im Einzelknoten-Betrieb ist der eine Host jeder Rechner. Was aus Fakten gelernt wird, gehört weiter in eine Projektion, die Funktion liest es per Lese-Fähigkeit:
+Parent „fertig“, ohne neu zu rechnen: was der Stand enthält, zählt nicht doppelt. Ein Schreiber: eine Instanz mit Zustand
+nennt im Cluster ihren **Rechner** (Pflicht, sonst Boot-Fehler) und läuft nur dort — ein Modell auf seiner GPU (ein Eingang aus einer Quelle ebenso,
+§4.7). Fällt der Rechner aus, zieht nichts um: die durablen Eingänge warten in `cqrs_eingaenge`. Im Einzelknoten-Betrieb ist der eine Host jeder Rechner. Was aus Fakten gelernt wird, gehört weiter in eine Projektion, die Funktion liest es per Lese-Fähigkeit:
 ```csharp
 public sealed class Schaetzer(IZaehlwerk zaehler) : IFunktion         // Prüfdomäne, Graph Merkmalbildung
 {
@@ -416,10 +414,10 @@ Zwischen Knoten desselben Graphen reist nichts als Eingang — das tragen die Au
 **Hinweise** (`Infrastructure/Funktionen/Hinweise.cs`). Ein Hinweis aus einem Knoten oder eine gescheiterte Kette geht nur an die Verteiler und
 von dort an die Sitzungen der Akteure, die ihn hören — ohne Log, höchstens einmal. Was ein Knoten braucht, ist ein Command.
 
-**Bestand.** Beispieldomäne: der **Linienimport** bei ImagePair (`Dateiwaechter` → **Bildaufbereitung** aus `Bildvorschau.Katalog`:
-`Bildeinlesen` → `BildEingelesen` → `Bildverkleinerung` → `BildVerkleinert` → `Kontrastausgleich` → `VorschauErstellt` (trägt die Datei der Quelle
+**Bestand.** Beispieldomäne: die **Bildaufbereitung** aus `Bildvorschau.Katalog` (Kopf `LiesBild`, den das `KameraSystem` gibt — verwirklicht
+durch die Dateiwächter des Clients `Linienrechner`, §4.7: `Bildeinlesen` → `BildEingelesen` → `Bildverkleinerung` → `BildVerkleinert` → `Kontrastausgleich` → `VorschauErstellt` (trägt die Datei der Quelle
 mit) → `Dateinamendeutung` → `BildGedeutet`, im Ablauf übersetzt ↦ `NimmBildAuf` (flache Felder, das Decide baut `BildMeta` und `BildVersion`);
-`BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise des Katalogs; die **Bildaufnahme** ist dasselbe ohne Dateiwächter, Kopf `DateiGefunden`), die Pflege eines Datensatzes und die Meldung eines fertigen Teils als **Reaktionen eines Clients** (Schritt 6, kein Graph mehr: der
+`BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise des Katalogs), die Pflege eines Datensatzes und die Meldung eines fertigen Teils als **Reaktionen eines Clients** (Schritt 6, kein Graph mehr: der
 `ReaktionsWorker` hört als `Datensatzpfleger` `RangeAngefordert` bzw. `EinfrierenAngefordert`, liest per Query und gibt `NimmRangeAuf` bzw.
 `SchliesseEinfrierenAb`, als `Teilmelder` `TeilauftragAbgeschlossen` und gibt `MeldeTeilFertig` an den Sammelvorgang, den das Event nennt);
 ebenso reagieren die Python-Worker: der `Klassifizierer` auf `ImagePairKomplett` mit seinem Urteil, das `TrainingsSystem` auf
@@ -508,29 +506,40 @@ sie jede Sekunde an (`UhrTakt`, verlierbar). Sie liest die fälligen Fristen üb
 der Command-Id aus Stream und Version des Frist-Events und trägt sie erst nach entschiedenem Ausgang aus — doppelt gefeuert wirkt es über die
 Inbox des Ziels einmal. In Sim verschiebt ein Uhr-Versatz die Datenbank-Uhr (Durchspielen).
 
-**Quellen** sind Funktionen aus dem Katalog des Frameworks (`Core/Katalog/`). Eine Quellfunktion hat `Lausche(CancellationToken)` statt `Auf` —
-ein `IAsyncEnumerable` ihrer Commands — und steht am Kopf eines Graphen, als dessen einziger Kopf (CQRS115); die Domäne nennt sie als Knoten
-(`Linienimport(Dateiwaechter Eingang, Bildaufbereitung Aufbereitung)` im Katalog `Bildvorschau`), ihre Werte stehen in der Instanz. Was sie meldet, ist ein gewöhnlicher
-Command ohne Ziel (`Abstractions/Katalog.cs`), den der nächste Knoten nimmt; Codegen und Leitung kennen die Katalog-Commands wie die der Domäne.
+**Quellen.** Was draußen geschieht — eine Datei ist fertig, ein Intervall beginnt, ein Webhook wird gerufen —, meldet eine **Quellart**: eine Klasse
+`: IQuellart` mit `Lausche(CancellationToken)`, einem asynchronen Strom ihrer **Meldungen** (`IMeldung`, kein Command). Ihr Konstruktor nimmt wie eine
+Funktion Konfig-Records, `IZustand<T>`, Technik und `ILogger<T>`; sie liegt in einem Katalog (die des Frameworks in `Core/Katalog/`) und ist **nie ein
+Knoten eines Graphen** (CQRS115). Jede Meldung nennt die **Kennung** ihres Elements, aus seinem Inhalt.
 
-| Katalogfunktion | meldet | Konfig (am Knoten) | Zustand |
+| Quellart | meldet (Kennung) | Konfig (Werte des Eingangs) | Zustand |
 |---|---|---|---|
-| `Dateiwaechter` | `DateiGefunden` je fertige, noch nicht gemeldete Datei | `Pfad`, `Muster`, `Unterordner`, `Erkennung` (`Abfrage` oder `EreignisUndAbfrage`), `Intervall`, `Fertig` (`Stabil` über ein `Fenster` oder `Marker` mit `Endung`), `Kennung` (`NameGroesse` oder `PfadGroesseZeit`) | `Gesehen`: relativer Pfad → Kennung |
-| `Taktgeber` | `Takt` je Intervall (Beginn, auf das Intervall gerundet, UTC) | `Intervall` (mindestens 1 s) | `Taktstand`: das letzte gemeldete Intervall |
-| `Webhook` | `Aufruf` je Aufruf an `POST /eingang/webhook/<Pfad>` (Postfach je Pfad, voll → „später“) | `Pfad` | keiner: ein Aufruf, dessen Kette nicht fertig wurde, wiederholt der Absender — mit derselben Kennung dieselbe Meldung, dieselben Ids |
+| `Dateiwaechter` | `DateiGefunden` je fertige, noch nicht gemeldete Datei (relativer Pfad, Größe, letzte Änderung) | `Pfad`, `Muster`, `Unterordner`, `Erkennung` (`Abfrage` oder `EreignisUndAbfrage`), `Intervall`, `Fertig` (`Stabil` über ein `Fenster` oder `Marker` mit `Endung`), `Kennung` (`NameGroesse` oder `PfadGroesseZeit`) | `Gesehen`: relativer Pfad → Kennung |
+| `Taktgeber` | `Takt` je Intervall (sein Beginn, auf das Intervall gerundet, UTC) | `Intervall` (mindestens 1 s) | `Taktstand`: das letzte gemeldete Intervall |
+| `Webhook` | `Aufruf` je Aufruf an `POST /eingang/webhook/<Pfad>` (die Kennung des Absenders, Kopf `kennung`) | `Pfad` | keiner |
 
-Der Dateiwächter **liest** nur (er legt nichts an, verschiebt und löscht nichts); ein Weckruf (Intervall, wahlweise ein Dateisystem-Ereignis, das
-nur weckt) löst einen Scan aus, der Scan entscheidet. Quell-Commands stehen **nicht im Log**: ob eine Quelle Doppeltes vermeidet oder nach einem
-Neustart weitermacht, regelt sie über ihren **gesicherten Zustand** (§4.4) — die Architektur liefert nur ihn. Das Kind des Quellknotens lauscht,
-solange der Cluster-Knoten die Instanz hält (eine Quellinstanz läuft genau einmal im Cluster, auf ihrem Rechner); je Element gehen die nächste
-laufende Nummer und der Schnappschuss des Zustands an den Graph-Actor, das nächste Element erst, wenn er die Kette angenommen hat (Gegendruck über
-die Stränge der Instanz). Kennung und Herkunft folgen aus Instanz und der **Kennung der Meldung** (`IMeldung`: beim Dateiwächter relativer
-Pfad, Größe und letzte Änderung, beim Taktgeber der Beginn des Intervalls, beim Webhook die Kennung des Absenders) — meldet die Quelle nach einem
-Neustart dasselbe Element erneut, auch in anderer Reihenfolge, entstehen dieselben Ids, und ein zweites Mal startet der Graph-Actor keine Kette, solange
-er das Element kennt; eine eigene Quelle ohne Meldung zählt bis zum Umbau der Quellen (docs/plan-clients-und-quellen.md) nach der Nummer. Gesichert
-werden Zustand und Nummer, sobald die Kette und alle früheren beendet sind — auch eine gescheiterte Kette zählt als beendet (er meldet `LaufGescheitert`, die Quelle wiederholt ihn nicht). Endet das
-Lauschen (die Quelle warf oder ihr Strom endete), beginnt der Parent es nach einer Pause neu, mit dem zuletzt gesicherten Stand. Eine eigene Quelle
-ist eine Funktion mit `Lausche` wie die des Katalogs.
+Eine Quellart **verwirklicht einen Akteur**: eine **Übersetzung der Akteur-Seite** (`class DateiGefunden_LiesBild_1(DateiGefunden source) :
+ITranslate<DateiGefunden, LiesBild>` in `<Wurzel>.Akteure/Uebersetzungen.cs`) macht aus der Meldung eine Nachricht, die der Akteur darf
+(`KameraSystem : IDarf<LiesBild>`). Welche Quellarten einen Akteur verwirklichen können, folgt daraus. Laufen tut sie als **Eingang eines Clients**
+in der Umgebung (`Clients:<Name>:Eingaenge:<eingang>`, `EingangKonfig`): Art, Akteur, Rechner, `Offen` und die Werte ihrer Konfig, flach wie am
+Knoten einer Instanz — drei Verzeichnisse sind drei Eingänge:
+```json
+"Clients": { "Linienrechner": { "Eingaenge": { "linie1": { "Art": "Dateiwaechter", "Akteur": "KameraSystem", "Rechner": "prod-1",
+  "Pfad": "/mnt/linie1", "Fertig": "Stabil", "Kennung": "NameGroesse" } } } }
+```
+Der Start prüft jeden Eingang (`Eingaenge.Aus`, Boot-Fehler mit der Karte `eingang:<Client>/<Eingang>`): den Client gibt es und er verkörpert den
+Akteur, die Art ist eine Quellart, je Meldung, die sie melden kann, macht eine Übersetzung daraus eine Nachricht, die der Akteur darf, und im Cluster
+nennt der Eingang seinen Rechner. Werte und Technik-Wahl bindet `BindeTechnik` wie bei den Knoten.
+
+Je Eingang lauscht ein **Läufer** (`Infrastructure/Quellen/QuellLaeufer.cs`, Kind der Wurzel `funktionen`) genau einmal im Cluster: auf dem Host mit
+seinem Rechner (bei doppeltem Rechnernamen nur auf dem mit Vorrang). Er aktiviert die Quellart wie ein Kind seine Funktion (Zustand in
+`cqrs_zustaende` unter `eingang:<Client>` und dem Eingang) und gibt je Meldung hinein **wie eine App**, im Namen des Akteurs: die Kennung des Elements
+folgt aus Eingang und Kennung der Meldung (`Kettenvertrag.Element`); ein Command an ein Aggregat geht über den Emitter (Id aus Kennung, Übersetzung
+und Stelle), ein Command ohne Ziel als offener Eingang am Kopf (`cqrs_eingaenge`, dann der schnelle Weg). Ist die Nachricht durabel, sichert er den
+Zustand der Quellart. Was er enthält, meldet die Quelle nicht wieder; was danach kam, meldet sie nach einem Neustart mit derselben Kennung erneut —
+eine offene Zeile wird nicht doppelt gelegt, ein Command wirkt über die Inbox einmal. **Gegendruck:** sind so viele hineingegebene Elemente offen, wie
+`Offen` erlaubt (Standard 10 000), wartet der Läufer, bevor er die nächste Meldung nimmt. Endet `Lausche` oder wirft es, beginnt er nach einer Pause
+neu, mit dem gesicherten Stand. Meldungen stehen **nicht im Log**; der Dateiwächter **liest** nur (er legt nichts an, verschiebt und löscht nichts),
+ein Weckruf (Intervall, wahlweise ein Dateisystem-Ereignis) löst einen Scan aus, der Scan entscheidet.
 
 ## 4.8 Dead-Letter & Snapshots
 
@@ -550,7 +559,8 @@ und Wirker in den Command-Envelope, das Ziel-Aggregat schreibt mit `wirker = dec
 - **Knoten eines Graphen:** Ursache = die Ursache seiner Kette (das Fakt, auf das der Client reagierte, der den Kopf speiste; bei einer Antwort das
   Event, das das Ziel entschied), Wirker am Command = der Knoten, `knoten:<Instanz>/<Knoten>` — die Spur zeigt so den Schritt der Kette. Der Akteur
   der Kette reist mit. Was zwischen Knoten fließt, steht nie im Log.
-- **Quelle:** eine Quell-Kette hat keinen Log-Eintrag als Wurzel; seine Ursache ist der abgeleitete Stream der Instanz an der laufenden Nummer.
+- **Eingang aus einer Quelle:** ein Element hat keinen Log-Eintrag als Wurzel; seine Ursache ist die Kennung des Elements (aus Eingang und Meldung,
+  Version 0), der Wirker `eingang:<Client>/<Eingang>`, der Akteur der des Eingangs.
 - **Uhr:** Ursache = das Frist-Event, Wirker `uhr` (ohne Karte).
 - **Akteur:** ein Command von draußen trägt `ueber = akteur:<Akteur>`; reagiert ein Client auf ein Event, nennt die Hülle es als `ursache`
   (`Stream:Version`, der Läufer setzt sie), sonst ist die Ursache leer.

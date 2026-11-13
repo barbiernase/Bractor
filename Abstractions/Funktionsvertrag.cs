@@ -14,8 +14,8 @@ public static class Funktionsvertrag
     /// <summary>Die Methode einer Funktion in Baustein-Form: <c>Auf(TEingang e[, Herkunft h][, Lese-Fähigkeiten…][, CancellationToken])</c>.</summary>
     public const string Auf = "Auf";
 
-    /// <summary>Die Methode einer Quellfunktion (docs/04 §4.7): <c>IAsyncEnumerable&lt;T&gt; Lausche(CancellationToken ct)</c> — sie steht am Kopf ihres
-    /// Graphen, jedes Element startet einen Lauf.</summary>
+    /// <summary>Die Methode einer Quellart (<c>IQuellart</c>, docs/04 §4.7): <c>IAsyncEnumerable&lt;T&gt; Lausche(CancellationToken ct)</c> — je Element
+    /// eine Meldung, die der Läufer eines Eingangs im Namen seines Akteurs hineingibt.</summary>
     public const string Lausche = "Lausche";
 
     /// <summary>Der volle Name der <c>Herkunft</c> (optionaler Parameter eines <see cref="Auf"/>).</summary>

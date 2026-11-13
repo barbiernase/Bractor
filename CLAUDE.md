@@ -37,8 +37,9 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **W6** Keine Simulation: Durchspielen = echter Host in Umgebung `sim` gegen eine eigene, echte DB.
 - **W7** Umgebung = ein Ordner (`umgebungen/<name>/umgebung.json`, je Instanz eines Graphen `graphen/<instanz>.json`); Struktur ist Code,
   Auswahl und Werte sind Konfig.
-- **W8** Quellen = Funktionen aus dem Katalog des Frameworks (`Core/Katalog`: `Dateiwaechter`, `Taktgeber`, `Webhook`) am Kopf eines Graphen; ein
-  Graph eines Katalogs nennt sie als Knoten, ihre Werte stehen in der Instanz.
+- **W8** Quellen = Quellarten (`IQuellart`, Katalog des Frameworks `Core/Katalog`: `Dateiwaechter`, `Taktgeber`, `Webhook`, oder eigene im Katalog), nie
+  Knoten eines Graphen; sie verwirklichen einen Akteur (Übersetzung der Akteur-Seite) und laufen als Eingang eines Clients
+  (Werte in der Umgebung unter `Clients:<Name>:Eingaenge`).
 - **W9** Spur: jeder Log-Eintrag trägt `ursache`, `wirker`, `ueber`, `stand`; der Wirker ist die Karten-Id.
 - **W10** Keine Reflection, auch nicht in Werkzeugen (= Inv. 4).
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
@@ -71,22 +72,25 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` — der Editor schreibt `Translate()` aus der Verdrahtung, der Compiler prüft sie; Feld für Feld ohne Logik, Routing über den Typ (jede Ausgabe eines laufenden Graphen, ein
   Client-Command am Kopf, eine Antwort auf ihren Command; docs/04 §4.4, CQRS119–121/123). Nur das Projekt der Übersetzungen (und
   Speicher, Akteure, Leitung, Komposition) referenziert Kataloge: **die Domäne bleibt rein**. **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
-  jeder Kopf als `[Kopf]` (nimmt von außen, was keine Quelle speist; je Eingangstyp genau einer); nur eine Quelle trägt keins; was kein Knoten über
+  jeder Kopf als `[Kopf]` (nimmt von außen, was keine Quelle speist; je Eingangstyp genau einer; ohne Kopf kein Graph); was kein Knoten über
   `Von` nimmt, verlässt den Graphen (`GeneratedGraphen`, eine Lesart `Graphform`). Zwischen den Bausteinen bleibt es beim Typ-Routing mit genau einem
   Empfänger. Folge, Gabel, Wahl, Je sind Formen der Ausgaben; Zusammenführen, Sammeln, Warten stehen im Logik-Code (die Nachricht trägt mit, Zustand des
   Knotens oder ein Aggregat); Graph im
   Graphen über seine Signatur (`Von` hinein speist seine Köpfe, `Von(nameof(G))` nimmt seine Ausgänge); kreisfrei über die Knoten (CQRS115). Er läuft als **Instanz** (Datei
-  `graphen/<instanz>.json`: `Graph`, bei Quellkopf `Akteur`, wahlweise `Rechner`, `Straenge` (gleichzeitige Ketten je Host), je Knoten Konfig-Werte, `Parallel`, `Warteschlange`, `Wiederholungen`, `Zeitlimit`,
-  `Technik`), beliebig oft; ein Graph mit Command-Kopf je Umgebung einmal. Jede Kopf-Nachricht startet eine **Kette** (`Kette.cs`, kein
+  `graphen/<instanz>.json`: `Graph`, wahlweise `Rechner`, `Straenge` (gleichzeitige Ketten je Host), je Knoten Konfig-Werte, `Parallel`, `Warteschlange`, `Wiederholungen`, `Zeitlimit`,
+  `Technik`), je Umgebung genau einmal; den Akteur der Kette bringt ihr Auslöser mit. Jede Kopf-Nachricht startet eine **Kette** (`Kette.cs`, kein
   Laufzettel): jeder Schritt (Parent) rechnet je ankommender Nachricht, schlägt jede Ausgabe in der generierten **Wegtabelle** nach und gibt sie
   direkt an die Parents ihrer Knoten — **gesichert** (Standard: „fertig“ erst nach den gesicherten Ausgaben, so reicht die Rückmeldung bis zum Kopf)
   oder **verlierbar** (`[Von(nameof(A), Verlierbar = true)]`: einmal, ohne Antwort); voll → „später“, der Absender schickt erneut. Haltbar ist nur
   der Kopf; Ids aus der Nachricht, aus der sie entstand (`Kettenvertrag`), Knoten und Stelle; ein scheiternder Knoten wird wiederholt, danach
   reicht „gescheitert“ zum Kopf (geparkt, `LaufGescheitert`). Laufzeit: Wurzel `funktionen` je Cluster-Knoten, Graph-Actor je Instanz (Halter und
   Kopf), Parent je Knoten, Kinder bis `Parallel`, Orte im Gossip-Zustand, Wege über den Bote.
-- **Quellen** sind Katalogfunktionen mit `Lausche(CancellationToken)` am Kopf eines Graphen (`Dateiwaechter` → `DateiGefunden`, `Taktgeber` →
-  `Takt`, `Webhook` → `Aufruf`; Commands in `Abstractions/Katalog.cs`); je Element eine Kette, nichts im Log; eine Quellinstanz läuft genau einmal
-  im Cluster. **Zustand** `IZustand<T>` ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach beendeten Aufrufen mit deren Kennungen (nach einem Absturz zählt nichts doppelt).
+- **Quellen** sind Quellarten (`: IQuellart` mit `Lausche(CancellationToken)`, nie Knoten: `Dateiwaechter` → `DateiGefunden`, `Taktgeber` → `Takt`,
+  `Webhook` → `Aufruf`; Meldungen `IMeldung` mit `Kennung` aus dem Inhalt, kein Command, `Abstractions/Katalog.cs`). Eine Quellart **verwirklicht einen
+  Akteur**: eine Übersetzung der Akteur-Seite (`ITranslate<Meldung, Ziel>` in `<Wurzel>.Akteure/Uebersetzungen.cs`) macht aus der Meldung eine
+  Nachricht, die er darf. Sie läuft als **Eingang eines Clients** (Umgebung `Clients:<Name>:Eingaenge:<e>`: Art, Akteur, Rechner, Werte); je Eingang
+  ein Läufer (`Infrastructure/Quellen/`) genau einmal im Cluster auf seinem Rechner, der hineingibt wie eine App (Aggregat-Command über den Emitter,
+  Command ohne Ziel als offener Eingang am Kopf) und danach den Zustand der Quellart sichert; nichts im Log. **Zustand** `IZustand<T>` ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach beendeten Aufrufen mit deren Kennungen (nach einem Absturz zählt nichts doppelt).
 - **Eingang am Kopf:** ein Command ohne Ziel eines Clients steht nicht im Log; je Instanz, deren Graph ihn am Kopf nimmt, ein offener Eingang
   `cqrs_eingaenge` (`SitzungsActor.AnKopfAsync`), der Zusteller bringt ihn hin. Nennt der Command ein Fakt als `ursache` (`Stream:Version`), ist
   es die Herkunft des Eingangs: die Kette und ihre Commands tragen das Fakt als Ursache.
@@ -112,7 +116,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Ausgangskorb im C#-Client. Kein Broker, keine Abos.
 - **Aktivierung eines Knotens** (docs/04 §4.4): Umsetzung und Technik je Kind (DI-Bereich, geschlossen beim Stoppen; Technik lädt beim ersten
   Aufruf, Freigabe über `IAsyncDisposable`); Konfig-Werte und Technik-Wahl aus dem Knoten der Instanz (`GeneratedTechnik`); Zustand nur über
-  `IZustand<T>` (CQRS105), eine Instanz mit Zustand oder Quelle läuft im Cluster auf ihrem **Rechner** (`Rechner` in der Instanz-Datei = `Cluster:Rechner` des Hosts;
+  `IZustand<T>` (CQRS105), eine Instanz mit Zustand (und ein Eingang aus einer Quelle) läuft im Cluster auf ihrem **Rechner** (`Rechner` in der Instanz-Datei = `Cluster:Rechner` des Hosts;
   Pflicht, keine Sperre, kein Umzug bei Ausfall; doppelte Rechnernamen erkennt der Gossip).
 - **Abläufe** sind Graphen (eine Rechnung je Auslöser: Folge, Gabel, Wahl, Je) plus ein Vorgangs-Aggregat für alles, was zusammengeführt oder
   abgewartet wird (Zählung, Kompensation, Frist im Decide); die Zugehörigkeit ist ein fachliches Feld (A2). Aggregate reden nur über Graphen und
@@ -129,7 +133,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 |---|---|
 | Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteur.cs`, `Funktion.cs`, `Graph.cs`, `Katalog.cs`, `Zustand.cs`, `Funktionsvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
 | Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Verteilen, Funktionen — Graph-Actor, Parent, Kette —, Eingaenge, Uhr, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
-| Katalog der Quellfunktionen, Store-Treiber | `Core/Katalog/` (`Dateiwaechter`, `Taktgeber`, `Webhook`), `Core/` (`MartenStore`, `DateiZiel`) |
+| Quellarten des Frameworks, Läufer, Store-Treiber | `Core/Katalog/` (`Dateiwaechter`, `Taktgeber`, `Webhook`), `Infrastructure/Quellen/` (Eingänge, `QuellLaeufer`), `Core/` (`MartenStore`, `DateiZiel`) |
 | Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
 | Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |
 | Generatoren und Analyzer | `*.SourceGeneration/`; Codegen vor dem Build (Proto, STJ-Kontexte, Python-Basen): `Cqrs.Codegen` über das Target in `Domain.Leitung` |

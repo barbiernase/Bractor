@@ -74,10 +74,11 @@ public sealed class MahnungNachSchaetzung : IFunktion
 
 // ── Import ──
 
-// Der Eingang: aus der gefundenen Datei der Import (Id aus der Herkunft).
+// Der Eingang: aus der angenommenen Datei der Import (Id aus der Herkunft). Am Kopf nimmt er einen Command des Katalogs — keine Meldung: was ein
+// Dateiwächter findet, macht die Übersetzung der Akteur-Seite (bei der Ablage) zu diesem Command.
 public sealed class Katalogeingang : IFunktion
 {
-    public Importieren Auf(DateiGefunden d, Herkunft h) => new(h.NeueId("import:" + d.RelativerPfad), d.Pfad);
+    public Importieren Auf(NimmKatalogdateiAn d, Herkunft h) => new(h.NeueId("import:" + d.RelativerPfad), d.Pfad);
 }
 
 // Technik als Klasse (ohne Schnittstelle, ohne Marker) mit Konfig-Record.
@@ -114,9 +115,9 @@ public sealed class Artikelanlage : IFunktion
 
 // ── Messung ──
 
-// ── Die Quelle: eine eigene Quellfunktion (Lausche) mit Konfig, gesichertem Zustand und Technik ─────────────────────────────────────────────
+// ── Die Quelle: eine eigene QUELLART (Sensorabfrage.cs) mit Konfig, gesichertem Zustand und Technik — hier ihr Zustand und ihre Technik ──────────
 
-/// <summary>Der Zustand der Abfrage: wie oft sie gelesen hat (gesichert mit dem Lauf; nach einem Neustart zählt sie weiter).</summary>
+/// <summary>Der Zustand der Abfrage: wie oft sie gelesen hat (gesichert, sobald ihre Nachricht hineingegeben ist; nach einem Neustart zählt sie weiter).</summary>
 public sealed class Abfragestand
 {
     public long Abfragen { get; set; }
@@ -132,27 +133,17 @@ public sealed class Feldbus : ISensorbus
     public Task<double?> LiesAsync(Guid sensor, CancellationToken ct) => Task.FromResult<double?>(null);
 }
 
-public sealed class Sensorabfrage(SensorabfrageKonfig konfig, IZustand<Abfragestand> stand, ISensorbus bus) : IFunktion
+// Die Annahme am Kopf der Messkette nimmt einen Command des Katalogs — keine Meldung: was die Sensorabfrage meldet (Rohwert), macht die Übersetzung
+// der Akteur-Seite (beim Sensornetz) zu diesem Command; sie reicht ihn in die Aufbereitung.
+public sealed class Messwertannahme : IFunktion
 {
-    public async IAsyncEnumerable<Rohwert> Lausche([EnumeratorCancellation] CancellationToken ct)
-    {
-        while (!ct.IsCancellationRequested)
-        {
-            foreach (var s in konfig.Sensoren)
-                if (await bus.LiesAsync(Guid.Parse(s), ct) is { } wert)
-                {
-                    stand.Wert.Abfragen++;
-                    yield return new Rohwert(Guid.Parse(s), wert, DateTimeOffset.UtcNow);
-                }
-            await Task.Delay(konfig.Intervall, ct);
-        }
-    }
+    public Messwert Auf(NimmMesswert m) => new(m.Sensor, m.Wert, m.GemessenAm);
 }
 
 // Die Aufbereitung: ein unlesbarer Wert ergibt nichts (ein leerer Strom), ein lesbarer den geprüften Wert.
 public sealed class Plausibilisierung : IFunktion
 {
-    public IEnumerable<Plausibel> Auf(Rohwert r)
+    public IEnumerable<Plausibel> Auf(Messwert r)
     {
         if (!double.IsNaN(r.Wert) && !double.IsInfinity(r.Wert)) yield return new Plausibel(r.Sensor, r.Wert, r.GemessenAm);
     }

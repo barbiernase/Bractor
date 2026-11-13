@@ -13,9 +13,10 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Quellen;
 
 /// <summary>
-/// Der Funktions-Katalog des Frameworks (docs/04 §4.7, Entscheidung 8): Quellen sind Funktionen, die lauschen — der Kern des Dateiwächters (Kennung,
-/// Fertig-Erkennung, Gedächtnis im Zustand), der Dateiwächter gegen ein echtes Verzeichnis (sein Zustand trägt über einen Neustart), der Taktgeber und
-/// der Webhook. Store-frei: das Sichern des Zustands nach dem Lauf beweisen Laufzeit- und Integrations-Tests.
+/// Die Quellarten des Frameworks (docs/04 §4.7, <c>Core/Katalog</c>, <c>IQuellart</c>): sie lauschen und melden je Element eine Meldung — der Kern des
+/// Dateiwächters (Kennung, Fertig-Erkennung, Gedächtnis im Zustand), der Dateiwächter gegen ein echtes Verzeichnis (sein Zustand trägt über einen
+/// Neustart), der Taktgeber und der Webhook. Store-frei: das Sichern des Zustands nach dem Hineingeben beweisen <c>QuellLaeuferTests</c> und die
+/// Integrations-Tests.
 /// </summary>
 public class KatalogTests
 {

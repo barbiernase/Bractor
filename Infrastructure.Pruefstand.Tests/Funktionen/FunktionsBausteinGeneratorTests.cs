@@ -31,6 +31,8 @@ public sealed record Bezahlt(decimal Betrag) : ICommand;
 public sealed record Gebucht(int Stufe) : IEvent;
 public sealed record Unnoetig() : ITransientEvent;
 public sealed record Messwert(double Wert) : ITransientEvent;
+public sealed record Faellig(string Kennung) : IMeldung;
+public sealed record Erinnert(string Kennung, int Tage) : IMeldung;
 public interface ISucheKonto : IReadStore { Task<int> StufeAsync(Guid konto); }
 public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
 public interface IPost { Task SendeAsync(string an); }
@@ -165,32 +167,44 @@ public interface IPost { Task SendeAsync(string an); }
     }
 
     [Fact]
-    public void Eine_Quellfunktion_lauscht_ihre_Rechnung_ruft_Lausche_unter_der_Nummer_hinter_den_Auf()
+    public void Eine_Quellart_lauscht_ihre_Rechnung_ruft_Lausche_und_der_Baustein_nennt_ihre_Meldungen()
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
-            public sealed class Wecker : IFunktion
+            public sealed class Wecker : IQuellart
             {
-                public async IAsyncEnumerable<OneOf<Ueberfaellig, Unnoetig>> Lausche([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+                public async IAsyncEnumerable<OneOf<Faellig, Erinnert>> Lausche([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
                 { await Task.CompletedTask; yield break; }
             } }");
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
-        quelle.Should().Contain("\"Wecker\",").And.Contain("Lausche: 0)");
+        quelle.Should().Contain("\"Wecker\",").And.Contain("Lausche: 0, Meldet: new Type[] { typeof(global::Probe.Faellig), typeof(global::Probe.Erinnert) })",
+            "der Läufer übersetzt, was sie meldet — der Start prüft je Meldung eine Übersetzung der Akteur-Seite");
         quelle.Should().Contain("case 0: return Ausgaben.StromAsync(f.Lausche(ct), y => (object?)y.Value, ct);");
     }
 
     [Theory]
-    [InlineData("public IEnumerable<Ueberfaellig> Lausche(CancellationToken ct) => [];", "kein asynchroner Strom")]
-    [InlineData("public async IAsyncEnumerable<Ueberfaellig> Lausche() { await Task.CompletedTask; yield break; }", "ohne Abbruch")]
-    [InlineData("public async IAsyncEnumerable<Mahne> Lausche(CancellationToken ct) { await Task.CompletedTask; yield break; }", "ein Command an ein Aggregat")]
-    [InlineData("public async IAsyncEnumerable<Ueberfaellig> Lausche(CancellationToken ct) { await Task.CompletedTask; yield break; } "
+    [InlineData("public IEnumerable<Faellig> Lausche(CancellationToken ct) => [];", "kein asynchroner Strom")]
+    [InlineData("public async IAsyncEnumerable<Faellig> Lausche() { await Task.CompletedTask; yield break; }", "ohne Abbruch")]
+    [InlineData("public async IAsyncEnumerable<Mahne> Lausche(CancellationToken ct) { await Task.CompletedTask; yield break; }", "ein Command ist keine Meldung")]
+    [InlineData("public async IAsyncEnumerable<Ueberfaellig> Lausche(CancellationToken ct) { await Task.CompletedTask; yield break; }", "auch ein Command ohne Ziel nicht")]
+    [InlineData("public async IAsyncEnumerable<Faellig> Lausche(CancellationToken ct) { await Task.CompletedTask; yield break; } "
         + "public Mahne Auf(Bezahlt b) => null!;", "Lausche und Auf")]
-    public void Eine_Quellfunktion_ausser_Form_ist_CQRS100(string methoden, string worum)
+    [InlineData("public Mahne Auf(Bezahlt b) => null!;", "eine Quellart ohne Lausche")]
+    public void Eine_Quellart_ausser_Form_ist_CQRS100(string methoden, string worum)
     {
-        var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Falsch : IFunktion { " + methoden + " } }");
+        var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Falsch : IQuellart { " + methoden + " } }");
         ids.Should().Contain("CQRS100", worum);
         quelle.Should().NotContain("\"Falsch\",");
+    }
+
+    [Fact]
+    public void Eine_Funktion_lauscht_nicht_was_draussen_gefunden_wird_meldet_eine_Quellart()
+    {
+        var (quelle, ids, _) = Bausteine(@"namespace Probe { public sealed class Lauscher : IFunktion {
+            public async IAsyncEnumerable<Faellig> Lausche(CancellationToken ct) { await Task.CompletedTask; yield break; } } }");
+        ids.Should().Contain("CQRS100", "eine Funktion mit Lausche ist keine Quelle mehr — sie stünde in einem Graphen");
+        quelle.Should().NotContain("\"Lauscher\",");
     }
 
     [Fact]

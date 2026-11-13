@@ -4,8 +4,8 @@ namespace GraphExtractor;
 
 /// <summary>
 /// Die Umgebungen der Solution (docs/06 §6.5): je Umgebung ein Ordner <c>umgebungen/&lt;name&gt;/</c> mit <c>umgebung.json</c> neben der <c>.sln</c>. Der
-/// Extractor liest sie roh (Struktur ist Code, Werte sind Konfig) und legt sie dem Board bei — die Quellkarte zeigt die Werte je
-/// Umgebung, der Host-Rahmen (P3) bearbeitet sie. Platzhalter (<c>${env:…}</c>, <c>${branch}</c>) bleiben unaufgelöst stehen.
+/// Extractor liest sie roh (Struktur ist Code, Werte sind Konfig) und legt sie dem Board bei — die Eingänge der Clients (Quellen) und die Instanzen
+/// der Graphen mit ihren Werten je Umgebung; der Host-Rahmen (P3) bearbeitet sie. Platzhalter (<c>${env:…}</c>, <c>${branch}</c>) bleiben unaufgelöst stehen.
 /// </summary>
 public static class Umgebungen
 {

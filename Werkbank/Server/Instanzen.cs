@@ -52,20 +52,19 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
     }
 
     /// <summary>
-    /// Das Formular einer Instanz des Graphen <paramref name="graph"/>, aus dem Board: ob er eine Quelle hat (dann nennt die Instanz ihren Akteur),
-    /// ob er Commands am Kopf nimmt (dann je Umgebung genau eine Instanz), ob Zustand oder Quelle einen Rechner verlangen, der Standard der Stränge — und je Knoten (Pfad, innere
-    /// Graphen mit Punkt) seine Funktion, die Rahmenfelder, die Felder seiner Konfig-Records und die Technik mit mehr als einer Umsetzung.
+    /// Das Formular einer Instanz des Graphen <paramref name="graph"/>, aus dem Board: ob Zustand einen Rechner verlangt, der Standard der Stränge — und
+    /// je Knoten (Pfad, innere Graphen mit Punkt) seine Funktion, die Rahmenfelder, die Felder seiner Konfig-Records und die Technik mit mehr als einer
+    /// Umsetzung. Je Umgebung läuft ein Graph genau einmal; den Akteur einer Kette bringt ihr Auslöser mit (keine Quelle, kein Akteur an der Instanz).
     /// </summary>
     public static JsonObject Schema(JsonObject board, string graph)
     {
         var graphen = Liste(board["graphen"]).ToDictionary(g => S(g, "name"), StringComparer.Ordinal);
-        var funktionen = Liste(board["bausteinFunktionen"]).Concat(Liste(board["katalog"]))
+        var funktionen = Liste(board["bausteinFunktionen"])
             .GroupBy(f => S(f, "name"), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         if (!graphen.TryGetValue(graph, out var wurzel)) throw new ArgumentException($"Kein Graph „{graph}“.");
 
         var knoten = new JsonArray();
         var mitZustand = false;
-        var mitQuelle = false;
         void Knoten(JsonObject g, string praefix, HashSet<string> besucht)
         {
             foreach (var k in Liste(g["knoten"]))
@@ -83,14 +82,12 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
                 var konfigs = new JsonArray();
                 var technik = new JsonArray();
                 if (f != null) Bedarf(f, konfigs, technik, funktionen, []);
-                var quelle = f?["lauscht"] is JsonArray { Count: > 0 };
                 var zustand = (string?)f?["zustand"];
                 mitZustand |= zustand != null;
-                mitQuelle |= quelle;
                 knoten.Add(new JsonObject
                 {
-                    ["pfad"] = pfad, ["typ"] = typ, ["funktion"] = basis, ["bekannt"] = f != null, ["katalog"] = f != null && f["datei"] == null,
-                    ["quelle"] = quelle, ["zustand"] = zustand, ["konfigs"] = konfigs, ["technik"] = technik,
+                    ["pfad"] = pfad, ["typ"] = typ, ["funktion"] = basis, ["bekannt"] = f != null,
+                    ["zustand"] = zustand, ["konfigs"] = konfigs, ["technik"] = technik,
                 });
             }
         }
@@ -98,9 +95,7 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
         return new JsonObject
         {
             ["graph"] = graph,
-            ["quelle"] = mitQuelle,
-            ["commandKopf"] = !mitQuelle && (wurzel["koepfe"] as JsonArray ?? []).Count > 0,
-            ["rechnerPflicht"] = mitQuelle || mitZustand,
+            ["rechnerPflicht"] = mitZustand,
             ["straengeStandard"] = GraphInstanzKonfig.StandardStraenge,
             ["rahmenfelder"] = new JsonArray(KnotenKonfig.Rahmenfelder.Where(r => r != nameof(KnotenKonfig.Technik)).Select(r => (JsonNode)new JsonObject
             {
@@ -109,6 +104,49 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
             }).ToArray()),
             ["knoten"] = knoten,
         };
+    }
+
+    /// <summary>
+    /// Das Formular eines Eingangs aus der Quellart <paramref name="art"/> (docs/04 §4.7), aus dem Board: was sie meldet, ob sie Zustand hat, der Standard
+    /// für <c>Offen</c>, die Felder ihrer Konfig-Records (Typ, Standard, Werte eines Enums) und je Technik mit mehr als einer Umsetzung die Wahl — dieselbe
+    /// Ableitung wie am Knoten einer Instanz. Welche Akteure in Frage kommen, steht an der Karte des Clients (<c>sicht.flaeche</c>, W3).
+    /// </summary>
+    public static JsonObject EingangSchema(JsonObject board, string art)
+    {
+        var q = Liste(board["quellarten"]).FirstOrDefault(x => S(x, "name") == art) ?? throw new ArgumentException($"Keine Quellart „{art}“.");
+        var funktionen = Liste(board["bausteinFunktionen"])
+            .GroupBy(f => S(f, "name"), StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var konfigs = new JsonArray();
+        var technik = new JsonArray();
+        Bedarf(q, konfigs, technik, funktionen, []);
+        return new JsonObject
+        {
+            ["art"] = art, ["framework"] = (bool?)q["framework"] == true, ["zustand"] = (string?)q["zustand"],
+            ["meldet"] = (q["meldet"] ?? new JsonArray()).DeepClone(),
+            ["offenStandard"] = EingangKonfig.StandardOffen, ["konfigs"] = konfigs, ["technik"] = technik,
+        };
+    }
+
+    /// <summary>
+    /// Ein Eingang eines Clients in <c>umgebung.json</c> setzen (<paramref name="eingang"/>) bzw. entfernen (null): der Text der ganzen Datei danach —
+    /// geschrieben wird er als Geste (Verlauf, ↶, Branch-Sperre). Die übrigen Werte der Datei bleiben, wie sie dastehen (unaufgelöst).
+    /// </summary>
+    public string MitEingang(string umgebung, string client, string name, JsonObject? eingang)
+    {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z0-9_-]+$")) throw new ArgumentException($"Kein gültiger Name für einen Eingang: „{name}“.");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(client, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException($"Kein Client: „{client}“.");
+        var inhalt = umgebungen.Roh(umgebung);
+        if (inhalt[UmgebungsAbschnitte.Clients] is not JsonObject clients) inhalt[UmgebungsAbschnitte.Clients] = clients = new JsonObject();
+        if (clients[client] is not JsonObject c) clients[client] = c = new JsonObject();
+        if (c[nameof(ClientKonfig.Eingaenge)] is not JsonObject alle) c[nameof(ClientKonfig.Eingaenge)] = alle = new JsonObject();
+        if (eingang == null)
+        {
+            if (!alle.Remove(name)) throw new ArgumentException($"Einen Eingang {client}/{name} gibt es in „{umgebung}“ nicht.");
+            if (alle.Count == 0) c.Remove(nameof(ClientKonfig.Eingaenge));
+            if (c.Count == 0) clients.Remove(client);
+        }
+        else alle[name] = eingang.DeepClone();
+        return Umgebungen.Text(inhalt);
     }
 
     /// <summary>
@@ -144,6 +182,43 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
         var k = (JsonObject)konfig.DeepClone();
         if (umsetzung != null) k["umsetzung"] = umsetzung;
         return k;
+    }
+
+    /// <summary>
+    /// Wo welche Umsetzung einer Technik gewählt ist (<c>Technik</c> am Knoten einer Instanz bzw. an einem Eingang eines Clients), über alle Umgebungen:
+    /// Schnittstelle → [{umgebung, wo (<c>instanz/Knoten</c> bzw. <c>Client/Eingang</c>), umsetzung}]. Gelesen wie die Dateien dastehen (unaufgelöst); der
+    /// Editor zeigt es nur („gewählt in …“, W3).
+    /// </summary>
+    public JsonObject TechnikWahl()
+    {
+        var aus = new JsonObject();
+        void Dazu(JsonNode? technik, string umgebung, string wo)
+        {
+            if (technik is not JsonObject t) return;
+            foreach (var (schnittstelle, umsetzung) in t)
+            {
+                if (umsetzung is not JsonValue v || !v.TryGetValue<string>(out var u) || u.Length == 0) continue;
+                if (aus[schnittstelle] is not JsonArray l) aus[schnittstelle] = l = new JsonArray();
+                l.Add(new JsonObject { ["umgebung"] = umgebung, ["wo"] = wo, ["umsetzung"] = u });
+            }
+        }
+        foreach (var name in umgebungen.Namen())
+        {
+            try
+            {
+                foreach (var (instanz, inhalt) in Liste(name))
+                    if (inhalt is JsonObject i)
+                        foreach (var (knoten, wert) in i)
+                            if (wert is JsonObject k) Dazu(k[nameof(KnotenKonfig.Technik)], name, instanz + "/" + knoten);
+                if (umgebungen.Roh(name)[UmgebungsAbschnitte.Clients] is JsonObject clients)
+                    foreach (var (client, c) in clients)
+                        if (c?[nameof(ClientKonfig.Eingaenge)] is JsonObject eingaenge)
+                            foreach (var (eingang, e) in eingaenge)
+                                Dazu(e?[nameof(EingangKonfig.Technik)], name, client + "/" + eingang);
+            }
+            catch (Exception ex) when (ex is JsonException or IOException) { /* eine kaputte Datei meldet ⟳; hier zählt sie nicht */ }
+        }
+        return aus;
     }
 
     private static IEnumerable<JsonObject> Liste(JsonNode? n) => (n as JsonArray ?? []).OfType<JsonObject>();

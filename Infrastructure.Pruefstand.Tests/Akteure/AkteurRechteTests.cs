@@ -55,7 +55,8 @@ public class AkteurRechteTests
         p.Commands.Should().BeEquivalentTo(new[] { typeof(LabelPhysischesProdukt) });
         p.Queries.Should().BeEquivalentTo(new[] { typeof(SucheImagePairs), typeof(GetImagePair) });
         p.TransientEvents.Should().BeEmpty();
-        R("KameraSystem").Commands.Should().BeEquivalentTo(new[] { typeof(Domain.ImagePair.NimmBildAuf) }, "was die Instanz des Linienimports hineingibt");
+        R("KameraSystem").Commands.Should().BeEquivalentTo(new[] { typeof(Bildvorschau.Katalog.LiesBild) },
+            "was sein Dateiwächter findet, gibt es zum Lesen in die Bildaufbereitung (die Übersetzung der Akteur-Seite) — NimmBildAuf trägt es über die Kette");
     }
 
     [Fact]

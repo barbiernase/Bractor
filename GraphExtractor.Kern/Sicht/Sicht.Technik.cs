@@ -39,7 +39,7 @@ public sealed partial class Sicht
                     ["sig"] = S(m, "rueckgabe") + " " + S(m, "name") + "(" + string.Join(", ", Alle(m["parameter"]).Select(p => S(p, "typ") + " " + S(p, "name"))) + ")",
                 }).ToArray()),
                 ["umsetzungen"] = umsetzungen,
-                ["genommenVon"] = Arr(GerufenNutzer(g).Select(f => S(f, "name")).Distinct()),
+                ["genommenVon"] = Arr(GerufenNutzer(g).Concat(QuellartNutzer(g)).Select(f => S(f, "name")).Distinct()),
             };
         }
         return aus;

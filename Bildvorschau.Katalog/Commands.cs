@@ -4,6 +4,12 @@ namespace Bildvorschau.Katalog;
 
 // COMMANDS, die nur Knoten einander geben (docs/04 §4.4): Commands ohne Ziel, nie im Log.
 
+/// <summary>
+/// Der Kopf der Bildaufbereitung: eine fertig geschriebene Bilddatei ist zu lesen — Name, Pfad, Größe und wann sie erkannt wurde. Wer sie hineingibt,
+/// sagt sein Akteur (etwa ein Kamerasystem, dessen Dateiwächter sie fand, über eine Übersetzung der Akteur-Seite).
+/// </summary>
+public record LiesBild(string Name, string Pfad, long Groesse, DateTimeOffset ErkanntAm) : ICommand;
+
 /// <summary>Schritt 1: die erkannte Datei ist als Bild lesbar — die Datei (Name, Pfad, Größe, wann erkannt) und ihre Maße.</summary>
 public record BildEingelesen(string Dateiname, string Pfad, long Groesse, DateTimeOffset ErkanntAm, int BreitePixel, int HoehePixel) : ICommand;
 

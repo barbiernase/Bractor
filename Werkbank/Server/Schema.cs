@@ -74,6 +74,12 @@ public static class Schema
             else if (typ == typeof(TimeSpan)) feld = new JsonObject { ["typ"] = "dauer" };
             else if (typ == typeof(string)) feld = new JsonObject { ["typ"] = "string" };
             else if (typ == typeof(string[])) feld = new JsonObject { ["typ"] = "liste" };
+            // Name → Wert (z. B. Technik) als Liste von Schlüsseln. Name → Klasse sind die Eingänge eines Clients: sie stehen nicht hier, sondern auf der
+            //   Fläche (Spalte Clients: „＋ Eingang“, Doppelklick öffnet ihr Formular) — je Absicht ein Ort; das Formular des Host-Rahmens lässt sie stehen.
+            else if (typ.IsGenericType && typ.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+                feld = typ.GetGenericArguments()[1] == typeof(string)
+                    ? new JsonObject { ["typ"] = "map" }
+                    : new JsonObject { ["art"] = "hinweis", ["hilfe"] = "auf der Fläche, Spalte Clients — „＋ Eingang“ an der Karte des Clients, Doppelklick öffnet einen" };
             else if (typ.IsClass) feld = Klasse(typ);
             else feld = new JsonObject { ["typ"] = "string" };
             if (wert != null && !typ.IsClass || wert is string) feld["standard"] = wert switch { TimeSpan ts => ts.ToString(), bool b => b ? "true" : "false", _ => wert?.ToString() };

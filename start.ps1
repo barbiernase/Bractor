@@ -127,7 +127,8 @@ Write-Host " OK" -ForegroundColor Green
 Write-Host ""
 Write-Host "[3] Starte Host.Grpc..." -ForegroundColor Yellow
 
-$env:Quellen__DateiErkannt__Pfad = $WatchPath
+# Der Pfad des Dateiwächters: Eingang linie1 des Linienrechners (Clients:Linienrechner:Eingaenge:linie1:Pfad)
+$env:Clients__Linienrechner__Eingaenge__linie1__Pfad = $WatchPath
 $grpcProcess = Start-Process -FilePath ".\grpc\Host.Grpc.exe" `
     -ArgumentList "--umgebung", "linux" `
     -WorkingDirectory ".\grpc" `

@@ -5,12 +5,13 @@ using Core;
 // SONDE — fremdes Szenario 3 (docs/12 §12.6): MASSEN-IMPORT MIT FORTSCHRITT — die Domäne.
 //
 // EINE abgelegte Katalog-Datei wird zu vielen Fakten. Die Domäne ist rein: die Abläufe sind zwei Graphen des fremden Katalogs (Katalog.*.cs.txt, Teil Import) — die
-// Dateiannahme mit einer QUELLFUNKTION AUS DEM KATALOG des Frameworks am Kopf (der Dateiwächter, Core.Katalog: je gefundene Datei ein Lauf) und
+// Dateiannahme (an ihren Kopf gibt die Ablage, die ein Dateiwächter verwirklicht — eine QUELLART AUS DEM KATALOG des Frameworks, Core.Katalog; die
+// Übersetzung der Akteur-Seite steht in Akteure.Warenkatalog.cs.txt) und
 // der Zeilenimport: ein Zeilenleser (Technik als KLASSE, ohne Schnittstelle, mit Konfig-Record) gibt als STROM je Zeile einen Unterlauf (JE) und
 // zwischendurch den Fortschritt; je Zeile wird ein Artikel angelegt; am Ende des Stroms die Bilanz. Die Übersetzungen (Uebersetzungen.Warenkatalog
-// .cs.txt) machen daraus Commands an Import-Vorgang und Artikel, und die ANTWORT des Vorgangs auf seinen Start in den Kopf des Zeilenimports (eine
-// Quelle hat keinen Kopf: was als Antwort zurückkommt, nimmt ein eigener Graph). Die Ids leiten die Knoten aus der Herkunft ab (R13). Der Akteur der
-// Instanz (die Ablage) darf, was nach der Übersetzung entsteht.
+// .cs.txt) machen daraus Commands an Import-Vorgang und Artikel, und die ANTWORT des Vorgangs auf seinen Start in den Kopf des Zeilenimports (was als
+// Antwort zurückkommt, nimmt ein eigener Graph). Die Ids leiten die Knoten aus der Herkunft ab (R13). Die Kette trägt den Akteur ihres Auslösers (die
+// Ablage) — er braucht kein Recht auf das, was nach der Übersetzung entsteht.
 //
 // Die Leseseite zeigt die beiden Store-Klassen ohne Transaktion (docs/04 §4.3, docs/10 R14): der Stand liegt in Dateien (Klasse 2, wiederholungsfest — jede
 // Schreib-Fähigkeit nimmt die Herkunft und schreibt bedingt), und eine Metrik zählt angelegte Artikel (Klasse 3, mindestens einmal — nur mit
@@ -164,9 +165,8 @@ public sealed class Importauskunft : IReader
     }
 }
 
-// Wer hineingibt: die Ablage — der Akteur der Instanz des Katalogimports (er darf, was den Graphen verlässt); die Katalogpflege fragt den Stand
-// und hört den Fortschritt (Kenntnis).
-public sealed record Ablage : IAkteur, IDarf<StarteImport>, IDarf<LegeArtikelAn>, IDarf<MeldeImportFortschritt>, IDarf<SchliesseImportAb>;
+// Wer hineingibt: die Katalogpflege fragt den Stand und hört den Fortschritt (Kenntnis). (Die Ablage gibt an den Kopf der Dateiannahme, eine
+// Nachricht des Katalogs — sie steht bei den Akteuren, Akteure.Warenkatalog.cs.txt.)
 public sealed record Katalogpflege : IAkteur, IDarf<HoleImportstand>, IHoert<ImportFortgeschritten>, IHoert<ImportAbgeschlossen>;
 
 public sealed record KatalogpflegeOberflaeche : IClient, IVerkoerpert<Katalogpflege>;

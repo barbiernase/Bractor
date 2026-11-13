@@ -13,7 +13,7 @@ public sealed partial class Sicht
     /// <summary>Eine Partner-Zeile: Karte (null = Außenwelt), Text, Marke und optional, was ✕ löst.</summary>
     public sealed record Partner(string? Id, string Text, string Marke, JsonObject? Loesen);
 
-    private static readonly string[] PartnerArten = ["command", "event", "rejection", "query", "queryresponse"];
+    private static readonly string[] PartnerArten = ["command", "event", "rejection", "query", "queryresponse", "meldung"];
 
     /// <summary>Was ✕ löst: <paramref name="wert"/> aus der Liste <paramref name="feld"/> der Karte.</summary>
     private static JsonObject AusListe(string karte, string feld, string wert) => new() { ["karte"] = karte, ["feld"] = feld, ["wert"] = wert };
@@ -61,6 +61,12 @@ public sealed partial class Sicht
             // Kenntnis: die Akteure, die das Event bzw. den Hinweis hören (IHoert am Akteur; ✕ nimmt ihm das Hören).
             HoererPartner(aus, nm, "Kenntnis");
         }
+        else if (k == "meldung")
+        {
+            // Eine Meldung (docs/04 §4.7): ◀ die Quellart, die sie meldet (Lausche); ▶ die Übersetzungen der Akteur-Seite, die sie nehmen.
+            foreach (var q in MeldendeQuellarten(nm)) P(ein, QuellartKarte(q), "⚡ " + S(q, "name") + ".Lausche()", "Strom");
+            UebersetzungsPartner(nm, ein, aus);
+        }
         else if (k == "query")
         {
             AkteurePartner(ein, nm);
@@ -103,8 +109,6 @@ public sealed partial class Sicht
                     if (S(ein2, "eingang") == n)
                         P(a, "fb:" + S(f, "_id"), txt, "Auf");
                 }
-            foreach (var f in _bausteinFunktionen.Where(f => L(f, "lauscht").Contains(n)))
-                P(e, "fb:" + S(f, "_id"), "ƒ " + S(f, "name") + ".Lausche()", "Strom");
         }
         // Akteure, die die Nachricht hören (◀ IHoert) — ihr Client reagiert darauf oder nimmt sie zur Kenntnis.
         void HoererPartner(List<Partner> a, string n, string mark)

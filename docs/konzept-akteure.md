@@ -58,14 +58,17 @@ public sealed record Inspekteur     : IAkteur, IDarf<LabelBildPaar>, IDarf<Marki
   seiner Akteure; ohne Ausgabe ist es **Kenntnis** — gepusht, verlierbar. Einen Command (an ein Aggregat oder ohne Ziel), eine Query oder eine
   Antwort hört kein Akteur (CQRS058). Hören ist deklariert, nicht abgeleitet: gepusht wird nur, was ein Akteur hört.
 - Was ein Graph oder eine Frist aus einem Eingang erzeugt, wird **nicht** deklariert — es trägt den Akteur der Kette (§2.3). Ein Command, den
-  niemand per `IDarf` darf, kommt am Tor nie durch („nie von der GUI“ ist damit ein Typ-Fakt). Ausnahme: der Akteur einer Instanz mit Quellkopf
-  gibt hinein, was ihren Graphen verlässt, und muss es dürfen (`KameraSystem : IDarf<NimmBildAuf>`, der Start prüft es).
+  niemand per `IDarf` darf, kommt am Tor nie durch („nie von der GUI“ ist damit ein Typ-Fakt).
+- **Verwirklichung:** womit ein Akteur seine Nachrichten tatsächlich erzeugt — eine App gegen seinen generierten Vertrag, oder eine **Quellart**
+  (Dateiwächter, Taktgeber, Webhook, eine eigene): eine Übersetzung der Akteur-Seite in `Domain.Akteure/Uebersetzungen.cs` macht aus ihrer Meldung
+  eine Nachricht, die er darf (`DateiGefunden_LiesBild_1` für `KameraSystem : IDarf<LiesBild>`). Welche Quellarten ihn verwirklichen können, folgt
+  aus diesen Übersetzungen; welche laufen, sagen die Eingänge der Clients ([04](04-konsum-und-prozess-maschine.md) §4.7).
 
 ### 2.2 Katalog der Beispieldomäne (`Domain.Akteure/Akteure.cs`)
 
 | Akteur | gibt selbst hinein (`IDarf`) | hört (`IHoert`: Reaktion oder Kenntnis) |
 |---|---|---|
-| KameraSystem | `NimmBildAuf` (über die Instanz des Linienimports) | – |
+| KameraSystem | `LiesBild` (den Kopf der Bildaufbereitung; verwirklicht durch Dateiwächter) | – |
 | TrainingsSystem | `MeldeTrainingBegonnen`, `MeldeFortschritt`, `MeldeTrainingAbgeschlossen`, `MeldeTrainingGescheitert`, `HoleDatensatzSamples`, `HoleTrainingslauf` | `TrainingAngefordert` (Reaktion: das Training) |
 | Datensatzpfleger | `NimmRangeAuf`, `SchliesseEinfrierenAb`, `SucheImagePairs`, `GetImagePair` | `RangeAngefordert`, `EinfrierenAngefordert` (Reaktion: auflösen bzw. abschließen) |
 | Klassifizierer | `KlassifiziereBildPaarDurchKi`, `KlassifiziereEinzelBildDurchKi`, `HoleAktivesModell` | `ImagePairKomplett` (Reaktion: das Urteil), `BildVerfuegbar`, `ModellAktiviert` |
@@ -86,7 +89,7 @@ Fehlmenge ↦ `Unterschritten` …) — verkörpert vom Client `ReaktionsWorker`
 | Fall | Akteur | Beispiel |
 |---|---|---|
 | 1. kommt durchs **Tor** (Client, JSON-Eingang) | der Akteur der Sitzung, der `IDarf<T>` hat; verkörpert sie mehrere, der erste, der ihn darf (`AkteurRechte.AkteurFuer`) | `FriereEin` vom Arbeitsplatz → KIOperator |
-| 2. gibt ein **Graph** oder die **Uhr** in einer Kette aus | der Akteur des Auslösers, geerbt; bei einer Quellinstanz der Akteur ihrer Datei | `ReservierePosten` trägt die Sachbearbeitung, die `AuftragAbzuwickeln` gab; `NimmBildAuf` trägt das KameraSystem |
+| 2. gibt ein **Graph** oder die **Uhr** in einer Kette aus | der Akteur des Auslösers, geerbt (beim Eingang aus einer Quelle der Akteur des Eingangs) | `ReservierePosten` trägt die Sachbearbeitung, die `AuftragAbzuwickeln` gab; `NimmBildAuf` trägt das KameraSystem, dessen Dateiwächter die Datei fand |
 | 3. kommt **ohne Kette** (Command ohne Akteur der Kette) | **der eine** Akteur mit `IDarf<T>` (`AkteurHerkunft.EindeutigerHalter`); dürfen ihn mehrere oder keiner: kein Akteur (`system`) | – |
 
 Jede Kette beginnt bei einem Akteur (Fall 1 oder 3) und trägt ihn weiter (Fall 2). Statisch hat eine Nachricht eine Akteur-*Menge* (Fixpunkt über
@@ -133,9 +136,13 @@ public sealed record TrainingsWorker      : IClient, IVerkoerpert<TrainingsSyste
 public sealed record ReaktionsWorker      : IClient, IVerkoerpert<Datensatzpfleger>, IVerkoerpert<Teilmelder>;
 public sealed record Arbeitsplatz         : IClient, IVerkoerpert<Inspekteur>, IVerkoerpert<Produktpruefer>, IVerkoerpert<KIOperator>,
                                                      IVerkoerpert<Modellfreigeber>;
+public sealed record Linienrechner        : IClient, IVerkoerpert<KameraSystem>;   // ohne Leitung: Eingänge aus Quellen
 ```
 
-- Ein Client ist **eine Verbindung, eine Sitzung**. Er kann mehrere Akteure verkörpern, und ein Akteur kann über mehrere Clients laufen (n:m).
+- Ein Client ist die Software-Einheit, die Akteure verkörpert — über **eine Leitung** (eine Verbindung, eine Sitzung) und/oder über **Eingänge aus
+  Quellen**, die im Host laufen (in der Umgebung `Clients:<Name>:Eingaenge`, je Eingang Art, Akteur, Rechner, Werte; drei Verzeichnisse = drei
+  Eingänge, auch verschiedener Art und für verschiedene seiner Akteure). Er kann mehrere Akteure verkörpern, und ein Akteur kann über mehrere
+  Clients laufen (n:m). Ein Eingang aus einer Quelle braucht kein Token: wirksam ist sein Akteur.
 - Der Client ist ein Record und **nennt nur**, wen er verkörpert (`IVerkoerpert<A>`, nur konkrete Akteure); eigene Member, eigene Befugnisse oder
   ein eigenes Hören gibt es nicht (CQRS063, CQRS064). Gelesen wird er an einer Stelle (`Infrastructure.SourceGeneration/Clientvertragslesart.cs`).
 - Handshake-Name = Name des Records (`Clientvertragsregeln.ClientName`); Akteur- und Client-Namen sind zusammen eindeutig (CQRS059).
@@ -167,6 +174,7 @@ geht über die Leitung; client-interne Typen stehen nie bei einem Akteur.
 | `KlassifikationsWorker` (`classifier.py`, `run_stub.py`) | Klassifizierer | `ImagePairKomplett` | `KlassifiziereBildPaarDurchKi`, `KlassifiziereEinzelBildDurchKi` / `HoleAktivesModell` | `BildVerfuegbar`, `ModellAktiviert` |
 | `TrainingsWorker` (`training_worker.py`, `run_train_stub.py`) | TrainingsSystem | `TrainingAngefordert` | die `Melde…`-Commands / `HoleDatensatzSamples`, `HoleTrainingslauf` | – |
 | `ReaktionsWorker` (`Domain.Client.Worker`, .NET) | Datensatzpfleger, Teilmelder | `RangeAngefordert`, `EinfrierenAngefordert`, `TeilauftragAbgeschlossen` | `NimmRangeAuf`, `SchliesseEinfrierenAb`, `MeldeTeilFertig` / `SucheImagePairs`, `GetImagePair` | – |
+| `Linienrechner` (Eingänge: Dateiwächter je Linie) | KameraSystem | – | `LiesBild` (aus `DateiGefunden`) | – |
 | `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | – | alle Commands und Queries der vier Akteure | was die vier hören |
 
 Ein Ketten-Command, den nur ein Graph ausgibt, steht bei keinem Akteur (Prüfdomäne: `ReservierePosten` aus der Auftragsabwicklung); die
@@ -192,7 +200,7 @@ Mehrfach-Auswahl beim Kuratieren schickt je Paar `NimmPaarAuf`.
 
 - Der Akteur reist als Event-Header **`akteur`** (`ImAuftrag.Header`): `MartenEventBatchWriter` schreibt ihn, `MartenEventStore` liest ihn in den
   Envelope (`UserId`).
-- Ein offener Eingang trägt den Akteur seines Auslösers; die Kette eines Graphen nimmt ihn mit (bei einer Quellinstanz den Akteur der Instanz), und
+- Ein offener Eingang trägt den Akteur seines Auslösers; die Kette eines Graphen nimmt ihn mit (beim Eingang aus einer Quelle den Akteur des Eingangs), und
   der `CommandEmitter` stempelt ihn (`ImAuftrag.Akteur`) auf jeden Command der Kette; die Uhr nimmt den Akteur, der in der Frist steht
   (`UhrActor`). Ist er leer, gilt Fall 3 (§2.3).
 - Von draußen schreibt der Akteur auch die Spur: ein Command vom Client trägt den Wirker `akteur:<A>` (`WirkerId.FuerAkteur`).

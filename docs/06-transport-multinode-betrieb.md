@@ -34,7 +34,7 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
 - **Cluster:** `Cluster:Art = Einzelknoten` (Mitgliedschaft in-memory über den `TestProvider` von Proto.Cluster, kein Consul — Standard in Sim)
   oder `Consul` (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen `PartitionIdentityLookup`. Jeder Host trägt im Cluster
   seinen **Rechnernamen** (`Cluster:Rechner`, in `deploy-multinode` je Node `Cluster__Rechner`): eine Instanz, die ihn nennt, läuft nur dort (der
-  Linienimport mit seiner Quelle auf `grpc1`); Instanzen mit Zustand oder Quelle nennen ihn im Cluster immer. Die Kinds werden beim
+  Dateiwächter des Linienrechners und die Bildaufbereitung auf `grpc1`); Instanzen mit Zustand und Eingänge aus Quellen nennen ihn im Cluster immer. Die Kinds werden beim
   Start aggregiert: Aggregate und alle `IClusterKindContributor` (Batch-Leser, Uhr, Zusteller); dazu
   spawnt jeder Knoten seinen Verteiler (lokaler Actor mit festem Namen `verteiler`, `VerteilerStart`) und die Wurzel seiner Funktionen (`funktionen`,
   `FunktionenStart`: je Instanz ein Graph-Actor, Orte im Gossip-Zustand). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`), danach die **Start-Sperre** (`Bereitschaft`): 32 Proben-Identitäten, die über
@@ -131,8 +131,8 @@ kommt aus der Beispieldomäne (Bildverarbeitung), nicht aus dem Framework.
 **Veraltet:** Die Start-Skripte für Host.Blazor (`deploy/deploy.sh`, `deploy/deploy_clients.sh`, `deploy/cqrs-blazor.env`,
 `deploy-linux/start-server.sh`, `deploy-windows/start.ps1`) setzen noch `Pipeline__WatchPath`, `Blazor__Urls` und `GrpcServer__Address`;
 `deploy-linux/start-server.sh` startet beide Hosts ohne Umgebung und setzt `ConnectionStrings__EventStore`. Heute gilt: beide Hosts brauchen
-`--umgebung` bzw. `CQRS_UMGEBUNG`; Host.Blazor liest `Clients:<Name>` der Umgebung, das Verzeichnis des Dateiwächters steht in der Instanz des
-Linienimports (`graphen/linienimport.json`, `Eingang:Pfad`).
+`--umgebung` bzw. `CQRS_UMGEBUNG`; Host.Blazor liest `Clients:<Name>` der Umgebung, das Verzeichnis des Dateiwächters steht im Eingang des
+Linienrechners (`umgebung.json`, `Clients:Linienrechner:Eingaenge:linie1:Pfad`).
 
 ## 6.5 Konfiguration: die Umgebungs-Datei
 
@@ -144,11 +144,12 @@ das Formular):
   (Art, Name, Consul, AdvertisedHost, Rolle), `Schreibpfad` (generiertes JSON, Group-Commit, Batch, Linger, Drain, Snapshot-Schwelle,
   Inbox-Grenze), `Lebenszyklus` (Leerlauf bis zur Passivierung je Actor-Art), `Konsum` (Partitionen, Seitengröße und Takt je Partition des Batch-Konsums), `Transport` (gRPC-Port, Einblick-Port, JSON-Eingang).
 - **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Clients` (je Client Token, Adresse, Urls,
-  Dateien und `Worker` — wie die Werkbank ihn als Prozess startet: Skript, Argumente, Interpreter oder ein .NET-`Projekt`), `Stores`, `Logging`.
-- **Die Instanzen** (`graphen/<instanz>.json`, `GraphInstanzKonfig`): `Graph`, bei einem Quellkopf `Akteur`, `Rechner`, `Straenge` (gleichzeitige Ketten je Host), je Knoten (Pfad bei inneren Graphen,
+  Dateien und `Worker` — wie die Werkbank ihn als Prozess startet: Skript, Argumente, Interpreter oder ein .NET-`Projekt` —, dazu `Eingaenge` aus
+  Quellen: je Eingang `Art`, `Akteur`, `Rechner`, `Offen`, `Technik` und die Werte der Quellart, flach), `Stores`, `Logging`.
+- **Die Instanzen** (`graphen/<instanz>.json`, `GraphInstanzKonfig`): `Graph`, `Rechner`, `Straenge` (gleichzeitige Ketten je Host), je Knoten (Pfad bei inneren Graphen,
   `Aufbereitung.Verkleinern`) `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik` (Schnittstelle → Umsetzung) und die
-  Felder seiner Konfig-Records ([04](04-konsum-und-prozess-maschine.md) §4.4). Ohne Datei läuft ein Graph nicht; ein Graph mit Command-Kopf läuft
-  je Umgebung genau einmal.
+  Felder seiner Konfig-Records ([04](04-konsum-und-prozess-maschine.md) §4.4). Ohne Datei läuft ein Graph nicht; je Umgebung läuft
+  ein Graph genau einmal.
 
 Jeder Wert lässt sich per `__`-Variable überschreiben, z. B. `Cluster__AdvertisedHost=grpc1`, ein Wert einer Instanz unter
 `Graphen__<instanz>__<Knoten>__<Feld>`. Die **Rolle** eines Knotens heißt

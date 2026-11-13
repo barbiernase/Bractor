@@ -1,4 +1,5 @@
 using Abstractions;
+using Bildvorschau.Katalog;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Modell;
@@ -17,14 +18,17 @@ namespace Domain.Akteure;
 // eine Query, ein Hinweis) und was zu ihm kommt (IHoert<T>): ein Event oder Hinweis — ein Fakt, auf das sein Client reagiert oder das er zur Kenntnis
 // nimmt. Was eine Funktion oder eine Frist
 // erzeugt (NimmRangeAuf, MarkiereAlsHaengengeblieben …), trägt den Akteur der Kette — es steht hier bewusst NICHT: am Tor käme es so nie durch.
-// Ausnahme: ein Akteur, für den eine Instanz mit Quellkopf hineingibt (Akteur in ihrer Datei), darf, was sie verlässt — der Start prüft es
-// (docs/04 §4.4). Welche Software für welche Akteure an der Leitung spricht, steht in Clients.cs.
+// Welche Software für welche Akteure spricht, steht in Clients.cs; wie ein Akteur aus dem, was eine Quelle meldet, seine Nachricht macht, in
+// Uebersetzungen.cs.
 
 // ── Maschinen ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/// <summary>Nimmt die Bildpaare (dc0/dc2) an der Linie auf und legt sie auf dem Share ab.</summary>
+/// <summary>
+/// Nimmt die Bildpaare (dc0/dc2) an der Linie auf und legt sie auf dem Share ab; jede fertige Datei gibt es zum Lesen in die Bildaufbereitung. Verwirklicht
+/// wird es durch einen Dateiwächter (Übersetzung in Uebersetzungen.cs, Eingänge des Linienrechners in der Umgebung).
+/// </summary>
 public sealed record KameraSystem : IAkteur,
-    IDarf<NimmBildAuf>;   // NimmBildAuf: was die Instanz des Linienimports (Dateiwächter → Bildaufbereitung) für das Kamerasystem hineingibt
+    IDarf<LiesBild>;
 
 /// <summary>
 /// GPU-Worker: reagiert auf <see cref="TrainingAngefordert"/> — trainiert auf der eingefrorenen Datensatz-Version und meldet den Fortschritt; ob der

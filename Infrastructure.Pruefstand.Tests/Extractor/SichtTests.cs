@@ -193,15 +193,16 @@ public class SichtTests
         kanten.Should().Contain(gr + "→fb:" + Id(board, "bausteinFunktionen", "name", "Schadensaufnahme"));
         var messkette = "gr:" + Id(board, "graphen", "name", "Messkette");
         kanten.Should().Contain(messkette + "→gr:" + Id(board, "graphen", "name", "Messwertaufbereitung"));
-        // Eine Quelle ist der Kopf ihres Graphen (kein Eingang von außen); die Kanten des inneren Graphen sind aufgefaltet.
+        // Eine Quelle ist kein Knoten: jeder Graph nimmt am Kopf einen Command (hier gibt das Sensornetz ihn über die Übersetzung der Akteur-Seite); die
+        //   Kanten des inneren Graphen sind aufgefaltet.
         var mk = (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == "Messkette");
-        ((string?)mk["quelle"]).Should().Be("Abfrage");
-        mk["koepfe"]!.AsArray().Should().BeEmpty();
+        mk.ContainsKey("quelle").Should().BeFalse();
+        mk["koepfe"]!.AsArray().Select(x => (string?)x).Should().Equal("NimmMesswert");
         mk["kanten"]!.AsArray().Select(k => (string?)k!["nach"]).Should().Contain("Aufbereitung.Plausi");
     }
 
     [Fact]
-    public async Task Eine_Funktion_nennt_ihre_Eingaenge_und_eine_Quelle_was_sie_meldet()
+    public async Task Eine_Funktion_nennt_ihre_Eingaenge_und_eine_Quellart_was_sie_meldet()
     {
         var board = await BoardAsync();
         JsonObject F(string name) => (board["bausteinFunktionen"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == name);
@@ -210,8 +211,24 @@ public class SichtTests
         Ports(F("Alarmquittung")).Should().Be("PerAnrufErreicht || PerFunkErreicht", "zwei Wege, je einer ein Auf");
         Ports(F("Prognosemodell")).Should().Be("Geglaettet<Kurzfenster> || Geglaettet<Langfenster>", "zusammengeführt im Zustand, je Glättung ein Auf");
         Ports(F("Pruefungsstart")).Should().Be("Scan || Gestartet", "ein Command und die Antwort auf den eigenen Command (aus dem Event übersetzt)");
-        F("Sensorabfrage")["lauscht"]!.AsArray().Select(x => (string?)x).Should().Equal("Rohwert");
-        F("Sensorabfrage")["eingaenge"]!.AsArray().Should().BeEmpty("eine Quelle lauscht und nimmt nichts");
+        Ports(F("Messwertannahme")).Should().Be("NimmMesswert", "am Kopf der Messkette nimmt sie einen Command des Katalogs, keine Meldung");
+        // Eine Quellart ist keine Funktion: eine eigene Liste mit dem, was sie meldet, und ihrem Konstruktor (Konfig, Zustand, Technik).
+        (board["bausteinFunktionen"] as JsonArray)!.OfType<JsonObject>().Should().NotContain(x => (string?)x["name"] == "Sensorabfrage");
+        var q = (board["quellarten"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == "Sensorabfrage");
+        q["meldet"]!.AsArray().Select(x => (string?)x).Should().Equal("Rohwert");
+        ((string?)q["zustand"]).Should().Be("Abfragestand");
+        q["konfigs"]!.AsArray().OfType<JsonObject>().Select(k => (string?)k["record"]).Should().Equal("SensorabfrageKonfig");
+        q.ContainsKey("framework").Should().BeFalse("sie liegt in der Anwendung (ihrem Katalog), nicht im Framework");
+        // Was sie meldet, ist eine Meldung (kein Command); die Übersetzung der Akteur-Seite trägt ihr Kennzeichen.
+        var rohwert = (board["records"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == "Rohwert");
+        ((string?)rohwert["kind"]).Should().Be("meldung");
+        var u = (board["uebersetzungen"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == "Rohwert_NimmMesswert_1");
+        ((bool?)u["akteurSeite"]).Should().BeTrue();
+        // In der Sicht: eine Karte der Quellart, ihr gehört die Meldung, und sie verwirklicht das Sensornetz.
+        var qa = "qa:" + (string)q["_id"]!;
+        Karte(board, qa)["art"]!.GetValue<string>().Should().Be("quellart");
+        board["sicht"]!["besitz"]!["rec:Rohwert"]!.GetValue<string>().Should().Be(qa);
+        Karte(board, qa)["akteure"]!.AsArray().Select(x => (string?)x).Should().Equal("Sensornetz");
     }
 
     // ── Die Fläche in sieben Spalten und die Komposition eines Graphen (docs/10 §10.9) ──
@@ -228,6 +245,10 @@ public class SichtTests
         var board = await BoardAsync();
         var karten = FlaechenKarten(board);
         JsonObject K(string id) => karten.Single(k => (string?)k["id"] == id);
+        // Keine Spalte Quellen: eine Quelle ist kein Knoten eines Graphen, sie verwirklicht einen Akteur und läuft als Eingang eines Clients — der steht
+        //   je Umgebung an der Karte des Clients in der Spalte Clients ganz links.
+        board["sicht"]!["flaeche"]!["spalten"]!.AsArray().Select(x => (string?)x).Should()
+            .Equal("clients", "ausgang", "graphen", "uebersetzungen", "aggregate", "projektionen", "eingang");
         // Ein Akteur steht zweimal: links mit dem, was er darf, rechts mit dem, was zu ihm kommt — dazu die Antworten auf seine Queries.
         var theke = "akt:" + Id(board, "akteure", "name", "Theke");
         ((string?)K(theke + "|aus")["spalte"]).Should().Be("ausgang");
@@ -240,19 +261,20 @@ public class SichtTests
         var messkette = "gr:" + Id(board, "graphen", "name", "Messkette");
         ((string?)K(messkette)["spalte"]).Should().Be("graphen");
         karten.Should().NotContain(k => (string?)k["id"] == "gr:" + Id(board, "graphen", "name", "Messwertaufbereitung"));
-        // Quellen: der Dateiwächter am Kopf der Dateiannahme (Katalog des Frameworks) und die eigene Quellfunktion der Messkette (Lausche) — sie
-        //   meldet ihren Command und deklariert ihn.
+        // An den Kopf eines Graphen gibt ein Akteur: das Sensornetz an die Messkette, die Ablage an die Dateiannahme — beide verwirklicht durch eine
+        //   Quellart (über die Übersetzung der Akteur-Seite, die nicht auf der Fläche steht: sie gehört zum Akteur).
         var dateiannahme = "gr:" + Id(board, "graphen", "name", "Dateiannahme");
-        var dateiwaechter = karten.Single(k => (string?)k["spalte"] == "quellen" && ((string?)k["id"])!.StartsWith("q:" + Id(board, "graphen", "name", "Dateiannahme") + ":"));
-        ((string?)dateiwaechter["name"]).Should().Be("Dateiwaechter");
-        var abfrage = karten.Single(k => (string?)k["karte"] == "fb:" + Id(board, "bausteinFunktionen", "name", "Sensorabfrage"));
-        ((string?)abfrage["spalte"]).Should().Be("quellen");
-        Ports(abfrage).Should().Be("▶Rohwert*");
+        var sensornetz = "akt:" + Id(board, "akteure", "name", "Sensornetz");
+        var ablage = "akt:" + Id(board, "akteure", "name", "Ablage");
+        karten.Should().NotContain(k => (string?)k["art"] == "quelle" || (string?)k["art"] == "quellart");
+        karten.Should().NotContain(k => (string?)k["id"] == "ue:" + Id(board, "uebersetzungen", "name", "Rohwert_NimmMesswert_1"));
+        Ports(K(messkette)).Should().Contain("◀NimmMesswert");
         ((string?)K(messkette)["band"]).Should().NotBeNull();
 
         var kanten = FlaechenKanten(board);
-        kanten.Should().Contain($"{(string?)dateiwaechter["id"]} -DateiGefunden/quelle-> {dateiannahme}");
-        kanten.Should().Contain($"{(string?)abfrage["id"]} -Rohwert/quelle-> {messkette}");
+        kanten.Should().NotContain(k => k.Contains("/quelle->"));
+        kanten.Should().Contain($"{sensornetz}|aus -NimmMesswert/schreiben-> {messkette}");
+        kanten.Should().Contain($"{ablage}|aus -NimmKatalogdateiAn/schreiben-> {dateiannahme}");
         kanten.Should().Contain($"{theke}|aus -LeiheAus/schreiben-> agg:Leihvorgang");
         // Ein Decide gibt keinen Command aus: den Kopf der Mahnbemessung gibt das Archiv hinein (es reagiert auf die Mahnung) — über die Übersetzung,
         //   die aus seiner Nachricht den Eingang des Katalogs macht (docs/04 §4.4).
@@ -298,9 +320,16 @@ public class SichtTests
         Kanten(Kompo("Kartenausgabe")).Should().Contain(x => x.StartsWith("Filter -") && x.EndsWith("~-> Daumen"))
             .And.Contain(x => x.StartsWith("Filter -") && x.EndsWith("-> Vorschau") && !x.Contains('~'));
         var messkette = Kompo("Messkette");
-        Knoten(messkette).Single(k => (string?)k["name"] == "Abfrage")["quelle"]!.GetValue<bool>().Should().BeTrue();
+        Knoten(messkette).Single(k => (string?)k["name"] == "Annahme")["kopf"]!.GetValue<bool>().Should().BeTrue();
+        Knoten(messkette).Should().NotContain(k => k.ContainsKey("quelle"));
         ((string?)Knoten(messkette).Single(k => (string?)k["name"] == "Aufbereitung")["art"]).Should().Be("graph");
-        Kanten(messkette).Should().Contain("Abfrage -Rohwert-> Aufbereitung");
+        Kanten(messkette).Should().Contain("Annahme -Messwert-> Aufbereitung");
+        // Wer an den Kopf gibt: der Akteur, der den Kopf-Command darf, und die Quellart, die ihn über die Übersetzung der Akteur-Seite verwirklicht.
+        var geben = messkette["geben"]!.AsArray().OfType<JsonObject>().Single(x => (string?)x["typ"] == "NimmMesswert");
+        geben["akteure"]!.AsArray().Select(x => (string?)x).Should().Equal("Sensornetz");
+        var verw = geben["verwirklichungen"]!.AsArray().OfType<JsonObject>().Single();
+        ((string?)verw["uebersetzung"]).Should().Be("Rohwert_NimmMesswert_1");
+        verw["quellarten"]!.AsArray().Select(x => (string?)x).Should().Equal("Sensorabfrage");
         Kompo("Messwertaufbereitung")["eltern"]!.AsArray().Select(x => (string?)x).Should().Equal("gr:" + Id(board, "graphen", "name", "Messkette"));
         // Technik mit ihren Umsetzungen am Knoten, Lese-Fähigkeiten als „liest“.
         var pruefer = Knoten(Kompo("Seitenpruefungslauf")).Single(k => (string?)k["name"] == "Pruefer");
@@ -317,6 +346,13 @@ public class SichtTests
             .Select(x => (string?)x).Should().Equal("gr:" + Id(board, "graphen", "name", "Kartenfilter"));
         bk["technik"]!.AsArray().OfType<JsonObject>().Should().Contain(t => (string?)t["name"] == "ISeitenleser");
         bk["konfig"]!.AsArray().OfType<JsonObject>().Should().Contain(c => (string?)c["name"] == "GutachtenKonfig");
+        // Die Quellarten im Baukasten (statt des Katalogs des Frameworks): was sie melden und wen sie verwirklichen; ihre Konfig nutzt die Quellart.
+        var sensorabfrage = bk["quellarten"]!.AsArray().OfType<JsonObject>().Single(q => (string?)q["name"] == "Sensorabfrage");
+        sensorabfrage["meldet"]!.AsArray().Select(x => (string?)x).Should().Equal("Rohwert");
+        sensorabfrage["verwirklicht"]!.AsArray().OfType<JsonObject>().Select(x => (string?)x["akteur"]).Should().Equal("Sensornetz");
+        bk.ContainsKey("katalog").Should().BeFalse();
+        bk["konfig"]!.AsArray().OfType<JsonObject>().Single(c => (string?)c["name"] == "SensorabfrageKonfig")["genutztVon"]!.AsArray()
+            .Select(x => (string?)x).Should().Equal((string?)sensorabfrage["karte"]);
         bk["nachrichten"]!.AsArray().OfType<JsonObject>().Should().Contain(n =>
             (string?)n["typ"] == "SeiteZuPruefen" && (string?)n["besitzer"] == "fb:" + Id(board, "bausteinFunktionen", "name", "Pruefungsstart"));
     }

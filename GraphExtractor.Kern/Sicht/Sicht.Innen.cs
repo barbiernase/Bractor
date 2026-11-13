@@ -17,7 +17,7 @@ public sealed partial class Sicht
     /// <summary>
     /// Wo ein Typ verwendet wird: je Stelle Art, Text, das Aggregat bzw. der Besitzer (Projektion/Reader) und die Karte der Stelle (Decide, Apply,
     /// Handhabung); <c>erzeugt</c> = die Stelle gibt ihn aus (Ergebnis eines Decide, Antwort einer Frage, Ausgabe einer Funktion bzw. Übersetzung,
-    /// was eine Quelle meldet).
+    /// was eine Quellart meldet).
     /// </summary>
     private JsonObject VerwendungenJson()
     {
@@ -75,8 +75,9 @@ public sealed partial class Sicht
                 P(S(e, "eingang"), "funktion", "Auf(" + S(e, "eingang") + ") in Funktion " + S(f, "name"), null, null, fid);
                 foreach (var x in L(e, "ausgaben")) P(Basis(x), "funktion", "Ausgabe von " + S(f, "name") + ".Auf(" + S(e, "eingang") + ")", null, null, fid, true);
             }
-            foreach (var x in L(f, "lauscht")) P(x, "funktion", "Quelle " + S(f, "name"), null, null, fid, true);
         }
+        foreach (var q in _quellarten.Where(q => !B(q, "framework")))
+            foreach (var x in Meldet(q)) P(x, "quellart", "Meldung der Quellart " + S(q, "name"), null, null, "qa:" + S(q, "_id"), true);
         foreach (var u in _uebersetzungen)
         {
             var uid = "ue:" + S(u, "_id");

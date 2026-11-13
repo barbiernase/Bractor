@@ -100,7 +100,7 @@ public sealed class Arbeitsbereich : IDisposable
             var stand = _solution!;
             foreach (var p in pfade.Where(p => p.EndsWith(".cs", StringComparison.Ordinal))) stand = await UebernimmAsync(stand, p);
             // Nur Dateien außerhalb der Projekte — außer Python (die Rümpfe der Client-Implementierungen gehören zum Board, P7.4) und den
-            //   Umgebungs-Dateien (Werte je Umgebung, z. B. der Webhook einer Quelle, docs/06 §6.6): sie lesen das Board neu.
+            //   Umgebungs-Dateien (Werte je Umgebung, z. B. die Eingänge der Clients, docs/06 §6.6): sie lesen das Board neu.
             if (ReferenceEquals(stand, _solution) && !pfade.Any(p => p.EndsWith(".py", StringComparison.Ordinal) || IstUmgebung(p))) return _letzte;
             var lage = await _kalt!.NurDomänenAsync(stand, ct);
             var lesung = await Lesen.LiesAsync(stand, lage, _root, _zusammensetzung, uhr.Elapsed);
@@ -344,10 +344,13 @@ public sealed class Arbeitsbereich : IDisposable
         _waechter.EnableRaisingEvents = true;
     }
 
-    /// <summary>Eine Umgebungs-Datei (<c>umgebungen/umgebung.&lt;name&gt;.json</c>) — kein Workspace-Dokument, aber Teil des Boards.</summary>
+    /// <summary>
+    /// Eine Umgebungs-Datei (<c>umgebungen/&lt;name&gt;/umgebung.json</c> bzw. eine Instanz <c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>) — kein
+    /// Workspace-Dokument, aber Teil des Boards.
+    /// </summary>
     private bool IstUmgebung(string pfad) =>
         pfad.EndsWith(".json", StringComparison.Ordinal)
-        && Path.GetFullPath(Path.GetDirectoryName(pfad) ?? "") == Path.GetFullPath(Path.Combine(_root, Abstractions.Projektstruktur.UmgebungsOrdner));
+        && Path.GetFullPath(pfad).StartsWith(Path.GetFullPath(Path.Combine(_root, Abstractions.Projektstruktur.UmgebungsOrdner)) + Path.DirectorySeparatorChar, StringComparison.Ordinal);
 
     /// <summary>Build-Ausgaben, Git und Werkzeug-Ordner gehören nicht zum Code.</summary>
     private static bool Ignoriert(string pfad)

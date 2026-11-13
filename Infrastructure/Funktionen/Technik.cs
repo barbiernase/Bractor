@@ -167,8 +167,13 @@ public static class TechnikExtensions
     /// Bindet die Technik und die Konfig-Records, die die Knoten der Instanzen im Host brauchen (transitiv über die Umsetzungen), aus den generierten
     /// Tabellen der angemeldeten Anwendung. Muss NACH den Instanzen stehen.
     /// </summary>
-    public static IServiceCollection BindeTechnik(this IServiceCollection services, GraphInstanzen instanzen)
-        => services.BindeTechnik(HostKnoten(instanzen), Anwendung.Technik.Umsetzungen, Anwendung.Technik.Braucht, Anwendung.Technik.Konfigs);
+    public static IServiceCollection BindeTechnik(this IServiceCollection services, GraphInstanzen instanzen, Infrastructure.Quellen.Eingaenge? eingaenge = null)
+        => services.BindeTechnik(HostKnoten(instanzen).Concat(eingaenge?.Bindungen() ?? []), Anwendung.Technik.Umsetzungen, Anwendung.Technik.Braucht,
+            Anwendung.Technik.Konfigs);
+
+    /// <summary>Die Karte eines Bindungs-Fehlers: der Eingang eines Clients (<c>eingang:Client/Eingang</c>) bzw. die Instanz.</summary>
+    private static string KarteVon(KnotenKontext k) =>
+        k.Instanz.StartsWith("eingang:", StringComparison.Ordinal) ? WirkerId.FuerEingang(k.Instanz["eingang:".Length..], k.Knoten) : "instanz:" + k.Instanz;
 
     /// <summary>Die Knoten der Instanzen, die im Host rechnen: ihr Kontext (Instanz, Knoten, Konfig) und die Klasse ihrer Funktion.</summary>
     public static IEnumerable<(KnotenKontext Knoten, Type Umsetzung)> HostKnoten(GraphInstanzen instanzen) =>
@@ -225,12 +230,12 @@ public static class TechnikExtensions
 
             // Die Technik-Wahl nennt nur Technik dieses Knotens; die Werte nur Felder seiner Konfig-Records; jeder Record bindet (fehlt ein Feld, scheitert es hier).
             foreach (var fremd in kk.Technik.Keys.Where(n => !alleUmsetzungen.Any(u => u.Technik.Name == n)))
-                throw new BootFehler($"{kontext.Ort}: Technik:{fremd} — keine Technik dieses Namens.", "instanz:" + kontext.Instanz);
+                throw new BootFehler($"{kontext.Ort}: Technik:{fremd} — keine Technik dieses Namens.", KarteVon(kontext));
             var felder = records.SelectMany(r => r.Felder).ToHashSet(StringComparer.Ordinal);
             var unbekannt = kk.Werte.Keys.Select(w => w.Split(':')[0]).Distinct().Where(f => !felder.Contains(f)).ToList();
             if (unbekannt.Count > 0)
                 throw new BootFehler($"{kontext.Ort}: unbekannte Felder {string.Join(", ", unbekannt)} (bekannt: "
-                    + string.Join(", ", KnotenKonfig.Rahmenfelder.Concat(felder).Order(StringComparer.Ordinal)) + ").", "instanz:" + kontext.Instanz);
+                    + string.Join(", ", KnotenKonfig.Rahmenfelder.Concat(felder).Order(StringComparer.Ordinal)) + ").", KarteVon(kontext));
             foreach (var rec in records) rec.Binde(KnotenBereich.Abschnitt(kontext, rec));
         }
 

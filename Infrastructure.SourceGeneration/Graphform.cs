@@ -107,8 +107,6 @@ namespace Infrastructure.SourceGeneration
             public List<(Knoten Von, INamedTypeSymbol Typ)> Ausgaenge = new List<(Knoten, INamedTypeSymbol)>();
             /// <summary>Die Signatur: was der Graph nimmt (seine Köpfe) und was er nach außen gibt (Commands ohne Ziel, die kein innerer Knoten nimmt).</summary>
             public List<INamedTypeSymbol> SignaturEin = new List<INamedTypeSymbol>(), SignaturAus = new List<INamedTypeSymbol>();
-            /// <summary>Der Quellknoten (eine Funktion, die lauscht): er ist der Kopf des Graphen, jedes seiner Elemente startet einen Lauf; null = keiner.</summary>
-            public Knoten? Quelle;
             public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
             /// <summary>Ohne Formfehler — nur so erzeugt der Generator den Graphen.</summary>
             public bool Gueltig => Fehler.Count == 0;
@@ -164,16 +162,9 @@ namespace Infrastructure.SourceGeneration
                 }
             g.SignaturEin = g.Koepfe.Select(k => k.Typ).ToList();
             g.SignaturAus = wurzel.Aus.Select(a => a.Typ).GroupBy(V).Select(x => x.First()).ToList();
-            var quellen = g.Knoten.Where(k => k.Funktion.Lausche != null).ToList();
-            g.Quelle = quellen.FirstOrDefault();
-            if (quellen.Count > 1)
-                g.Fehler.Add(($"der Graph hat {quellen.Count} Quellknoten ({string.Join(", ", quellen.Select(k => k.Name))}) — eine Quelle je Graph: sie ist sein Kopf",
-                    quellen[1].Ort));
-            if (g.Quelle != null && g.Koepfe.Count > 0)
-                g.Fehler.Add(($"der Graph hat den Quellknoten {g.Quelle.Name} und dazu Köpfe ({string.Join(", ", g.Koepfe.Select(k => k.Typ.Name))}) — ein Graph "
-                    + "mit Quelle hat sonst keinen Kopf (was von draußen kommt, nimmt ein eigener Graph)", g.Quelle.Ort));
-            if (g.Knoten.Count > 0 && g.Koepfe.Count == 0 && g.Quelle == null)
-                g.Fehler.Add(("der Graph hat keinen Kopf und keine Quelle — von außen nimmt nur ein Knoten mit [Kopf]", OrtVon(t)));
+            if (g.Knoten.Count > 0 && g.Koepfe.Count == 0)
+                g.Fehler.Add(("der Graph hat keinen Kopf — von außen nimmt nur ein Knoten mit [Kopf]; was eine Quelle meldet, gibt ihr Akteur an einen Kopf",
+                    OrtVon(t)));
 
             var kreis = Kreis(g);
             if (kreis != null)
@@ -221,6 +212,12 @@ namespace Infrastructure.SourceGeneration
                 {
                     g.Fehler.Add(($"der Knoten '{p.Name}' ist eine Übersetzung ({u.Name}) — eine Übersetzung ist kein Knoten eines Graphen: der Graph bleibt "
                         + "domänenneutral, die Übersetzung lebt in der Domäne und nimmt seine Nachricht nach ihrem Typ", pOrt));
+                    continue;
+                }
+                if (p.Type is INamedTypeSymbol q && Funktionsform.IstQuellart(q))
+                {
+                    g.Fehler.Add(($"der Knoten '{p.Name}' ist eine Quellart ({q.Name}) — eine Quellart ist kein Knoten eines Graphen: sie läuft als Eingang eines "
+                        + "Clients, und was sie meldet, gibt ihr Akteur über eine Übersetzung an einen Kopf", pOrt));
                     continue;
                 }
                 if (p.Type is INamedTypeSymbol gg && IstGraph(gg))
@@ -332,18 +329,11 @@ namespace Infrastructure.SourceGeneration
             foreach (var glied in s.Glieder)
             {
                 var ports = Eingaenge(glied);
-                if (glied.Knoten is { Funktion.Lausche: not null })
-                {
-                    if (glied.Kopf || glied.Von.Count > 0)
-                        g.Fehler.Add(($"'{glied.Name}' ist eine Quelle (sie lauscht) und trägt {(glied.Kopf ? "[Kopf]" : "[Von]")} — eine Quelle nimmt nichts: "
-                            + "sie trägt weder [Kopf] noch [Von], die Knoten hinter ihr nennen sie mit [Von]", glied.Ort));
-                    continue;
-                }
                 if (!glied.Kopf && glied.Von.Count == 0)
                 {
                     if (ports.Count > 0)
                         g.Fehler.Add(($"der Knoten '{glied.Name}' trägt weder [Kopf] noch [Von] — ein Knoten nimmt von außen ([Kopf]) oder von Knoten "
-                            + "desselben Graphen ([Von(nameof(…))]); nur eine Quelle trägt keins von beiden", glied.Ort));
+                            + "desselben Graphen ([Von(nameof(…))])", glied.Ort));
                     continue;
                 }
                 var gespeist = new HashSet<Funktionsform.Port>();
@@ -438,18 +428,7 @@ namespace Infrastructure.SourceGeneration
                     foreach (var an in antworten) Nimm(an);
                 k.Operationen.Add(op);
             }
-            if (form.Lausche is { } l)
-            {
-                // Die Quelle: eine Operation ohne Ports; jedes Element startet einen Lauf (kein Unterlauf — es ist der Kopf).
-                var op = new Operation { Knoten = k, Auf = l, Nummer = form.Aufs.Count };
-                foreach (var x in l.Ausgaben)
-                {
-                    op.Ausgaben.Add(x);
-                    if (l.Wahl) op.Wahlen.Add(V(x));
-                }
-                k.Operationen.Add(op);
-            }
-            foreach (var x in form.Aufs.Concat(form.Lausche != null ? new[] { form.Lausche } : new Funktionsform.Auf[0]).SelectMany(a => a.Ausgaben))
+            foreach (var x in form.Aufs.SelectMany(a => a.Ausgaben))
                 if (!k.Ausgaben.Any(y => V(y) == V(x))) k.Ausgaben.Add(x);
             return k;
         }

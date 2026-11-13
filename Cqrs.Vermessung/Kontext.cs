@@ -81,13 +81,21 @@ internal sealed class Umgebungsdatei
     public int EinblickPort => (int)Json["Transport"]!["EinblickPort"]!;
     public int GrpcPort => (int)Json["Transport"]!["GrpcPort"]!;
     public string Python => Ersetze((string?)Json["Umgebung"]!["Python"] ?? "python3");
-    /// <summary>Das Verzeichnis des Dateiwächters (Wert <c>Pfad</c> am Knoten <c>Eingang</c> einer Instanz des Linienimports).</summary>
-    public string? Quellpfad => Instanzen.Values.Select(i => i["Eingang"]?["Pfad"]).FirstOrDefault(p => p != null) is { } p ? Ersetze((string)p!) : null;
+    /// <summary>
+    /// Das Verzeichnis des Dateiwächters: der Wert <c>Pfad</c> des ersten Eingangs eines Clients mit Art <c>Dateiwaechter</c>
+    /// (<c>Clients:&lt;Name&gt;:Eingaenge:&lt;eingang&gt;</c>, nach Client und Eingang geordnet); null ohne einen solchen Eingang.
+    /// </summary>
+    public string? Quellpfad =>
+        (Json["Clients"] as JsonObject ?? []).OrderBy(c => c.Key, StringComparer.Ordinal)
+            .SelectMany(c => (c.Value?["Eingaenge"] as JsonObject ?? []).OrderBy(e => e.Key, StringComparer.Ordinal))
+            .Select(e => e.Value)
+            .Where(e => (string?)e?["Art"] == "Dateiwaechter")
+            .Select(e => (string?)e?["Pfad"]).FirstOrDefault(p => p != null) is { } p ? Ersetze(p) : null;
     /// <summary>Die Instanzen der Graphen (Ordner <c>graphen</c> der Umgebung): Name → Inhalt.</summary>
     public Dictionary<string, JsonNode> Instanzen { get; init; } = new();
 
     /// <summary>Der Ausgabe-Pfad der Bildaufbereitung (Wert <c>AusgabePfad</c> ihres Knotens <c>Verkleinern</c>).</summary>
-    public string? Ausgabepfad => Instanzen.Values.Select(i => i["Aufbereitung.Verkleinern"]?["AusgabePfad"] ?? i["Verkleinern"]?["AusgabePfad"])
+    public string? Ausgabepfad => Instanzen.Values.Select(i => i["Verkleinern"]?["AusgabePfad"])
         .FirstOrDefault(p => p != null) is { } p ? Ersetze((string)p!) : null;
 
     public static Umgebungsdatei Lies(string wurzel, string name)

@@ -83,7 +83,7 @@ public sealed class SlotInventar
                 foreach (var auf in Projektionsform.LiesProjektion(t).Aufs) Add("projektion", t, auf.Methode, null);
             if (Projektionsform.IstReader(t))
                 foreach (var frage in Projektionsform.LiesReader(t).Fragen) Add("reader", t, frage.Methode, null);
-            // Funktion (IFunktion, eine Klasse in einem Katalog): je Auf ein Slot (Disc = der Eingang), dazu Lausche bei einer Quelle. Ein Auf, das die
+            // Funktion (IFunktion, eine Klasse in einem Katalog): je Auf ein Slot (Disc = der Eingang). Ein Auf, das die
             //   Funktionsform (noch) nicht annimmt, ist trotzdem ein Rumpf — er steht als Slot da, den Fehler meldet der Build.
             if (t.TypeKind == TypeKind.Class && Funktionsform.IstFunktion(t))
             {
@@ -92,8 +92,11 @@ public sealed class SlotInventar
                 foreach (var m in t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>()
                              .Where(m => m.MethodKind == MethodKind.Ordinary && m.Parameters.Length > 0 && !Slots.Any(s => SymbolEqualityComparer.Default.Equals(s.Methode, m))))
                     Add("funktion", t, m, null, m.Parameters[0].Type.Name);
-                if (form.Lausche is { } l) Add("funktion", t, l.Methode, null, Abstractions.Funktionsvertrag.Lausche);
             }
+            // Quellart (IQuellart, docs/04 §4.7): ihr Lausche ist ein Rumpf wie ein Auf (Disc = Lausche) — eine Klasse des Katalogs, nie ein Knoten.
+            if (t.TypeKind == TypeKind.Class && Funktionsform.IstQuellart(t)
+                && t.GetMembers(Abstractions.Funktionsvertrag.Lausche).OfType<IMethodSymbol>().FirstOrDefault(m => m.MethodKind == MethodKind.Ordinary) is { } lausche)
+                Add("funktion", t, lausche, null, Abstractions.Funktionsvertrag.Lausche);
             foreach (var m in Methoden(t))
             {
                 var p0 = m.Parameters.FirstOrDefault()?.Type;

@@ -242,12 +242,12 @@ public sealed class WerkbankServer
             }
             else Schritt(schritte, new Schritt("Daten prüfen", true, 0, [altProto == null ? "kein gespeicherter Stand (neue oder übernommene Sim-DB) — der neue gilt ab dem Start" : "kein domain.proto"]));
 
-            // 5 Infrastruktur — dazu die Verzeichnisse der Datei-Quellen: der Treiber sähe ein fehlendes erst nach seinem Backoff (bis ≈ 30 s).
+            // 5 Infrastruktur — dazu die Verzeichnisse der Dateiwächter der Eingänge: der Dateiwächter sähe ein fehlendes erst nach seiner Pause (bis ≈ 1 min).
             Beginne("Infrastruktur");
             var infra = await Infra.StarteAsync(name, u, ct);
-            var verzeichnisse = QuellVerzeichnisseAnlegen(name);
+            var verzeichnisse = EingangsVerzeichnisseAnlegen(name);
             Schritt(schritte, new Schritt("Infrastruktur", infra.Ok, 0,
-                verzeichnisse.Count > 0 ? [.. infra.Meldungen, $"Quell-Verzeichnis(se) angelegt: {string.Join(", ", verzeichnisse)}"] : infra.Meldungen));
+                verzeichnisse.Count > 0 ? [.. infra.Meldungen, $"Verzeichnis(se) der Eingänge angelegt: {string.Join(", ", verzeichnisse)}"] : infra.Meldungen));
             if (!infra.Ok) return Ende(false, diagnosen);
 
             // 6 Host ersetzen. Den Proto-Stand der Daten schreibt der Host beim Start selbst (UmgebungsSiegel, jede Umgebung).
@@ -319,17 +319,17 @@ public sealed class WerkbankServer
     }
 
     /// <summary>
-    /// Legt je Quelle mit <c>Quellen:&lt;Typ&gt;:Pfad</c> der Sim-Umgebung das Verzeichnis an, falls es fehlt (nur Sim; der Datei-Treiber bleibt, wie er
-    /// ist). Gibt die angelegten Quellen zurück.
+    /// Legt je Eingang eines Clients mit einem Dateiwächter (<c>Clients:&lt;Client&gt;:Eingaenge:&lt;eingang&gt;:Pfad</c>) das Verzeichnis an, falls es fehlt
+    /// (der Dateiwächter selbst legt nichts an). Gibt die Eingänge (<c>Client/Eingang</c>) zurück, deren Verzeichnis neu ist.
     /// </summary>
-    public List<string> QuellVerzeichnisseAnlegen(string umgebung)
+    public List<string> EingangsVerzeichnisseAnlegen(string umgebung)
     {
         var angelegt = new List<string>();
-        foreach (var (typ, pfad) in Umgebungen.QuellPfade(umgebung))
+        foreach (var (eingang, pfad) in Umgebungen.EingangsPfade(umgebung))
         {
             if (Directory.Exists(pfad)) continue;
             Directory.CreateDirectory(pfad);
-            angelegt.Add(typ);
+            angelegt.Add(eingang);
         }
         return angelegt;
     }

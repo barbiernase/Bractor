@@ -136,7 +136,20 @@ Baut erst wieder als Ganzes; in dieser Reihenfolge:
    Katalog-Modal entfällt.
 8. **Tests:** der Garantie-Test aus Schritt 1 bleibt grün; dazu Gegendruck bei voller Grenze und mehrere Eingänge eines Clients nebeneinander.
 
-### Schritt 4 — Werkbank: Sicht und Editor
+**Stand Schritt 3 (2026-11-13, lokal gebaut, Tests noch nicht auf dem Server):** umgesetzt wie oben, mit diesen Abweichungen und Lücken:
+- Quellarten stehen weiter in der generierten Tabelle der Bausteine (`GeneratedFunktionsBausteine`, mit `Lausche` und `Meldet`) statt in einer eigenen
+  Tabelle — so aktiviert der Läufer sie über dieselbe `FunktionsAktivierung` (Konfig, Zustand, Technik). Die Lesart unterscheidet sie (`IstQuellart`).
+- Gegendruck ohne neue Spalte: der Läufer merkt sich die Kennungen seiner offenen Eingänge und fragt `cqrs_eingaenge`, welche noch offen sind
+  (`NochOffenAsync`).
+- Die Bildaufbereitung behält in prod, multinode und vermessung ihren Rechner (die Vorschauen liegen im Dateisystem des Hosts).
+- Die Übersetzung `DateiGefunden_LiesBild_1` liegt bei den Akteuren; die Leitung kennt `DateiGefunden`, `Takt`, `Aufruf` nicht mehr (Codegen neu).
+- Zwei Graphen ohne Bedeutung im Katalog Bildvorschau (`BildvorschauKette`, `BildvorschauKette2`, Überbleibsel aus Werkbank-Gesten) sind entfernt —
+  mit dem Kopf `LiesBild` hätte der Command drei Empfänger gehabt.
+- Offen: die Kennung von `DateiGefunden` ist fest relativer Pfad, Größe, letzte Änderung (nicht nach `Kennung` der Konfig); `AkteurAnteile` rechnet den
+  Akteur nicht über Übersetzungen hinweg (war vorher schon so, ist jetzt sichtbarer); `build.sh` schreibt noch eine veraltete `umgebung.linux.json`;
+  das Formular der Werkbank zeigt Eingänge vorerst als JSON-Feld; der Webhook ist unverändert (Schritt 5).
+
+### Schritt 4 — Werkbank: Sicht und Editor (umgesetzt)
 
 - **Sicht** (Server, W3): je Akteur seine Verwirklichungen (Quellarten mit Übersetzung, App = Vertrag); je Client seine Eingänge aus der Umgebung
   (`rahmen.umgebungen`); je Graph seine Instanz mit Strängen — der Editor filtert nichts mehr selbst (heute die Instanz-Chips).
@@ -150,6 +163,18 @@ Baut erst wieder als Ganzes; in dieser Reihenfolge:
 - **Katalog-Modal:** Quellen verschwinden; „gewählt in …“ einer Technik rechnet der Server aus `KnotenKonfig.Technik` der Instanzen (heute liest der
   Editor einen Abschnitt, den es nicht mehr gibt).
 - Abnahme: `Werkbank.Abnahme.Tests` und im Browser.
+
+**Stand Schritt 4 (2026-11-13, lokal gebaut und im Browser geprüft, Abnahme-Tests nicht gelaufen):** umgesetzt — die Spalte Clients der Fläche
+(`Sicht.Clients.cs`, `flaeche.eingaenge` je Umgebung mit den Befunden des Starts, Kante Eingang → Port der Nachricht am Akteur), „＋ Eingang“ an der
+Client-Karte, das Formular eines Eingangs (Schema `/api/werkbank/eingangschema`, Gesten `/api/werkbank/eingang/<umgebung>/<client>/<eingang>`), im
+Modal die Verwirklichungen eines Akteurs in der Spalte Herkunft samt „＋ Verwirklichung“ und ✕ mit Löschplan, im Host-Rahmen statt des JSON-Felds ein
+Verweis auf die Fläche; docs/10 §10.9 und E4 nachgezogen. Abweichungen und Offenes:
+- Die Client-Karte steht auf der Höhe der Gruppe des Clients; ein Akteur, den zwei Clients verkörpern, steht weiter nur in der Gruppe des ersten — die
+  Kante vom Eingang des zweiten läuft dorthin.
+- Die Befunde der Eingänge zeigt die Fläche (⚠ an der Zeile); in `--check` gehen nur Kanten, die ins Leere zeigen, nicht die Konfig-Befunde.
+- Die Felder einer Meldung des Frameworks kennt die Sicht nur über eine vorhandene Übersetzung (ohne sie ordnet „＋ Verwirklichung“ nichts vor).
+- Die Instanz an der Graph-Karte zeigt weiter der Chip (die Stränge stehen im Formular); das Katalog-Modal („gewählt in …“) ist unverändert.
+- `Werkbank.Abnahme.Tests` nicht gelaufen (Tests nur auf dem Server, nach Rückfrage).
 
 ### Schritt 5 — Webhook als Eingang
 

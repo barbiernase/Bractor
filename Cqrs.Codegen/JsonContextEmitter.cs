@@ -158,9 +158,9 @@ public static class JsonContextEmitter
             }
         }
 
-        // Die Zustände der Katalogfunktionen (Core/Katalog): eine Domäne nennt sie als Knoten, ihr Zustand wird wie jeder gesichert.
+        // Die Zustände der Funktionen und Quellarten außerhalb der Domäne (Kataloge, Core/Katalog): ihr Zustand wird wie jeder gesichert.
         foreach (var asm in huelle.Except(domainAssemblies))
-            foreach (var t in ConcreteClasses(asm).Where(t => t.GetInterfaces().Any(i => i.FullName == "Abstractions.IFunktion")))
+            foreach (var t in ConcreteClasses(asm).Where(t => t.GetInterfaces().Any(i => i.FullName is "Abstractions.IFunktion" or "Abstractions.IQuellart")))
                 foreach (var c in t.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
                     foreach (var p in c.GetParameters())
                         if (p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition().FullName == Abstractions.Funktionsvertrag.Zustand)

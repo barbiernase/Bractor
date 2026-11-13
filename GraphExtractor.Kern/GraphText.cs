@@ -37,9 +37,8 @@ public static class GraphText
         b.AppendLine("Knoten:");
         var breite = g.Knoten.Select(k => k.Name.Length).DefaultIfEmpty(0).Max();
         foreach (var k in g.Knoten)
-            b.AppendLine($"  {k.Name.PadRight(breite)}  {N(k.Typ)}{(k == g.Quelle ? "  (Quelle: lauscht, je Element ein Lauf)" : "")}");
+            b.AppendLine($"  {k.Name.PadRight(breite)}  {N(k.Typ)}");
         b.AppendLine("Köpfe:");
-        if (g.Quelle != null) b.AppendLine($"  {g.Quelle.Name} (Quelle)");
         foreach (var (typ, knoten) in g.Koepfe) b.AppendLine($"  {N(typ)} → {string.Join(", ", knoten.Select(k => k.Name))}");
         b.AppendLine("Kanten:");
         foreach (var k in g.Kanten)
@@ -49,9 +48,9 @@ public static class GraphText
         }
         b.AppendLine("Verlässt den Graphen:");
         foreach (var (von, typ) in g.Ausgaenge) b.AppendLine($"  {von.Name} ─{N(typ)}─▶");
-        // Die Signatur: was der Graph nimmt (seine Köpfe; eine Quelle nimmt nichts, sie meldet) → alles, was ihn verlässt.
-        var ein = g.Quelle != null ? g.Quelle.Funktion.Lausche?.Ausgaben.Select(N) ?? [] : g.Koepfe.Select(k => N(k.Typ));
-        b.AppendLine($"Signatur: {(g.Quelle != null ? "Quelle " : "")}{string.Join(" | ", ein.DefaultIfEmpty("—"))} → "
+        // Die Signatur: was der Graph nimmt (seine Köpfe — eine Quelle ist nie ein Knoten, ihr Akteur gibt an einen Kopf) → alles, was ihn verlässt.
+        var ein = g.Koepfe.Select(k => N(k.Typ));
+        b.AppendLine($"Signatur: {string.Join(" | ", ein.DefaultIfEmpty("—"))} → "
                      + string.Join(" | ", g.Ausgaenge.Select(a => N(a.Typ)).Distinct().DefaultIfEmpty("—")));
         if (g.Fehler.Count > 0)
         {

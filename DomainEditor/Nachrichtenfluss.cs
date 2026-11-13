@@ -86,6 +86,13 @@ public sealed class Nachrichtenfluss
         foreach (var ap in m.Applier.Where(a => a.Aggregat.Length > 0))
             K(N(ap.Event, null, null), B("agg", Grammatik.Aggregat, ap.Aggregat, aggNs.GetValueOrDefault(ap.Aggregat)), ap.Event);
 
+        // Quellart (docs/04 §4.7): Quellart → was sie meldet (nur die Signatur von Lausche); die des Frameworks liegen außerhalb der Anwendung.
+        foreach (var q in m.Quellarten.Where(q => !q.Framework))
+        {
+            var qid = B("qa", Grammatik.Quellart, q.Name, q.Namespace);
+            foreach (var x in q.Meldet) K(qid, N(x, Grammatik.Meldung, q.Namespace));
+        }
+
         // Funktion: je Auf Eingang → Funktion → Ausgaben (nur die Signatur); der Handle ist der Eingang.
         foreach (var f in m.BausteinFunktionen)
         {
@@ -154,15 +161,15 @@ public sealed class Nachrichtenfluss
                 else K(aid, N(d, null, null));
         }
 
-        // Außenwelt: Commands/Queries ohne internen Erzeuger (Client), Quell-Nachrichten (Treiber oder Client).
+        // Außenwelt: Commands/Queries ohne internen Erzeuger (Client), Meldungen ohne Quellart der Anwendung.
         foreach (var n in knoten.Values.Where(n => n.Art == "nachricht").ToList())
         {
             var erzeugt = kanten.Any(k => k.Nach == n.Id);
             var aussen = n.Sorte switch
             {
                 Grammatik.Command or Grammatik.Query => !erzeugt,
-                // Eine Quell-Nachricht kommt immer von außen: vom Treiber oder vom Webhook der Umgebung (Quellen:<Typ>, docs/06 §6.6).
-                Grammatik.Quelle => true,
+                // Eine Meldung ohne Quellart der Anwendung (eine des Frameworks) kommt von außen.
+                Grammatik.Meldung => !erzeugt,
                 _ => false,
             };
             if (!aussen) continue;

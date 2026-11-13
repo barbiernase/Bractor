@@ -22,6 +22,8 @@ public record Mahnbetrag(Guid Vorgang, decimal Betrag) : ICommand;
 
 // SONDE — fremder Katalog, Teil Import (docs/04 §4.4): Dateiannahme und Zeilenimport domänenneutral — Import und Artikel sind Guids.
 
+/// <summary>Der Kopf der Dateiannahme: eine abgelegte Katalog-Datei ist anzunehmen (aus dem, was ein Dateiwächter meldet, übersetzt).</summary>
+public record NimmKatalogdateiAn(string Pfad, string RelativerPfad) : ICommand;
 public record Importieren(Guid Import, string Pfad) : ICommand;
 /// <summary>Der Kopf des Zeilenimports: die Anwendung hat den Import gestartet (aus ihrer Antwort übersetzt).</summary>
 public record KatalogBereit(Guid Import, string Pfad) : ICommand;
@@ -47,8 +49,10 @@ public record Ablehnen(Guid Benutzer, string Grund) : ICommand;
 // SONDE — fremder Katalog, Teil Messung (docs/04 §4.4): Messkette, Störungsöffnung und Alarmierung domänenneutral — Sensor und
 // Fall sind Guids.
 
-// Die Messkette: der rohe Wert aus der Quelle, der plausible, der geprüfte (ihr Ergebnis).
-public record Rohwert(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
+// Die Messkette: der Messwert an ihrem Kopf (aus dem Rohwert der Sensorabfrage übersetzt), der angenommene (in die Aufbereitung), der plausible, der
+// geprüfte (ihr Ergebnis).
+public record NimmMesswert(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
+public record Messwert(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
 public record Plausibel(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
 public record Geprueft(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
 

@@ -7,18 +7,19 @@ namespace GraphExtractor;
 //   dazu der Baukasten der Anwendung, aus dem man komponiert. Alles aus dem Board (Code-Fakten); der Editor zeichnet.
 public sealed partial class Sicht
 {
-    /// <summary>Die Ports eines Knotens: was er nimmt und was er ausgibt (Funktion: Auf/Lausche; Graph: Köpfe/Ausgänge; Katalog: was er meldet).</summary>
+    /// <summary>
+    /// Die Ports eines Knotens: was er nimmt und was er ausgibt (Funktion: je Auf Eingang und Ausgaben; Graph: Köpfe/Ausgänge). Eine Quellart ist kein
+    /// Knoten (CQRS115): steht sie doch im Record, bleibt sie ohne Ports mit ihrer Art, damit der Editor sie als Fehler zeigt.
+    /// </summary>
     private (List<string> Ein, List<string> Aus, string Art, string? Karte) KnotenPorts(string typ)
     {
         var basis = Basis(typ);
         if (BausteinFunktion(basis) is { } f)
             return (Alle(f["eingaenge"]).Select(e => S(e, "eingang")).Where(x => x.Length > 0).Distinct().ToList(),
-                Alle(f["eingaenge"]).SelectMany(e => L(e, "ausgaben")).Concat(L(f, "lauscht")).Distinct().ToList(), "funktion", "fb:" + S(f, "_id"));
+                Alle(f["eingaenge"]).SelectMany(e => L(e, "ausgaben")).Distinct().ToList(), "funktion", "fb:" + S(f, "_id"));
         if (GraphNamens(basis) is { } g)
             return (L(g, "koepfe").ToList(), L(g, "ausgaenge").ToList(), "graph", "gr:" + S(g, "_id"));
-        if (KatalogNamens(basis) is { } k)
-            return (Alle(k["eingaenge"]).Select(e => S(e, "eingang")).ToList(),
-                L(k, "lauscht").Concat(Alle(k["eingaenge"]).SelectMany(e => L(e, "ausgaben"))).Distinct().ToList(), "katalog", null);
+        if (QuellartNamens(basis) is { } q) return ([], [], "quellart", QuellartKarte(q));
         return ([], [], "fehlt", null);
     }
 
@@ -164,7 +165,7 @@ public sealed partial class Sicht
         var knoten = Alle(g["knoten"]).ToList();
         // Die Ports der Funktion bzw. des Graphen (eine Übersetzung ist kein Knoten: sie lebt in der Domäne).
         var ports = knoten.ToDictionary(k => S(k, "name"), k => KnotenPorts(S(k, "typ")), StringComparer.Ordinal);
-        // Tiefe in der Kette: 0 für Köpfe und Quellen, sonst eins mehr als die tiefste Quelle in [Von] (kreisfrei, CQRS115; begrenzt zur Sicherheit).
+        // Tiefe in der Kette: 0 für Köpfe, sonst eins mehr als die tiefste Quelle in [Von] (kreisfrei, CQRS115; begrenzt zur Sicherheit).
         var tiefe = new Dictionary<string, int>(StringComparer.Ordinal);
         int Tiefe(string n, int rest)
         {
@@ -213,7 +214,7 @@ public sealed partial class Sicht
             var (ein, aus, art, karte) = ports[n];
             var o = new JsonObject
             {
-                ["name"] = n, ["typ"] = S(kn, "typ"), ["art"] = art, ["kopf"] = B(kn, "kopf"), ["quelle"] = Meldet(S(kn, "typ")).Count > 0,
+                ["name"] = n, ["typ"] = S(kn, "typ"), ["art"] = art, ["kopf"] = B(kn, "kopf"),
                 ["tiefe"] = Tiefe(n, knoten.Count),
                 ["von"] = new JsonArray(L(kn, "von").Select(v => (JsonNode)new JsonObject { ["knoten"] = v, ["verlierbar"] = L(kn, "verlierbar").Contains(v) }).ToArray()),
                 ["ein"] = Arr(ein), ["aus"] = Arr(aus),
@@ -236,17 +237,26 @@ public sealed partial class Sicht
             // Offen: ein Command ohne Ziel, den der Graph ausgibt und den keine Übersetzung nimmt — er braucht einen Empfänger (CQRS120).
             ["offen"] = Arr(L(g, "ausgaenge").Where(t => Sorte(t) == "command" && RecordAgg(Basis(t)).Length == 0
                 && !_uebersetzungen.Any(u => Basis(S(u, "ein")) == Basis(t)))),
-            // Die Quellen aus dem Katalog des Frameworks, deren Meldung ein Kopf des Graphen nimmt.
-            ["quellen"] = new JsonArray(Alle(_board["katalog"]).Where(k => L(k, "lauscht").Any(m => L(g, "koepfe").Any(t => Basis(t) == Basis(m))))
-                .Select(k => (JsonNode)new JsonObject { ["name"] = S(k, "name"), ["meldet"] = Arr(L(k, "lauscht")) }).ToArray()),
+            // Wer an die Köpfe gibt: die Akteure, die einen Kopf-Command dürfen, und je Übersetzung der Akteur-Seite auf einen Kopf die Quellart, die ihn
+            //   so verwirklicht (Meldung ↦ Kopf-Command) — eine Quelle ist kein Knoten, sie gibt über ihren Akteur hinein.
+            ["geben"] = new JsonArray(L(g, "koepfe").Select(t => (JsonNode)new JsonObject
+            {
+                ["typ"] = t,
+                ["akteure"] = Arr(_akteure.Where(a => L(a, "darf").Contains(Basis(t))).Select(a => S(a, "name"))),
+                ["verwirklichungen"] = new JsonArray(Verwirklichungen.Where(u => Basis(S(u, "aus")) == Basis(t)).Select(u => (JsonNode)new JsonObject
+                {
+                    ["uebersetzung"] = S(u, "name"), ["karte"] = "ue:" + S(u, "_id"), ["meldung"] = S(u, "ein"),
+                    ["quellarten"] = Arr(MeldendeQuellarten(Basis(S(u, "ein"))).Select(q => S(q, "name"))),
+                }).ToArray()),
+            }).ToArray()),
         };
     }
 
     /// <summary>
     /// Der Baukasten der Anwendung (<c>board.sicht.baukasten</c>): Funktionen (mit Verwendung in Graphen, den Typargumenten generischer und ihrem
-    /// Katalog — <c>null</c> = in der Anwendung), die Kataloge, die die Anwendung nutzt, Graphen, der Katalog des Frameworks (Quellen), Technik (mit
-    /// Umsetzungen und Nutzern), Konfig-Records und die Nachrichten, die Funktionen ausgeben (Commands ohne Ziel und Hinweise, deren Besitzer eine
-    /// Funktion ist).
+    /// Katalog — <c>null</c> = in der Anwendung), die Kataloge, die die Anwendung nutzt, Graphen, die Quellarten (der Anwendung und des Frameworks: was
+    /// sie melden, ihre Konfig und welche Akteure sie über eine Übersetzung der Akteur-Seite verwirklichen), Technik (mit Umsetzungen und Nutzern),
+    /// Konfig-Records und die Nachrichten, die Funktionen ausgeben (Commands ohne Ziel und Hinweise, deren Besitzer eine Funktion ist).
     /// </summary>
     public JsonObject Baukasten()
     {
@@ -257,7 +267,7 @@ public sealed partial class Sicht
         {
             var o = new JsonObject
             {
-                ["karte"] = "fb:" + S(f, "_id"), ["name"] = S(f, "name"), ["quelle"] = L(f, "lauscht").Any(),
+                ["karte"] = "fb:" + S(f, "_id"), ["name"] = S(f, "name"),
                 ["verwendet"] = Arr(Verwendet(S(f, "name"))), ["katalog"] = Abstractions.Projektstruktur.KatalogVon(S(f, "namespace")),
             };
             if (Typargumente(S(f, "name")).ToList() is { Count: > 0 } ta) o["typargumente"] = Arr(ta);
@@ -267,21 +277,34 @@ public sealed partial class Sicht
         {
             ["karte"] = "gr:" + S(g, "_id"), ["name"] = S(g, "name"), ["verwendet"] = Arr(Verwendet(S(g, "name")).Where(x => x != "gr:" + S(g, "_id"))),
         }).ToArray());
-        var katalog = new JsonArray(Alle(_board["katalog"]).Select(k => (JsonNode)new JsonObject
+        var quellarten = new JsonArray(_quellarten.Select(q =>
         {
-            ["name"] = S(k, "name"), ["meldet"] = Arr(L(k, "lauscht")), ["konfig"] = Arr(Alle(k["konfigs"]).Select(c => S(c, "record"))),
+            var o = new JsonObject
+            {
+                ["name"] = S(q, "name"), ["meldet"] = Arr(Meldet(q)), ["konfig"] = Arr(Alle(q["konfigs"]).Select(c => S(c, "record"))),
+                ["framework"] = B(q, "framework"),
+                ["verwirklicht"] = new JsonArray(Verwirklicht(q).Select(x => (JsonNode)new JsonObject
+                {
+                    ["akteur"] = S(x.Akteur, "name"), ["uebersetzungen"] = Arr(x.Uebersetzungen.Select(u => S(u, "name"))),
+                }).ToArray()),
+            };
+            if (QuellartKarte(q) is { } karte) o["karte"] = karte;
+            if (S(q, "katalog") is { Length: > 0 } kat) o["katalog"] = kat;
+            if (S(q, "zustand") is { Length: > 0 } z) o["zustand"] = z;
+            return (JsonNode)o;
         }).ToArray());
         var technik = new JsonArray(_bausteinFunktionen.Where(IstGerufen).Select(t => (JsonNode)new JsonObject
         {
             ["karte"] = "fb:" + S(t, "_id"), ["name"] = S(t, "name"),
             ["umsetzungen"] = Arr(Alle(t["umsetzungen"]).Select(u => S(u, "name"))),
-            ["genutztVon"] = Arr(GerufenNutzer(t).Select(f => "fb:" + S(f, "_id"))),
+            ["genutztVon"] = Arr(GerufenNutzer(t).Select(f => "fb:" + S(f, "_id")).Concat(QuellartNutzer(t).Select(q => "qa:" + S(q, "_id")))),
         }).ToArray());
-        var konfig = new JsonArray(_bausteinFunktionen.SelectMany(f => Alle(f["konfigs"]).Select(c => (Record: S(c, "record"), Felder: c["felder"], F: f)))
+        var konfig = new JsonArray(_bausteinFunktionen.SelectMany(f => Alle(f["konfigs"]).Select(c => (Record: S(c, "record"), Felder: c["felder"], Karte: "fb:" + S(f, "_id"))))
+            .Concat(_quellarten.Where(q => !B(q, "framework")).SelectMany(q => Alle(q["konfigs"]).Select(c => (Record: S(c, "record"), Felder: c["felder"], Karte: "qa:" + S(q, "_id")))))
             .GroupBy(x => x.Record, StringComparer.Ordinal).Select(x => (JsonNode)new JsonObject
             {
                 ["name"] = x.Key, ["felder"] = Arr(Alle(x.First().Felder).Select(fe => S(fe, "feld"))),
-                ["genutztVon"] = Arr(x.Select(y => "fb:" + S(y.F, "_id")).Distinct()),
+                ["genutztVon"] = Arr(x.Select(y => y.Karte).Distinct()),
             }).ToArray());
         var nachrichten = new JsonArray();
         foreach (var r in _records.Where(r => S(r, "kind") is "command" or "rejection"))
@@ -290,7 +313,7 @@ public sealed partial class Sicht
         var kataloge = Arr(KatalogNamen());
         return new JsonObject
         {
-            ["funktionen"] = funktionen, ["kataloge"] = kataloge, ["graphen"] = graphen, ["katalog"] = katalog, ["technik"] = technik, ["konfig"] = konfig,
+            ["funktionen"] = funktionen, ["kataloge"] = kataloge, ["graphen"] = graphen, ["quellarten"] = quellarten, ["technik"] = technik, ["konfig"] = konfig,
             ["nachrichten"] = nachrichten,
         };
     }

@@ -171,6 +171,8 @@ public sealed partial class Sicht
                 foreach (var a in _akteure.Where(a => L(a, "darf").Contains(name))) Add([S(a, "name")]);
                 foreach (var e in Alle(r["eingaenge"])) Add(MengeListe(S(e, "eingang")));
                 break;
+            // Eine Quellart: die Akteure, die sie über eine Übersetzung der Akteur-Seite verwirklichen kann.
+            case "quellart": foreach (var (a, _) in Verwirklicht(r)) Add([S(a, "name")]); break;
             case "projektion": Add(ProjektionAkteure(r)); break;
             case "store": Add(StoreAkteure(r)); break;
             case "fn": { var l = FnLeser(S(r, "_id")); Add(l.Count > 0 ? l : StoreAkteure(n.Besitzer!.Ref)); break; }

@@ -37,6 +37,12 @@ public sealed record EditorModell
     /// </summary>
     public IReadOnlyList<BausteinFunktion> BausteinFunktionen { get; init; } = [];
     /// <summary>
+    /// Quellarten (<c>IQuellart</c>, docs/04 §4.7): Klassen mit <c>Lausche</c>, die je Element eine Meldung (<c>IMeldung</c>) melden — die der Anwendung
+    /// (in einem Katalog) und die des Frameworks (<see cref="Quellart.Framework"/>, nur gelesen). Nie ein Knoten eines Graphen: ein Akteur verwirklicht
+    /// sich mit ihr über eine Übersetzung der Akteur-Seite, laufen tut sie als Eingang eines Clients in der Umgebung.
+    /// </summary>
+    public IReadOnlyList<Quellart> Quellarten { get; init; } = [];
+    /// <summary>
     /// Akteure (<c>docs/konzept-akteure.md</c>): wer draußen steht — je Akteur, was er hineingibt (<c>IDarf&lt;T&gt;</c>: Commands, Queries,
     /// Hinweise) und was zu ihm kommt (<c>IHoert&lt;T&gt;</c>: ein Command ohne Ziel ist Arbeit, ein Event oder Hinweis Kenntnis).
     /// </summary>
@@ -90,8 +96,9 @@ public static class RecordArt
     public const string Antwort = "queryresponse";  // : IQueryResponse → Responses.cs
     public const string ReadModel = "readmodel";    // : IReadModel → ReadModels.cs
     public const string Konfig = "konfig";          // reiner Record, per Ctor in eine Funktion bzw. ihre Umsetzung injiziert → Konfigs.cs
+    public const string Meldung = "meldung";        // : IMeldung — was eine Quellart meldet (kein Command) → Meldungen.cs im Katalog
 
-    public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject, Query, Antwort, ReadModel, Konfig];
+    public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject, Query, Antwort, ReadModel, Konfig, Meldung];
 }
 
 /// <summary>
@@ -275,9 +282,9 @@ public sealed record ApplyRegel
 }
 
 /// <summary>
-/// Eine Funktion (eine Klasse mit typisierten Ports, Entscheidung 4) — mit Eingängen (je <c>Auf</c> die Signatur) oder als Quelle (<c>Lausche</c>,
-/// <see cref="Lauscht"/>); oder Technik (Schnittstelle oder Klasse im Konstruktor einer Funktion, ohne Marker): ihre <see cref="Methoden"/> und
-/// Umsetzungen.
+/// Eine Funktion (eine Klasse mit typisierten Ports, Entscheidung 4) — mit Eingängen (je <c>Auf</c> die Signatur); oder Technik (Schnittstelle oder
+/// Klasse im Konstruktor einer Funktion bzw. Quellart, ohne Marker): ihre <see cref="Methoden"/> und Umsetzungen. Eine Funktion lauscht nie — das
+/// tut eine <see cref="Quellart"/>.
 /// </summary>
 public sealed record BausteinFunktion
 {
@@ -294,9 +301,32 @@ public sealed record BausteinFunktion
     public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
     /// <summary>Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4): der einfache Name von T, sonst null.</summary>
     public string? Zustand { get; init; }
-    /// <summary>Eine Quellfunktion (<c>Lausche(CancellationToken)</c>, Entscheidung 8): was sie meldet (einfache Namen); leer = keine Quelle.</summary>
-    public IReadOnlyList<string> Lauscht { get; init; } = [];
     public string? Doku { get; init; }
+    public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel (<see cref="DomainEditor.Herkunft"/>): Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>
+/// Eine QUELLART (<c>public sealed class X(Konfig, IZustand&lt;T&gt;, Technik…) : IQuellart</c> mit <c>Lausche(CancellationToken)</c>, docs/04 §4.7): was sie
+/// meldet (<see cref="Meldet"/>, Meldungen mit <c>IMeldung</c>) und ihr Konstruktor. Sie liegt in einem Katalog (die des Frameworks in <c>Core/Katalog</c>),
+/// nie in einem Graphen; welche Akteure sie verwirklichen kann, folgt aus den Übersetzungen der Akteur-Seite.
+/// </summary>
+public sealed record Quellart
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    /// <summary>Was sie meldet (einfache Namen der Meldungen) — aus der Signatur von <c>Lausche</c>.</summary>
+    public IReadOnlyList<string> Meldet { get; init; } = [];
+    /// <summary>Konstruktor der Klasse: Konfig-Records (die Werte eines Eingangs), <c>IZustand&lt;T&gt;</c>, Technik, Logger.</summary>
+    public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
+    /// <summary>Was sie gesehen hat (<c>IZustand&lt;T&gt;</c> im Konstruktor): der einfache Name von T, sonst null.</summary>
+    public string? Zustand { get; init; }
+    /// <summary>Aus dem Framework (<c>Core/Katalog</c>): nur gelesen, ohne Karte; der Scaffolder schreibt sie nie.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Framework { get; init; }
+    public string? Doku { get; init; }
+    /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
     public string? Datei { get; init; }
     /// <summary>Herkunfts-Stempel (<see cref="DomainEditor.Herkunft"/>): Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
@@ -633,9 +663,7 @@ public sealed record Graph
     public IReadOnlyList<string> Ausgaenge { get; init; } = [];
     /// <summary>Abgeleitet: die Kanten aus den <c>Von</c> (aufgefaltete Knoten-Pfade, je Kante der Typ, den sie trägt).</summary>
     public IReadOnlyList<GraphKante> Kanten { get; init; } = [];
-    /// <summary>Abgeleitet: der Quellknoten (eine Funktion, die lauscht), oder null.</summary>
-    public string? Quelle { get; init; }
-    /// <summary>Die Namespaces der Knoten-Typen außerhalb der Domäne (z. B. <c>Core.Katalog</c> für eine Quellfunktion) — wie geschrieben.</summary>
+    /// <summary>Die Namespaces der Knoten-Typen außerhalb der Domäne (z. B. eines Katalogs) — wie geschrieben.</summary>
     public IReadOnlyList<string> Usings { get; init; } = [];
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
@@ -660,6 +688,12 @@ public sealed record Uebersetzung
     public IReadOnlyList<UebersetzungsFeld> Quellen { get; init; } = [];
     public IReadOnlyList<UebersetzungsZiel> Ziele { get; init; } = [];
     public IReadOnlyList<string> Fehler { get; init; } = [];
+    /// <summary>
+    /// Abgeleitet: eine Übersetzung der AKTEUR-SEITE — <see cref="Ein"/> ist die Meldung einer Quellart (<c>IMeldung</c>); sie verwirklicht einen Akteur
+    /// (macht aus der Meldung eine Nachricht, die er darf) und liegt bei den Akteuren (<c>&lt;Wurzel&gt;.Akteure/Uebersetzungen.cs</c>).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AkteurSeite { get; init; }
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
     public string? Datei { get; init; }

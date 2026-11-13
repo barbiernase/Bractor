@@ -85,7 +85,7 @@ public static class CqrsUmgebungExtensions
             o.BuendelGroesse = u.Schreibpfad.BuendelGroesse;
             o.Passivierung = Infrastructure.Lebenszyklus.Passivierung.Aus(u.Lebenszyklus);
             o.Konsum = Infrastructure.Projections.Konsum.Aus(u.Konsum);
-            o.EnableGrpc = anwendung.Nutzlast != null;   // gRPC nur mit Leitung; ohne bleiben JSON-Eingang und Quellfunktionen
+            o.EnableGrpc = anwendung.Nutzlast != null;   // gRPC nur mit Leitung; ohne bleiben JSON-Eingang und Eingänge aus Quellen
         });
         // Die Uhr der Umgebung (Versatz nur in Sim) ersetzt die nackte DB-Uhr — die letzte Registrierung gewinnt.
         s.AddSingleton<IDbClock>(_ => new UmgebungsDbClock(u));
@@ -96,7 +96,8 @@ public static class CqrsUmgebungExtensions
         s.AddBackendMonitoring();
         s.AddAkteure(builder.Configuration.GetSection(UmgebungsAbschnitte.Identitaeten));
         var instanzen = s.BindeGraphen(u);
-        s.BindeTechnik(instanzen);   // nach den Instanzen: gebunden wird, was die Umsetzungen ihrer Knoten brauchen
+        var eingaenge = s.BindeEingaenge(u);
+        s.BindeTechnik(instanzen, eingaenge);   // nach Instanzen und Eingängen: gebunden wird, was ihre Umsetzungen brauchen
         s.AddEinblick(u);
         return builder;
     }

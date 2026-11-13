@@ -18,6 +18,8 @@ namespace Infrastructure.SourceGeneration
     {
         private const string A = "Abstractions.";
         public const string IFunktion = A + "IFunktion";
+        public const string IQuellart = A + "IQuellart";
+        public const string IMeldung = A + "IMeldung";
 
         /// <summary>Der Eingang eines <c>Auf</c> (genau einer je Auf): Parametername und der Typ, den er nimmt.</summary>
         internal sealed class Port
@@ -75,10 +77,14 @@ namespace Infrastructure.SourceGeneration
             public bool IstAntwort(Auf a) => !a.Command;
 
             /// <summary>
-            /// Die Methode <c>Lausche(CancellationToken)</c> einer QUELLFUNKTION (docs/04 §4.7, Entscheidung 8) — ohne Ports, ihr Strom startet je Element
-            /// einen Lauf; null = keine Quelle. Sie steht nicht in <see cref="Aufs"/>; die Rechnung ruft sie unter der Nummer <c>Aufs.Count</c>.
+            /// Die Methode <c>Lausche(CancellationToken)</c> einer QUELLART (<c>IQuellart</c>, docs/04 §4.7) — ohne Ports, ihr Strom gibt je Element eine
+            /// Meldung (<c>IMeldung</c>); null = keine Quellart. Sie steht nicht in <see cref="Aufs"/>; die Rechnung ruft sie unter der Nummer
+            /// <c>Aufs.Count</c>.
             /// </summary>
             public Auf? Lausche;
+
+            /// <summary>Eine Quellart (<c>IQuellart</c>): sie lauscht und steht nie in einem Graphen; ihr Akteur gibt hinein, was sie meldet.</summary>
+            public bool Quellart;
         }
 
         /// <summary>Der Name einer Funktion (Baustein, Wirker, Spur): der Klassenname, bei einer generischen mit ihren Typargumenten
@@ -103,6 +109,16 @@ namespace Infrastructure.SourceGeneration
             return t.TypeKind == TypeKind.Class && !t.IsAbstract && !t.AllInterfaces.Any(i => Name(i) != IFunktion && Hat(i, IFunktion));
         }
 
+        /// <summary>
+        /// Ist <paramref name="t"/> eine QUELLART (<c>IQuellart</c>, docs/04 §4.7)? Eine konkrete Klasse mit <c>Lausche</c>: sie meldet, was sie draußen findet;
+        /// eine Übersetzung der Akteur-Seite macht daraus eine Nachricht, die der Akteur eines Eingangs darf. Nie ein Knoten eines Graphen.
+        /// </summary>
+        public static bool IstQuellart(INamedTypeSymbol t) =>
+            Name(t) != IQuellart && t.TypeKind == TypeKind.Class && !t.IsAbstract && Hat(t, IQuellart);
+
+        /// <summary>Ist <paramref name="t"/> eine Meldung einer Quellart (<c>IMeldung</c>)?</summary>
+        public static bool IstMeldung(ITypeSymbol t) => Name(t) != IMeldung && Hat(t, IMeldung);
+
         /// <summary>Hat <paramref name="t"/> eine Methode <c>Auf</c> (einen Eingang)?</summary>
         public static bool HatAuf(INamedTypeSymbol t) =>
             t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>().Any(m => m.MethodKind == MethodKind.Ordinary);
@@ -126,7 +142,7 @@ namespace Infrastructure.SourceGeneration
             var alle = typen.ToList();
             var klassen = alle.Where(k => k.TypeKind == TypeKind.Class && !k.IsAbstract).ToList();
             var m = new Technikmenge();
-            var offen = new Queue<INamedTypeSymbol>(klassen.Where(IstFunktion));
+            var offen = new Queue<INamedTypeSymbol>(klassen.Where(k => IstFunktion(k) || IstQuellart(k)));
             var besucht = new HashSet<string>();
             while (offen.Count > 0)
             {
@@ -190,10 +206,10 @@ namespace Infrastructure.SourceGeneration
         }
 
 
-        /// <summary>Liest die Form einer Funktion (<see cref="IstFunktion"/> vorausgesetzt).</summary>
+        /// <summary>Liest die Form einer Funktion bzw. einer Quellart (<see cref="IstFunktion"/> oder <see cref="IstQuellart"/> vorausgesetzt).</summary>
         public static Form Lies(INamedTypeSymbol t)
         {
-            var f = new Form { Typ = t };
+            var f = new Form { Typ = t, Quellart = Hat(t, IQuellart) };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
             // Eine Funktion ist eine Klasse im Host: was draußen gerechnet wird, rechnet ein Client, der auf ein Fakt reagiert (IHoert).
             if (t.TypeKind == TypeKind.Interface)
@@ -227,12 +243,21 @@ namespace Infrastructure.SourceGeneration
             foreach (var m in t.GetMembers(Abstractions.Funktionsvertrag.Lausche).OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary))
             {
                 var mOrt = m.Locations.FirstOrDefault() ?? ort;
-                if (f.Lausche != null) { f.Fehler.Add(("eine Quellfunktion lauscht genau einmal (ein Lausche)", mOrt)); continue; }
+                if (!f.Quellart)
+                {
+                    f.Fehler.Add(("eine Funktion lauscht nicht — was draußen gefunden wird, meldet eine Quellart (IQuellart); sie steht in keinem Graphen, "
+                        + "ihr Akteur gibt über eine Übersetzung hinein, was sie meldet", mOrt));
+                    continue;
+                }
+                if (f.Lausche != null) { f.Fehler.Add(("eine Quellart lauscht genau einmal (ein Lausche)", mOrt)); continue; }
                 f.Lausche = LiesLausche(m, mOrt, f.Fehler);
             }
-            if (f.Lausche != null && f.Aufs.Count > 0)
-                f.Fehler.Add(("eine Quellfunktion lauscht nur (Lausche) und nimmt keine Eingänge — was sie meldet, rechnet der nächste Knoten ihres Graphen",
-                    f.Aufs[0].Methode.Locations.FirstOrDefault() ?? ort));
+            if (f.Quellart && f.Aufs.Count > 0)
+                f.Fehler.Add(("eine Quellart lauscht nur (Lausche) und nimmt keine Eingänge — was sie meldet, übersetzt die Akteur-Seite in eine Nachricht "
+                    + "des Akteurs", f.Aufs[0].Methode.Locations.FirstOrDefault() ?? ort));
+            if (f.Quellart && f.Lausche == null && f.Fehler.Count == 0)
+                f.Fehler.Add(($"'{t.Name}' ist eine Quellart ohne {Abstractions.Funktionsvertrag.Lausche} — sie lauscht und meldet je Element eine Meldung "
+                    + "(IMeldung)", ort));
             // Eine Funktion liest nie das Log: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
             if (f.Aufs.Count > 0 && !f.MitEinstieg)
                 f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie nimmt einen Command (ohne Ziel); ein Event nur als "
@@ -255,13 +280,13 @@ namespace Infrastructure.SourceGeneration
             || t is INamedTypeSymbol { TypeKind: TypeKind.Class, IsAbstract: false, IsGenericType: true } g && Hat(g, A + "ICommand") && !Hat(g, A + "IAggregatCommand");
 
         /// <summary>
-        /// <c>IAsyncEnumerable&lt;T&gt; Lausche(CancellationToken ct)</c>: öffentlich, ein Abbruch als einziger Parameter, ein asynchroner Strom von Commands
-        /// ohne Ziel oder Hinweisen (auch als OneOf). Was sie meldet, steht vollständig in der Signatur.
+        /// <c>IAsyncEnumerable&lt;T&gt; Lausche(CancellationToken ct)</c>: öffentlich, ein Abbruch als einziger Parameter, ein asynchroner Strom von
+        /// Meldungen (<c>IMeldung</c>, auch als OneOf). Was sie meldet, steht vollständig in der Signatur.
         /// </summary>
         private static Auf? LiesLausche(IMethodSymbol m, Location ort, List<(string, Location)> fehler)
         {
-            const string form = "eine Quellfunktion lauscht so: public async IAsyncEnumerable<T> Lausche([EnumeratorCancellation] CancellationToken ct) — T ein "
-                + "Command ohne Ziel oder ein Hinweis (auch als OneOf)";
+            const string form = "eine Quellart lauscht so: public async IAsyncEnumerable<T> Lausche([EnumeratorCancellation] CancellationToken ct) — T eine "
+                + "Meldung (IMeldung: ein Record mit der Kennung seines Elements; auch als OneOf)";
             if (m.DeclaredAccessibility != Accessibility.Public || m.IsStatic || m.IsGenericMethod || m.Parameters.Length != 1
                 || Name(m.Parameters[0].Type) != "System.Threading.CancellationToken"
                 || m.ReturnType is not INamedTypeSymbol { IsGenericType: true } r || Name(r) != "System.Collections.Generic.IAsyncEnumerable`1")
@@ -275,7 +300,7 @@ namespace Infrastructure.SourceGeneration
             if (auf.Element is INamedTypeSymbol o && IstOneOf(o)) { auf.Abbildung = ".Value"; faelle = o.TypeArguments; }
             foreach (var x in faelle)
             {
-                if (x is not INamedTypeSymbol a || !(IstCommandOhneZiel(a) || Hat(a, A + "ITransientEvent")) || a.IsAbstract)
+                if (x is not INamedTypeSymbol a || !IstMeldung(a) || a.IsAbstract)
                 {
                     fehler.Add((form + $" — '{x.ToDisplayString()}' ist keiner", ort));
                     return null;

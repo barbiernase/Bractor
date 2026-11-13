@@ -9,7 +9,7 @@ namespace Core.Katalog;
 public sealed record Webhookkonfig(string Pfad);
 
 /// <summary>
-/// Die Postfächer der Webhooks eines Prozesses (je Pfad eines): der Eingang legt einen Aufruf hinein, der Webhook am Kopf seines Graphen nimmt ihn heraus.
+/// Die Postfächer der Webhooks eines Prozesses (je Pfad eines): der Eingang legt einen Aufruf hinein, der Webhook (der Eingang mit diesem Pfad) nimmt ihn heraus.
 /// Ein Postfach ist begrenzt — ist es voll, heißt die Antwort „später“ (der Absender wiederholt mit derselben Kennung).
 /// </summary>
 public static class Webhookpostfaecher
@@ -27,10 +27,10 @@ public static class Webhookpostfaecher
 }
 
 /// <summary>
-/// Der WEBHOOK (Katalog des Frameworks, docs/04 §4.7): eine Quellfunktion am Kopf eines Graphen — je Aufruf ein <see cref="Aufruf"/>, ein neuer Lauf. Er
+/// Der WEBHOOK (Katalog des Frameworks, docs/04 §4.7): eine Quellart (IQuellart), läuft als Eingang eines Clients — je Aufruf ein <see cref="Aufruf"/>, ein neuer Lauf. Er
 /// hält nichts fest: ein Aufruf, dessen Lauf nicht fertig wurde, kommt nach einem Neustart nicht wieder — der Absender wiederholt; mit derselben Kennung (Kopf „kennung“) ist es dieselbe Meldung, die Kette rechnet dieselben Ids.
 /// </summary>
-public sealed class Webhook(Webhookkonfig konfig) : IFunktion
+public sealed class Webhook(Webhookkonfig konfig) : IQuellart
 {
     public async IAsyncEnumerable<Aufruf> Lausche([EnumeratorCancellation] CancellationToken ct)
     {

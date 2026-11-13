@@ -10,8 +10,8 @@ namespace Infrastructure.SourceGeneration
     /// <summary>
     /// Die EINE Lesart einer ÜBERSETZUNG (docs/04 §4.4) für Generator, Analyzer und Extractor — nur Code-Fakten: eine Klasse der Anwendung mit
     /// <c>ITranslate&lt;TSource, TTarget&gt;</c>. Ihr Konstruktor nimmt genau die Quelle (<c>TSource source</c>, sonst CQRS119); <c>Translate()</c> baut
-    /// das Ziel aus ihren Feldern — der Compiler prüft, dass es vollständig ist. <c>TSource</c> ist ein Command ohne Ziel oder ein Event (eine Antwort),
-    /// <c>TTarget</c> ein Command, sonst CQRS121. Für den Editor liest sie aus dem Ausdruck in <c>Translate()</c>, welcher Parameter des Ziels aus welchem
+    /// das Ziel aus ihren Feldern — der Compiler prüft, dass es vollständig ist. <c>TSource</c> ist ein Command ohne Ziel, ein Event (eine Antwort) oder
+    /// die Meldung einer Quellart (<c>IMeldung</c>, die Übersetzung der Akteur-Seite), <c>TTarget</c> ein Command, sonst CQRS121. Für den Editor liest sie aus dem Ausdruck in <c>Translate()</c>, welcher Parameter des Ziels aus welchem
     /// Feld der Quelle kommt (<c>Ziel: source.Feld</c>, <c>Ziel: new(source.Feld)</c>, <c>Ziel: source.Feld.Wert</c>) — so schreibt ihn der Editor aus der
     /// Verdrahtung.
     /// <para>Eine ANTWORT-ÜBERSETZUNG nimmt statt eines Commands ein Event: die Antwort eines Aggregats auf den Command einer Übersetzung (ob das
@@ -49,6 +49,11 @@ namespace Infrastructure.SourceGeneration
             public List<(string Id, string Text, Location Ort)> Fehler = new List<(string, string, Location)>();
             /// <summary>Eine Antwort-Übersetzung: <c>TSource</c> ist ein Event (die Antwort eines Aggregats), kein Command ohne Ziel.</summary>
             public bool IstAntwort;
+            /// <summary>
+            /// Eine Übersetzung der AKTEUR-SEITE (docs/04 §4.7): <c>TSource</c> ist die Meldung einer Quellart (<c>IMeldung</c>); sie macht daraus eine
+            /// Nachricht, die der Akteur eines Eingangs darf. Sie liegt bei den Akteuren (<c>&lt;Wurzel&gt;.Akteure/Uebersetzungen.cs</c>).
+            /// </summary>
+            public bool IstMeldung;
         }
 
         /// <summary>Der Marker <c>ITranslate&lt;TSource, TTarget&gt;</c>, den <paramref name="t"/> trägt (oder ist) — sonst null.</summary>
@@ -76,9 +81,11 @@ namespace Infrastructure.SourceGeneration
             var ein = f.Ein as INamedTypeSymbol;
             var aus = f.Aus as INamedTypeSymbol;
             f.IstAntwort = ein != null && Funktionsform.Hat(ein, "Abstractions.IEvent") && !Funktionsform.Hat(ein, "Abstractions.ITransientEvent");
-            if (ein == null || !f.IstAntwort && !Funktionsform.IstCommandOhneZiel(ein))
+            f.IstMeldung = ein != null && Funktionsform.IstMeldung(ein);
+            if (ein == null || !f.IstAntwort && !f.IstMeldung && !Funktionsform.IstCommandOhneZiel(ein))
                 f.Fehler.Add((Nachricht, $"die Übersetzung '{p.Name}' nimmt {f.Ein.ToDisplayString()} — sie nimmt einen Command ohne Ziel (die Ausgabe "
-                    + "eines Graphen oder die Nachricht eines Clients) oder die Antwort eines Aggregats (ein Event) auf den Command einer Übersetzung", ort));
+                    + "eines Graphen oder die Nachricht eines Clients), die Antwort eines Aggregats (ein Event) auf den Command einer Übersetzung oder die "
+                    + "Meldung einer Quellart (IMeldung)", ort));
             if (aus == null || aus.TypeKind != TypeKind.Class || aus.IsAbstract || aus.IsGenericType && aus.TypeArguments.Any(a => a.TypeKind == TypeKind.TypeParameter)
                 || !Funktionsform.Hat(aus, "Abstractions.ICommand"))
                 f.Fehler.Add((Nachricht, $"die Übersetzung '{p.Name}' erzeugt {f.Aus.ToDisplayString()} — sie erzeugt einen Command (ohne Ziel an einen "

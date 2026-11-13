@@ -10,9 +10,9 @@ namespace Infrastructure.Funktionen;
 /// Der GRAPH-ACTOR einer Instanz auf einem Cluster-Knoten (docs/04 §4.4, <c>funktionen/&lt;instanz&gt;</c>) — der Halter ihrer Schritte und ihr Kopf.
 /// Seine Kinder sind die Parents der Knoten (<c>funktionen/&lt;instanz&gt;/&lt;knoten&gt;</c>); zwischen ihnen reisen die Aufrufe direkt (Kette.cs). Er
 /// koordiniert nichts: ein Eingang am Kopf (Kennung = die des Eingangs; ein doppelter hängt sich an bzw. hört „fertig“) geht als gesicherter Aufruf an
-/// den Knoten, der ihn nimmt, ein Element der Quelle an die Knoten, die sie nennen. Kommt dessen „fertig“, antwortet er dem wartenden Absender bzw.
+/// den Knoten, der ihn nimmt. Kommt dessen „fertig“, antwortet er dem wartenden Absender bzw.
 /// trägt den durablen Eingang aus; kommt „gescheitert“, parkt er den durablen Kopf und meldet <see cref="LaufGescheitert"/>. Sind schon so viele Ketten
-/// offen, wie die Instanz Stränge hat (<see cref="GraphInstanz.Gleichzeitig"/>), heißt die Antwort „später“ bzw. wartet die Quelle — der Rückstau
+/// offen, wie die Instanz Stränge hat (<see cref="GraphInstanz.Gleichzeitig"/>), heißt die Antwort „später“ — der Rückstau
 /// reicht bis zum durablen Rand. Eine Kopf-Übersetzung rechnet schon der Eingang (<see cref="Verkettung.Ziele"/>); hier kommt ihr Ergebnis an.
 /// </summary>
 public sealed class GraphActor(
@@ -21,7 +21,6 @@ public sealed class GraphActor(
     IOffeneEingaenge? offene = null,
     Action<HinweisZustellen>? hinweise = null,
     ILogger? logger = null,
-    IZustandsAblage? ablage = null,
     Func<IAggregatCommand, Guid, Guid, CancellationToken, Task<Infrastructure.Emit.EmitAntwort>>? sende = null) : RahmenActor(logger)
 {
     /// <summary>So viele fertige Kennungen merkt sich ein Graph-Actor (ein doppelter Eingang danach rechnet neu — die Inbox verwirft seine Commands).</summary>
@@ -43,11 +42,6 @@ public sealed class GraphActor(
     private readonly Queue<Guid> _fertigReihe = new();
     private readonly List<Guid> _auszutragen = new();
     private readonly List<(Guid Kennung, string Grund)> _zuParken = new();
-    // Der Zustand der Quelle: die Schnappschüsse in Reihenfolge, mit der Kette, die ihr Element startete; gesichert wird der letzte, dessen Kette und
-    //   alle früheren beendet sind (ein Element, dessen Kette nicht fertig war, meldet sie nach einem Neustart erneut — mit derselben Kennung, aus seinem Inhalt).
-    private readonly Queue<(Guid Kette, GesicherterZustand Zustand)> _quellStaende = new();
-    private GesicherterZustand? _zuSichern;
-    private readonly Queue<QuellMeldung> _quellRueckstau = new();
 
     /// <summary>Kein Passivieren mit offenen Ketten.</summary>
     protected override bool Beschaeftigt => base.Beschaeftigt || _ketten.Count > 0;
@@ -64,13 +58,6 @@ public sealed class GraphActor(
         switch (context.Message)
         {
             case EingangZustellen e: Kopf(context, e); break;
-            case QuelleHalten h:
-                if (instanz.Graph.Quelle is { } quelle && _parents.TryGetValue(quelle, out var lauscher)) context.Send(lauscher, new Lausche(h.Halten));
-                break;
-            case QuellMeldung m:
-                if (_ketten.Count >= instanz.Gleichzeitig) _quellRueckstau.Enqueue(m);
-                else Quelle(context, m);
-                break;
             case KnotenRueckmeldung r: Rueckmeldung(context, r); break;
         }
         return Task.CompletedTask;
@@ -99,54 +86,10 @@ public sealed class GraphActor(
         if (e.Art == Eingangsart.Kette && context.Sender is { } absender) o.Warten.Add(absender);
         else Antworte(context, e, Quittungsart.Angenommen);
         _ketten[e.Kennung] = o;
-        // Der Akteur der Kette: der der Instanz (die Arbeit eines Akteurs gibt er selbst hinein), sonst der des Auslösers.
-        var kontext = new KettenKontext(e.Kennung, e.Stream, e.Version, e.Zeit, instanz.Akteur ?? e.Akteur, e.Korrelation, e.Ursache);
+        // Der Akteur der Kette: der ihres Auslösers.
+        var kontext = new KettenKontext(e.Kennung, e.Stream, e.Version, e.Zeit, e.Akteur, e.Korrelation, e.Ursache);
         foreach (var (k, op) in ziele) Rufe(context, o, k, op!.Auf, e.Nachricht, e.Kennung, kontext, verlierbar: false);
         if (_ketten.ContainsKey(e.Kennung) && o.Ausstehend == 0) Beende(context, o, null);
-    }
-
-    /// <summary>
-    /// Ein Element der Quelle startet eine Kette — Kennung aus Instanz und der Kennung seiner Meldung (<see cref="Kettenvertrag.Quelle"/>: meldet die
-    /// Quelle es nach einem Neustart erneut, auch in anderer Reihenfolge, rechnet die Kette dieselben Ids), Herkunft wie ein Eingang ohne Vorgänger im
-    /// Log (Stream = die Kennung, Version 0 — so leitet auch <c>NeueId</c> aus dem Element ab, nicht aus seiner Stelle), der Akteur der Instanz; es geht
-    /// an die Knoten, die die Quelle nennen. Ein Hinweis der Quelle geht an die, die ihn hören. Ihr Schnappschuss wird gesichert, sobald diese Kette und
-    /// alle früheren beendet sind.
-    /// </summary>
-    private void Quelle(IContext context, QuellMeldung m)
-    {
-        var quelle = instanz.Graph.Quelle!;
-        var kennung = Kettenvertrag.Quelle(instanz.Name, m.Nachricht, m.Nummer);
-        var stream = kennung;
-        var zustand = new GesicherterZustand(m.Zustand, m.Nummer);
-        if (m.Nachricht is ITransientEvent h)
-        {
-            hinweise?.Invoke(new HinweisZustellen(kennung, h, stream, 0, DateTimeOffset.UtcNow, kennung.ToString(), instanz.Akteur, null));
-            if (ablage is not null) _quellStaende.Enqueue((Guid.Empty, zustand));
-            m.Angenommen.TrySetResult();
-            PruefeSicherung(context);
-            return;
-        }
-        if (_ketten.ContainsKey(kennung) || _fertig.Contains(kennung))
-        {
-            // Dasselbe Element noch einmal (die Quelle meldete es nach einem Neustart erneut, ein Absender wiederholte): keine zweite Kette; ihr Stand
-            //   wird gesichert, sobald die Kette des Elements beendet ist (ist sie es schon, gleich).
-            if (ablage is not null) _quellStaende.Enqueue((kennung, zustand));
-            m.Angenommen.TrySetResult();
-            PruefeSicherung(context);
-            return;
-        }
-        var kopf = new EingangZustellen(kennung, instanz.Name, m.Nachricht, Eingangsart.Quelle, stream, 0, DateTimeOffset.UtcNow, instanz.Akteur,
-            kennung.ToString(), null);
-        var o = new Offen(kopf);
-        _ketten[kennung] = o;
-        if (ablage is not null) _quellStaende.Enqueue((kennung, zustand));
-        m.Angenommen.TrySetResult();
-        var kontext = new KettenKontext(kennung, stream, 0, kopf.Zeit, instanz.Akteur, kopf.Korrelation, null);
-        var op = instanz.Graph.KnotenNamens(quelle)!.Operationen.Single(x => x.Eingang is null);
-        var nachricht = Kettenvertrag.Weiter(kennung, instanz.Ort(quelle), 0);
-        foreach (var w in instanz.Graph.Wege(quelle, op.Auf, m.Nachricht.GetType()))
-            Rufe(context, o, w.Knoten, w.Operation, m.Nachricht, nachricht, kontext, w.Verlierbar);
-        if (o.Ausstehend == 0) Beende(context, o, null);
     }
 
     /// <summary>Ein Aufruf aus dem Kopf: gesichert mit diesem Actor als Antwort (die Kette ist offen, bis er „fertig“ meldet), verlierbar ohne.</summary>
@@ -189,7 +132,7 @@ public sealed class GraphActor(
 
     /// <summary>
     /// Die Kette ist fertig (<paramref name="gescheitert"/> null) oder gescheitert: die Wartenden erfahren es, ein durabler Kopf wird ausgetragen bzw.
-    /// geparkt, ein gescheiterter meldet <see cref="LaufGescheitert"/>; danach Sicherung und Rückstau der Quelle.
+    /// geparkt, ein gescheiterter meldet <see cref="LaufGescheitert"/>.
     /// </summary>
     private void Beende(IContext context, Offen o, (string Knoten, string Grund)? gescheitert)
     {
@@ -218,18 +161,6 @@ public sealed class GraphActor(
                 Wecke(context, SchreibeAsync);
             }
         }
-        PruefeSicherung(context);
-        while (_quellRueckstau.Count > 0 && _ketten.Count < instanz.Gleichzeitig) Quelle(context, _quellRueckstau.Dequeue());
-    }
-
-    /// <summary>Der letzte Schnappschuss der Quelle, dessen Kette und alle früheren beendet (fertig oder gescheitert) sind — zum Sichern.</summary>
-    private void PruefeSicherung(IContext context)
-    {
-        GesicherterZustand? letzter = null;
-        while (_quellStaende.Count > 0 && !_ketten.ContainsKey(_quellStaende.Peek().Kette)) letzter = _quellStaende.Dequeue().Zustand;
-        if (letzter is null) return;
-        _zuSichern = letzter;
-        Wecke(context, SchreibeAsync);
     }
 
     private static void Antworte(IContext context, EingangZustellen e, Quittungsart ausgang)
@@ -244,25 +175,22 @@ public sealed class GraphActor(
         while (_fertigReihe.Count > Gedaechtnis) _fertig.Remove(_fertigReihe.Dequeue());
     }
 
-    /// <summary>Fertige durable Köpfe gebündelt austragen, gescheiterte parken, den Stand der Quelle sichern (neben der Mailbox; was dabei dazukommt, schreibt der nächste Durchlauf).</summary>
+    /// <summary>Fertige durable Köpfe gebündelt austragen, gescheiterte parken (neben der Mailbox; was dabei dazukommt, schreibt der nächste Durchlauf).</summary>
     private async Task SchreibeAsync(CancellationToken ct)
     {
         var aus = _auszutragen.ToArray();
         var parken = _zuParken.ToArray();
-        var sichern = _zuSichern is { } z && instanz.Graph.Quelle is { } q ? new[] { (instanz.Name, q, z) } : Array.Empty<(string, string, GesicherterZustand)>();
         _auszutragen.Clear();
         _zuParken.Clear();
-        _zuSichern = null;
         try
         {
-            if (sichern.Length > 0) await ablage!.SichereAsync(sichern, ct);
             if (aus.Length > 0) await offene!.ErledigtAsync(aus, ct);
             if (parken.Length > 0) await offene!.ParkeAsync(parken, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger?.LogWarning(ex, "[Funktionen] {Instanz}: Stand der Quelle, {Aus} fertige bzw. {Parken} gescheiterte Köpfe nicht geschrieben — der Zusteller "
-                + "bringt die Köpfe erneut, den Stand sichert die nächste fertige Kette", instanz.Name, aus.Length, parken.Length);
+            logger?.LogWarning(ex, "[Funktionen] {Instanz}: {Aus} fertige bzw. {Parken} gescheiterte Köpfe nicht geschrieben — der Zusteller "
+                + "bringt die Köpfe erneut", instanz.Name, aus.Length, parken.Length);
         }
     }
 }

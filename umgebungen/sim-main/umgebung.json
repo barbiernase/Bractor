@@ -59,6 +59,19 @@
       "Worker": {
         "Skript": "Domain.Client.Worker.Python.ML/run_train_stub.py"
       }
+    },
+    "Linienrechner": {
+      "Eingaenge": {
+        "linie1": {
+          "Art": "Dateiwaechter",
+          "Akteur": "KameraSystem",
+          "Pfad": "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
+          "Intervall": "00:00:01",
+          "Fertig": "Stabil",
+          "Fenster": "00:00:01",
+          "Kennung": "PfadGroesseZeit"
+        }
+      }
     }
   }
 }

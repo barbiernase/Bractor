@@ -37,10 +37,12 @@ public sealed class DomainModel
     /// <summary>Funktionen (<c>Auf</c>, docs/10 §10.3): je Eingang die Ausgaben aus der Signatur.</summary>
     public List<BausteinFunktionRaw> BausteinFunktionen { get; } = new();
     /// <summary>
-    /// Funktionen aus dem Katalog des Frameworks, die ein Graph der Domäne als Knoten nennt (<c>Core/Katalog</c>: Dateiwaechter, Taktgeber,
-    /// Webhook) — nur gelesen: was sie melden und welche Konfig ihr Knoten in der Instanz trägt.
+    /// Quellarten (<c>IQuellart</c>, docs/04 §4.7): je Klasse, was sie meldet (aus <c>Lausche</c>), ihr Konstruktor (Konfig, Zustand, Technik) — die der
+    /// Anwendung (in einem Katalog) und die des Frameworks (<c>Core/Katalog</c>: Dateiwaechter, Taktgeber, Webhook; nur gelesen). Nie ein Knoten.
     /// </summary>
-    public List<BausteinFunktionRaw> Katalog { get; } = new();
+    public List<QuellartRaw> Quellarten { get; } = new();
+    /// <summary><c>IMeldung</c>-Records der Anwendung: was eine Quellart meldet — kein Command, nur die Quelle einer Übersetzung der Akteur-Seite.</summary>
+    public List<RecordRaw> Meldungen { get; } = new();
     /// <summary>
     /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR einer Funktion bzw. Funktions-Umsetzung,
     /// Projektion, eines Readers oder einer Store-Impl injiziert werden — keine Value Objects der Domäne.
@@ -171,15 +173,36 @@ public sealed class BausteinFunktionRaw
     public Dictionary<string, List<(string Methode, string? Rumpf, Ort? Ort)>> UmsetzungsRumpfe = new(StringComparer.Ordinal);
     /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne (docs/04 §4.4).</summary>
     public string? ZustandFull;
-    /// <summary>Eine Quellfunktion (<c>Lausche</c>, Entscheidung 8): die vollen Namen dessen, was sie meldet — leer, wenn sie nicht lauscht.</summary>
-    public List<string> LauschtFull = new();
-    /// <summary>Die Methode <c>Lausche</c> und ihr Rumpf (Rumpf-Edit) — null, wenn sie nicht lauscht.</summary>
-    public Ort? LauscheOrt;
-    public string? LauscheRumpf;
     /// <summary>Die Konfig-Records im Konstruktor (die Werte am Knoten der Instanz) — je Record seine Felder.</summary>
     public List<KonfigRaw> Konfigs = new();
     /// <summary>Je Umsetzung die Konfig-Records in ihrem Konstruktor.</summary>
     public Dictionary<string, List<KonfigRaw>> UmsetzungsKonfigs = new(StringComparer.Ordinal);
+    public string? Doku, Datei;
+}
+
+/// <summary>
+/// Eine QUELLART (<c>IQuellart</c>, docs/04 §4.7): eine Klasse mit <c>Lausche(CancellationToken)</c> — gelesen über die Funktionsform (dieselbe Lesart wie
+/// der Generator): was sie meldet, ihr Konstruktor (Konfig-Records = die Werte eines Eingangs, <c>IZustand&lt;T&gt;</c>, Technik, Logger) und der Rumpf von
+/// <c>Lausche</c>. Sie steht in keinem Graphen; ein Akteur verwirklicht sich mit ihr über eine Übersetzung der Akteur-Seite.
+/// </summary>
+public sealed class QuellartRaw
+{
+    public string Name = "", Full = "", Namespace = "";
+    /// <summary>Die vollen Namen der Meldungen (<c>IMeldung</c>) aus der Signatur von <c>Lausche</c>.</summary>
+    public List<string> MeldetFull = new();
+    /// <summary>Konstruktor der Klasse (Typ wie geschrieben, Name).</summary>
+    public List<(string Typ, string Name)> Konstruktor = new();
+    /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne.</summary>
+    public string? ZustandFull;
+    /// <summary>Die Konfig-Records im Konstruktor (die Werte des Eingangs in der Umgebung) — je Record seine Felder.</summary>
+    public List<KonfigRaw> Konfigs = new();
+    /// <summary>Die Methode <c>Lausche</c> und ihr Rumpf (Rumpf-Edit) — null, wenn sie (noch) nicht lauscht.</summary>
+    public Ort? LauscheOrt;
+    public string? LauscheRumpf;
+    /// <summary>Aus dem Framework (nicht in einem Projekt der Anwendung, z. B. <c>Core/Katalog</c>): nur gelesen, ohne Karte.</summary>
+    public bool Framework;
+    /// <summary>Die Befunde der Lesart (Form von <c>Lausche</c>, Eingänge an einer Quellart).</summary>
+    public List<string> Fehler = new();
     public string? Doku, Datei;
 }
 
@@ -414,7 +437,6 @@ public sealed class GraphRaw
     public List<string> Koepfe = new(), Ausgaenge = new();
     /// <summary>Die Kanten aus den <c>Von</c>: Erzeuger-Knoten, Typ, nehmender Knoten (aufgefaltete Pfade, <c>Aufbereitung.Vorschau</c>).</summary>
     public List<(string Von, string Typ, string Nach)> Kanten = new();
-    public string? Quelle;
     public List<string> Fehler = new();
     /// <summary>Die Namespaces der Knoten-Typen (samt Typargumenten), die nicht der des Graphen sind.</summary>
     public List<string> Usings = new();
@@ -433,6 +455,8 @@ public sealed class UebersetzungRaw
     public List<DomainEditor.UebersetzungsFeld> Quellen = new();
     public List<DomainEditor.UebersetzungsZiel> Ziele = new();
     public List<string> Fehler = new();
+    /// <summary>Eine Übersetzung der AKTEUR-SEITE: <c>TSource</c> ist die Meldung einer Quellart (<c>IMeldung</c>) — sie liegt bei den Akteuren.</summary>
+    public bool AkteurSeite;
     public string? Datei, Doku;
 }
 
@@ -501,7 +525,7 @@ public sealed partial class DomainExtractor
     /// <summary>Die globalen usings der Domänen-Compilations (ImplicitUsings + global using) + der Vertrags-Namespace — nie „explizit".</summary>
     private readonly HashSet<string> _impliziteUsings;
     private readonly INamedTypeSymbol? _iDecider, _iApplier,
-        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _iAkteur, _iDarf, _iHoert,
+        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _iAkteur, _iDarf, _iHoert, _iMeldung,
         _iClient, _iVerkoerpert;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
@@ -541,6 +565,7 @@ public sealed partial class DomainExtractor
         _iVerkoerpert = Get(Vertrag.IVerkoerpert);
         _iDarf = Get(Vertrag.IDarf);
         _iWertobjekt = Get(Vertrag.IWertobjekt);
+        _iMeldung = Get(Vertrag.IMeldung);
 
         // Aggregat-Komposition über den TYP: wer IDecider<T>/IApplier<T> implementiert, gehört zum State T.
         foreach (var t in _types)
@@ -704,9 +729,6 @@ public sealed partial class DomainExtractor
             foreach (var x in MitGeschachtelten(n)) yield return x;
     }
 
-    /// <summary>Die Funktions-Typen, die Graphen als Knoten nennen — was davon nicht in der Domäne liegt, ist Katalog.</summary>
-    private readonly HashSet<INamedTypeSymbol> _knotenTypen = new(SymbolEqualityComparer.Default);
-
     private void CatalogDomainTypes(DomainModel m)
     {
         var quell = DomainQuellTypen().ToList();
@@ -721,6 +743,8 @@ public sealed partial class DomainExtractor
             }
             // Funktion: Klasse im Host oder Schnittstelle — nur ihre Signatur zählt; Technik: ihre Methoden und Umsetzungen.
             if (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: false)); continue; }
+            // Quellart (IQuellart): lauscht und meldet — nie ein Knoten, kein Funktionsbaustein.
+            if (Infrastructure.SourceGeneration.Funktionsform.IstQuellart(t)) { m.Quellarten.Add(ReadQuellart(t, framework: false)); continue; }
             if (t.ContainingType == null && technik.IstTechnik(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: true)); continue; }
             // Client (record X : IClient): die Software an der Leitung.
             if (t.TypeKind != TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
@@ -733,6 +757,8 @@ public sealed partial class DomainExtractor
             var raw = new RecordRaw { Name = t.Name, Full = t.Fq(), Fields = Felder(t), Meta = Meta(t) };
             if (_iAkteur != null && Sym.Implements(t, _iAkteur)) m.Akteure.Add(ReadAkteur(t));
             else if (Sym.Implements(t, _iQueryResponse)) m.Responses.Add(raw);
+            // Meldung (IMeldung): was eine Quellart meldet — kein Command, kein Wert.
+            else if (_iMeldung != null && Sym.Implements(t, _iMeldung)) m.Meldungen.Add(raw);
             else if (Sym.Implements(t, _iReadModel)) { raw.Geteilt = _iGeteilt != null && Sym.Implements(t, _iGeteilt); m.ReadModels.Add(raw); }
             // Value Object = als Wertobjekt markiert ODER ein Record (Datenträger per Sprachkonstrukt) ohne jede Rolle.
             // Klassen ohne Marker sind Dienste/Helfer (z. B. Store-Implementierungen), keine Werte. Ein Record mit UNAUFGELÖSTER Basis
@@ -743,9 +769,13 @@ public sealed partial class DomainExtractor
                      && !Sym.Implements(t, _iWriteStore) && !Sym.Implements(t, _iReadStore))
                 m.ValueObjects.Add(raw);
         }
-        var inDomaene = m.BausteinFunktionen.Select(f => f.Full).ToHashSet(StringComparer.Ordinal);
-        foreach (var k in _knotenTypen.OrderBy(k => k.Fq(), StringComparer.Ordinal))
-            if (!inDomaene.Contains(k.Fq())) m.Katalog.Add(ReadBausteinFunktion(k, technik: false));
+        // Die Quellarten des Frameworks (Core/Katalog): jede Quellart der übersetzten Projekte, die nicht in der Anwendung liegt — nur gelesen.
+        var inDomaene = m.Quellarten.Select(q => q.Full).ToHashSet(StringComparer.Ordinal);
+        foreach (var t in _types.Where(t => t.ContainingType == null && !IstDomänenAssembly(t.ContainingAssembly)
+                                           && Infrastructure.SourceGeneration.Funktionsform.IstQuellart(t) && !inDomaene.Contains(t.Fq())))
+            m.Quellarten.Add(ReadQuellart(t, framework: true));
+        m.Quellarten.Sort((a, b) => a.Framework != b.Framework ? a.Framework.CompareTo(b.Framework) : string.CompareOrdinal(a.Full, b.Full));
+        m.Meldungen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Enums.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Akteure.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Clients.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
@@ -799,12 +829,6 @@ public sealed partial class DomainExtractor
             for (var i = 0; i < a.Methode.Parameters.Length; i++)
                 if (a.Parameter[i].Art == "faehigkeit") e.Faehigkeiten.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
             f.Eingaenge.Add(e);
-        }
-        if (form.Lausche is { } lausche)
-        {
-            f.LauschtFull = lausche.Ausgaben.Select(x => x.Fq()).ToList();
-            f.LauscheOrt = MethodenOrt(lausche.Methode);
-            f.LauscheRumpf = MethodBody(lausche.Methode);
         }
         // Unfertig (W1: Unfertiges = Code, der nicht baut): ein Auf, das die Funktionsform (noch) nicht annimmt — z. B. ohne Ausgabe, frisch im
         //   Editor angelegt —, bleibt als Eingang ohne Ausgaben sichtbar; den Fehler meldet der Build an seiner Stelle.
@@ -899,6 +923,8 @@ public sealed partial class DomainExtractor
         //   bei einer Funktion die Klasse selbst bzw. die Umsetzungen der Schnittstelle.
         storeImpls.UnionWith(m.BausteinFunktionen.Where(f => f.Klasse).Select(f => f.Full));
         storeImpls.UnionWith(m.BausteinFunktionen.SelectMany(f => f.UmsetzungenFull));
+        // … ebenso Quellarten (docs/04 §4.7): ihre Konstruktor-Records sind die Werte eines Eingangs.
+        storeImpls.UnionWith(m.Quellarten.Where(q => !q.Framework).Select(q => q.Full));
         var injiziert = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in _types)
         {
@@ -962,8 +988,6 @@ public sealed partial class DomainExtractor
             : new Dictionary<string, string>();
         // Dieselbe Wahl wie die Graphform: der öffentliche Konstruktor — nie der Kopier-Konstruktor des Records (ein leerer Graph hat keine Knoten).
         var ctor = t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public).OrderByDescending(c => c.Parameters.Length).FirstOrDefault();
-        foreach (var p in ctor?.Parameters ?? [])
-            if (p.Type is INamedTypeSymbol k && Infrastructure.SourceGeneration.Funktionsform.IstFunktion(k)) _knotenTypen.Add(k.OriginalDefinition);
         var raw = new GraphRaw
         {
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
@@ -975,7 +999,6 @@ public sealed partial class DomainExtractor
             }).ToList(),
             Koepfe = g.Koepfe.Select(k => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(k.Typ)).Distinct(StringComparer.Ordinal).ToList(),
             Ausgaenge = g.Ausgaenge.Select(a => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(a.Typ)).Distinct(StringComparer.Ordinal).ToList(),
-            Quelle = g.Quelle?.Name,
             Fehler = g.Fehler.Select(f => f.Text).ToList(),
         };
         IEnumerable<ITypeSymbol> MitArgumenten(ITypeSymbol x) => x is INamedTypeSymbol n ? new[] { x }.Concat(n.TypeArguments.SelectMany(MitArgumenten)) : [x];
@@ -1004,7 +1027,45 @@ public sealed partial class DomainExtractor
                 u.Felder.Where(f => Infrastructure.SourceGeneration.Uebersetzungsform.Ausdruck(f.Type, z.Typ, "e", ausdruecklich: true) != null)
                     .Select(f => f.Name).ToList())).ToList(),
             Fehler = u.Fehler.Select(f => f.Text).ToList(),
+            AkteurSeite = u.IstMeldung,
         };
+    }
+
+    private static readonly string OneOfName = typeof(Abstractions.OneOf<>).Name.Split('`')[0];
+
+    // ── Quellarten: eine Klasse mit IQuellart und Lausche (Funktionsform, eine Lesart mit dem Generator) ────────────────────────────────────────
+    private QuellartRaw ReadQuellart(INamedTypeSymbol t, bool framework)
+    {
+        var form = Infrastructure.SourceGeneration.Funktionsform.Lies(t);
+        var decl = QuellDeklarationen(t).FirstOrDefault()
+                   ?? t.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<BaseTypeDeclarationSyntax>().FirstOrDefault();
+        var q = new QuellartRaw
+        {
+            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), Framework = framework,
+            Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
+            ZustandFull = form.Zustand?.Fq(),
+            Konstruktor = KonstruktorWieGeschrieben(t), Konfigs = KonfigsVon(t),
+            Fehler = form.Fehler.Select(f => f.Text).ToList(),
+        };
+        if (form.Lausche is { } lausche)
+        {
+            q.MeldetFull = lausche.Ausgaben.Select(x => x.Fq()).ToList();
+            q.LauscheOrt = MethodenOrt(lausche.Methode);
+            q.LauscheRumpf = MethodBody(lausche.Methode);
+        }
+        else
+        {
+            // Unfertig (W1): ein Lausche, das die Lesart (noch) nicht annimmt — was sein Strom nennt, bleibt sichtbar; den Fehler meldet der Build.
+            var m = t.GetMembers(Abstractions.Funktionsvertrag.Lausche).OfType<IMethodSymbol>().FirstOrDefault(x => x.MethodKind == MethodKind.Ordinary);
+            if (m != null)
+            {
+                q.LauscheOrt = MethodenOrt(m);
+                q.LauscheRumpf = MethodBody(m);
+                if (m.ReturnType is INamedTypeSymbol { IsGenericType: true } r && r.TypeArguments[0] is INamedTypeSymbol el)
+                    q.MeldetFull = (el.IsGenericType && el.Name == OneOfName ? el.TypeArguments : [el]).Select(x => x.Fq()).ToList();
+            }
+        }
+        return q;
     }
 
     // ── Akteure: IAkteur + IDarf<T> in der Basisliste (Code-Fakt; Reihenfolge = Deklaration, Geerbtes danach) ───────
@@ -1399,7 +1460,7 @@ public sealed partial class DomainExtractor
         {
             var model = Model(decl.SyntaxTree);
             // Die Rollen-Marker (sie bestimmen die Art und werden aus ihr geschrieben) — alle übrigen Basen sind Code-Fakt.
-            var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt }
+            var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt, _iMeldung }
                 .Where(x => x != null).Select(x => x!.Fq()).ToHashSet(StringComparer.Ordinal);
             basen = bl.Types.Where(b => model.GetTypeInfo(b.Type).Type is not INamedTypeSymbol bt
                                         || !(rollen.Contains(bt.Fq()) || (_iCommandZiel != null && bt.OriginalDefinition.Fq() == _iCommandZiel.Fq())))

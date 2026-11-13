@@ -17,11 +17,11 @@ public static class Grammatik
 {
     // ── Alphabet: Nachrichtensorten (die Kanten) ──────────────────────────────────────────────────────────────────────
     public const string Command = "command", Event = "event", Transient = "transient", Frist = "frist", Query = "query", Response = "response",
-        Faehigkeit = "faehigkeit", Quelle = "quelle", Gerufen = "gerufen", Gebuendelt = "gebuendelt";
+        Faehigkeit = "faehigkeit", Meldung = "meldung", Gerufen = "gerufen", Gebuendelt = "gebuendelt";
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
     public const string Aggregat = "aggregat", Projektion = "projektion", Reader = "reader", Store = "store", Aussenwelt = "aussenwelt",
-        Akteur = "akteur", Client = "client", Funktion = "funktion", Uhr = "uhr", Buendel = "buendel";
+        Akteur = "akteur", Client = "client", Funktion = "funktion", Uhr = "uhr", Buendel = "buendel", Quellart = "quellart";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
     public const string GenauEins = "eins", Beliebig = "beliebig";
@@ -52,6 +52,8 @@ public static class Grammatik
             "Technik hinter einer Funktion (ohne Marker: was ihr Konstruktor nimmt) — keine Nachricht, eine Abhängigkeit, läuft im Prozess ihres Halters"),
         new(Gebuendelt, "Bündel", "⋈", "aus dem Log abgeleitet; gleich bei jedem Neuaufbau",
             "Events, die zu einem Schlüssel zusammen im Log stehen (Buendel<A, B, …>) — je Typ das neueste; nur eine Projektion nimmt es"),
+        new(Meldung, "Meldung", "⚡", "nicht im Log; dieselbe Kennung ergibt dieselben Ids (die Inbox verwirft Wiederholtes)",
+            "was eine Quellart draußen findet (IMeldung, mit der Kennung des Elements aus seinem Inhalt) — kein Command: eine Übersetzung der Akteur-Seite macht daraus eine Nachricht, die der Akteur darf"),
     ];
 
     public static readonly IReadOnlyList<BausteinInfo> Bausteine =
@@ -63,6 +65,8 @@ public static class Grammatik
         new(Uhr, "Uhr", false),
         // Ein Bündel von Events vor einer Projektion (docs/04 §4.3.1): ohne Zustand, ausgewertet gegen das Log.
         new(Buendel, "Bündel", false),
+        // Eine Quellart (docs/04 §4.7): lauscht draußen und meldet; ihr Zustand (was sie gesehen hat) ist gesichert.
+        new(Quellart, "Quellart", true),
     ];
 
     // ── Regeln (Id = der Name, unter dem Build-Diagnosen und Editor sie nennen) ──────────────────────────────────────────────
@@ -107,11 +111,11 @@ public static class Grammatik
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsParent.cs (je Ausgabe die Wege nachgeschlagen, gesichert mit Antwort, verlierbar ohne)")]),
         new("GR-GRAPH", "Graph: Knoten als Parameter mit [Kopf] oder [Von]", "Ein Graph ist ein Record mit IGraph; jeder Parameter ist ein Knoten (eine "
             + "Funktion — eine generische mit Typargument — oder ein anderer Graph; Name = Konfig-Schlüssel, in einem inneren Graphen mit Punkt). Eine "
-            + "Funktion darf mehrfach im Graphen stehen. Jeder Knoten trägt [Kopf], [Von(…)] oder beides; nur eine Quelle (eine Funktion, die lauscht) trägt "
-            + "keins. Jedes Argument von Von ist nameof eines anderen Parameters desselben Records — kein String-Literal, nicht der Knoten selbst, kein Name "
+            + "Funktion darf mehrfach im Graphen stehen. Jeder Knoten trägt [Kopf], [Von(…)] oder beides; eine Quellart ist nie ein Knoten (sie läuft als "
+            + "Eingang eines Clients, GR-QUELLE). Jedes Argument von Von ist nameof eines anderen Parameters desselben Records — kein String-Literal, nicht der Knoten selbst, kein Name "
             + "doppelt. Ein Graph im Graphen ist eine Schachtel: Von an ihm speist seine Köpfe, [Kopf] an ihm macht seine Köpfe zu Köpfen des äußeren, "
             + "Von(nameof(Schachtel)) meint seine Ausgänge (seine Signatur). Kein Builder, keine Liste, keine Knotenarten (docs/04 §4.4).", "error",
-            [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Form des Graphen, Lesart Graphform)"),
+            [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Form des Graphen, eine Quellart als Knoten; Lesart Graphform)"),
              An("CQRS117", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (eine Funktion in keinem Graphen läuft nie)")]),
         new("GR-EINGANG", "Eingang: ein Auf, eine Nachricht", "Ein Auf nimmt genau eine Nachricht (einen Command ohne Ziel; allein auch ein Event als "
             + "Antwort auf den eigenen Command) und rechnet, sobald sie ankommt — kommen zwei, rechnet es zweimal. Mehrere Nachrichten, T?, OneOf<…> oder "
@@ -123,22 +127,24 @@ public static class Grammatik
         new("GR-KOPF", "Kopf: [Kopf] je Eingangstyp genau einer", "Ein Knoten, der von außerhalb des Graphen nimmt (aus einem Decide, von einem Akteur, "
             + "vom Ausgang eines anderen Graphen), trägt [Kopf]; er nimmt von außen, was keine genannte Quelle speist. Je Eingangstyp des Graphen genau ein "
             + "[Kopf], der ihn nimmt — was mehrere brauchen, nimmt einer, die übrigen nennen ihn in [Von]. Ein [Kopf], an dem nichts von außen ankommt, "
-            + "ist ein Fehler; ein Graph mit Quelle hat sonst keinen Kopf (docs/04 §4.4).", "error",
-            [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Köpfe je Eingangstyp, Kopf ohne Eingang von außen; Lesart Graphform)"),
+            + "ist ein Fehler. Jeder Graph hat mindestens einen [Kopf], und jeder Kopf nimmt Commands: was eine Quellart meldet, gibt ihr Akteur über eine "
+            + "Übersetzung der Akteur-Seite an einen Kopf (docs/04 §4.4).", "error",
+            [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Köpfe je Eingangstyp, Kopf ohne Eingang von außen, Graph ohne Kopf; Lesart Graphform)"),
              new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (der Kopf gibt den Eingang an den Knoten, der seinen Typ nimmt)")]),
         new("GR-UEBERSETZUNG", "Übersetzung: ITranslate<TSource, TTarget>", "Graphen und Funktionen liegen in Katalogen, domänenneutral; "
             + "domänenspezifisch macht sie eine Übersetzung der Anwendung: public sealed class {TSource}_{TTarget}_{n}(TSource source) : "
             + "ITranslate<TSource, TTarget> { public TTarget Translate() => new(Ziel: source.Feld, …); } in <Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs. "
             + "Der Konstruktor nimmt genau die Quelle, Translate() baut das Ziel aus ihren Feldern, ohne Logik (Guid ⇄ Id<T> "
             + "als new(…) bzw. .Wert) — der Compiler prüft, dass es vollständig ist; der Editor schreibt Translate() aus der Verdrahtung. Sie nimmt einen Command "
-            + "ohne Ziel oder ein Event (eine Antwort) und erzeugt einen Command. Wohin, entscheidet der Typ: jede Ausgabe eines laufenden Graphen mit Typ "
+            + "ohne Ziel, ein Event (eine Antwort) oder — als Übersetzung der Akteur-Seite in <Wurzel>.Akteure/Uebersetzungen.cs — die Meldung einer "
+            + "Quellart (GR-QUELLE) und erzeugt einen Command. Wohin, entscheidet der Typ: jede Ausgabe eines laufenden Graphen mit Typ "
             + "TSource wird im Kind übersetzt, ein Command ohne Ziel eines Clients am Kopf, eine Antwort gleich nach dem Senden; TTarget geht an sein Aggregat "
             + "bzw. an den Kopf genau eines Graphen. Ein Graph nennt sie nie als Knoten. Nur das Projekt der Übersetzungen referenziert Kataloge: die Domäne "
             + "(Schreib- und Leseseite) bleibt rein und kennt keinen Katalog.", "error",
             [An("CQRS119", "Domain.SourceGeneration/GraphAnalyzer.cs (der Konstruktor nimmt nicht genau die Quelle; Lesart Uebersetzungsform)"),
              An("CQRS120", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (ein Ausgang eines laufenden Katalog-Graphen ohne Empfänger)"),
-             An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TEin weder Command ohne Ziel noch Antwort-Event, TAus kein Command)"),
-             An("CQRS098", "Domain.SourceGeneration/LageAnalyzer.cs (eine Übersetzung außerhalb von <Wurzel>.Uebersetzungen)"),
+             An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TEin weder Command ohne Ziel noch Antwort-Event noch Meldung, TAus kein Command)"),
+             An("CQRS098", "Domain.SourceGeneration/LageAnalyzer.cs (eine Übersetzung außerhalb von <Wurzel>.Uebersetzungen, eine der Akteur-Seite außerhalb von <Wurzel>.Akteure)"),
              new("check", null, "GraphExtractor.Kern/Lagepruefung.cs (Schreib- oder Leseseite referenziert einen Katalog)"),
              An("CQRS123", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Antwort-Übersetzung nimmt ein Event, das das Decide nicht ausgibt)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (ein Graph nennt eine Übersetzung als Knoten)"),
@@ -153,13 +159,13 @@ public static class Grammatik
             [new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (Kopf einer Instanz: offen bis „fertig“, ausgetragen bzw. geparkt)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsParent.cs (ein Schritt: rechnen, Wege nachschlagen, „fertig“ nach den gesicherten Ausgaben)")]),
         new("GR-INSTANZ", "Graph läuft als Instanz", "Ein Graph läuft erst als Instanz: eine Datei je Instanz (umgebungen/<name>/graphen/<instanz>.json) "
-            + "mit Graph, bei einem Quellkopf dem Akteur (er darf, was den Graphen verlässt), den Strängen (gleichzeitige Ketten je Host) und je Knoten "
-            + "Parallel, Warteschlange, Wiederholungen, Zeitlimit, "
-            + "Technik und die Felder seiner Konfig-Records. Ein Graph mit Command-Kopf läuft je Umgebung genau einmal. Nennt die Instanz einen Rechner, läuft "
-            + "sie nur auf dem Host mit diesem Cluster:Rechner (eine Quelle an ihrer Steuerung, ein Modell auf seiner GPU); mit Zustand oder Quelle ist der "
-            + "Rechner im Cluster Pflicht, fällt er aus, zieht nichts um (docs/04 §4.4).", "error",
-            [new("boot", null, "Infrastructure/Funktionen/Graph.cs (GraphInstanzen.Aus: Graph, Knoten, Akteur ∩ IDarf, Command-Kopf einmal, Rechner ein Name)"),
-             new("boot", null, "Infrastructure/Funktionen/Rechner.cs (Pflicht des Rechners bei Zustand oder Quelle im Cluster)"),
+            + "mit Graph, den Strängen (gleichzeitige Ketten je Host) und je Knoten Parallel, Warteschlange, Wiederholungen, Zeitlimit, "
+            + "Technik und die Felder seiner Konfig-Records; einen Akteur nennt sie nicht (die Kette trägt den ihres Auslösers). Jeder Graph läuft je "
+            + "Umgebung genau einmal. Nennt die Instanz einen Rechner, läuft sie nur auf dem Host mit diesem Cluster:Rechner (ein Modell auf seiner GPU); "
+            + "mit Zustand ist der Rechner im Cluster Pflicht, fällt er aus, zieht nichts um (docs/04 §4.4). Eine Quelle ist keine Instanz: sie läuft als "
+            + "Eingang eines Clients (GR-QUELLE).", "error",
+            [new("boot", null, "Infrastructure/Funktionen/Graph.cs (GraphInstanzen.Aus: Graph, Knoten, Stränge, je Umgebung einmal, Rechner ein Name)"),
+             new("boot", null, "Infrastructure/Funktionen/Rechner.cs (Pflicht des Rechners bei Zustand im Cluster)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsWege.cs (Rechnernamen im Gossip, ein doppelter Name verdrängt den späteren)"),
              new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: Werte der Konfig-Records, Technik-Wahl je Knoten)")]),
         new("GR-FALTUNG", "Event → genau ein Aggregat faltet", "Ein Event faltet genau ein Aggregat (Applier) — das, das es entscheidet.", "warning",
@@ -252,13 +258,22 @@ public static class Grammatik
             + "eindeutig: je Technik genau eine Umsetzung (sonst die Wahl am Knoten der Instanz, Technik:<Schnittstelle>), je Konfig-Record seine Felder "
             + "am Knoten, kein Kreis über Technik — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: fehlend, mehrdeutig, Kreis, Konfig)")]),
-        new("GR-QUELLE", "Quelle = Funktion, die lauscht", "Eine Quelle ist eine Funktion mit Lausche(CancellationToken) statt Auf — aus dem Katalog des "
-            + "Frameworks (Dateiwaechter, Taktgeber, Webhook) oder eigen. Sie steht am Kopf ihres Graphen (eine je Graph, dann kein anderer Kopf); jedes "
-            + "Element startet eine Kette, nichts davon steht im Log. Was sie gesehen hat und ihre laufende Nummer stehen in ihrem gesicherten Zustand; ihre "
-            + "Instanz läuft genau einmal im Cluster, auf ihrem Rechner (docs/04 §4.7).", "error",
-            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form von Lausche)"),
-             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (eine Quelle je Graph, sonst kein Kopf)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (je Element eine Kette, Gegendruck, Zustand gesichert nach der Kette)")]),
+        new("GR-QUELLE", "Quellart meldet, ein Akteur gibt hinein", "Was draußen gefunden wird, meldet eine QUELLART: eine Klasse mit IQuellart und "
+            + "Lausche(CancellationToken), ein asynchroner Strom ihrer Meldungen; ihr Konstruktor nimmt wie eine Funktion Konfig-Records, IZustand<T>, Technik "
+            + "und ILogger<T>. Sie liegt in einem Katalog (die des Frameworks — Dateiwaechter, Taktgeber, Webhook — in Core/Katalog) und ist nie ein Knoten "
+            + "eines Graphen; eine Funktion lauscht nicht. Eine MELDUNG (record … : IMeldung, in Meldungen.cs des Katalogs) ist kein Command: sie nennt die "
+            + "Kennung ihres Elements aus seinem Inhalt, kein Auf und kein Kopf nimmt sie. Eine Übersetzung der AKTEUR-SEITE (ITranslate<TMeldung, TZiel> in "
+            + "<Wurzel>.Akteure/Uebersetzungen.cs) macht aus ihr eine Nachricht, die ein Akteur darf — so verwirklicht die Quellart den Akteur; welche "
+            + "Quellarten zu einem Akteur passen, folgt aus diesen Übersetzungen. Laufen tut sie als EINGANG eines Clients, der den Akteur verkörpert: in der "
+            + "Umgebung unter Clients:<Client>:Eingaenge:<Eingang> mit Art, Akteur, Rechner, den Werten ihrer Konfig, der Wahl ihrer Technik und der Grenze "
+            + "offener Elemente; im Cluster genau einmal, auf ihrem Rechner. Was sie gesehen hat, sichert sie in ihrem Zustand; nichts davon steht im Log "
+            + "(docs/04 §4.7).", "error",
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form von Lausche: nur an einer Quellart, ihre Elemente Meldungen; Lesart Funktionsform)"),
+             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (eine Quellart als Knoten eines Graphen; Lesart Graphform)"),
+             An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TSource einer Übersetzung: eine Meldung ist erlaubt; Lesart Uebersetzungsform)"),
+             An("CQRS098", "Domain.SourceGeneration/LageAnalyzer.cs (Quellart und Meldung im Katalog, die Übersetzung der Akteur-Seite bei den Akteuren)"),
+             new("boot", null, "Infrastructure/Quellen/Eingaenge.cs (der Client verkörpert den Akteur, die Art ist eine Quellart, eine Übersetzung passt, Werte und Rechner)"),
+             new("laufzeit", null, "Infrastructure/Quellen/QuellLaeufer.cs (je Meldung übersetzt und hineingegeben wie eine App, Zustand gesichert, Gegendruck)")]),
         // Bündel von Events vor einer Projektion (docs/04 §4.3.1).
         new("GR-BUENDEL", "Bündel: Events eines Schlüssels → eine Projektion", "Ein Auf einer Projektion kann ein Bündel nehmen: Buendel<A, B, …> "
             + "(2 bis 16 verschiedene, persistente Events). Es wird gerufen, sobald zum Schlüssel von jedem Typ ein Event im Log steht, und bei jedem weiteren "
@@ -355,6 +370,7 @@ public static class Grammatik
         new(Buendel, Gebuendelt, "GR-BUENDEL"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
         new(Funktion, Gerufen, "GR-TECHNIK"),
+        new(Quellart, Meldung, "GR-QUELLE"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"),
         new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
         new(Client, Command, "GR-CLIENT-BEFUGT"), new(Client, Query, "GR-CLIENT-BEFUGT"), new(Client, Transient, "GR-CLIENT-BEFUGT"),
@@ -383,14 +399,14 @@ public static class Grammatik
     /// <summary>Ein Typname, wie Werkbank und Editor ihn annehmen: groß beginnend, Buchstaben, Ziffern, Unterstrich (ein Namespace: Glieder mit Punkt).</summary>
     public const string Typname = "[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*";
 
-    /// <summary>Nachrichtensorte eines Records: aus seiner Art (Quellen sind Funktionen, die lauschen — ihre Commands sind gewöhnliche Commands).</summary>
+    /// <summary>Nachrichtensorte eines Records: aus seiner Art (eine Meldung ist die Sorte dessen, was eine Quellart meldet — kein Command).</summary>
     public static string? SorteVon(Record r) => SorteVonRecordArt(r.Kind);
 
     /// <summary>Record-Art → Nachrichtensorte (null = keine Nachricht: Value Object, Konfig, ReadModel).</summary>
     public static string? SorteVonRecordArt(string kind) => kind switch
     {
         RecordArt.Command => Command, RecordArt.Event => Event, RecordArt.Rejection => Transient, RecordArt.Query => Query,
-        RecordArt.Antwort => Response, _ => null,
+        RecordArt.Antwort => Response, RecordArt.Meldung => Meldung, _ => null,
     };
 
     public static Regel RegelVon(string id) => Regeln.First(r => r.Id == id);

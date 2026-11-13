@@ -14,7 +14,7 @@ namespace Infrastructure.Pruefstand.Umgebung;
 
 /// <summary>
 /// Umgebungen (docs/06 §6.5), store-frei: Laden der Datei, Platzhalter, strikte Bindung, das Siegel als reiner
-/// Vergleich, die Knoten-Konfig gegen die generierte Tabelle und die Arbeit der Akteure als eigene Instanzen.
+/// Vergleich, die Knoten-Konfig gegen die generierte Tabelle, die Instanzen gegen die Graphen und die Eingänge der Clients aus Quellen.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class UmgebungLaderTests
@@ -45,9 +45,12 @@ public class UmgebungLaderTests
         var (k, verz) = Datei("sim-t", """
             { "Umgebung": { "Name": "sim-t", "Art": "Sim" },
               "EventStore": { "Verbindung": "Host=db;Password=${env:CQRS_TEST_PW}", "Datenbank": "cqrs_sim_${branch}" },
-              "Cluster": { "Art": "Consul", "Name": "c-${branch}", "Rolle": "Mitglied" } }
+              "Cluster": { "Art": "Consul", "Name": "c-${branch}", "Rolle": "Mitglied" },
+              "Clients": { "Linienrechner": { "Eingaenge": { "kamera1": {
+                  "Art": "Dateiwaechter", "Akteur": "KameraSystem", "Rechner": "linie-${branch}", "Offen": 50,
+                  "Pfad": "/bilder/${branch}", "Muster": [ "*.tiff", "*.png" ], "Intervall": "00:00:01" } } } } }
             """, ("linie1", """
-            { "Graph": "Bildaufbereitung", "Akteur": "KameraSystem", "Straenge": 2,
+            { "Graph": "Bildaufbereitung", "Straenge": 2,
               "Verkleinern": { "Parallel": 4, "Technik": { "IImageResizer": "ImageResizer" }, "AusgabePfad": "/daten/${branch}", "Endungen": [ "png", "tif" ] } }
             """));
         try
@@ -60,13 +63,24 @@ public class UmgebungLaderTests
             u.Cluster.Rolle.Should().Be(KnotenRolle.Mitglied);
             var knoten = u.Graphen["linie1"].Knoten["Verkleinern"];
             u.Graphen["linie1"].Graph.Should().Be("Bildaufbereitung", "die Instanz heißt wie ihre Datei");
-            u.Graphen["linie1"].Akteur.Should().Be("KameraSystem");
             u.Graphen["linie1"].Straenge.Should().Be(2);
             u.Graphen["linie1"].Knoten.Keys.Should().Equal(["Verkleinern"], "Straenge gehört der Instanz, kein Knoten");
             knoten.Parallel.Should().Be(4);
             knoten.Technik.Should().Equal(new Dictionary<string, string> { ["IImageResizer"] = "ImageResizer" });
             knoten.Werte.Should().Contain("AusgabePfad", "/daten/feature_werkbank_p2", "Platzhalter gelten auch in den Instanzen")
                 .And.Contain("Endungen:0", "png").And.Contain("Endungen:1", "tif");
+
+            // Ein Eingang des Clients: Art, Akteur, Rechner, Offen als Rahmen; alles andere sind Werte der Quellart, flach (eine Liste als Feld:0 …).
+            var e = u.Clients["Linienrechner"].Eingaenge["kamera1"];
+            e.Art.Should().Be("Dateiwaechter");
+            e.Akteur.Should().Be("KameraSystem");
+            e.Rechner.Should().Be("linie-feature_werkbank_p2", "Platzhalter gelten auch im Eingang");
+            e.Offen.Should().Be(50);
+            e.Werte.Should().BeEquivalentTo(new Dictionary<string, string?>
+            {
+                ["Pfad"] = "/bilder/feature_werkbank_p2", ["Muster:0"] = "*.tiff", ["Muster:1"] = "*.png", ["Intervall"] = "00:00:01",
+            }, "Art, Akteur, Rechner und Offen sind keine Werte");
+            e.AlsKnoten().Werte.Should().BeSameAs(e.Werte, "die Aktivierung liest die Werte wie am Knoten einer Instanz");
         }
         finally { Directory.Delete(verz, true); }
     }
@@ -84,6 +98,39 @@ public class UmgebungLaderTests
     {
         var (k, verz) = Datei("sim-u", """{ "Umgebung": { "Name": "sim-u" }, "Datenbank": {} }""");
         try { FluentActions.Invoking(() => UmgebungLader.Lade(k, "sim-u", [])).Should().Throw<InvalidOperationException>().WithMessage("*Datenbank*"); }
+        finally { Directory.Delete(verz, true); }
+    }
+
+    [Fact]
+    public void Offen_eines_Eingangs_ist_eine_Zahl_ab_null()
+    {
+        var (k, verz) = Datei("sim-o", """
+            { "Umgebung": { "Name": "sim-o" },
+              "Clients": { "Linienrechner": { "Eingaenge": { "kamera1": { "Art": "Dateiwaechter", "Akteur": "KameraSystem", "Offen": "viele" } } } } }
+            """);
+        try { FluentActions.Invoking(() => UmgebungLader.Lade(k, "sim-o", [])).Should().Throw<Exception>().WithMessage("*Linienrechner:Eingaenge:kamera1*Offen*viele*"); }
+        finally { Directory.Delete(verz, true); }
+    }
+
+    [Fact]
+    public void Ein_unbekanntes_Feld_eines_Clients_ausserhalb_der_Eingaenge_ist_ein_Fehler()
+    {
+        var (k, verz) = Datei("sim-c", """{ "Umgebung": { "Name": "sim-c" }, "Clients": { "Linienrechner": { "Tokn": "x", "Eingaenge": {} } } }""");
+        try { FluentActions.Invoking(() => UmgebungLader.Lade(k, "sim-c", [])).Should().Throw<InvalidOperationException>().WithMessage("*Tokn*"); }
+        finally { Directory.Delete(verz, true); }
+    }
+
+    [Fact]
+    public void Ein_Akteur_an_der_Instanz_ist_kein_Rahmenfeld_mehr()
+    {
+        // Den Akteur einer Kette bringt ihr Auslöser mit; ein „Akteur“ in einer alten Instanz-Datei ist ein Knoten dieses Namens — den der Start ablehnt.
+        var (k, verz) = Datei("sim-a", """{ "Umgebung": { "Name": "sim-a" } }""", ("bild", """{ "Graph": "Bildaufbereitung", "Akteur": "KameraSystem" }"""));
+        try
+        {
+            var u = UmgebungLader.Lade(k, "sim-a", []);
+            u.Graphen["bild"].Knoten.Keys.Should().Equal(["Akteur"]);
+            FluentActions.Invoking(() => GraphInstanzen.Aus(u.Graphen, Graphen)).Should().Throw<BootFehler>().WithMessage("*'Akteur' ist kein Knoten von Bildaufbereitung*");
+        }
         finally { Directory.Delete(verz, true); }
     }
 
@@ -156,30 +203,16 @@ public class UmgebungLaderTests
     }
 
     [Fact]
-    public void Ein_Graph_mit_Command_Kopf_laeuft_nur_einmal_ein_Graph_mit_Quellkopf_beliebig_oft()
+    public void Ein_Graph_laeuft_je_Umgebung_genau_einmal()
     {
+        // Ein Graph kennt keine Quelle mehr: jeder Kopf nimmt Commands (genau ein Empfänger) — mehrere Verzeichnisse sind mehrere Eingänge eines Clients.
         FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
                 ["a"] = new() { Graph = "Bildaufbereitung" }, ["b"] = new() { Graph = "Bildaufbereitung" },
             }, Graphen))
-            .Should().Throw<BootFehler>().WithMessage("*Bildaufbereitung hat einen Command-Kopf*genau einmal*a, b*");
-        GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
-            {
-                ["linie1"] = new() { Graph = "Linienimport" }, ["linie2"] = new() { Graph = "Linienimport" },
-            }, Graphen).Alle.Select(i => i.Name).Should().Equal("linie1", "linie2");
-    }
-
-    [Fact]
-    public void Der_Akteur_einer_Instanz_darf_was_sie_verlaesst()
-    {
-        var rechte = Infrastructure.Komposition.Anwendung.Akteure.Rechte;
-        GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["linie1"] = new() { Graph = "Linienimport", Akteur = "KameraSystem" } },
-            Graphen, rechte).Alle.Single(i => i.Name == "linie1").Akteur.Should().Be("KameraSystem");
-        FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
-            {
-                ["linie1"] = new() { Graph = "Linienimport", Akteur = "Inspekteur" },
-            }, Graphen, rechte))
-            .Should().Throw<BootFehler>().WithMessage("*Inspekteur darf NimmBildAuf nicht*");
+            .Should().Throw<BootFehler>().WithMessage("*Bildaufbereitung läuft je Umgebung genau einmal*a, b*");
+        GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["bild"] = new() { Graph = "Bildaufbereitung", Straenge = 3, Rechner = "r1" } }, Graphen)
+            .Alle.Should().ContainSingle().Which.Should().Match<GraphInstanz>(i => i.Name == "bild" && i.Gleichzeitig == 3 && i.Rechner == "r1");
     }
 
     [Fact]
@@ -207,20 +240,35 @@ public class UmgebungLaderTests
         Environment.SetEnvironmentVariable("CQRS_UMGEBUNGEN", Path.Combine(verz!, "umgebungen"));
         var u = UmgebungLader.Lade(new ConfigurationManager(), name, [], branch: "main");
         u.Umgebung.Name.Should().Be(name);
-        GraphInstanzen.Aus(u.Graphen, Graphen, Infrastructure.Komposition.Anwendung.Akteure.Rechte).Alle.Select(i => i.Graph.Name)
-            .Should().BeEquivalentTo(["Linienimport"], "je Graph eine Instanz; Arbeit hat kein Akteur, die Worker reagieren");
+        GraphInstanzen.Aus(u.Graphen, Graphen).Alle.Select(i => i.Graph.Name)
+            .Should().BeEquivalentTo(["Bildaufbereitung"], "je Graph eine Instanz; Arbeit hat kein Akteur, die Worker reagieren");
+        foreach (var k in new[] { "Einlesen", "Verkleinern", "Kontrast" })
+            u.Graphen["bildaufbereitung"].Knoten[k].Wiederholungen.Should().Be(1);
+        u.Graphen["bildaufbereitung"].Knoten.Keys.Should().BeEquivalentTo(["Einlesen", "Verkleinern", "Kontrast"], "ohne Quellknoten, ohne Präfix");
+
+        // Der Dateiwächter ist ein Eingang des Linienrechners, der das Kamerasystem verkörpert — geprüft wie beim Start.
+        var linie = u.Clients["Linienrechner"].Eingaenge["linie1"];
+        linie.Art.Should().Be("Dateiwaechter");
+        linie.Akteur.Should().Be("KameraSystem");
+        var a = Infrastructure.Komposition.Anwendung.Aktuell;
+        var eingaenge = Infrastructure.Quellen.Eingaenge.Aus(u.Clients, a.Funktionen.Bausteine, new Uebersetzungen(a.Funktionen.Uebersetzungen),
+            a.Akteure.Rechte, a.Akteure.ClientVertraege, u.Cluster.Art == ClusterArt.Einzelknoten);
+        eingaenge.Alle.Select(e => e.Ort).Should().Equal("Linienrechner/linie1");
+        eingaenge.Alle.Single().Uebersetzungen[typeof(DateiGefunden)].Select(x => x.Name).Should().Equal("DateiGefunden_LiesBild_1");
+        new ServiceCollection().BindeTechnik(GraphInstanzen.Aus(u.Graphen, Graphen), eingaenge);   // Werte und Technik binden — auch die des Eingangs
+
         if (name == "sim-main")
         {
             u.Transport.JsonEingang.Should().BeTrue("Sim: die Werkbank handelt als Akteur");
-            foreach (var k in new[] { "Einlesen", "Verkleinern", "Kontrast" })
-                u.Graphen["linienimport"].Knoten["Aufbereitung." + k].Wiederholungen.Should().Be(1);
-            u.Graphen["linienimport"].Knoten["Aufbereitung.Verkleinern"].Werte["AusgabePfad"].Should().EndWith("/cqrs-sim/main/preprocessed");
-            u.Graphen["linienimport"].Knoten["Aufbereitung.Kontrast"].Werte["AusgabePfad"].Should().EndWith("/cqrs-sim/main/preprocessed");
-            u.Graphen["linienimport"].Knoten["Eingang"].Werte["Pfad"].Should().EndWith("/cqrs-sim/main/DateiErkannt", "der Wächter ist der Kopf");
+            u.Graphen["bildaufbereitung"].Knoten["Verkleinern"].Werte["AusgabePfad"].Should().EndWith("/cqrs-sim/main/preprocessed");
+            u.Graphen["bildaufbereitung"].Knoten["Kontrast"].Werte["AusgabePfad"].Should().EndWith("/cqrs-sim/main/preprocessed");
+            linie.Werte["Pfad"].Should().EndWith("/cqrs-sim/main/DateiErkannt", "der Wächter des Eingangs lauscht auf dem Verzeichnis der Kamera");
         }
-        else u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
-        if (name != "sim-main")
-            u.Graphen["linienimport"].Rechner.Should().NotBeNullOrEmpty("eine Quelle läuft im Cluster auf ihrem Rechner (Cluster:Rechner des Hosts)");
+        else
+        {
+            u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
+            linie.Rechner.Should().NotBeNullOrEmpty("eine Quelle lauscht im Cluster genau einmal, auf ihrem Rechner (Cluster:Rechner des Hosts)");
+        }
     }
 
     [Fact]

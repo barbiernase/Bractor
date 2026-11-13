@@ -26,7 +26,7 @@ public sealed partial class Sicht
 
     private readonly JsonObject _board;
     private readonly List<JsonObject> _records, _enums, _aggregate, _decider, _applier, _states,
-        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _codeKarten, _bausteinFunktionen, _graphen, _uebersetzungen;
+        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _codeKarten, _bausteinFunktionen, _graphen, _uebersetzungen, _quellarten;
     private readonly Dictionary<string, (HashSet<string> Direkt, HashSet<string> Kette)> _mengen = new(StringComparer.Ordinal);
 
     public IReadOnlyList<SichtKarte> Karten { get; }
@@ -43,6 +43,7 @@ public sealed partial class Sicht
         _akteure = Liste("akteure"); _clients = Liste("clients"); _readModels = Liste("readModels"); _stores = Liste("stores");
         _projektionen = Liste("projektionen"); _reader = Liste("reader"); _codeKarten = Liste("codeKarten");
         _bausteinFunktionen = Liste("bausteinFunktionen"); _graphen = Liste("graphen"); _uebersetzungen = Liste("uebersetzungen");
+        _quellarten = Liste("quellarten");
         // Wie der Editor das Board liest: je Aggregat mit State eine State-Karte.
         _states = _aggregate.Where(a => Alle(a["state"]).Any()).Select(a => new JsonObject { ["_id"] = "state:" + S(a, "name"), ["aggregat"] = S(a, "name") }).ToList();
         foreach (var (n, m) in Eintraege(board["rahmen"]?["akteurMengen"] as JsonObject))
@@ -142,6 +143,8 @@ public sealed partial class Sicht
         foreach (var e in _enums) k.Add(new("enum:" + S(e, "name"), "enum", S(e, "name"), e));
         // Funktionen: eine Karte je Funktion — mit Eingängen oder gerufen (Methoden statt Auf).
         foreach (var f in _bausteinFunktionen) k.Add(new("fb:" + S(f, "_id"), "bausteinfunktion", S(f, "name"), f));
+        // Quellarten (docs/04 §4.7): eine Karte je Quellart der Anwendung — die des Frameworks (Core/Katalog) sind nur gelesen und haben keine.
+        foreach (var q in _quellarten.Where(q => !B(q, "framework"))) k.Add(new("qa:" + S(q, "_id"), "quellart", S(q, "name"), q));
         // Graphen (docs/04 §4.4): eine Karte je Graph-Record — seine Knoten sind Funktionen oder Graphen.
         foreach (var g in _graphen) k.Add(new("gr:" + S(g, "_id"), "graph", S(g, "name"), g));
         // Übersetzungen (docs/04 §4.4): eine Karte je Record der Domäne — sie nimmt TEin und erzeugt TAus.
@@ -207,12 +210,37 @@ public sealed partial class Sicht
     internal static bool IstGerufen(JsonObject f) => Alle(f["methoden"]).Any() && !Alle(f["eingaenge"]).Any();
     /// <summary>Die Funktion dieses Namens — oder null.</summary>
     internal JsonObject? BausteinFunktion(string name) => _bausteinFunktionen.FirstOrDefault(x => S(x, "name") == name);
+    /// <summary>Die Quellart dieses Namens (auch eine des Frameworks) — oder null.</summary>
+    internal JsonObject? QuellartNamens(string name) => _quellarten.FirstOrDefault(q => S(q, "name") == name);
+    /// <summary>Die Karte einer Quellart (nur die der Anwendung haben eine) — oder null.</summary>
+    internal string? QuellartKarte(JsonObject q) => B(q, "framework") ? null : "qa:" + S(q, "_id");
+    /// <summary>Die Quellarten, die <paramref name="meldung"/> melden (aus der Signatur von <c>Lausche</c>).</summary>
+    internal IEnumerable<JsonObject> MeldendeQuellarten(string meldung) => _quellarten.Where(q => L(q, "meldet").Contains(meldung));
+    /// <summary>Was eine Quellart meldet (einfache Namen).</summary>
+    internal static IEnumerable<string> Meldet(JsonObject q) => L(q, "meldet");
+    /// <summary>Die Übersetzungen der Akteur-Seite (ihre Quelle ist eine Meldung, docs/04 §4.7).</summary>
+    internal IEnumerable<JsonObject> Verwirklichungen => _uebersetzungen.Where(u => B(u, "akteurSeite"));
+    /// <summary>
+    /// Die Akteure, die eine Quellart verwirklichen kann: es gibt eine Übersetzung der Akteur-Seite von einer ihrer Meldungen auf eine Nachricht seines
+    /// <c>IDarf</c> (Entscheidung 4 des Plans: aus den Typen, kein Marker am Akteur) — je Akteur die Übersetzungen.
+    /// </summary>
+    internal IEnumerable<(JsonObject Akteur, List<JsonObject> Uebersetzungen)> Verwirklicht(JsonObject q)
+    {
+        var meldet = Meldet(q).ToHashSet(StringComparer.Ordinal);
+        var us = Verwirklichungen.Where(u => meldet.Contains(Basis(S(u, "ein")))).ToList();
+        foreach (var a in _akteure)
+            if (us.Where(u => L(a, "darf").Contains(Basis(S(u, "aus")))).ToList() is { Count: > 0 } passend) yield return (a, passend);
+    }
+
     /// <summary>Die Konstruktor-Parameter einer Funktion: der Klasse, bzw. aller Umsetzungen einer Schnittstelle.</summary>
     internal static IEnumerable<JsonObject> BausteinKonstruktor(JsonObject f) =>
         Alle(f["konstruktor"]).Concat(Alle(f["umsetzungen"]).SelectMany(u => Alle(u["konstruktor"])));
     /// <summary>Die Funktionen, deren Klasse oder Umsetzung die gerufene Funktion im Konstruktor nimmt.</summary>
     internal IEnumerable<JsonObject> GerufenNutzer(JsonObject g) =>
         _bausteinFunktionen.Where(f => !ReferenceEquals(f, g) && BausteinKonstruktor(f).Any(p => ReferenceEquals(GerufenZu(S(p, "typ")), g)));
+    /// <summary>Die Quellarten der Anwendung, deren Konstruktor die Technik nimmt.</summary>
+    internal IEnumerable<JsonObject> QuellartNutzer(JsonObject g) =>
+        _quellarten.Where(q => !B(q, "framework") && Alle(q["konstruktor"]).Any(p => ReferenceEquals(GerufenZu(S(p, "typ")), g)));
     private (JsonObject Store, JsonObject Fn)? LeseFnZu(string typ)
     {
         foreach (var st in _stores)
@@ -280,6 +308,13 @@ public sealed partial class Sicht
                 if (BausteinFunktion(basis) is { } fb) P("gr:" + S(g, "_id"), "fb:" + S(fb, "_id"));
                 else if (_graphen.FirstOrDefault(x => S(x, "name") == basis) is { } inner) P("gr:" + S(g, "_id"), "gr:" + S(inner, "_id"));
             }
+        // Eine Quellart meldet ihre Meldungen und nimmt Technik im Konstruktor (wie eine Funktion).
+        foreach (var q in _quellarten.Where(q => !B(q, "framework")))
+        {
+            var qid = "qa:" + S(q, "_id");
+            foreach (var m in Meldet(q)) if (IstRec(m)) P(qid, Rec(m));
+            foreach (var p in Alle(q["konstruktor"])) if (GerufenZu(S(p, "typ")) is { } g) P(qid, "fb:" + S(g, "_id"));
+        }
         // Eine Übersetzung nimmt TEin und erzeugt TAus.
         foreach (var u in _uebersetzungen)
         {

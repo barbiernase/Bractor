@@ -275,6 +275,24 @@ public class TechnikBindungTests
         => (await Befunde(Bild.Replace("Skalierer(ILogger<Skalierer> log)", "Skalierer(ILogger<Skalierer> log, Mach m)")))
             .Should().Equal(TechnikAnalyzer.CtorId);
 
+    /// <summary>Eine Quellart (docs/04 §4.7) nimmt im Konstruktor dasselbe wie eine Funktion: Technik und Konfig-Records binden aus ihrem Eingang.</summary>
+    private static readonly string Quelle = Bild.Replace("public enum Modus", "public sealed record Gefunden(string Kennung) : IMeldung; "
+        + "public sealed class Kamera(ISkalierer s, BildKonfig k) : IQuellart { public async System.Collections.Generic.IAsyncEnumerable<Gefunden> Lausche("
+        + "[System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct) { await Task.CompletedTask; yield break; } } "
+        + "public enum Modus");
+
+    [Fact]
+    public async Task Technik_im_Konstruktor_einer_Quellart_ist_still_und_ihr_Bedarf_wird_gelesen()
+    {
+        (await Befunde(Quelle)).Should().BeEmpty("eine Quellart wird gebaut wie eine Funktion — im Bereich ihres Eingangs");
+        Generiert(Quelle).Should().Contain("[typeof(global::Probe.Kamera)] = new Type[] { typeof(global::Probe.ISkalierer), typeof(global::Probe.BildKonfig) }");
+    }
+
+    [Fact]
+    public async Task Ein_Konstruktor_Parameter_einer_Quellart_den_die_Umgebung_nicht_bindet_ist_CQRS090()
+        => (await Befunde(Quelle.Replace("Kamera(ISkalierer s, BildKonfig k)", "Kamera(ISkalierer s, BildKonfig k, System.Net.Http.HttpClient h)")))
+            .Should().Equal(TechnikAnalyzer.CtorId);
+
     [Fact]
     public async Task Ein_Konfig_Feld_das_die_Konfig_nicht_lesen_kann_ist_CQRS091()
         => (await Befunde(Bild.Replace("bool Laut = false", "System.Uri? Laut = null"))).Should().Equal(TechnikAnalyzer.KonfigFeldId);

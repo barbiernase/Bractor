@@ -100,11 +100,28 @@ public sealed class Testumgebung
                 [TokenReaktionsWorker] = "Datensatzpfleger,Teilmelder",
             },
         };
+        // Der Linienrechner verkörpert das Kamerasystem: sein Eingang ist ein Dateiwächter auf dem Quell-Verzeichnis, im Cluster auf dem ersten Host
+        //   (eine Quelle lauscht genau einmal). Was er findet, gibt das Kamerasystem als LiesBild in die Bildaufbereitung.
+        json["Clients"] = new JsonObject
+        {
+            ["Linienrechner"] = new JsonObject
+            {
+                ["Eingaenge"] = new JsonObject
+                {
+                    ["linie1"] = new JsonObject
+                    {
+                        ["Art"] = "Dateiwaechter", ["Akteur"] = "KameraSystem", ["Rechner"] = Hostlauf.Rechner1,
+                        ["Pfad"] = Quellpfad, ["Muster"] = new JsonArray("*.tiff"), ["Intervall"] = "00:00:01", ["Fertig"] = "Stabil", ["Fenster"] = "00:00:01",
+                        ["Kennung"] = "NameGroesse",
+                    },
+                },
+            },
+        };
         return json;
     }
 
-    /// <summary>Die Instanzen der Graphen (je Graph eine): der Linienimport mit dem Ausgabe-Pfad der Bildaufbereitung; die Arbeit der Akteure kommt ohne
-    /// Datei dazu.</summary>
+    /// <summary>Die Instanzen der Graphen (je Graph eine): die Bildaufbereitung mit ihrem Ausgabe-Pfad; was der Dateiwächter findet, gibt der Eingang des
+    /// Linienrechners hinein (<see cref="Json"/>), die Arbeit der Akteure kommt ohne Datei dazu.</summary>
     private IEnumerable<(string Instanz, JsonObject Inhalt)> Instanzen()
     {
         if (Anwendung == Anwendung.Pruefdomaene)
@@ -121,16 +138,11 @@ public sealed class Testumgebung
             if (mitPfad) k["AusgabePfad"] = Path.Combine(Verzeichnis, "aufbereitet");
             return k;
         }
-        // Der Linienimport: ein Dateiwächter auf dem Quell-Verzeichnis, darunter die Bildaufbereitung (Graph im Graphen).
-        yield return ("linienimport", new JsonObject
+        // Die Bildaufbereitung (Kopf LiesBild) auf dem ersten Host, wie zuvor die Kette hinter dem Wächter.
+        yield return ("bildaufbereitung", new JsonObject
         {
-            ["Graph"] = "Linienimport", ["Akteur"] = "KameraSystem", ["Rechner"] = Hostlauf.Rechner1,
-            ["Eingang"] = new JsonObject
-            {
-                ["Pfad"] = Quellpfad, ["Muster"] = new JsonArray("*.tiff"), ["Intervall"] = "00:00:01", ["Fertig"] = "Stabil", ["Fenster"] = "00:00:01",
-                ["Kennung"] = "NameGroesse",
-            },
-            ["Aufbereitung.Einlesen"] = ImHost(), ["Aufbereitung.Verkleinern"] = ImHost(mitPfad: true), ["Aufbereitung.Kontrast"] = ImHost(mitPfad: true),
+            ["Graph"] = "Bildaufbereitung", ["Rechner"] = Hostlauf.Rechner1,
+            ["Einlesen"] = ImHost(), ["Verkleinern"] = ImHost(mitPfad: true), ["Kontrast"] = ImHost(mitPfad: true),
         });
     }
 

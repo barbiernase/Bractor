@@ -31,7 +31,7 @@ Exactly-once, Partition, offene Eingänge, Ketten, Orte), wählt der Generator a
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
 | **Funktion** | ein Knoten: je `Auf` eine Nachricht rein, gerechnet je Ankunft (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
 | **Graph** | nennt Knoten (Funktionen, Graphen, eine Funktion auch mehrfach); jede Kante als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; läuft als Instanz, je Kopf-Nachricht eine Kette; jede Kante gesichert oder verlierbar | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
-| **Quelle** | eine Funktion mit `Lausche` am Kopf eines Graphen (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | eine Quellinstanz genau einmal im Cluster, auf ihrem Rechner — §4.7 |
+| **Quellart** | meldet, was draußen geschieht (`Lausche`, Meldungen `IMeldung`); nie ein Knoten — sie verwirklicht einen Akteur, eine Übersetzung der Akteur-Seite macht aus ihrer Meldung seine Nachricht (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | je Eingang eines Clients ein Läufer, genau einmal im Cluster, auf seinem Rechner — §4.7 |
 | Store, Technik | Speicher hinter Projektion/Reader bzw. Technik im Konstruktor einer Funktion | – |
 | **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Verteiler je Knoten; Reaktionen über den Läufer im Client — [konzept-akteure.md](konzept-akteure.md) |
 | *eingebaut:* Uhr, Verteiler | macht aus fälligen Fristen Commands; stellt Pushes und Hinweise an Clients zu | – |
@@ -200,8 +200,8 @@ public sealed record Schadensbewertung(
   generische mit Typargument — oder ein Graph), die Reihenfolge bedeutet nichts; dieselbe Funktion darf mehrfach stehen (je Knoten eigene Konfig).
   **Kanten** stehen am nehmenden Knoten: `[Von(nameof(A), nameof(B))]` nennt die Knoten, von denen er bekommt, und jede genannte Quelle speist die
   Ports, deren Typ sie ausgibt (mindestens einen; nur `nameof` eines anderen Parameters, kein Name doppelt). Ein **Kopf** trägt `[Kopf]` und nimmt
-  von außen, was keine genannte Quelle speist — je Eingangstyp genau einer; ein Knoten darf beides tragen. Jeder Knoten trägt eins davon, nur eine
-  Quelle keins. Was ein Knoten ausgibt und kein Knoten über `Von` von ihm nimmt, verlässt den Graphen. Kreisfrei über die Knoten (eine Kette `Bild → Bild → Bild` ist kein Kreis); ein Graph im Graphen ist eine Schachtel mit seiner
+  von außen, was keine genannte Quelle speist — je Eingangstyp genau einer; ein Knoten darf beides tragen. Jeder Knoten trägt eins davon; ein Graph ohne
+  Kopf ist ein Fehler. Was ein Knoten ausgibt und kein Knoten über `Von` von ihm nimmt, verlässt den Graphen. Kreisfrei über die Knoten (eine Kette `Bild → Bild → Bild` ist kein Kreis); ein Graph im Graphen ist eine Schachtel mit seiner
   Signatur — `Von` an ihm speist seine Köpfe, `[Kopf]` an ihm macht sie zu Köpfen des äußeren, `Von(nameof(Schachtel))` nimmt seine Ausgänge
   (CQRS115: GR-GRAPH, GR-KANTE, GR-KOPF). Eine Funktion in keinem Graphen läuft nie (CQRS117). Passt ein Typ nicht, ist der Adapter eine
   eigene kleine Funktion — Klebecode zwischen Knoten gibt es nicht. Zeigen: `dotnet run --project GraphExtractor -- --graph <Typ>`.
@@ -244,29 +244,33 @@ public sealed record Schadensbewertung(
 
 ### 10.3.5 … eine Instanz und eine Quelle
 
-Ein Graph läuft erst als **Instanz**: eine Datei je Instanz in der Umgebung, `umgebungen/<name>/graphen/<instanz>.json`, mit `Graph`, bei einem
-Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt, und muss es dürfen), den `Straenge` (so viele Ketten rechnet sie zugleich, je
-Host; 1 = eine nach der anderen; `Parallel` am Knoten bleibt seine Obergrenze) und je Knoten (Pfad bei inneren Graphen) die Felder seiner
-Konfig-Records sowie `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik`. Dieselbe Blaupause läuft beliebig oft;
-ein Graph mit Command-Kopf läuft je Umgebung genau einmal. `Rechner` legt die Instanz auf einen Host fest (seinen `Cluster:Rechner`), etwa eine
-Quelle an ihre Steuerung oder ein Modell auf seine GPU; mit Zustand oder Quelle ist er im Cluster Pflicht, ohne läuft die Instanz auf jedem Host. Der Start prüft jede Instanz gegen ihren Graphen ([04](04-konsum-und-prozess-maschine.md)
-§4.4).
+Ein Graph läuft erst als **Instanz**: eine Datei je Instanz in der Umgebung, `umgebungen/<name>/graphen/<instanz>.json`, mit `Graph`, den `Straenge`
+(so viele Ketten rechnet sie zugleich, je Host; 1 = eine nach der anderen; `Parallel` am Knoten bleibt seine Obergrenze) und je Knoten (Pfad bei inneren
+Graphen) die Felder seiner Konfig-Records sowie `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik`. Je Umgebung läuft
+ein Graph genau einmal. `Rechner` legt die Instanz auf einen Host fest (seinen `Cluster:Rechner`), etwa ein Modell auf seine GPU; mit Zustand ist er
+im Cluster Pflicht, ohne läuft die Instanz auf jedem Host. Den Akteur einer Kette bringt ihr Auslöser mit. Der Start prüft jede Instanz gegen ihren
+Graphen ([04](04-konsum-und-prozess-maschine.md) §4.4).
 
-Eine **Quelle** ist eine Funktion mit `Lausche(CancellationToken)` statt `Auf`, am Kopf ihres Graphen (sie ist dann sein einziger Kopf, CQRS115).
-Das Framework bringt einen Katalog mit (`Core/Katalog`: `Dateiwaechter` → `DateiGefunden`, `Taktgeber` → `Takt`, `Webhook` → `Aufruf`); die Domäne
-nennt ihn als Knoten (`Katalogimport(Dateiwaechter Eingang, Katalogeingang Annahme, …) : IGraph`, Sonde `Katalogimport.cs.txt`). Eine eigene Quelle
-schreibt man genauso:
+Eine **Quellart** meldet, was draußen geschieht: eine Klasse `: IQuellart` mit `Lausche(CancellationToken)` statt `Auf`, deren Strom
+**Meldungen** gibt (`record … : IMeldung`, je Element mit seiner `Kennung` aus dem Inhalt — kein Command). Ihr Konstruktor nimmt dasselbe wie der
+einer Funktion. Das Framework bringt drei mit (`Core/Katalog`: `Dateiwaechter` → `DateiGefunden`, `Taktgeber` → `Takt`, `Webhook` → `Aufruf`); eine
+eigene liegt in einem Katalog (Sonde `Katalog.Funktionen.cs.txt`: `Sensorabfrage` mit Technik und Zustand). Sie ist **nie ein Knoten** (CQRS115). Sie
+**verwirklicht einen Akteur**: eine Übersetzung der Akteur-Seite bei den Akteuren macht aus der Meldung eine Nachricht, die er darf:
 
 ```csharp
-public sealed class Sensorabfrage(SensorabfrageKonfig konfig, IZustand<Abfragestand> stand, ISensorbus bus) : IFunktion   // Sonde Messnetz.cs.txt
+// Domain.Akteure/Uebersetzungen.cs
+public sealed class DateiGefunden_LiesBild_1(DateiGefunden source) : ITranslate<DateiGefunden, LiesBild>
 {
-    public async IAsyncEnumerable<Rohwert> Lausche([EnumeratorCancellation] CancellationToken ct) { … }
+    public LiesBild Translate() => new(Name: source.Name, Pfad: source.Pfad, Groesse: source.Groesse, ErkanntAm: source.ErkanntAm);
 }
-public sealed record Messkette(Sensorabfrage Abfrage, Messwertaufbereitung Aufbereitung) : IGraph;
+public sealed record KameraSystem : IAkteur, IDarf<LiesBild>;                 // Akteure.cs
+public sealed record Linienrechner : IClient, IVerkoerpert<KameraSystem>;     // Clients.cs
 ```
 
-Was eine Quelle meldet, steht nicht im Log; Doppeltes vermeiden und nach einem Neustart weitermachen regelt sie über ihren gesicherten Zustand
-(Gesehen-Liste, Sequenznummer, Hochwassermarke) — jedes Element startet eine Kette.
+Laufen tut sie als **Eingang eines Clients** in der Umgebung (`Clients:Linienrechner:Eingaenge:linie1`: `Art`, `Akteur`, `Rechner`, `Offen` und die
+Werte ihrer Konfig, flach) — je Eingang ein Läufer, der hineingibt wie eine App. Was eine Quelle meldet, steht nicht im Log; Doppeltes vermeiden und
+nach einem Neustart weitermachen regelt sie über ihren gesicherten Zustand (Gesehen-Liste, Hochwassermarke), dieselbe Kennung ergibt dieselben Ids
+([04](04-konsum-und-prozess-maschine.md) §4.7).
 
 ### 10.3.6 … Akteure und Clients
 
@@ -366,7 +370,7 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R18 | Die Hausregel für Actors: ein Weg je Absicht (nur Framework-Code) | CQRS112/113 |
 | R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor | CQRS105, CQRS100 |
 | R20 | Ein Command ohne Ziel hat genau einen Empfänger (im Graphen die Knoten, die seinen Erzeuger in `Von` nennen; sonst ein Graph-Kopf); ein Graph ist kreisfrei über seine Knoten, jeder Knoten trägt `[Kopf]` oder `[Von(nameof(…))]`, je Eingangstyp ein Kopf, ein `Auf` nimmt genau eine Nachricht (CQRS100); jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
-| R22 | Eine Übersetzung (`class … : ITranslate<TSource, TTarget>` in `<Wurzel>.Uebersetzungen`) nimmt einen Command ohne Ziel oder ein Antwort-Event und erzeugt einen Command; ihr Konstruktor nimmt genau die Quelle, `Translate()` baut das Ziel vollständig (Compiler); ein Graph nennt sie nie als Knoten; ein Ausgang eines laufenden Katalog-Graphen hat einen Empfänger; eine Antwort-Übersetzung nimmt ein Event, das das Decide eines übersetzten Commands ausgeben kann | CQRS119, CQRS121, CQRS115, CQRS120, CQRS123 |
+| R22 | Eine Übersetzung (`class … : ITranslate<TSource, TTarget>` in `<Wurzel>.Uebersetzungen`, mit einer Meldung als Quelle bei den Akteuren) nimmt einen Command ohne Ziel, ein Antwort-Event oder eine Meldung und erzeugt einen Command; ihr Konstruktor nimmt genau die Quelle, `Translate()` baut das Ziel vollständig (Compiler); ein Graph nennt sie nie als Knoten; ein Ausgang eines laufenden Katalog-Graphen hat einen Empfänger; eine Antwort-Übersetzung nimmt ein Event, das das Decide eines übersetzten Commands ausgeben kann | CQRS119, CQRS121, CQRS115, CQRS120, CQRS123 |
 | R21 | Ein Bündel (`Buendel<A, B, …>` als Eingang eines `Auf`) bündelt verschiedene persistente Events mit ableitbarem Schlüssel: eine gemeinsame `Id<T>`, sonst `[Ueber<T>]`; keine = global | CQRS057, CQRS118 |
 
 Dazu die Projektstruktur ([07](07-projektstruktur.md), CQRS098): wo eine Primitive liegt, sagt die Tabelle `Abstractions/Projektstruktur.cs`.
@@ -380,7 +384,7 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E1 | Geltungsbereich (Mandant, Daten-Rechte je Objekt) | nicht jetzt: im Zielbetrieb (interne Produktionsfirma) darf jeder alles; Akteur-Rechte nach Typ bleiben. Der Platz ist frei (§10.8). |
 | E2 | Direkte Abfrage eines Aggregats | ja, als eigener Lesepfad neben dem Reader (§10.3.1) |
 | E3 | Typisierte Ids | ja, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§10.4) |
-| E4 | Editor-Oberfläche | eine Fläche in sieben Spalten in der Reihenfolge des Ablaufs (Client-Ausgang, Quellen, Graphen, Übersetzungen, Aggregate, Projektionen, Client-Eingang), Domänen als Bänder, Nachrichten als Ports; Graph, Aggregat und Store von innen als Modal; gerechnet in der Sicht (§10.9) |
+| E4 | Editor-Oberfläche | eine Fläche in sieben Spalten in der Reihenfolge des Ablaufs (Clients mit ihren Eingängen in der aktiven Umgebung, Client-Ausgang, Graphen, Übersetzungen, Aggregate, Projektionen, Client-Eingang), Domänen als Bänder, Nachrichten als Ports; Graph, Aggregat, Store, Akteure und Clients von innen als Modal; Konzept (Code) im Modal, Instanz (Konfig) auf der Fläche; gerechnet in der Sicht (§10.9) |
 | E5 | Umsetzen | schrittweise, je Schritt auf Tobis Wort |
 | E6 | Darf eine Funktion Zustand haben? | ja, gekapselt, kein Domänen-Zustand (Gewichte, ein Zähler, eine Gesehen-Liste); `IZustand<T>` im Konstruktor, gesichert je Instanz und Knoten nach fertigem Lauf; Gelerntes gehört in Projektionen |
 | E7 | Was fließt zwischen Funktionen? | ein Command ohne Ziel, als Aufruf von Schritt zu Schritt, nie im Log (Invariante 6); kein eigener Nachrichten-Marker |
@@ -390,8 +394,8 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E11 | Nachrichtenarten | drei: Command (mit oder ohne Ziel), Event, Hinweis; dazu Query und Frist |
 | E12 | Empfänger eines Commands | genau einer, vom Absender aus: Ziel im Typ → Aggregat; sonst der Knoten desselben Graphen; sonst der Kopf genau eines Graphen |
 | E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter mit `[Kopf]` und `[Von(nameof(…))]` (ausdrückliche Kanten, eine Funktion auch mehrfach; aus Typen allein entsteht innen keine Kante), Ablaufformen als Formen der Ausgaben (Zusammenführen im Logik-Code); läuft als Instanz mit eigener Konfig, beliebig oft |
-| E14 | Quellen | Katalogfunktionen am Kopf eines Graphen, nicht im Log; durabel über den gesicherten Zustand |
-| E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json`); der Akteur einer Quellinstanz steht in ihrer Datei, geprüft gegen sein `IDarf` |
+| E14 | Quellen | Quellarten (`IQuellart`), nie Knoten; sie verwirklichen einen Akteur über eine Übersetzung der Akteur-Seite und laufen als Eingang eines Clients; nicht im Log, durabel über den gesicherten Zustand, Kennung eines Elements aus seinem Inhalt |
+| E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json`); je Graph eine Instanz, je Client seine Eingänge aus Quellen (Art, Akteur, Rechner, Werte), geprüft gegen Client, Akteur und Übersetzung |
 | E17 | Funktionen und Aggregate | voneinander isoliert: Funktionen und Graphen nur in Katalogen, die Domäne rein; dazwischen steht eine Übersetzung (`ITranslate<TSource, TTarget>`, vom Editor geschrieben, Routing über den Typ) in einem eigenen Projekt der Anwendung — ohne Logik. Nur Clients und Quellen stoßen Funktionen an (konzept-akteure §5) |
 | E16 | Akteur und Client | Akteur = `IDarf` + `IHoert` (ohne Art); Client = Record, der nur verkörpert; ein C#-Client nennt ihn mit `[assembly: IstClient<X>]`; Hinweise gehen nur an Akteure |
 
@@ -401,8 +405,8 @@ Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
 - **A2** Die Zugehörigkeit zu einem Vorgang ist ein fachliches Feld im Event, keine versteckte Korrelation in den Metadaten.
 - **A3** Wiederholungsfeste Stores (Klasse 2) schreiben mit der Event-Identität im Schlüssel oder bedingt nach Position.
 - **A4** Der Neuaufbau einer Projektion geht über Generationen; Leeren ist der Sonderfall.
-- **A5** Eine Instanz mit Zustand oder Quelle rechnet im Cluster auf genau einem Host: dem Rechner, den sie nennt (`Rechner` in ihrer Datei,
-  `Cluster:Rechner` des Hosts; Pflicht im Cluster). Fällt er aus, zieht nichts um, die durablen Eingänge warten.
+- **A5** Eine Instanz mit Zustand und ein Eingang aus einer Quelle rechnen im Cluster auf genau einem Host: dem Rechner, den sie nennen
+  (`Rechner`, `Cluster:Rechner` des Hosts; Pflicht im Cluster). Fällt er aus, zieht nichts um, die durablen Eingänge warten.
 - **A6** Jeder Cluster-Knoten hat von jeder Instanz einen Graph-Actor `funktionen/<instanz>` mit je Knoten einem Parent; eine Kette bleibt auf dem Rechner, der ihren Kopf annahm; ein
   Eingang geht an den eigenen Knoten, sonst reihum (Gossip).
 - **A7** Ein Hinweis trägt eine Kennung, die der Absender vergibt.
@@ -421,18 +425,19 @@ Builder und keine Kantenliste (die Kanten stehen als `Von` an den Knoten), keine
 Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was er zeigt, rechnet der Server in der Sicht
 (`GraphExtractor.Kern/Sicht/`, W3), er ordnet nur an und zeichnet.
 
-- **Die Fläche** (`board.sicht.flaeche`, `Sicht.Flaeche.cs`) ordnet nach dem Ablauf, von links nach rechts: Client-Ausgang (je Akteur, was er darf),
-  Quellen (die Quellknoten der Graphen), Graphen (nur die obersten, mit ihrer Signatur), Aggregate, Projektionen (Projektion und Reader je Store
+- **Die Fläche** (`board.sicht.flaeche`, `Sicht.Flaeche.cs`) ordnet nach dem Ablauf, von links nach rechts: Clients (je Client eine Karte auf der Höhe
+  seiner Gruppe, darin seine Eingänge in der aktiven Umgebung, s. u.), Client-Ausgang (je Akteur, was er darf),
+  Graphen (nur die obersten, mit ihrer Signatur), Aggregate, Projektionen (Projektion und Reader je Store
   gruppiert), Client-Eingang (je Akteur, was er hört, dazu die Antworten auf seine Queries). Ein Akteur steht also zweimal, beide Male unter dem
   Client, der ihn verkörpert (eine Gruppe je Client, links und rechts auf derselben Höhe; ohne Client in der Gruppe „ohne Client“). Hat ein Client
   eine Implementierung, läuft ein Rücklauf-Bogen von seiner Gruppe rechts zu seiner Gruppe links: er reagiert auf, was seine Akteure hören, mit dem,
-  was sie dürfen. Die Domänen sind Bänder über Quellen bis Projektionen; das Band eines Graphen sind die Aggregate, an die er schreibt.
+  was sie dürfen. Die Domänen sind Bänder über Graphen bis Projektionen; das Band eines Graphen sind die Aggregate, an die er schreibt.
 - **Nachrichten sind Ports** an den Karten, mit Sorte (Command, Event, Hinweis, Query, Antwort, Frist). Deklariert wird ein Typ am Port seines
   Besitzers (`Sicht.Besitz`).
 - **Klick und Doppelklick:** ein Klick auf eine Karte oder einen Port hebt seine Kette bzw. seine Kanten hervor; ein Doppelklick öffnet ihn im
   Modal — Aggregat, Store und Katalog von innen, ein Graph im Katalog-Modal, ein Glied (Decide, Auf, Projektion, Reader, eine Nachricht des Aggregats) in seinem Block gewählt,
-  eine Funktion im Katalog-Modal, Akteur und Client (auch der Kopf einer Client-Gruppe) im Modal „Akteure und Clients“, alles andere (Instanz, Umgebung) als Formular. Ein Panel neben der Fläche gibt es nicht; Brotkrumen führen zurück.
-- **Kanten** laufen von Port zu Port und haben eine Art: schreiben, Quelle, lesen, Kenntnis (ein Event oder Hinweis an den Akteur, der es hört),
+  eine Funktion im Katalog-Modal, Akteur und Client (auch der Kopf einer Client-Gruppe und die Client-Karte) im Modal „Akteure und Clients“, alles andere (Instanz, Eingang, Umgebung) als Formular. Ein Panel neben der Fläche gibt es nicht; Brotkrumen führen zurück.
+- **Kanten** laufen von Port zu Port und haben eine Art: schreiben, lesen, Kenntnis (ein Event oder Hinweis an den Akteur, der es hört),
   Rücklauf (die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store), Reaktion (Gruppe eines Clients rechts → links).
 - **Von innen** (Modal): ein Graph zeigt seine Komposition in der Mitte des Katalog-Modals (`board.sicht.komposition`, `Sicht.Komposition.cs`:
   Knoten nach Tiefe, je `[Von]` eine Kante, Köpfe und Ausgänge, Technik und Konfig als Chips; eingesetzt wird aus der Liste links); ein Aggregat
@@ -447,7 +452,7 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Ausgänge mit Vielfachheit (1 · 0..1 · 0..n); eine Antwort vom Aggregat hat kein „＋“. „＋“ an einem Eingang hebt die Knoten hervor, die den Typ
   ausgeben (→ `[Von]`), dazu „von außen“ (→ `[Kopf]`), gestrichelt „neue Funktion davor“ (gibt den Typ aus, nimmt eine neue Nachricht von außen);
   „＋“ an einem Ausgang die Knoten, die ihn nehmen (→ `[Von]` am Nehmer), gestrichelt „neue Funktion dahinter“ (nimmt den Typ und steht danach
-  in der Mitte) — eine neue Funktion liegt in einem Katalog, der den Typ kennt (eine Anwendung hat keine Funktionen). Am linken Rand „＋ Quelle“ (nur ohne Kopf), am rechten
+  in der Mitte) — eine neue Funktion liegt in einem Katalog, der den Typ kennt (eine Anwendung hat keine Funktionen). Am rechten
   je Command ohne Ziel sein Empfänger bzw. „⚠ kein Empfänger“ und „＋“: ein Knoten eines anderen Graphen wird Kopf, oder ein neuer Graph entsteht mit
   einem Kopf dafür (Verbindung). Links im Katalog-Modal setzt „＋“ neben einer Funktion bzw. einem Graphen sie als Knoten ein (ein Graph als Schachtel) — gezogen
   wird nicht. „＋ Technik/Konfig“ am Knoten (Konstruktor), Klick auf eine Kante (verlierbar, lösen), ✕ am Knoten: aus dem Graphen bzw. samt
@@ -458,31 +463,50 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   ein Feld passt).
   Ein Doppelklick auf den Knoten öffnet die Verknüpfung der Felder: links die Felder der Quelle, rechts die Parameter des Ziels mit ihrer Regel („=“
   gleicher Name, „⇐“ anderer Name, „∅“ Standardwert, „⚠“ offen — dann baut die Klasse nicht); „＋“ an einem Ziel hebt die passenden Felder hervor
-  (der Server rechnet sie), ein Klick verknüpft (der Server schreibt `Translate()` neu), ✕ löst es. Am Eingang eines Graphen „＋ Eingang“: eine Quelle (nur
-  ohne Kopf) oder ein Client — eine neue bzw. vorhandene Nachricht der Domäne, die eine Kopf-Übersetzung in den Eingang macht (die neue Nachricht
+  (der Server rechnet sie), ein Klick verknüpft (der Server schreibt `Translate()` neu), ✕ löst es. Am Eingang eines Graphen „＋ Eingang“: ein
+  Client — eine neue bzw. vorhandene Nachricht der Domäne, die eine Kopf-Übersetzung in den Eingang macht (die neue Nachricht
   bekommt dessen Felder); wer sie bzw. den Eingang direkt hineingibt (`IDarf`), legt man im Modal „Akteure und Clients“ fest. „＋“ an einem
   Ausgang bietet gestrichelt „↦ ▣ Command an …“: ein vorhandener Command oder ein neuer samt Decide, Event und Apply; die Übersetzung dazwischen nennt
   die Id des Ziels ausdrücklich, wenn genau ein Feld in Frage kommt. Der Server legt jede neue Übersetzung nach
   `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` (Bereich der Domäne), nie in die Domäne. Unter den Ergebnissen eines Decide steht kein
   Command. Der Picker der Fläche legt einen Graphen nur mit erstem Knoten an — in einem Katalog (dem seines ersten Knotens, sonst dem ersten genutzten
   ); er öffnet sich danach.
+- **Clients und ihre Eingänge** (Fläche, Konfig; `flaeche.eingaenge`, `Sicht.Clients.cs`): was es gibt, ist Code (Akteur, Client, Quellart,
+  Verwirklichung — im Modal), was wo läuft, ist Konfig der Umgebung (auf der Fläche). Je Client (`IClient`) eine Karte in der Spalte Clients; darin
+  je Eingang der aktiven Umgebung (`Clients:<Client>:Eingaenge:<eingang>` in `umgebung.json`) eine Zeile — Name, Quellart, Rechner, Akteur und die
+  ersten Werte der Konfig der Quellart —, dazu „📡 App“, wenn der Client eine Leitung hat (Token, Adresse, URLs, Worker). Von jedem Eingang läuft
+  eine Kante zum Port der Nachricht, die seine Verwirklichung erzeugt, am Akteur in der Spalte daneben (z. B. `linie1` → `LiesBild` am
+  KameraSystem). Der Server rechnet das je Umgebung samt den Befunden, die der Start melden würde (dieselben Regeln wie `Eingaenge.Aus`: Client
+  und Akteur gibt es, der Client verkörpert ihn, die Art ist eine Quellart, je Meldung eine Übersetzung auf ein `IDarf` des Akteurs, im Cluster
+  ein Rechner, nur Werte der Konfig der Quellart) — ⚠ an der Zeile, Clients der Datei ohne Code im Kopf der Spalte; der Editor wählt nur die
+  aktive Umgebung. **„＋ Eingang“** an der Karte (nur dort) bietet die Quellarten, die einen verkörperten Akteur verwirklichen (bei mehreren
+  Akteuren danach der Akteur), fragt den Namen (leer) und schreibt `{Art, Akteur}`; ohne Verwirklichung verweist er ins Modal. **Doppelklick** auf
+  einen Eingang öffnet sein Formular (Machart der Instanz, Schema vom Server: `/api/werkbank/eingangschema`): Art fest, Akteur (verkörperte, die die
+  Art verwirklicht), Rechner („Pflicht im Cluster“), Offen (Standard 10 000), Wahl der Technik, die Felder der Konfig-Records mit Typ, Standard
+  und Werten. Speichern und ✕ (mit Nachfrage) sind Gesten an `umgebung.json` (`/api/werkbank/eingang/<umgebung>/<client>/<eingang>`, ↶). Im
+  Host-Rahmen (🔌 Clients) stehen nur Token, Adresse, URLs, Dateien und Worker; „Eingaenge“ verweist auf die Fläche.
 - **Akteure und Clients** (Modal, `board.sicht.akteure`, `Sicht.Akteure.cs`): links die Liste — „＋ Akteur“ (`record X : IAkteur`) und „＋ Client“
   (`record X : IClient`) sind der einzige Weg, sie anzulegen —, in der Mitte das Gewählte mit derselben Mechanik wie Aggregat, Store und Katalog
   (`innenZeige`). Ein **Akteur** in vier Spalten Herkunft · hört · darf · Ziel, ein Band je Gegenüber auf der Fläche (wohin seine Nachrichten gehen,
   woher kommt, was er hört: Aggregat, Graph, Übersetzung, Reader); „＋“ im Spaltenkopf „hört“ bzw. „darf“ zeigt gestrichelt, was die Grammatik dort
   erlaubt und er noch nicht hat (ein Klick schreibt `IHoert<T>` bzw. `IDarf<T>`), ✕ am Port nimmt es heraus; im Kopf die Clients, die ihn verkörpern,
-  und ✕ (löscht ihn, samt `IVerkoerpert` an den Clients). Ein **Client** in vier Spalten hört · Reaktion · sendet · Ziel, ein Band je verkörpertem
+  und ✕ (löscht ihn, samt `IVerkoerpert` an den Clients). In der Spalte Herkunft stehen seine **Verwirklichungen**: je Übersetzung der
+  Akteur-Seite eine Karte „<Quellart> ↦ <Nachricht>“ mit der Klasse, „✓ alle Felder zugeordnet“ bzw. „⚠ n offen“ und den Eingängen, die sie
+  brauchen; ein Doppelklick öffnet die Feldzuordnung (dieselbe wie auf der Fläche), ✕ entfernt sie (der Löschplan nennt diese Eingänge).
+  „＋ Verwirklichung“ im Spaltenkopf wählt eine Quellart (alle, bei mehreren Meldungen die Meldung) und einen Command seines `IDarf` und legt die
+  Übersetzung als Code an (`{Meldung}_{Ziel}_{n}` in `<Wurzel>.Akteure/Uebersetzungen.cs`, gleiche Namen gleich zugeordnet). Werte gibt es im
+  Modal nicht. Ein **Client** in vier Spalten hört · Reaktion · sendet · Ziel, ein Band je verkörpertem
   Akteur (✕ am Band: nicht mehr verkörpern); die Reaktion ist die Methode seiner Implementierung je gehörtem Fakt (Stand, ✎ Code, 🤖 Prompt — Platz
   `zusage|Client|Event@Klasse`); im Kopf „＋ verkörpert“ (links leuchten die Akteure, ein Klick schreibt `IVerkoerpert<A>`), seine Implementierungen
-  bzw. „＋ 🐍 Implementierung“ und ✕. Neue Nachrichten entstehen hier nicht — sie gehören einem Aggregat bzw. Katalog.
+  bzw. „＋ 🐍 Implementierung“, den Hinweis „Eingänge: auf der Fläche“ und ✕. Neue Nachrichten entstehen hier nicht — sie gehören einem Aggregat bzw. Katalog.
 - **Was passt und wo etwas verwendet wird, rechnet der Server** — der Editor schlägt in Fläche, Aggregat und Store nur nach (W3):
   `board.sicht.flaeche.anschluss` nennt je „＋“ der Fläche (`event|Projektion`, `uebersetzen|Typ`) die Ports,
   die die Grammatik dort erlaubt und die noch frei sind; ✕ steht an einem Port, den der Server `loesbar` nennt. `board.sicht.innen`
   (`Sicht.Innen.cs`) trägt je Typ seine Verwendungen (Art, Aggregat bzw. Besitzer, Karte der Stelle, `erzeugt`) — daraus Löschplan, „hat schon
   einen Erzeuger“ und „unverbunden“ —, je Decide die möglichen Ergebnisse und Fristen, je Frage eines Aggregats die möglichen Antworten, je Auf
   bzw. Frage eines Readers die Fähigkeiten derselben Richtung und die Antworten und je Fähigkeit die Read-Models ihrer Signatur. Wer einen Command
-  schickt, steht in `board.sicht.partner`; `komposition[…].offen` nennt die Ausgänge eines Graphen ohne Empfänger, `komposition[…].quellen` die
-  Quellen, deren Meldung ein Kopf nimmt. Regeln als Daten kommen aus der Grammatik (`rahmen.grammatik`): die Store-Klassen (Herkunft in
+  schickt, steht in `board.sicht.partner`; `komposition[…].offen` nennt die Ausgänge eines Graphen ohne Empfänger, `komposition[…].geben` je Kopf, wer
+  ihn gibt (Akteure, Verwirklichungen über Quellarten). Regeln als Daten kommen aus der Grammatik (`rahmen.grammatik`): die Store-Klassen (Herkunft in
   Schreib-Fähigkeiten, `[MindestensEinmal]`), die Grenzen eines Bündels (`Abstractions.Buendelgrenzen`) und das Muster eines Typnamens.
   Namen schlägt der Editor nicht vor: das Feld beginnt leer.
 - **Zoom:** in jedem Modal mit ＋/−/0 (auch mit Strg/⌘), Strg/⌘ + Mausrad bzw. Zwei-Finger-Zoom und der Anzeige im Kopf; auf der Fläche ebenso
@@ -539,7 +563,7 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   geschlossene Einheit, jede seiner Funktionen sieht alle seine Nachrichten. **Oben** ein Dropdown mit dem Katalog, darin „＋ neuer Katalog“ (ein eigenes
   Projekt `<Name>.Katalog`). **Ein Modal, kein Springen:** links die Auswahl — die Funktionen und Graphen des Katalogs, „＋ Funktion“, „＋ Graph“ —,
   in der Mitte genau das Gewählte. **Eine Funktion steht von innen wie Aggregat und Store** (dieselbe Innenansicht: Karten mit Ports, Kanten, ＋ am
-  Port, ✎ an der Karte, ✕ mit Löschplan): waagerecht das Band mit den Spalten **Eingänge · Auf · Lausche · Ausgänge · Liest**, senkrecht darüber
+  Port, ✎ an der Karte, ✕ mit Löschplan): waagerecht das Band mit den Spalten **Eingänge · Auf · Ausgänge · Liest**, senkrecht darüber
   ihre **Abhängigkeiten** — je Technik im Konstruktor ein eigener Stapel, nebeneinander: unten die Schnittstelle (Methoden mit Signatur, ✕ nimmt eine
   heraus, „＋ Methode“ fragt eine Zeile C#, „＋ Umsetzung ▲“), darüber ihre Umsetzungen (je Methode ihr Stand: geschrieben, leer, fehlt; ✎ öffnet
   je Methode den Rumpf, dazu „＋ braucht“ und wo sie gewählt ist), darüber, was eine Umsetzung selbst nimmt — ab der dritten Ebene zu, bis man es an
@@ -555,11 +579,11 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   viele“, den Strom), „asynchron“, „Herkunft“ und den **Rumpf** über dasselbe Werkzeug wie Decide, Apply, Handhabung und Store-Fähigkeit (ein Modell
   für jeden Code-Teil): der Ausschnitt aus der Datei, „✎“ als Code („✓ Speichern“, ⌘S, ersetzt genau diesen Bereich als Geste) oder „🤖“ als
   Auftrag (`claude -p` füllt bzw. passt an, geprüft im warmen Workspace, geprüft sofort in der Datei, sonst Vorschlag ✓/✗; ↶ nimmt die Übernahme
-  zurück). Der Platz eines Funktions-Rumpfs heißt `funktion|<Klasse>|<Eingang>` (bzw. `…|Lausche`, bei einer Technik
+  zurück). Der Platz eines Funktions-Rumpfs heißt `funktion|<Klasse>|<Eingang>` (bei einer Quellart `…|Lausche`, bei einer Technik
   `funktion|<Umsetzung>|<Methode>`); der Prompt trägt Signatur, Vertrag, Konstruktor-Typen, die Knoten in Graphen samt Kanten und den Rumpf der
-  genommenen Technik. Lausche hat seinen Rumpf ebenso hinter ✎. Eine Nachricht: ✎ für Name, Felder und
+  genommenen Technik. Eine eigene Quellart (`IQuellart`) steht ebenfalls im Katalog, ihr Lausche hat seinen Rumpf hinter ✎; sie ist nie Knoten eines Graphen. Eine Nachricht: ✎ für Name, Felder und
   Command ⇄ Hinweis, ✕ löscht, solange sie nirgends verwendet wird. **Verbunden wird über ＋:** „＋ Ausgang“ bzw. „＋ Eingang“ hebt die Karten
-  hervor, die passen (als Eingang ein Command des Katalogs oder einer Quelle, den die Funktion weder nimmt noch ausgibt; als Ausgang ein Command
+  hervor, die passen (als Eingang ein Command des Katalogs, den die Funktion weder nimmt noch ausgibt; als Ausgang ein Command
   oder Hinweis, den das Auf noch nicht ausgibt und die Funktion nicht nimmt), gestrichelt steht, was passt, aber nicht im Bild ist, und je Art
   „＋ neuer …“ (eine Nachricht entsteht so immer schon verbunden); ein Klick verbindet, Esc bricht ab, nach einem Eingang ist gleich sein Ausgang
   dran. „＋“ im Kopf der Spalten Eingänge bzw. Ausgänge startet dieselbe Wahl. „＋ Funktion“ fragt nur den Namen (die Klasse entsteht ohne `Auf` und
@@ -567,7 +591,7 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   an derselben Stelle in der Mitte: seine Leinwand (s. Gesten oben); links setzt „＋“ neben einer Funktion bzw. einem Graphen sie als Knoten ein. Ein Katalog hat keine
   **Bereiche** (docs/07 §7.3): alles Neue liegt flach in ihm, im Namespace `<Name>.Katalog` (der Server legt es so ab, `Strukturort.Flach`). Welche
   Kataloge ein Katalog nutzt, steht im Rahmen (`Rahmen.KatalogNutzt`, aus seiner Projektdatei). **Alles, was das Modal zeigt, rechnet der Server**
-  (`board.sicht.kataloge`, `Sicht.Kataloge.cs`): je Katalog seine Nachrichten mit „gibt“/„nimmt“, was die Quellen melden, seine Funktionen mit
+  (`board.sicht.kataloge`, `Sicht.Kataloge.cs`): je Katalog seine Nachrichten mit „gibt“/„nimmt“, seine Quellarten und was sie melden, seine Funktionen mit
   Konstruktor-Chips, Graphen und den passenden Ein- und Ausgängen (Grammatik: Konsum bzw. Erzeugung einer Funktion, kein Kreis an einem Knoten),
   dazu die Arten von Nachrichten, die ein Katalog hält (Projektstruktur × Grammatik — sie geben die Gruppen rechts und ihr „＋“); was im Graphen
   aneinander passt, steht in `komposition[…].flach.passt`, was Technik ist, in `baukasten.technik`. Der Editor schlägt nur nach; einen Katalog, der Nachrichten mehrerer Kataloge
@@ -580,14 +604,14 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   die Projektreferenz mit. **Alles liegt auf einer Ebene:** steht ein Graph als Knoten in einem anderen, zeigt die Mitte seine Knoten
   aufgefaltet im selben Bild (Pfad `Teil.Knoten`), umrahmt mit seinem Namen (Doppelklick auf den Rahmen: der Teilgraph für sich in der Mitte); die Sicht liefert
   das als `komposition[…].flach`, jeder Knoten mit dem Graphen, dem er gehört — eine Geste trifft dessen Record. Ein Graph im Katalog hat keinen
-  Eingang (Client, Quelle), kein „↦ ▣ Command an …“, keinen Empfänger am rechten Rand
+  Eingang (Client), kein „↦ ▣ Command an …“, keinen Empfänger am rechten Rand
   und keine Instanzen; rechts stehen seine **Outputs** (die Signatur). Er ist eine Blaupause:
   CQRS116 zählt seine Köpfe und Ausgänge erst dort, wo er als Knoten eines Graphen der Anwendung steht.
 - **Graph an eine Domäne binden:** im Kopf jedes Domänen-Bands der Fläche steht „＋ Graph“ (über der Spalte Graphen). Er bietet die Graphen der
   Kataloge an, dann einen ihrer Ausgänge und den Command an ein Aggregat dieser Domäne — es entsteht eine **Übersetzung**, kein Knoten und kein
   Graph der Anwendung (docs/04 §4.4). Ein Graph eines Katalogs steht auf der Fläche, sobald er läuft (eine Übersetzung oder ein Akteur bindet ihn),
   im Band „📚 <Katalog>“ — er gehört keiner Domäne. Er steht **aufgeklappt** (▾/▸ klappt ihn zu, gemerkt in der Ansicht): oben sein Eingang (die
-  Nachricht eines Clients samt den Akteuren, die sie dürfen, bzw. „⚠ kein Akteur“; eine Quelle; sonst „offen“) mit „＋ Eingang“, darunter **der
+  Nachricht eines Clients samt den Akteuren, die sie dürfen, bzw. „⚠ kein Akteur“, dazu die Quellarten, die einen dieser Akteure verwirklichen; sonst „offen“) mit „＋ Eingang“, darunter **der
   ganze Graph**: seine Knoten auf einer Ebene nebeneinander nach ihrer Tiefe (Teilgraphen aufgefaltet), je Knoten und Auf der Eingang und **jeder
   Fall seines Outputs als Port** (mit Vielfachheit), die Kanten dazwischen. An **jedem** Command-Port — auch an einem Zwischenschritt, der im Graphen
   weiterläuft — dockt „＋ ↦“ eine Übersetzung an (orange, solange ein Ausgang keinen Empfänger hat, CQRS120); „↦ n“ zählt, was schon andockt. Die

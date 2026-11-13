@@ -52,7 +52,8 @@ namespace Infrastructure.SourceGeneration
 
             var typen = Vertragsassemblies.Typen(c);
             var gut = new List<Funktionsform.Form>();
-            foreach (var t in typen.Where(Funktionsform.IstFunktion).OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal))
+            // Funktionen und Quellarten: beide werden über dieselbe Aktivierung gebaut (Konfig, Zustand, Technik); eine Quellart rechnet nur ihr Lausche.
+            foreach (var t in typen.Where(t => Funktionsform.IstFunktion(t) || Funktionsform.IstQuellart(t)).OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal))
             {
                 var f = Funktionsform.Lies(t);
                 foreach (var (text, ort) in f.Fehler) context.ReportDiagnostic(Diagnostic.Create(FormFehler, ort, t.Name, text));
@@ -117,7 +118,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"                (sp, z) => new {T(f.Typ)}({Ctorbindung.Argumente(ctor, fq, "z")}),");
                 sb.AppendLine($"                new Type[] {{ {string.Join(", ", dienste)} }},");
                 sb.AppendLine($"                Rechne{i}{(f.Zustand != null ? ", Zustand: " + Ctorbindung.Zustandsform(f.Zustand, fq) : "")}"
-                    + $"{(f.Lausche != null ? $", Lausche: {f.Aufs.Count}" : "")}),");
+                    + $"{(f.Lausche != null ? $", Lausche: {f.Aufs.Count}, Meldet: new Type[] {{ {string.Join(", ", f.Lausche.Ausgaben.Select(x => $"typeof({T(x)})"))} }}" : "")}),");
             }
             sb.AppendLine("        };");
             sb.AppendLine();

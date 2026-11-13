@@ -58,9 +58,10 @@ case "${1:-start}" in
 
     # Nur die Werte die vom Entwicklungs-Default abweichen:
     #   - die Umgebung "linux" (von build.sh geschrieben) trägt alle Werte; hier nur, was je Maschine abweicht:
-    #   - Quellen:DateiErkannt:Pfad und das DB-Passwort (als Verbindung) aus Variablen
+    #   - der Pfad des Dateiwächters (Eingang linie1 des Linienrechners, Clients:Linienrechner:Eingaenge:linie1:Pfad) und das DB-Passwort
+    #     (als Verbindung) aus Variablen
     cd "$SCRIPT_DIR/grpc"
-    Quellen__DateiErkannt__Pfad="$WATCH_PATH" \
+    Clients__Linienrechner__Eingaenge__linie1__Pfad="$WATCH_PATH" \
     EventStore__Verbindung="Host=localhost;Port=5432;Username=postgres;Password=$POSTGRES_PASSWORD" \
       ./host-grpc --umgebung linux > "$SCRIPT_DIR/logs/grpc.log" 2>&1 &
     echo $! > "$SCRIPT_DIR/grpc.pid"
