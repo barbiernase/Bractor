@@ -110,7 +110,8 @@ Commit nur auf Tobis Wort.
 ### Schritt 2 — Stränge an der Instanz (klein)
 
 - `GraphInstanzKonfig.Straenge`; der Graph-Actor nimmt so viele Ketten zugleich an, sonst „später“; die Warteschlange am Kopf zählt nicht mehr.
-- Instanz-Formular der Werkbank: das Feld Stränge; Prüfstand-Test der Grenze.
+- Instanz-Formular der Werkbank: das Feld Stränge; Prüfstand-Test der Grenze; der Umgebungs-Lader liest `Straenge` als Feld der Instanz, nicht als
+  Knoten. Auch die Quelle einer Instanz wartet auf einen freien Strang (bisher auf die Warteschlange ihres Knotens).
 
 ### Schritt 3 — Quellen als Eingänge (der Umbau, in einem Zug)
 

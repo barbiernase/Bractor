@@ -322,7 +322,8 @@ public sealed class Skaliert_MeldeAusreisser_1(Guid Bezug, double Wert) : ITrans
 ```
 
 **Instanz.** Ein Graph ist eine Blaupause und läuft erst als **Instanz**: eine Datei je Instanz, `umgebungen/<name>/graphen/<instanz>.json`, mit
-`Graph`, bei einem Quellkopf dem `Akteur` (er gibt hinein, was aus den Ausgängen des Graphen nach der Übersetzung entsteht), wahlweise dem `Rechner`, auf dem sie läuft, und je Knoten
+`Graph`, bei einem Quellkopf dem `Akteur` (er gibt hinein, was aus den Ausgängen des Graphen nach der Übersetzung entsteht), wahlweise dem `Rechner`, auf dem sie läuft, und den
+`Straenge` (so viele Ketten rechnet sie zugleich, je Host, der sie hält; Standard 10 000, 1 = eine nach der anderen), und je Knoten
 die Felder seiner Konfig-Records sowie
 `Parallel` (Standard 256), `Warteschlange` (10 000), `Wiederholungen` (3), `Vorwaermen`, `Zeitlimit` und `Technik` (die Umsetzung je Technik,
 nötig bei mehreren):
@@ -372,14 +373,14 @@ Aufrufe einer Kette bleiben auf dem Rechner, der ihren Kopf annahm (Parent an Pa
 mit diesem `Cluster:Rechner` an (`EigenerRechner`); jeder Host meldet seinen Namen im Gossip-Zustand, und tragen zwei denselben, hält nur das Mitglied
 mit der kleineren Id die festgelegten Instanzen (der andere meldet den Fehler). Die **Wege** (`FunktionsWege`) schicken einen Eingang an den eigenen
 Knoten, wenn er die Instanz hält, sonst reihum an einen, der sie hält (`Bote.FrageAnKnotenAsync`). Der Graph-Actor erkennt einen doppelten Kopf an der
-Kennung (in Arbeit: er hängt sich an; fertig: sofort „fertig“, Gedächtnis 10 000); sind schon so viele Ketten offen, wie die Warteschlange des Kopfs
-erlaubt, heißt die Antwort „später“. Der Parent erkennt einen doppelten Aufruf ebenso an seiner Kennung. Ein **Kind** rechnet einen Aufruf zugleich
+Kennung (in Arbeit: er hängt sich an; fertig: sofort „fertig“, Gedächtnis 10 000); sind schon so viele Ketten offen, wie die Instanz Stränge hat,
+heißt die Antwort „später“ (die Warteschlange eines Knotens begrenzt nur die Aufrufe an seinen Parent). Der Parent erkennt einen doppelten Aufruf ebenso an seiner Kennung. Ein **Kind** rechnet einen Aufruf zugleich
 und bringt jede Ausgabe hinaus: einen Command an ein Aggregat der Reihe nach über den Emitter (§4.6; „unbekannt“ → derselbe Command erneut, bis acht
 Versuche) — die **Antwort** trägt die Events, die das Ziel entschied (`CommandResult.Antwort`, auch bei einer erkannten Wiederholung), und hört die
 Funktion einen dieser Typen, rechnet das Kind ihn gleich weiter (Kennung `Kettenvertrag.Antwort`); einen Command ohne Ziel an einen Knoten desselben
 Graphen im Ergebnis an seinen Parent, der ihn nach der Wegtabelle weitergibt; einen an den Kopf einer anderen Instanz dorthin, und es wartet, bis
-deren Kette fertig ist („später“ oder 60 s ohne Antwort → erneut, mit derselben Kennung); einen Hinweis verlierbar an die Verteiler. Reihenfolge nur
-bei `Parallel` 1.
+deren Kette fertig ist („später“ oder 60 s ohne Antwort → erneut, mit derselben Kennung); einen Hinweis verlierbar an die Verteiler. Reihenfolge je Host
+nur bei einem Strang (`Straenge` 1) bzw. an einem Knoten mit `Parallel` 1.
 
 **Aktivierung** (`FunktionsAktivierung`, eine je Kind): ein eigener DI-Bereich, darin die Umsetzung über ihre generierte Fabrik und ihre Technik
 (`GeneratedTechnik`; Konfig-Records und Technik-Wahl liest der Bereich aus dem Knoten der Instanz, `KnotenBereich`). Technik lädt beim ersten Aufruf;
@@ -523,7 +524,7 @@ nur weckt) löst einen Scan aus, der Scan entscheidet. Quell-Commands stehen **n
 Neustart weitermacht, regelt sie über ihren **gesicherten Zustand** (§4.4) — die Architektur liefert nur ihn. Das Kind des Quellknotens lauscht,
 solange der Cluster-Knoten die Instanz hält (eine Quellinstanz läuft genau einmal im Cluster, auf ihrem Rechner); je Element gehen die nächste
 laufende Nummer und der Schnappschuss des Zustands an den Graph-Actor, das nächste Element erst, wenn er die Kette angenommen hat (Gegendruck über
-die Warteschlange des Kopfs). Kennung und Herkunft folgen aus Instanz und der **Kennung der Meldung** (`IMeldung`: beim Dateiwächter relativer
+die Stränge der Instanz). Kennung und Herkunft folgen aus Instanz und der **Kennung der Meldung** (`IMeldung`: beim Dateiwächter relativer
 Pfad, Größe und letzte Änderung, beim Taktgeber der Beginn des Intervalls, beim Webhook die Kennung des Absenders) — meldet die Quelle nach einem
 Neustart dasselbe Element erneut, auch in anderer Reihenfolge, entstehen dieselben Ids, und ein zweites Mal startet der Graph-Actor keine Kette, solange
 er das Element kennt; eine eigene Quelle ohne Meldung zählt bis zum Umbau der Quellen (docs/plan-clients-und-quellen.md) nach der Nummer. Gesichert

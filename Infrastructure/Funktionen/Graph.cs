@@ -87,10 +87,11 @@ public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> 
 }
 
 /// <summary>
-/// Eine Instanz: Name (Datei), Graph, der Akteur ihrer Quellköpfe (null: er folgt dem Auslöser), je Knoten seine Konfig und der Rechner, auf dem sie
-/// läuft (null: auf jedem Host).
+/// Eine Instanz: Name (Datei), Graph, der Akteur ihrer Quellköpfe (null: er folgt dem Auslöser), je Knoten seine Konfig, der Rechner, auf dem sie
+/// läuft (null: auf jedem Host), und ihre Stränge (0: der Standard).
 /// </summary>
-public sealed record GraphInstanz(string Name, GraphPlan Graph, string? Akteur, IReadOnlyDictionary<string, KnotenKonfig> Knoten, string? Rechner = null)
+public sealed record GraphInstanz(string Name, GraphPlan Graph, string? Akteur, IReadOnlyDictionary<string, KnotenKonfig> Knoten, string? Rechner = null,
+    int Straenge = 0)
 {
     /// <summary>Die Konfig eines Knotens (ohne Eintrag: die Standards).</summary>
     public KnotenKonfig Konfig(string knoten) => Knoten.TryGetValue(knoten, out var k) ? k : new KnotenKonfig();
@@ -101,9 +102,11 @@ public sealed record GraphInstanz(string Name, GraphPlan Graph, string? Akteur, 
     /// <summary>Die Knoten, die einen Eingang dieses Typs am Kopf nehmen (leer: keiner).</summary>
     public IReadOnlyList<string> KopfFuer(Type typ) => Graph.Koepfe.TryGetValue(typ, out var k) ? k : Array.Empty<string>();
 
-    /// <summary>So viele Ketten nimmt die Instanz auf diesem Cluster-Knoten zugleich am Kopf an (die Warteschlange ihres Kopfs; voll → „später“).</summary>
-    public int Ketten(Type kopf) =>
-        KopfFuer(kopf).Select(k => Konfig(k).Warteschlange).Where(w => w > 0).DefaultIfEmpty(FunktionsOrtKonfig.StandardWarteschlange).Min();
+    /// <summary>
+    /// So viele Ketten rechnet die Instanz auf diesem Cluster-Knoten zugleich — ihre Stränge, für jeden Kopf und ihre Quelle gleich (erreicht → „später“
+    /// bzw. die Quelle wartet).
+    /// </summary>
+    public int Gleichzeitig => Straenge > 0 ? Straenge : GraphInstanzKonfig.StandardStraenge;
 }
 
 /// <summary>
@@ -164,7 +167,9 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmg
             }
             if (k.Rechner is { } r && (r.Length == 0 || r.Trim() != r || r.Any(c => c is ',' or '*' or '?' || char.IsWhiteSpace(c))))
                 throw new BootFehler($"Instanz {name}: Rechner '{r}' ist kein Name — ein Rechner ist genau ein Name (kein Muster, keine Liste).", Karte());
-            alle.Add(new GraphInstanz(name, g, string.IsNullOrEmpty(k.Akteur) ? null : k.Akteur, k.Knoten, k.Rechner));
+            if (k.Straenge < 0)
+                throw new BootFehler($"Instanz {name}: Straenge {k.Straenge} — eine Zahl ab 0 (0 = Standard).", Karte());
+            alle.Add(new GraphInstanz(name, g, string.IsNullOrEmpty(k.Akteur) ? null : k.Akteur, k.Knoten, k.Rechner, k.Straenge));
         }
         foreach (var doppelt in alle.Where(i => i.Graph.MitCommandKopf).GroupBy(i => i.Graph.Name).Where(x => x.Count() > 1))
             throw new BootFehler($"Der Graph {doppelt.Key} hat einen Command-Kopf und läuft je Umgebung genau einmal — Instanzen: "

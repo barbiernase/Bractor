@@ -245,7 +245,8 @@ public sealed record Schadensbewertung(
 ### 10.3.5 … eine Instanz und eine Quelle
 
 Ein Graph läuft erst als **Instanz**: eine Datei je Instanz in der Umgebung, `umgebungen/<name>/graphen/<instanz>.json`, mit `Graph`, bei einem
-Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt, und muss es dürfen) und je Knoten (Pfad bei inneren Graphen) die Felder seiner
+Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt, und muss es dürfen), den `Straenge` (so viele Ketten rechnet sie zugleich, je
+Host; 1 = eine nach der anderen; `Parallel` am Knoten bleibt seine Obergrenze) und je Knoten (Pfad bei inneren Graphen) die Felder seiner
 Konfig-Records sowie `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik`. Dieselbe Blaupause läuft beliebig oft;
 ein Graph mit Command-Kopf läuft je Umgebung genau einmal. `Rechner` legt die Instanz auf einen Host fest (seinen `Cluster:Rechner`), etwa eine
 Quelle an ihre Steuerung oder ein Modell auf seine GPU; mit Zustand oder Quelle ist er im Cluster Pflicht, ohne läuft die Instanz auf jedem Host. Der Start prüft jede Instanz gegen ihren Graphen ([04](04-konsum-und-prozess-maschine.md)

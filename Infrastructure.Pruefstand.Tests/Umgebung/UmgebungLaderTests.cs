@@ -47,7 +47,7 @@ public class UmgebungLaderTests
               "EventStore": { "Verbindung": "Host=db;Password=${env:CQRS_TEST_PW}", "Datenbank": "cqrs_sim_${branch}" },
               "Cluster": { "Art": "Consul", "Name": "c-${branch}", "Rolle": "Mitglied" } }
             """, ("linie1", """
-            { "Graph": "Bildaufbereitung", "Akteur": "KameraSystem",
+            { "Graph": "Bildaufbereitung", "Akteur": "KameraSystem", "Straenge": 2,
               "Verkleinern": { "Parallel": 4, "Technik": { "IImageResizer": "ImageResizer" }, "AusgabePfad": "/daten/${branch}", "Endungen": [ "png", "tif" ] } }
             """));
         try
@@ -61,11 +61,21 @@ public class UmgebungLaderTests
             var knoten = u.Graphen["linie1"].Knoten["Verkleinern"];
             u.Graphen["linie1"].Graph.Should().Be("Bildaufbereitung", "die Instanz heißt wie ihre Datei");
             u.Graphen["linie1"].Akteur.Should().Be("KameraSystem");
+            u.Graphen["linie1"].Straenge.Should().Be(2);
+            u.Graphen["linie1"].Knoten.Keys.Should().Equal(["Verkleinern"], "Straenge gehört der Instanz, kein Knoten");
             knoten.Parallel.Should().Be(4);
             knoten.Technik.Should().Equal(new Dictionary<string, string> { ["IImageResizer"] = "ImageResizer" });
             knoten.Werte.Should().Contain("AusgabePfad", "/daten/feature_werkbank_p2", "Platzhalter gelten auch in den Instanzen")
                 .And.Contain("Endungen:0", "png").And.Contain("Endungen:1", "tif");
         }
+        finally { Directory.Delete(verz, true); }
+    }
+
+    [Fact]
+    public void Straenge_sind_eine_Zahl_ab_null()
+    {
+        var (k, verz) = Datei("sim-s", """{ "Umgebung": { "Name": "sim-s" } }""", ("linie1", """{ "Graph": "Bildaufbereitung", "Straenge": "viele" }"""));
+        try { FluentActions.Invoking(() => UmgebungLader.Lade(k, "sim-s", [])).Should().Throw<Exception>().WithMessage("*Straenge*viele*"); }
         finally { Directory.Delete(verz, true); }
     }
 

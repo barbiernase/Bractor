@@ -53,7 +53,7 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
 
     /// <summary>
     /// Das Formular einer Instanz des Graphen <paramref name="graph"/>, aus dem Board: ob er eine Quelle hat (dann nennt die Instanz ihren Akteur),
-    /// ob er Commands am Kopf nimmt (dann je Umgebung genau eine Instanz), ob Zustand oder Quelle einen Rechner verlangen — und je Knoten (Pfad, innere
+    /// ob er Commands am Kopf nimmt (dann je Umgebung genau eine Instanz), ob Zustand oder Quelle einen Rechner verlangen, der Standard der Stränge — und je Knoten (Pfad, innere
     /// Graphen mit Punkt) seine Funktion, die Rahmenfelder, die Felder seiner Konfig-Records und die Technik mit mehr als einer Umsetzung.
     /// </summary>
     public static JsonObject Schema(JsonObject board, string graph)
@@ -101,6 +101,7 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
             ["quelle"] = mitQuelle,
             ["commandKopf"] = !mitQuelle && (wurzel["koepfe"] as JsonArray ?? []).Count > 0,
             ["rechnerPflicht"] = mitQuelle || mitZustand,
+            ["straengeStandard"] = GraphInstanzKonfig.StandardStraenge,
             ["rahmenfelder"] = new JsonArray(KnotenKonfig.Rahmenfelder.Where(r => r != nameof(KnotenKonfig.Technik)).Select(r => (JsonNode)new JsonObject
             {
                 ["feld"] = r,

@@ -142,13 +142,22 @@ public sealed class KnotenKonfig
 
 /// <summary>
 /// Eine Instanz eines Graphen (docs/04 §4.4): eine Datei <c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c> — der Graph (Name des Records), bei
-/// einem Quellkopf der Akteur, für den sie hineingibt, und je Knoten seine Werte. Dieselbe Blaupause läuft beliebig oft; ein Graph mit Command-Kopf
-/// je Umgebung genau einmal.
+/// einem Quellkopf der Akteur, für den sie hineingibt, wie viele Ketten sie zugleich rechnet (<see cref="Straenge"/>) und je Knoten seine Werte.
+/// Dieselbe Blaupause läuft beliebig oft; ein Graph mit Command-Kopf je Umgebung genau einmal.
 /// </summary>
 public sealed class GraphInstanzKonfig
 {
+    /// <summary>Der Standard für <see cref="Straenge"/> — so viele Ketten, wie früher die Warteschlange am Kopf zuließ.</summary>
+    public const int StandardStraenge = 10_000;
+
     public string Graph { get; set; } = "";
     public string? Akteur { get; set; }
+    /// <summary>
+    /// So viele Ketten rechnet die Instanz zugleich, je Host, der sie hält (docs/04 §4.4); ist die Zahl erreicht, heißt ein neuer Kopf „später“ — der
+    /// durable Rand hält ihn, eine Quelle wartet. 1 = eine Kette nach der anderen (je Host der Reihe nach); 0 = der Standard
+    /// (<see cref="StandardStraenge"/>). <c>Parallel</c> am Knoten bleibt die Obergrenze seiner Kinder.
+    /// </summary>
+    public int Straenge { get; set; }
     /// <summary>Der Rechner, auf dem die Instanz läuft (sein <c>Cluster:Rechner</c>); ohne Angabe auf jedem Host. Pflicht mit Zustand oder Quelle im Cluster.</summary>
     public string? Rechner { get; set; }
     public Dictionary<string, KnotenKonfig> Knoten { get; set; } = new(StringComparer.Ordinal);

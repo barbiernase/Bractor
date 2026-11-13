@@ -113,7 +113,7 @@ public static partial class UmgebungLader
     }
 
     /// <summary>
-    /// Bindet eine Instanz: <c>Graph</c>, <c>Akteur</c>, <c>Rechner</c> und jeder andere Schlüssel ein Knoten — seine Rahmenfelder streng
+    /// Bindet eine Instanz: <c>Graph</c>, <c>Akteur</c>, <c>Rechner</c>, <c>Straenge</c> und jeder andere Schlüssel ein Knoten — seine Rahmenfelder streng
     /// (<see cref="KnotenKonfig.Rahmenfelder"/>), alles andere als Werte seiner Konfig-Records (geprüft beim Start gegen den Graphen).
     /// </summary>
     public static GraphInstanzKonfig Instanz(IConfigurationSection g)
@@ -122,7 +122,11 @@ public static partial class UmgebungLader
         {
             Graph = g[nameof(GraphInstanzKonfig.Graph)] ?? "", Akteur = g[nameof(GraphInstanzKonfig.Akteur)], Rechner = g[nameof(GraphInstanzKonfig.Rechner)],
         };
-        foreach (var k in g.GetChildren().Where(k => k.Key is not (nameof(GraphInstanzKonfig.Graph) or nameof(GraphInstanzKonfig.Akteur) or nameof(GraphInstanzKonfig.Rechner))))
+        if (g[nameof(GraphInstanzKonfig.Straenge)] is { } straenge)
+            i.Straenge = int.TryParse(straenge, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= 0
+                ? n : throw new InvalidOperationException($"Umgebung: Instanz {g.Key}: Straenge „{straenge}“ ist keine Zahl ab 0 (0 = Standard).");
+        foreach (var k in g.GetChildren().Where(k => k.Key is not (nameof(GraphInstanzKonfig.Graph) or nameof(GraphInstanzKonfig.Akteur)
+                     or nameof(GraphInstanzKonfig.Rechner) or nameof(GraphInstanzKonfig.Straenge))))
         {
             var knoten = new KnotenKonfig();
             var rahmen = new ConfigurationBuilder().AddInMemoryCollection(k.AsEnumerable(makePathsRelative: true)

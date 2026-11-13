@@ -12,9 +12,8 @@ namespace Infrastructure.Funktionen;
 /// koordiniert nichts: ein Eingang am Kopf (Kennung = die des Eingangs; ein doppelter hängt sich an bzw. hört „fertig“) geht als gesicherter Aufruf an
 /// den Knoten, der ihn nimmt, ein Element der Quelle an die Knoten, die sie nennen. Kommt dessen „fertig“, antwortet er dem wartenden Absender bzw.
 /// trägt den durablen Eingang aus; kommt „gescheitert“, parkt er den durablen Kopf und meldet <see cref="LaufGescheitert"/>. Sind schon so viele Ketten
-/// offen, wie die Warteschlange des Kopfs erlaubt, heißt die Antwort „später“ — der Rückstau reicht bis zum durablen Rand. Ist der Kopf eine
-/// ÜBERSETZUNG, rechnet er sie beim Annehmen inline: ihr Ergebnis geht an die Knoten, die sie nennen, oder als Command an ein Aggregat
-/// (Id aus Kopf und Übersetzung; die Kette ist fertig, wenn das Ziel entschieden hat).
+/// offen, wie die Instanz Stränge hat (<see cref="GraphInstanz.Gleichzeitig"/>), heißt die Antwort „später“ bzw. wartet die Quelle — der Rückstau
+/// reicht bis zum durablen Rand. Eine Kopf-Übersetzung rechnet schon der Eingang (<see cref="Verkettung.Ziele"/>); hier kommt ihr Ergebnis an.
 /// </summary>
 public sealed class GraphActor(
     GraphInstanz instanz,
@@ -69,7 +68,7 @@ public sealed class GraphActor(
                 if (instanz.Graph.Quelle is { } quelle && _parents.TryGetValue(quelle, out var lauscher)) context.Send(lauscher, new Lausche(h.Halten));
                 break;
             case QuellMeldung m:
-                if (_ketten.Count >= QuellGrenze) _quellRueckstau.Enqueue(m);
+                if (_ketten.Count >= instanz.Gleichzeitig) _quellRueckstau.Enqueue(m);
                 else Quelle(context, m);
                 break;
             case KnotenRueckmeldung r: Rueckmeldung(context, r); break;
@@ -95,7 +94,7 @@ public sealed class GraphActor(
             Antworte(context, e, Quittungsart.Gescheitert);
             return;
         }
-        if (_ketten.Count >= instanz.Ketten(typ)) { Antworte(context, e, Quittungsart.Spaeter); return; }
+        if (_ketten.Count >= instanz.Gleichzeitig) { Antworte(context, e, Quittungsart.Spaeter); return; }
         var o = new Offen(e);
         if (e.Art == Eingangsart.Kette && context.Sender is { } absender) o.Warten.Add(absender);
         else Antworte(context, e, Quittungsart.Angenommen);
@@ -105,9 +104,6 @@ public sealed class GraphActor(
         foreach (var (k, op) in ziele) Rufe(context, o, k, op!.Auf, e.Nachricht, e.Kennung, kontext, verlierbar: false);
         if (_ketten.ContainsKey(e.Kennung) && o.Ausstehend == 0) Beende(context, o, null);
     }
-
-    /// <summary>So viele Ketten nimmt die Quelle zugleich (die Warteschlange ihres Knotens); darüber wartet sie (Gegendruck).</summary>
-    private int QuellGrenze => instanz.Graph.Quelle is { } q && instanz.Konfig(q).Warteschlange is > 0 and var w ? w : FunktionsOrtKonfig.StandardWarteschlange;
 
     /// <summary>
     /// Ein Element der Quelle startet eine Kette — Kennung aus Instanz und der Kennung seiner Meldung (<see cref="Kettenvertrag.Quelle"/>: meldet die
@@ -223,7 +219,7 @@ public sealed class GraphActor(
             }
         }
         PruefeSicherung(context);
-        while (_quellRueckstau.Count > 0 && _ketten.Count < QuellGrenze) Quelle(context, _quellRueckstau.Dequeue());
+        while (_quellRueckstau.Count > 0 && _ketten.Count < instanz.Gleichzeitig) Quelle(context, _quellRueckstau.Dequeue());
     }
 
     /// <summary>Der letzte Schnappschuss der Quelle, dessen Kette und alle früheren beendet (fertig oder gescheitert) sind — zum Sichern.</summary>

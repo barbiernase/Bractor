@@ -153,7 +153,8 @@ public static class Grammatik
             [new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (Kopf einer Instanz: offen bis „fertig“, ausgetragen bzw. geparkt)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsParent.cs (ein Schritt: rechnen, Wege nachschlagen, „fertig“ nach den gesicherten Ausgaben)")]),
         new("GR-INSTANZ", "Graph läuft als Instanz", "Ein Graph läuft erst als Instanz: eine Datei je Instanz (umgebungen/<name>/graphen/<instanz>.json) "
-            + "mit Graph, bei einem Quellkopf dem Akteur (er darf, was den Graphen verlässt) und je Knoten Parallel, Warteschlange, Wiederholungen, Zeitlimit, "
+            + "mit Graph, bei einem Quellkopf dem Akteur (er darf, was den Graphen verlässt), den Strängen (gleichzeitige Ketten je Host) und je Knoten "
+            + "Parallel, Warteschlange, Wiederholungen, Zeitlimit, "
             + "Technik und die Felder seiner Konfig-Records. Ein Graph mit Command-Kopf läuft je Umgebung genau einmal. Nennt die Instanz einen Rechner, läuft "
             + "sie nur auf dem Host mit diesem Cluster:Rechner (eine Quelle an ihrer Steuerung, ein Modell auf seiner GPU); mit Zustand oder Quelle ist der "
             + "Rechner im Cluster Pflicht, fällt er aus, zieht nichts um (docs/04 §4.4).", "error",

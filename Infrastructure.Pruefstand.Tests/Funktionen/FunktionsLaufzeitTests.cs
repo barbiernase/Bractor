@@ -123,6 +123,8 @@ public class FunktionsLaufzeitTests
         public Func<IAggregatCommand, EmitAusgang> Ausgang = _ => EmitAusgang.Zugestellt;
         public Func<IAggregatCommand, IReadOnlyList<Antwortereignis>> Antwort = _ => Array.Empty<Antwortereignis>();
         public Verkettung Koepfe = Verkettung.Leer;
+        /// <summary>Die Stränge der nächsten Instanz (0 = der Standard).</summary>
+        public int Straenge;
         private readonly Dictionary<string, PID> _instanzen = new();
         private readonly ServiceProvider _dienste = new ServiceCollection().BuildServiceProvider();
 
@@ -131,7 +133,7 @@ public class FunktionsLaufzeitTests
         public GraphInstanz Instanz(string name, UebersetzungPlan[] uebersetzungen, params K[] knoten)
         {
             var plan = Plan(name, knoten);
-            var instanz = new GraphInstanz(name, plan, null, knoten.ToDictionary(k => k.Name, k => k.Knoten));
+            var instanz = new GraphInstanz(name, plan, null, knoten.ToDictionary(k => k.Name, k => k.Knoten), Straenge: Straenge);
             var parents = knoten.ToDictionary(k => k.Name, k =>
             {
                 var traeger = new FunktionsTraeger(k.Name, sp => new FunktionsAktivierung(sp, (_, z) => { k.BeimBau?.Invoke(); return z ?? new object(); },
@@ -348,14 +350,13 @@ public class FunktionsLaufzeitTests
     }
 
     [Fact]
-    public async Task Volle_Warteschlange_des_Kopfs_heisst_spaeter_Parallel_begrenzt_die_Kinder()
+    public async Task Volle_Straenge_der_Instanz_heissen_spaeter_Parallel_begrenzt_die_Kinder()
     {
-        await using var w = new Welt();
+        await using var w = new Welt { Straenge = 3 };
         var frei = new TaskCompletionSource();
         var laufen = 0;
         var hoechstens = 0;
         var a = new K("A", (_, _, _, _, _, ct) => Blockiert(ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 2) }.Op<Start>(typeof(Buche));
-        a.Knoten.Warteschlange = 3;
         w.Instanz("G", a);
 
         async IAsyncEnumerable<object> Blockiert([EnumeratorCancellation] CancellationToken ct)
@@ -370,7 +371,7 @@ public class FunktionsLaufzeitTests
         var quittungen = new List<Task<EingangQuittung?>>();
         for (var i = 0; i < 3; i++) quittungen.Add(w.StelleZuAsync(Eingang("G", new Start(i)), TimeSpan.FromSeconds(10), default));
         await Warte(() => Volatile.Read(ref laufen) == 2, "zwei Kinder rechnen");
-        (await Fertig(w, Eingang("G", new Start(9)), 5)).Should().Be(Quittungsart.Spaeter, "drei Ketten sind offen — die Warteschlange des Kopfs (3) ist voll");
+        (await Fertig(w, Eingang("G", new Start(9)), 5)).Should().Be(Quittungsart.Spaeter, "drei Ketten sind offen — die drei Stränge der Instanz sind belegt");
         frei.SetResult();
         foreach (var q in quittungen) (await q)!.Ausgang.Should().Be(Quittungsart.Fertig);
         hoechstens.Should().Be(2, "nie mehr als Parallel Kinder zugleich");

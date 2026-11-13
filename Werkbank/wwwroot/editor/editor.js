@@ -4449,6 +4449,10 @@
           [...r.querySelectorAll("button")].forEach(b=>b.classList.toggle("an",b.textContent==="👤 "+wert.Akteur));}},"👤 "+a.name)));box.append(r);}
       box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Rechner"),h("input",{value:wert.Rechner||"",placeholder:sch.rechnerPflicht?"Pflicht im Cluster (Zustand oder Quelle)":"ohne = auf jedem Host",
         oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}})));
+      // Stränge: so viele Ketten rechnet die Instanz zugleich, je Host, der sie hält (1 = der Reihe nach); leer = der Standard.
+      box.append(h("div",{class:"frow",title:"So viele Ketten rechnet die Instanz zugleich, je Host — 1 = eine nach der anderen; Parallel am Knoten bleibt seine Obergrenze"},
+        h("span",{class:"slotlbl"},"Stränge"),h("input",{value:wert.Straenge??"",placeholder:"Standard "+(sch.straengeStandard??""),
+        oninput:e=>{const v=e.target.value.trim();if(/^\d+$/.test(v)&&Number(v)>0)wert.Straenge=Number(v);else delete wert.Straenge;}})));
       const setze=(w,f,v)=>{if(v===""||v==null)delete w[f];else w[f]=v;};
       const feld=(w,f,typ,d)=>{d=d||{};
         if(d.werte||typ==="bool"){const werte=d.werte||["true","false"],s=h("select",{onchange:e=>setze(w,f,e.target.value===""?null:typ==="bool"?e.target.value==="true":e.target.value)},

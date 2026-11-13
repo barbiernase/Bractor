@@ -145,7 +145,7 @@ das Formular):
   Inbox-Grenze), `Lebenszyklus` (Leerlauf bis zur Passivierung je Actor-Art), `Konsum` (Partitionen, Seitengröße und Takt je Partition des Batch-Konsums), `Transport` (gRPC-Port, Einblick-Port, JSON-Eingang).
 - **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Clients` (je Client Token, Adresse, Urls,
   Dateien und `Worker` — wie die Werkbank ihn als Prozess startet: Skript, Argumente, Interpreter oder ein .NET-`Projekt`), `Stores`, `Logging`.
-- **Die Instanzen** (`graphen/<instanz>.json`, `GraphInstanzKonfig`): `Graph`, bei einem Quellkopf `Akteur`, je Knoten (Pfad bei inneren Graphen,
+- **Die Instanzen** (`graphen/<instanz>.json`, `GraphInstanzKonfig`): `Graph`, bei einem Quellkopf `Akteur`, `Rechner`, `Straenge` (gleichzeitige Ketten je Host), je Knoten (Pfad bei inneren Graphen,
   `Aufbereitung.Verkleinern`) `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik` (Schnittstelle → Umsetzung) und die
   Felder seiner Konfig-Records ([04](04-konsum-und-prozess-maschine.md) §4.4). Ohne Datei läuft ein Graph nicht; ein Graph mit Command-Kopf läuft
   je Umgebung genau einmal.
