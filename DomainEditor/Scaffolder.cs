@@ -504,6 +504,7 @@ public static class Scaffolder
     // ── Meldung (IMeldung) und Quellart (IQuellart, docs/04 §4.7) ─────────────────────────────────────────────────────────────
     private static readonly string IMeldung = nameof(Abstractions.IMeldung);
     private static readonly string IQuellart = nameof(Abstractions.IQuellart);
+    private static readonly string IAnnahme = typeof(Abstractions.IAnnahme<>).Name.Split('`')[0];
     private static readonly string Kennung = nameof(Abstractions.IMeldung.Kennung);
 
     /// <summary>
@@ -523,6 +524,12 @@ public static class Scaffolder
         var b = Kopf(q.Namespace, Usings(q.Namespace, modell, [modell.Rahmen.VertragsNamespace], q.Meldet.Concat(q.Konstruktor.Select(p => p.Typ)), []));
         Doku(b, q.Doku, "");
         var ctor = q.Konstruktor.Count > 0 ? $"({ParameterListe(q.Konstruktor)})" : "";
+        // Eine Annahme lauscht nicht: was sie meldet, steht im Typargument, ihre Meldungen nimmt der Host an.
+        if (q.Annahme)
+        {
+            b.AppendLine($"public sealed class {q.Name}{ctor} : {IAnnahme}<{q.Meldet.FirstOrDefault() ?? nameof(Abstractions.Aufruf)}>;");
+            return b.ToString();
+        }
         b.AppendLine($"public sealed class {q.Name}{ctor} : {IQuellart}");
         b.AppendLine("{");
         b.Append(LauscheStub(q, "    "));

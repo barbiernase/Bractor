@@ -201,6 +201,8 @@ public sealed class QuellartRaw
     public string? LauscheRumpf;
     /// <summary>Aus dem Framework (nicht in einem Projekt der Anwendung, z. B. <c>Core/Katalog</c>): nur gelesen, ohne Karte.</summary>
     public bool Framework;
+    /// <summary>Eine ANNEHMENDE Quellart (<c>IAnnahme&lt;TMeldung&gt;</c>): sie lauscht nicht, der Host nimmt ihre Meldungen an; was sie meldet, ist das Typargument.</summary>
+    public bool Annahme;
     /// <summary>Die Befunde der Lesart (Form von <c>Lausche</c>, Eingänge an einer Quellart).</summary>
     public List<string> Fehler = new();
     public string? Doku, Datei;
@@ -1047,13 +1049,19 @@ public sealed partial class DomainExtractor
             Konstruktor = KonstruktorWieGeschrieben(t), Konfigs = KonfigsVon(t),
             Fehler = form.Fehler.Select(f => f.Text).ToList(),
         };
+        // Eine Annahme (IAnnahme<TMeldung>): was sie meldet, steht im Typargument — auch unfertig (die Lesart meldet den Fehler, der Build bricht).
+        if (Infrastructure.SourceGeneration.Funktionsform.Annahmen(t).FirstOrDefault() is { } annahme)
+        {
+            q.Annahme = true;
+            q.MeldetFull = annahme.TypeArguments.Select(x => x.Fq()).ToList();
+        }
         if (form.Lausche is { } lausche)
         {
             q.MeldetFull = lausche.Ausgaben.Select(x => x.Fq()).ToList();
             q.LauscheOrt = MethodenOrt(lausche.Methode);
             q.LauscheRumpf = MethodBody(lausche.Methode);
         }
-        else
+        else if (!q.Annahme)
         {
             // Unfertig (W1): ein Lausche, das die Lesart (noch) nicht annimmt — was sein Strom nennt, bleibt sichtbar; den Fehler meldet der Build.
             var m = t.GetMembers(Abstractions.Funktionsvertrag.Lausche).OfType<IMethodSymbol>().FirstOrDefault(x => x.MethodKind == MethodKind.Ordinary);

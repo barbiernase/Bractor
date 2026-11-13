@@ -198,6 +198,34 @@ public interface IPost { Task SendeAsync(string an); }
         quelle.Should().NotContain("\"Falsch\",");
     }
 
+    // ── Annahme (IAnnahme<TMeldung>, docs/04 §4.7): eine Quellart, deren Meldungen der Host annimmt — kein Lausche, was sie meldet, ist das Typargument ──
+
+    [Fact]
+    public void Eine_Annahme_lauscht_nicht_und_der_Baustein_nennt_ihre_Meldung_aus_dem_Typargument()
+    {
+        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
+            public sealed record Hakenkonfig(string Pfad, string? Schluessel = null);
+            public sealed class Haken(Hakenkonfig konfig) : IAnnahme<Aufruf> { public Hakenkonfig Konfig { get; } = konfig; } }");
+
+        ids.Should().BeEmpty();
+        fehler.Should().BeEmpty();
+        quelle.Should().Contain("\"Haken\",").And.Contain("Annahme: true, Meldet: new Type[] { typeof(global::Abstractions.Aufruf) })",
+            "was eine Annahme meldet, steht im Typargument — der Start prüft dafür eine Übersetzung der Akteur-Seite");
+        quelle.Should().NotContain("Lausche: ", "eine Annahme hat kein Lausche — ihre Meldungen nimmt der Host an");
+    }
+
+    [Theory]
+    [InlineData("public sealed class Falsch : IAnnahme<Aufruf> { public async IAsyncEnumerable<Aufruf> Lausche(CancellationToken ct) "
+        + "{ await Task.CompletedTask; yield break; } }", "eine Annahme lauscht nicht")]
+    [InlineData("public sealed class Falsch : IAnnahme<Faellig> { }", "der Host baut aus dem HTTP-Aufruf einen Aufruf — eine andere Meldung kann er nicht annehmen")]
+    [InlineData("public sealed class Falsch : IAnnahme<Aufruf> { public Mahne Auf(Bezahlt b) => null!; }", "eine Annahme nimmt keine Eingänge")]
+    public void Eine_Annahme_ausser_Form_ist_CQRS100(string klasse, string worum)
+    {
+        var (quelle, ids, _) = Bausteine("namespace Probe { " + klasse + " }");
+        ids.Should().Contain("CQRS100", worum);
+        quelle.Should().NotContain("\"Falsch\",");
+    }
+
     [Fact]
     public void Eine_Funktion_lauscht_nicht_was_draussen_gefunden_wird_meldet_eine_Quellart()
     {

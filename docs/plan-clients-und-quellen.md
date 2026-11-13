@@ -147,7 +147,7 @@ Baut erst wieder als Ganzes; in dieser Reihenfolge:
   mit dem Kopf `LiesBild` hätte der Command drei Empfänger gehabt.
 - Offen: die Kennung von `DateiGefunden` ist fest relativer Pfad, Größe, letzte Änderung (nicht nach `Kennung` der Konfig); `AkteurAnteile` rechnet den
   Akteur nicht über Übersetzungen hinweg (war vorher schon so, ist jetzt sichtbarer); `build.sh` schreibt noch eine veraltete `umgebung.linux.json`;
-  das Formular der Werkbank zeigt Eingänge vorerst als JSON-Feld; der Webhook ist unverändert (Schritt 5).
+  das Formular der Werkbank zeigt Eingänge vorerst als JSON-Feld; der Webhook ist unverändert (Schritt 5, inzwischen umgesetzt).
 
 ### Schritt 4 — Werkbank: Sicht und Editor (umgesetzt)
 
@@ -176,11 +176,25 @@ Verweis auf die Fläche; docs/10 §10.9 und E4 nachgezogen. Abweichungen und Off
 - Die Instanz an der Graph-Karte zeigt weiter der Chip (die Stränge stehen im Formular); das Katalog-Modal („gewählt in …“) ist unverändert.
 - `Werkbank.Abnahme.Tests` nicht gelaufen (Tests nur auf dem Server, nach Rückfrage).
 
-### Schritt 5 — Webhook als Eingang
+### Schritt 5 — Webhook als Eingang (umgesetzt)
 
 Ein Webhook lauscht nicht: jeder Host nimmt `POST /eingang/webhook/<Pfad>` an (eigener Schalter statt des Sim-JSON-Eingangs), prüft den Schlüssel
-des Eingangs, übersetzt und legt die Nachricht durabel ab (Kennung aus Eingang und Kennung des Absenders), erst dann 202. Heute antwortet er,
-bevor etwas durabel ist, im Cluster liest nur der Rechner-Host sein Postfach, und eine Wiederholung wirkt doppelt.
+des Eingangs, übersetzt und legt die Nachricht durabel ab (Kennung aus Eingang und Kennung des Absenders), erst dann 202. Vorher antwortete er,
+bevor etwas durabel war, im Cluster las nur der Rechner-Host sein Postfach, und eine Wiederholung wirkte doppelt.
+
+**Stand Schritt 5 (2026-11-13, lokal gebaut, Werkzeuge grün, Tests geschrieben, nicht gelaufen):**
+- Vertrag `IAnnahme<TMeldung> : IQuellart` (Abstractions/Quellart.cs) samt `Annahmevertrag` (Werte `Pfad`/`Schluessel`, Köpfe `kennung`/`schluessel`,
+  Route) — eine Quelle für Laufzeit, Sicht und Werkbank. `Webhook(Webhookkonfig konfig) : IAnnahme<Aufruf>` ohne `Lausche`; `Webhookpostfaecher` ist weg.
+- Lesart `Funktionsform`: eine Annahme hat kein `Lausche` (eines ist CQRS100), `Meldet` = das Typargument; Baustein mit `Annahme: true` und `Meldet`.
+- Laufzeit: `Hineingabe` (ein Weg für Läufer und Annahme: Kennung, Übersetzung, Emitter mit Wiederholung, offener Eingang am Kopf, Akteur und Spur,
+  offene Kennungen für den Gegendruck); `Annahmen` (404/401/400/503/202) und `AnnahmeEndpunkt` auf dem Einblick-Port jedes Hosts, gemappt, sobald
+  die Umgebung einen Annahme-Eingang hat; die alte Route im JSON-Eingang ist entfernt; Läufer nur für lauschende Eingänge.
+- Abweichungen: (1) eine Annahme meldet heute nur `Aufruf` — der Host baut ihn aus dem HTTP-Aufruf; eine andere Meldung im Typargument ist CQRS100
+  (das Typargument bleibt der Code-Fakt, öffnen ist eine Zeile, sobald es einen zweiten Weg hinein gibt). (2) Ein Rechner an einem Annahme-Eingang ist
+  ein Boot-Fehler (nicht still ignoriert). (3) Ohne Einblick-Port bricht der Start, wenn die Umgebung einen Annahme-Eingang hat. (4) Die Annahme
+  versucht einen Command mit unbekanntem Ausgang dreimal (der Läufer achtmal) — der Absender wartet auf die Antwort.
+- Offen: der Endpunkt ist nur store-frei geprüft (`AnnahmeTests`), nicht über HTTP gegen echtes Marten und nicht im Cluster; der Gegendruck zählt je
+  Host; kein Akteur-Tor am Webhook, nur der Schlüssel des Eingangs (docs/13 GF-2).
 
 ### Schritt 6 — Abschluss
 

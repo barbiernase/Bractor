@@ -23,7 +23,7 @@ haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS1
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| GF-2 | Der `Webhook` nimmt Aufrufe nur am JSON-Eingang an (in Prod aus) und ohne Akteur-Tor; sein Postfach liegt je Prozess — ein Aufruf an einen Cluster-Knoten, der die Instanz nicht hält, bleibt dort liegen | P2 |
+| GF-2 | Der `Webhook` (eine Annahme, jeder Host nimmt an, 202 erst nach dem durablen Ablegen) prüft nur den Schlüssel seines Eingangs, kein Akteur-Tor; der Endpunkt ist nur store-frei geprüft (`AnnahmeTests`), über HTTP gegen echtes Marten und im Cluster noch nicht; sein Gegendruck zählt je Host | P2 |
 | GF-3 | Editor: „Adapter vorschlagen“ (eine kleine Funktion, wenn ein Typ nicht passt) fehlt als Geste; ⊕ im Panel findet auf der Fläche keine Ziele mehr (verbunden wird durch Ziehen von Port zu Karte) | P2 |
 | ED-1 | Editor-Fläche: Karten lassen sich in ihrer Zelle nicht von Hand senkrecht umordnen (die Reihenfolge rechnet der Editor); eine neue, leere Domäne erscheint nicht als Band | P3 |
 | ED-3 | Werkbank-Abnahme rot im Worker-Schritt (2026-11-04, Server): zwei Bilddateien in der Quelle `linienimport` ergeben in 120 s kein `ImagePairErstellt`; ⟳, Akteur, Fläche und Gesten davor sind grün. Ungeklärt, ob Dateiwächter, Instanz (Rechner) oder Kette; der Test war seit E4 aus | P1 |

@@ -8,7 +8,7 @@ namespace GraphExtractor;
 //   jedem Eingang eine Kante zu dem Akteur, für den er hineingibt — an den Port der Nachricht, die die Verwirklichung (Übersetzung der Akteur-Seite) aus
 //   der Meldung seiner Quellart macht. Dazu die Befunde, die der Start melden würde (dieselben Regeln wie Infrastructure.Quellen.Eingaenge.Aus): Client
 //   und Akteur gibt es, der Client verkörpert ihn, die Art ist eine Quellart, je Meldung eine Übersetzung auf ein IDarf des Akteurs, im Cluster ein
-//   Rechner — und die Werte gehören zur Konfig der Quellart. Gerechnet aus dem Board und rahmen.umgebungen (roh, Platzhalter bleiben stehen); der
+//   Rechner (eine Annahme nennt keinen, dafür einen Pfad, je Umgebung eindeutig) — und die Werte gehören zur Konfig der Quellart. Gerechnet aus dem Board und rahmen.umgebungen (roh, Platzhalter bleiben stehen); der
 //   Editor wählt nur die Daten der aktiven Umgebung.
 public sealed partial class Sicht
 {
@@ -37,7 +37,8 @@ public sealed partial class Sicht
     /// Ein Eingang geprüft wie beim Start: die Nachrichten, die er dem Akteur gibt (je passender Übersetzung ihr Ziel), und die Befunde. Leer heißt: er
     /// startet so.
     /// </summary>
-    private (List<(string Typ, string Uebersetzung)> Gibt, List<string> Befunde) EingangPruefen(string client, JsonObject? c, string name, JsonObject e, bool cluster)
+    private (List<(string Typ, string Uebersetzung)> Gibt, List<string> Befunde) EingangPruefen(string client, JsonObject? c, string name, JsonObject e, bool cluster,
+        IReadOnlyDictionary<string, List<string>> pfade)
     {
         var befunde = new List<string>();
         var gibt = new List<(string, string)>();
@@ -65,7 +66,16 @@ public sealed partial class Sicht
         if (e[nameof(EingangKonfig.Rechner)] is JsonValue rv && rv.TryGetValue<string>(out var r)
             && (r.Length == 0 || r.Trim() != r || r.Any(ch => ch is ',' or '*' or '?' || char.IsWhiteSpace(ch))))
             befunde.Add($"Rechner „{r}“ ist kein Name — ein Rechner ist genau ein Name");
-        if (cluster && e[nameof(EingangKonfig.Rechner)] == null) befunde.Add("im Cluster nennt ein Eingang seinen Rechner — eine Quelle lauscht genau einmal");
+        if (q != null && B(q, "annahme"))
+        {
+            // Eine Annahme (docs/04 §4.7): jeder Host nimmt an — kein Rechner, dafür ein Pfad, je Umgebung eindeutig.
+            if (e[nameof(EingangKonfig.Rechner)] != null) befunde.Add($"{art} nimmt an — jeder Host nimmt Aufrufe an, ein Rechner hat hier keine Bedeutung");
+            var pfad = Annahmevertrag.Normal(WertText(e[Annahmevertrag.Pfad]));
+            if (pfad.Length == 0) befunde.Add($"der Wert „{Annahmevertrag.Pfad}“ fehlt — unter ihm nimmt der Host an (POST {Annahmevertrag.Route}/<{Annahmevertrag.Pfad}>)");
+            else if (pfade.TryGetValue(pfad, out var mit) && mit.Count > 1)
+                befunde.Add($"Pfad „{pfad}“ nennen mehrere Eingänge ({string.Join(", ", mit)}) — ein Pfad gehört je Umgebung genau einem");
+        }
+        else if (cluster && e[nameof(EingangKonfig.Rechner)] == null) befunde.Add("im Cluster nennt ein Eingang seinen Rechner — eine Quelle lauscht genau einmal");
         if (q != null)
         {
             var felder = QuellartFelder(q).Select(x => x.Feld).ToHashSet(StringComparer.Ordinal);
@@ -90,6 +100,13 @@ public sealed partial class Sicht
             var kanten = new JsonArray();
             var befunde = new JsonArray();
             var clients = inhalt[UmgebungsAbschnitte.Clients] as JsonObject ?? new JsonObject();
+            // Die Pfade der Annahmen dieser Umgebung (je Pfad die Eingänge, die ihn nennen) — ein Pfad gehört genau einem.
+            var pfade = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            foreach (var (client, cw) in clients)
+                foreach (var (name, ew) in (cw?[nameof(ClientKonfig.Eingaenge)] as JsonObject ?? new JsonObject()))
+                    if (ew is JsonObject e && QuellartNamens(S(e, nameof(EingangKonfig.Art))) is { } q && B(q, "annahme")
+                        && Annahmevertrag.Normal(WertText(e[Annahmevertrag.Pfad])) is { Length: > 0 } p)
+                        (pfade.TryGetValue(p, out var l) ? l : pfade[p] = []).Add(client + "/" + name);
             foreach (var (client, cw) in clients.OrderBy(x => x.Key, StringComparer.Ordinal))
             {
                 if (cw is not JsonObject ck) continue;
@@ -104,11 +121,11 @@ public sealed partial class Sicht
                 foreach (var (name, ew) in (ck[nameof(ClientKonfig.Eingaenge)] as JsonObject ?? new JsonObject()).OrderBy(x => x.Key, StringComparer.Ordinal))
                 {
                     if (ew is not JsonObject e) continue;
-                    var (gibt, bef) = EingangPruefen(client, c, name, e, cluster);
+                    var (gibt, bef) = EingangPruefen(client, c, name, e, cluster, pfade);
                     var q = QuellartNamens(S(e, nameof(EingangKonfig.Art)));
-                    // Die wichtigsten Werte: die gesetzten Felder der Konfig der Quellart in ihrer Reihenfolge, höchstens zwei.
+                    // Die wichtigsten Werte: die gesetzten Felder der Konfig der Quellart in ihrer Reihenfolge, höchstens zwei — ein Schlüssel nur verdeckt.
                     var kurz = (q == null ? [] : QuellartFelder(q)).Where(f => e[f.Feld] != null).Take(2)
-                        .Select(f => (JsonNode)(f.Feld + ": " + WertText(e[f.Feld]))).ToArray();
+                        .Select(f => (JsonNode)(f.Feld + ": " + (f.Feld == Annahmevertrag.Schluessel ? "•••" : WertText(e[f.Feld])))).ToArray();
                     var akteur = S(e, nameof(EingangKonfig.Akteur));
                     var a = _akteure.FirstOrDefault(x => S(x, "name") == akteur);
                     var eo = new JsonObject
@@ -120,6 +137,7 @@ public sealed partial class Sicht
                     };
                     if (e[nameof(EingangKonfig.Rechner)] is JsonValue rv && rv.TryGetValue<string>(out var r)) eo["rechner"] = r;
                     if (q != null && QuellartKarte(q) is { } qk) eo["quellart"] = qk;
+                    if (q != null && B(q, "annahme")) eo["annahme"] = true;
                     eingaenge.Add(eo);
                     if (a != null)
                         foreach (var typ in gibt.Select(g => g.Typ).Distinct())
@@ -154,7 +172,7 @@ public sealed partial class Sicht
             var akteure = Verwirklicht(q).Select(x => S(x.Akteur, "name")).Where(verk.Contains).Distinct().Order(StringComparer.Ordinal).ToList();
             if (akteure.Count == 0) continue;
             verwirklicht.UnionWith(akteure);
-            arten.Add(new JsonObject { ["art"] = S(q, "name"), ["framework"] = B(q, "framework"), ["akteure"] = Arr(akteure) });
+            arten.Add(new JsonObject { ["art"] = S(q, "name"), ["framework"] = B(q, "framework"), ["annahme"] = B(q, "annahme"), ["akteure"] = Arr(akteure) });
         }
         return new JsonObject
         {

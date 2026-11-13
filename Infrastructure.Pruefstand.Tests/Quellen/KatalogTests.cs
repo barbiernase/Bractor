@@ -15,7 +15,7 @@ namespace Infrastructure.Pruefstand.Quellen;
 /// <summary>
 /// Die Quellarten des Frameworks (docs/04 §4.7, <c>Core/Katalog</c>, <c>IQuellart</c>): sie lauschen und melden je Element eine Meldung — der Kern des
 /// Dateiwächters (Kennung, Fertig-Erkennung, Gedächtnis im Zustand), der Dateiwächter gegen ein echtes Verzeichnis (sein Zustand trägt über einen
-/// Neustart), der Taktgeber und der Webhook. Store-frei: das Sichern des Zustands nach dem Hineingeben beweisen <c>QuellLaeuferTests</c> und die
+/// Neustart), der Taktgeber und der Webhook (eine Annahme: er lauscht nicht). Store-frei: das Sichern des Zustands nach dem Hineingeben beweisen <c>QuellLaeuferTests</c> und die
 /// Integrations-Tests.
 /// </summary>
 public class KatalogTests
@@ -141,14 +141,13 @@ public class KatalogTests
     }
 
     [Fact]
-    public async Task Der_Webhook_meldet_was_in_seinem_Postfach_liegt()
+    public void Der_Webhook_nimmt_an_statt_zu_lauschen_und_seine_Konfig_nennt_die_Werte_des_Annahmevertrags()
     {
-        var pfad = "probe-" + Guid.NewGuid().ToString("N")[..6];
-        Webhookpostfaecher.Lege(pfad, new Aufruf("k1", "{\"a\":1}")).Should().BeTrue();
-        using var stopp = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await using var e = new Webhook(new Webhookkonfig(pfad)).Lausche(stopp.Token).GetAsyncEnumerator(stopp.Token);
-        (await e.MoveNextAsync()).Should().BeTrue();
-        e.Current.Should().Be(new Aufruf("k1", "{\"a\":1}"));
+        // Eine Annahme: der Host nimmt ihre Aufrufe an (Annahmen, AnnahmeTests) — kein Postfach, kein Lausche.
+        typeof(IAnnahme<Aufruf>).IsAssignableFrom(typeof(Webhook)).Should().BeTrue();
+        typeof(IQuellart).IsAssignableFrom(typeof(Webhook)).Should().BeTrue("eine Annahme ist eine Quellart");
+        new[] { nameof(Webhookkonfig.Pfad), nameof(Webhookkonfig.Schluessel) }.Should().Equal(Annahmevertrag.Pfad, Annahmevertrag.Schluessel);
+        new Webhook(new Webhookkonfig("lieferant")).Konfig.Schluessel.Should().BeNull("ohne Schlüssel nimmt er jeden Aufruf an");
     }
 
     [Fact]

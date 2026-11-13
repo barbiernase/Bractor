@@ -2025,7 +2025,7 @@
           h("button",{class:"ag-los",title:"Eingang "+e.name+" entfernen",onclick:ev=>{ev.stopPropagation();
             menueFix(ev.clientX,ev.clientY,"✕ Eingang "+e.name+" entfernen?",[{hinweis:"aus umgebungen/"+flUmgebung()+"/umgebung.json (↶ nimmt es zurück)"},
               {t:"✕ entfernen",gefahr:1,fn:()=>instanzGeste(eingangPfad(cn,e.name),"DELETE",undefined,"⚡ Eingang "+cn+"/"+e.name+" entfernt")}]);}},"✕")),
-        h("div",{class:"fl-cl-w"},"🖥 "+(e.rechner||(flEing().cluster?"⚠ ohne Rechner":"auf dem Host"))+" · für 👤 "+(e.akteur||"?")),
+        h("div",{class:"fl-cl-w"},"🖥 "+(e.annahme?"jeder Host nimmt an":e.rechner||(flEing().cluster?"⚠ ohne Rechner":"auf dem Host"))+" · für 👤 "+(e.akteur||"?")),
         ...(e.kurz||[]).map(k=>h("div",{class:"fl-cl-w leise",title:k},k)));
       z.dataset.eingang=e.name;box.append(z);});
     if(!E.app&&!(E.eingaenge||[]).length)box.append(h("div",{class:"fl-cl-w leise"},"in „"+(flUmgebung()||"?")+"“ ohne Eingang"));
@@ -3886,7 +3886,9 @@
       h("span",{class:"kat-fn-u"},"meldet "+((q.meldet||[]).join(", ")||"—")+" · "+((x.verwirklicht||[]).length?"verwirklicht "+x.verwirklicht.map(a=>"👤 "+a).join(", "):"noch kein Akteur (eine Übersetzung der Akteur-Seite fehlt)"))));
     if((q.konstruktor||[]).length)box.append(h("div",{class:"kat-fuss"},"Konstruktor:",...q.konstruktor.map(c=>h("span",{class:"kat-chip"},String(c.typ)))));
     const teil=(rumpfTeile({kind:"quellart",ref:q})||[])[0],r=h("div",{class:"kat-rumpf rumpfport"});
-    if(!teil||!teil.ort)r.append(h("div",{class:"kom-wo"},"Lausche steht noch nicht im Code."));else rumpfWerkzeug(r,teil,q._id,0,true);
+    // Eine Annahme (IAnnahme) lauscht nicht — ihre Meldungen nimmt der Host an; sie hat keinen Rumpf.
+    if(q.annahme)r.append(h("div",{class:"kom-wo"},"nimmt an: jeder Host nimmt Aufrufe an (POST /eingang/webhook/<Pfad>) — kein Lausche."));
+    else if(!teil||!teil.ort)r.append(h("div",{class:"kom-wo"},"Lausche steht noch nicht im Code."));else rumpfWerkzeug(r,teil,q._id,0,true);
     box.append(r);return box;}
   // Eine Funktion bzw. einen Graphen als Knoten in den gezeigten Graphen setzen (eine generische fragt ihr Typargument).
   function katEinsetzenInGraph(grId,name,e){const g=komModell(grId);if(!g)return;
@@ -4546,14 +4548,19 @@
       const sa=h("select",{onchange:e=>instSetze(wert,"Akteur",e.target.value)},...(wert.Akteur?[]:[h("option",{value:""},"— wählen")]),
         ...akteure.map(an=>{const o=h("option",{value:an},"👤 "+an+((passend&&passend.akteure.includes(an))?"":" ⚠ verwirklicht die Art nicht"));if(an===wert.Akteur)o.selected=true;return o;}));
       box.append(zeile("Akteur",sa,"Für wen der Eingang hineingibt — ein Akteur, den "+client+" verkörpert und den "+wert.Art+" verwirklicht"));
-      box.append(zeile("Rechner",h("input",{style:"flex:1;min-width:0",value:wert.Rechner||"",placeholder:"Pflicht im Cluster",oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}}),
+      // Eine Annahme (der Webhook) lauscht nicht: jeder Host nimmt an — kein Rechner, dafür Pfad (Pflicht) und Schlüssel (unten, Werte ihrer Konfig).
+      if(sch.annahme)box.append(zeile("Rechner",h("input",{style:"flex:1;min-width:0",value:wert.Rechner||"",placeholder:"jeder Host",oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}}),
+        "Eine Annahme nimmt jeder Host an: POST "+(sch.route||"/eingang/webhook")+"/<Pfad> auf dem Einblick-Port — leer lassen"));
+      else box.append(zeile("Rechner",h("input",{style:"flex:1;min-width:0",value:wert.Rechner||"",placeholder:"Pflicht im Cluster",oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}}),
         "Auf welchem Rechner die Quelle lauscht (sein Cluster:Rechner) — im Cluster Pflicht: eine Quelle lauscht genau einmal"));
       box.append(zeile("Offen",h("input",{style:"flex:1;min-width:0",value:wert.Offen??"",placeholder:"Standard "+(sch.offenStandard??""),oninput:e=>{const v=e.target.value.trim();if(/^\d+$/.test(v)&&Number(v)>0)wert.Offen=Number(v);else delete wert.Offen;}}),
         "So viele hineingegebene Elemente dürfen offen sein, bevor die Quelle wartet"));
       (sch.technik||[]).forEach(t=>{wert.Technik=wert.Technik||{};const s=h("select",{onchange:e=>instSetze(wert.Technik,t.schnittstelle,e.target.value||null)},h("option",{value:""},"— wählen"));
         t.umsetzungen.forEach(u=>{const o=h("option",{value:u},u);if(wert.Technik[t.schnittstelle]===u)o.selected=true;s.append(o);});box.append(zeile("⚙ "+t.schnittstelle,s));});
       (sch.konfigs||[]).forEach(c=>{box.append(h("div",{class:"gsec",title:c.record},"▤ "+c.record+(c.umsetzung?" ("+c.umsetzung+")":"")));
-        (c.felder||[]).forEach(f=>box.append(zeile(f.feld,instFeld(wert,f.feld,f.typ.replace(/\?$/,""),{standard:f.standard,werte:f.werte}),c.record+" · "+f.typ)));});
+        (c.felder||[]).forEach(f=>box.append(zeile(f.feld,instFeld(wert,f.feld,f.typ.replace(/\?$/,""),{standard:f.standard,werte:f.werte}),c.record+" · "+f.typ
+          +(sch.annahme&&f.feld==="Pfad"?" — Pflicht, je Umgebung eindeutig: POST "+(sch.route||"")+"/<Pfad>":"")
+          +(sch.annahme&&f.feld==="Schluessel"?" — ein Geheimnis: als ${env:NAME} eintragen; der Absender schickt es im Kopf „schluessel“":""))));});
       box.append(h("div",{class:"frow"},h("button",{class:"act go",onclick:()=>instanzGeste(eingangPfad(client,name),"POST",instSauber(wert),"⚡ Eingang "+client+"/"+name)},"💾 Speichern"),
         h("button",{class:"act",onclick:async()=>{if(!confirm("Eingang "+client+"/"+name+" aus „"+(WB.umgName||"?")+"“ entfernen?"))return;
           if(await instanzGeste(eingangPfad(client,name),"DELETE",undefined,"⚡ Eingang "+client+"/"+name+" entfernt"))komSchliesse();}},"✕ Entfernen")));})();}

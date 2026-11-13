@@ -28,6 +28,12 @@ public static class GraphInstanzExtensions
         var eingaenge = Infrastructure.Quellen.Eingaenge.Aus(u.Clients, Anwendung.Funktionen.Bausteine, new Uebersetzungen(Anwendung.Funktionen.Uebersetzungen),
             Anwendung.Akteure.Rechte, Anwendung.Akteure.ClientVertraege, u.Cluster.Art == ClusterArt.Einzelknoten);
         services.Replace(ServiceDescriptor.Singleton(eingaenge));
+        // Die Annahme (docs/04 §4.7): Eingänge aus annehmenden Quellarten nimmt jeder Host auf dem Einblick-Port an — ohne ihn gäbe es keinen Weg hinein.
+        if (eingaenge.Annehmende.FirstOrDefault() is { } annahme && u.Transport.EinblickPort <= 0)
+            throw new Infrastructure.Umgebung.BootFehler($"Clients:{annahme.Client}:Eingaenge:{annahme.Name}: {annahme.Art.Name} nimmt an "
+                + $"(POST {Annahmevertrag.Route}/{annahme.Pfad}) — dafür braucht der Host den Einblick-Port (Transport:EinblickPort).",
+                WirkerId.FuerEingang(annahme.Client, annahme.Name));
+        services.Replace(ServiceDescriptor.Singleton(sp => Infrastructure.Quellen.Annahmen.Aus(eingaenge, sp)));
         if (eingaenge.Alle.Count > 0)
             Console.WriteLine($"[CQRS] Eingänge: {string.Join(", ", eingaenge.Alle.Select(e => e.Ort + " (" + e.Art.Name + " für " + e.Akteur + ")"))}");
         return eingaenge;

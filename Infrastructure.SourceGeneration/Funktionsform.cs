@@ -20,6 +20,10 @@ namespace Infrastructure.SourceGeneration
         public const string IFunktion = A + "IFunktion";
         public const string IQuellart = A + "IQuellart";
         public const string IMeldung = A + "IMeldung";
+        /// <summary>Die annehmende Quellart (<c>IAnnahme&lt;TMeldung&gt;</c>): der Host nimmt ihre Meldungen an, sie lauscht nicht.</summary>
+        public const string IAnnahme = A + "IAnnahme`1";
+        /// <summary>Was eine Annahme heute meldet: der Host nimmt über HTTP an und baut daraus einen <c>Aufruf</c>.</summary>
+        public const string Aufruf = A + "Aufruf";
 
         /// <summary>Der Eingang eines <c>Auf</c> (genau einer je Auf): Parametername und der Typ, den er nimmt.</summary>
         internal sealed class Port
@@ -70,7 +74,7 @@ namespace Infrastructure.SourceGeneration
             public INamedTypeSymbol? Zustand;
             /// <summary>Hat die Funktion einen Einstieg — einen Command, oder lauscht sie? Wer nur Events hört, hätte keinen
             /// (CQRS100): eine Funktion liest nie das Log.</summary>
-            public bool MitEinstieg => Lausche != null || Aufs.Any(a => a.Command);
+            public bool MitEinstieg => Lausche != null || Annahme != null || Aufs.Any(a => a.Command);
 
             /// <summary>Ein Event-Eingang ist eine ANTWORT: ein Ziel entschied es auf einen ihrer Commands hin; sie hört es nur so, nie aus dem Log
             /// (dass einer ihrer Commands es entscheiden kann, prüft das Gesamtbild).</summary>
@@ -85,6 +89,16 @@ namespace Infrastructure.SourceGeneration
 
             /// <summary>Eine Quellart (<c>IQuellart</c>): sie lauscht und steht nie in einem Graphen; ihr Akteur gibt hinein, was sie meldet.</summary>
             public bool Quellart;
+
+            /// <summary>
+            /// Eine ANNEHMENDE Quellart (<c>IAnnahme&lt;TMeldung&gt;</c>): was sie meldet — das Typargument (eine Meldung) —; null = keine Annahme. Sie hat
+            /// kein <c>Lausche</c>: ihre Meldungen nimmt der Host an.
+            /// </summary>
+            public INamedTypeSymbol? Annahme;
+
+            /// <summary>Was eine Quellart meldet: aus der Signatur von <c>Lausche</c> bzw. dem Typargument von <c>IAnnahme</c>.</summary>
+            public IEnumerable<INamedTypeSymbol> Meldet =>
+                Lausche != null ? Lausche.Ausgaben : Annahme != null ? new[] { Annahme } : Enumerable.Empty<INamedTypeSymbol>();
         }
 
         /// <summary>Der Name einer Funktion (Baustein, Wirker, Spur): der Klassenname, bei einer generischen mit ihren Typargumenten
@@ -110,11 +124,18 @@ namespace Infrastructure.SourceGeneration
         }
 
         /// <summary>
-        /// Ist <paramref name="t"/> eine QUELLART (<c>IQuellart</c>, docs/04 §4.7)? Eine konkrete Klasse mit <c>Lausche</c>: sie meldet, was sie draußen findet;
+        /// Ist <paramref name="t"/> eine QUELLART (<c>IQuellart</c>, docs/04 §4.7)? Eine konkrete Klasse mit <c>Lausche</c> (oder eine Annahme,
+        /// <c>IAnnahme&lt;TMeldung&gt;</c>, deren Meldungen der Host annimmt): sie meldet, was sie draußen findet;
         /// eine Übersetzung der Akteur-Seite macht daraus eine Nachricht, die der Akteur eines Eingangs darf. Nie ein Knoten eines Graphen.
         /// </summary>
         public static bool IstQuellart(INamedTypeSymbol t) =>
             Name(t) != IQuellart && t.TypeKind == TypeKind.Class && !t.IsAbstract && Hat(t, IQuellart);
+
+        /// <summary>
+        /// Die <c>IAnnahme&lt;TMeldung&gt;</c>-Schnittstellen von <paramref name="t"/> (eine Annahme nennt genau eine) — leer = keine Annahme.
+        /// </summary>
+        public static IEnumerable<INamedTypeSymbol> Annahmen(INamedTypeSymbol t) =>
+            t.AllInterfaces.Where(i => i.IsGenericType && Name(i) == IAnnahme);
 
         /// <summary>Ist <paramref name="t"/> eine Meldung einer Quellart (<c>IMeldung</c>)?</summary>
         public static bool IstMeldung(ITypeSymbol t) => Name(t) != IMeldung && Hat(t, IMeldung);
@@ -255,14 +276,32 @@ namespace Infrastructure.SourceGeneration
             if (f.Quellart && f.Aufs.Count > 0)
                 f.Fehler.Add(("eine Quellart lauscht nur (Lausche) und nimmt keine Eingänge — was sie meldet, übersetzt die Akteur-Seite in eine Nachricht "
                     + "des Akteurs", f.Aufs[0].Methode.Locations.FirstOrDefault() ?? ort));
-            if (f.Quellart && f.Lausche == null && f.Fehler.Count == 0)
+            // Eine ANNAHME (IAnnahme<TMeldung>): der Host nimmt ihre Meldungen an — sie lauscht nicht; was sie meldet, steht im Typargument.
+            var annahmen = Annahmen(t).ToList();
+            if (annahmen.Count > 1)
+                f.Fehler.Add(($"'{t.Name}' nimmt mehrfach an ({string.Join(", ", annahmen.Select(a => a.ToDisplayString()))}) — eine Annahme meldet genau "
+                    + "einen Typ", ort));
+            else if (annahmen.Count == 1)
+            {
+                var m = annahmen[0].TypeArguments[0] as INamedTypeSymbol;
+                if (f.Lausche != null)
+                    f.Fehler.Add(($"'{t.Name}' nimmt an (IAnnahme) und lauscht — eine Annahme lauscht nicht: ihre Meldungen nimmt der Host an "
+                        + "(POST /eingang/webhook/<Pfad>); nimm Lausche weg oder IAnnahme", f.Lausche.Methode.Locations.FirstOrDefault() ?? ort));
+                else if (m == null || !IstMeldung(m) || m.IsAbstract || m.TypeKind == TypeKind.Interface)
+                    f.Fehler.Add(($"'{t.Name}' nimmt '{annahmen[0].TypeArguments[0].ToDisplayString()}' an — eine Annahme meldet eine konkrete Meldung (IMeldung)", ort));
+                else if (Name(m) != Aufruf)
+                    f.Fehler.Add(($"'{t.Name}' nimmt '{m.Name}' an — der Host nimmt über HTTP an und baut daraus einen Aufruf (Kennung, Inhalt): eine Annahme "
+                        + "ist IAnnahme<Aufruf>; was der Aufruf trägt, macht die Übersetzung der Akteur-Seite zur Nachricht des Akteurs", ort));
+                else f.Annahme = m;
+            }
+            if (f.Quellart && f.Lausche == null && annahmen.Count == 0 && f.Fehler.Count == 0)
                 f.Fehler.Add(($"'{t.Name}' ist eine Quellart ohne {Abstractions.Funktionsvertrag.Lausche} — sie lauscht und meldet je Element eine Meldung "
-                    + "(IMeldung)", ort));
+                    + "(IMeldung), oder sie nimmt an (IAnnahme<Aufruf>: der Host nimmt ihre Meldungen an)", ort));
             // Eine Funktion liest nie das Log: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
             if (f.Aufs.Count > 0 && !f.MitEinstieg)
                 f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie nimmt einen Command (ohne Ziel); ein Event nur als "
                     + "Antwort auf einen eigenen Command", ort));
-            if (gesehen.Count == 0 && f.Lausche == null && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
+            if (gesehen.Count == 0 && f.Lausche == null && f.Annahme == null && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
                 f.Fehler.Add(($"'{t.Name}' hat kein {Abstractions.Funktionsvertrag.Auf} — eine Funktion hört mindestens einen Eingang; Technik hinter einer "
                     + "Funktion trägt keinen Marker (sie steht nur im Konstruktor ihres Halters)", ort));
             return f;

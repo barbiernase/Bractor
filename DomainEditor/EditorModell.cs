@@ -308,7 +308,8 @@ public sealed record BausteinFunktion
 }
 
 /// <summary>
-/// Eine QUELLART (<c>public sealed class X(Konfig, IZustand&lt;T&gt;, Technik…) : IQuellart</c> mit <c>Lausche(CancellationToken)</c>, docs/04 §4.7): was sie
+/// Eine QUELLART (<c>public sealed class X(Konfig, IZustand&lt;T&gt;, Technik…) : IQuellart</c> mit <c>Lausche(CancellationToken)</c>, oder eine Annahme
+/// <c>: IAnnahme&lt;Aufruf&gt;</c>, docs/04 §4.7): was sie
 /// meldet (<see cref="Meldet"/>, Meldungen mit <c>IMeldung</c>) und ihr Konstruktor. Sie liegt in einem Katalog (die des Frameworks in <c>Core/Katalog</c>),
 /// nie in einem Graphen; welche Akteure sie verwirklichen kann, folgt aus den Übersetzungen der Akteur-Seite.
 /// </summary>
@@ -316,8 +317,14 @@ public sealed record Quellart
 {
     public required string Name { get; init; }
     public required string Namespace { get; init; }
-    /// <summary>Was sie meldet (einfache Namen der Meldungen) — aus der Signatur von <c>Lausche</c>.</summary>
+    /// <summary>Was sie meldet (einfache Namen der Meldungen) — aus der Signatur von <c>Lausche</c> bzw. dem Typargument von <c>IAnnahme</c>.</summary>
     public IReadOnlyList<string> Meldet { get; init; } = [];
+    /// <summary>
+    /// Eine ANNEHMENDE Quellart (<c>IAnnahme&lt;TMeldung&gt;</c>, der Webhook): sie lauscht nicht — jeder Host nimmt ihre Meldungen an
+    /// (<c>POST /eingang/webhook/&lt;Pfad&gt;</c>); ihr Eingang nennt keinen Rechner, dafür einen Pfad.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Annahme { get; init; }
     /// <summary>Konstruktor der Klasse: Konfig-Records (die Werte eines Eingangs), <c>IZustand&lt;T&gt;</c>, Technik, Logger.</summary>
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
     /// <summary>Was sie gesehen hat (<c>IZustand&lt;T&gt;</c> im Konstruktor): der einfache Name von T, sonst null.</summary>

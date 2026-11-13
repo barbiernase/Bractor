@@ -100,18 +100,6 @@ public static class JsonEingang
             }, Json);
         });
 
-        // Ein Aufruf an einen Webhook (Katalogfunktion am Kopf eines Graphen, docs/04 §4.7): der Inhalt geht in das Postfach seines Pfads, der Webhook
-        //   startet daraus einen Lauf. Die Kennung wählt der Absender (Kopf „kennung“), sonst eine neue; voll heißt „später“.
-        g.MapPost("/webhook/{**pfad}", async (HttpContext http, string pfad, CancellationToken ct) =>
-        {
-            using var leser = new StreamReader(http.Request.Body);
-            var inhalt = await leser.ReadToEndAsync(ct);
-            var kennung = http.Request.Headers.TryGetValue("kennung", out var k) && k.ToString() is { Length: > 0 } kn ? kn : Guid.NewGuid().ToString();
-            return Core.Katalog.Webhookpostfaecher.Lege(pfad, new Aufruf(kennung, inhalt))
-                ? Results.Json(new { ok = true, kennung }, Json, statusCode: StatusCodes.Status202Accepted)
-                : Results.Json(new { ok = false, fehler = "das Postfach ist voll — später" }, Json, statusCode: StatusCodes.Status503ServiceUnavailable);
-        });
-
         g.MapPost("/query", async (HttpContext http, JsonElement body, IServiceProvider sp) =>
         {
             if (!Erkenne(http, sp, out var akteur, out var abgewiesen)) return abgewiesen!;

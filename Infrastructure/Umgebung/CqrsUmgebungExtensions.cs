@@ -1,5 +1,6 @@
 using Infrastructure.Einblick;
 using Infrastructure.Eingang;
+using Infrastructure.Quellen;
 using Abstractions;
 using Infrastructure.Akteure;
 using Infrastructure.Extensions;
@@ -121,6 +122,7 @@ public static class CqrsUmgebungExtensions
             app.MapBackendMonitoring();
             app.MapEinblick(u);
             app.MapEingang(u);
+            app.MapAnnahme(u);   // POST /eingang/webhook/<Pfad>: nur mit Eingängen, die der Host annimmt (docs/04 §4.7)
         }
         catch (Exception e) { CqrsBoot.Melde(e); throw; }
         Console.WriteLine();

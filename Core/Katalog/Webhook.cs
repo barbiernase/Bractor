@@ -1,42 +1,22 @@
-using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
-using System.Threading.Channels;
 using Abstractions;
 
 namespace Core.Katalog;
 
-/// <summary>Die Konfig eines Webhooks: der Pfad, unter dem er Aufrufe annimmt (<c>POST /eingang/webhook/&lt;Pfad&gt;</c> auf dem Einblick-Port).</summary>
-public sealed record Webhookkonfig(string Pfad);
+/// <summary>
+/// Die Konfig eines Webhooks (die Werte seines Eingangs): der Pfad, unter dem der Host annimmt (<c>POST /eingang/webhook/&lt;Pfad&gt;</c> auf dem
+/// Einblick-Port, je Umgebung eindeutig), und wahlweise der Schlüssel, den ein Absender im Kopf <c>schluessel</c> mitgeben muss (ein Geheimnis — in der
+/// Umgebung als <c>${env:NAME}</c>).
+/// </summary>
+public sealed record Webhookkonfig(string Pfad, string? Schluessel = null);
 
 /// <summary>
-/// Die Postfächer der Webhooks eines Prozesses (je Pfad eines): der Eingang legt einen Aufruf hinein, der Webhook (der Eingang mit diesem Pfad) nimmt ihn heraus.
-/// Ein Postfach ist begrenzt — ist es voll, heißt die Antwort „später“ (der Absender wiederholt mit derselben Kennung).
+/// Der WEBHOOK (Katalog des Frameworks, docs/04 §4.7): eine ANNEHMENDE Quellart (<see cref="IAnnahme{TMeldung}"/>) — er lauscht nicht; jeder Host nimmt
+/// <c>POST /eingang/webhook/&lt;Pfad&gt;</c> an, prüft den Schlüssel, macht daraus einen <see cref="Aufruf"/> (Kennung aus dem Kopf <c>kennung</c>),
+/// übersetzt ihn mit der Übersetzung der Akteur-Seite und legt die Nachricht durabel ab — erst dann antwortet er 202. Wiederholt der Absender mit
+/// derselben Kennung, entstehen dieselben Ids: der Aufruf wirkt einmal. Er hält nichts fest; die Klasse selbst rechnet nichts.
 /// </summary>
-public static class Webhookpostfaecher
+public sealed class Webhook(Webhookkonfig konfig) : IAnnahme<Aufruf>
 {
-    /// <summary>So viele Aufrufe wartet ein Postfach höchstens.</summary>
-    public const int Groesse = 1_000;
-
-    private static readonly ConcurrentDictionary<string, Channel<Aufruf>> Je = new(StringComparer.Ordinal);
-
-    public static Channel<Aufruf> Von(string pfad) =>
-        Je.GetOrAdd(pfad.Trim('/'), _ => Channel.CreateBounded<Aufruf>(new BoundedChannelOptions(Groesse) { FullMode = BoundedChannelFullMode.Wait }));
-
-    /// <summary>Legt einen Aufruf in das Postfach des Pfads; false = voll (später).</summary>
-    public static bool Lege(string pfad, Aufruf aufruf) => Von(pfad).Writer.TryWrite(aufruf);
-}
-
-/// <summary>
-/// Der WEBHOOK (Katalog des Frameworks, docs/04 §4.7): eine Quellart (IQuellart), läuft als Eingang eines Clients — je Aufruf ein <see cref="Aufruf"/>, ein neuer Lauf. Er
-/// hält nichts fest: ein Aufruf, dessen Lauf nicht fertig wurde, kommt nach einem Neustart nicht wieder — der Absender wiederholt; mit derselben Kennung (Kopf „kennung“) ist es dieselbe Meldung, die Kette rechnet dieselben Ids.
-/// </summary>
-public sealed class Webhook(Webhookkonfig konfig) : IQuellart
-{
-    public async IAsyncEnumerable<Aufruf> Lausche([EnumeratorCancellation] CancellationToken ct)
-    {
-        var postfach = Webhookpostfaecher.Von(konfig.Pfad).Reader;
-        while (await postfach.WaitToReadAsync(ct))
-            while (postfach.TryRead(out var aufruf))
-                yield return aufruf;
-    }
+    /// <summary>Die Werte des Eingangs (gelesen vom Host über <see cref="Annahmevertrag"/>).</summary>
+    public Webhookkonfig Konfig { get; } = konfig;
 }

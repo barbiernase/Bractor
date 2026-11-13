@@ -35,6 +35,7 @@ public sealed record FunktionsEingang(Type Typ, bool Strom, IReadOnlyList<Type> 
 /// <param name="Zustand">Der Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4), gesichert je Instanz und Knoten — null = ohne Zustand.</param>
 /// <param name="Lausche">Eine Quellart (<c>IQuellart</c>): die Nummer, unter der die Rechnung ihr <c>Lausche</c> ruft (null = eine Funktion).</param>
 /// <param name="Meldet">Was eine Quellart meldet (ihre Meldungen, <c>IMeldung</c>).</param>
+/// <param name="Annahme">Eine ANNEHMENDE Quellart (<c>IAnnahme&lt;TMeldung&gt;</c>): sie lauscht nicht, ihre Meldungen nimmt der Host an.</param>
 public sealed record FunktionsBaustein(
     Type Typ,
     string Name,
@@ -44,8 +45,12 @@ public sealed record FunktionsBaustein(
     FunktionsRechnung? Rechne,
     FunktionsZustandsform? Zustand = null,
     int? Lausche = null,
-    IReadOnlyList<Type>? Meldet = null)
+    IReadOnlyList<Type>? Meldet = null,
+    bool Annahme = false)
 {
+    /// <summary>Eine Quellart — sie lauscht oder nimmt an.</summary>
+    public bool Quellart => Lausche is not null || Annahme;
+
     /// <summary>Der Wirker im Log (Spur): <c>funktion:&lt;Name&gt;</c>.</summary>
     public string Wirker => WirkerId.FuerFunktion(Name);
 

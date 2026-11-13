@@ -5,7 +5,7 @@ using Core;
 // SONDE — fremdes Szenario 3 (docs/12 §12.6): MASSEN-IMPORT MIT FORTSCHRITT — die Domäne.
 //
 // EINE abgelegte Katalog-Datei wird zu vielen Fakten. Die Domäne ist rein: die Abläufe sind zwei Graphen des fremden Katalogs (Katalog.*.cs.txt, Teil Import) — die
-// Dateiannahme (an ihren Kopf gibt die Ablage, die ein Dateiwächter verwirklicht — eine QUELLART AUS DEM KATALOG des Frameworks, Core.Katalog; die
+// Dateiannahme (an ihren Kopf gibt die Ablage, die ein Dateiwächter und ein Webhook verwirklichen — QUELLARTEN AUS DEM KATALOG des Frameworks, Core.Katalog; die
 // Übersetzung der Akteur-Seite steht in Akteure.Warenkatalog.cs.txt) und
 // der Zeilenimport: ein Zeilenleser (Technik als KLASSE, ohne Schnittstelle, mit Konfig-Record) gibt als STROM je Zeile einen Unterlauf (JE) und
 // zwischendurch den Fortschritt; je Zeile wird ein Artikel angelegt; am Ende des Stroms die Bilanz. Die Übersetzungen (Uebersetzungen.Warenkatalog

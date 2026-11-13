@@ -66,7 +66,7 @@ namespace Infrastructure.SourceGeneration
                         "die Klasse ist nicht öffentlich — die generierte Fabrik kann sie nicht bauen"));
                     continue;
                 }
-                if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && (f.Aufs.Count > 0 || f.Lausche != null)) gut.Add(f);
+                if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && (f.Aufs.Count > 0 || f.Lausche != null || f.Annahme != null)) gut.Add(f);
             }
             // Generische Funktionen: je Typargument, mit dem ein Graph sie als Knoten nennt, ein Baustein (Bildverkleinerung<Vorschau>).
             var konstruiert = typen.Where(Graphform.IstGraph).SelectMany(g => Graphform.Lies(g).Knoten).Select(k => k.Typ)
@@ -74,7 +74,7 @@ namespace Infrastructure.SourceGeneration
             foreach (var t in konstruiert)
             {
                 var f = Funktionsform.Lies(t);
-                if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && (f.Aufs.Count > 0 || f.Lausche != null) && Ctorbindung.Baubar(t)) gut.Add(f);
+                if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && (f.Aufs.Count > 0 || f.Lausche != null || f.Annahme != null) && Ctorbindung.Baubar(t)) gut.Add(f);
             }
 
             context.AddSource("GeneratedFunktionsBausteine.g.cs", Emit(gut, fq));
@@ -118,7 +118,9 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"                (sp, z) => new {T(f.Typ)}({Ctorbindung.Argumente(ctor, fq, "z")}),");
                 sb.AppendLine($"                new Type[] {{ {string.Join(", ", dienste)} }},");
                 sb.AppendLine($"                Rechne{i}{(f.Zustand != null ? ", Zustand: " + Ctorbindung.Zustandsform(f.Zustand, fq) : "")}"
-                    + $"{(f.Lausche != null ? $", Lausche: {f.Aufs.Count}, Meldet: new Type[] {{ {string.Join(", ", f.Lausche.Ausgaben.Select(x => $"typeof({T(x)})"))} }}" : "")}),");
+                    + $"{(f.Lausche != null ? $", Lausche: {f.Aufs.Count}" : "")}"
+                    + $"{(f.Annahme != null ? ", Annahme: true" : "")}"
+                    + $"{(f.Lausche != null || f.Annahme != null ? $", Meldet: new Type[] {{ {string.Join(", ", f.Meldet.Select(x => $"typeof({T(x)})"))} }}" : "")}),");
             }
             sb.AppendLine("        };");
             sb.AppendLine();

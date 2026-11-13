@@ -259,21 +259,28 @@ public static class Grammatik
             + "am Knoten, kein Kreis über Technik — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: fehlend, mehrdeutig, Kreis, Konfig)")]),
         new("GR-QUELLE", "Quellart meldet, ein Akteur gibt hinein", "Was draußen gefunden wird, meldet eine QUELLART: eine Klasse mit IQuellart und "
-            + "Lausche(CancellationToken), ein asynchroner Strom ihrer Meldungen; ihr Konstruktor nimmt wie eine Funktion Konfig-Records, IZustand<T>, Technik "
+            + "Lausche(CancellationToken), ein asynchroner Strom ihrer Meldungen (oder eine Annahme, siehe unten); ihr Konstruktor nimmt wie eine Funktion Konfig-Records, IZustand<T>, Technik "
             + "und ILogger<T>. Sie liegt in einem Katalog (die des Frameworks — Dateiwaechter, Taktgeber, Webhook — in Core/Katalog) und ist nie ein Knoten "
             + "eines Graphen; eine Funktion lauscht nicht. Eine MELDUNG (record … : IMeldung, in Meldungen.cs des Katalogs) ist kein Command: sie nennt die "
             + "Kennung ihres Elements aus seinem Inhalt, kein Auf und kein Kopf nimmt sie. Eine Übersetzung der AKTEUR-SEITE (ITranslate<TMeldung, TZiel> in "
             + "<Wurzel>.Akteure/Uebersetzungen.cs) macht aus ihr eine Nachricht, die ein Akteur darf — so verwirklicht die Quellart den Akteur; welche "
             + "Quellarten zu einem Akteur passen, folgt aus diesen Übersetzungen. Laufen tut sie als EINGANG eines Clients, der den Akteur verkörpert: in der "
             + "Umgebung unter Clients:<Client>:Eingaenge:<Eingang> mit Art, Akteur, Rechner, den Werten ihrer Konfig, der Wahl ihrer Technik und der Grenze "
-            + "offener Elemente; im Cluster genau einmal, auf ihrem Rechner. Was sie gesehen hat, sichert sie in ihrem Zustand; nichts davon steht im Log "
+            + "offener Elemente; im Cluster genau einmal, auf ihrem Rechner. Was sie gesehen hat, sichert sie in ihrem Zustand; nichts davon steht im Log. "
+            + "Eine ANNAHME (IAnnahme<Aufruf>, der Webhook) lauscht nicht: jeder Host nimmt ihre Aufrufe an (POST /eingang/webhook/<Pfad> auf dem "
+            + "Einblick-Port; Schlüssel im Kopf schluessel, wenn der Eingang einen nennt; die Kennung im Kopf kennung ist Pflicht) und antwortet 202 erst, "
+            + "wenn die Nachricht durabel ist — ihr Eingang nennt keinen Rechner, dafür einen Pfad, je Umgebung eindeutig "
             + "(docs/04 §4.7).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form von Lausche: nur an einer Quellart, ihre Elemente Meldungen; Lesart Funktionsform)"),
+             Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (eine Annahme: IAnnahme<Aufruf>, kein Lausche, keine Eingänge; Lesart Funktionsform)"),
+             Comp("IAnnahme<TMeldung> : IQuellart where TMeldung : IMeldung (Abstractions/Quellart.cs)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (eine Quellart als Knoten eines Graphen; Lesart Graphform)"),
              An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TSource einer Übersetzung: eine Meldung ist erlaubt; Lesart Uebersetzungsform)"),
              An("CQRS098", "Domain.SourceGeneration/LageAnalyzer.cs (Quellart und Meldung im Katalog, die Übersetzung der Akteur-Seite bei den Akteuren)"),
-             new("boot", null, "Infrastructure/Quellen/Eingaenge.cs (der Client verkörpert den Akteur, die Art ist eine Quellart, eine Übersetzung passt, Werte und Rechner)"),
-             new("laufzeit", null, "Infrastructure/Quellen/QuellLaeufer.cs (je Meldung übersetzt und hineingegeben wie eine App, Zustand gesichert, Gegendruck)")]),
+             new("boot", null, "Infrastructure/Quellen/Eingaenge.cs (der Client verkörpert den Akteur, die Art ist eine Quellart, eine Übersetzung passt, Werte und Rechner; eine Annahme ohne Rechner, Pfad Pflicht und eindeutig)"),
+             new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (eine Annahme braucht den Einblick-Port)"),
+             new("laufzeit", null, "Infrastructure/Quellen/QuellLaeufer.cs (je Meldung über die Hineingabe übersetzt und hineingegeben wie eine App, Zustand gesichert, Gegendruck)"),
+             new("laufzeit", null, "Infrastructure/Quellen/Annahmen.cs (Pfad, Schlüssel, Kennung Pflicht, Gegendruck je Host, 202 erst nach der durablen Hineingabe)")]),
         // Bündel von Events vor einer Projektion (docs/04 §4.3.1).
         new("GR-BUENDEL", "Bündel: Events eines Schlüssels → eine Projektion", "Ein Auf einer Projektion kann ein Bündel nehmen: Buendel<A, B, …> "
             + "(2 bis 16 verschiedene, persistente Events). Es wird gerufen, sobald zum Schlüssel von jedem Typ ein Event im Log steht, und bei jedem weiteren "

@@ -314,7 +314,8 @@ public static class Sonde
         // Quellarten (docs/04 §4.7): eine Klasse mit IQuellart — Konstruktor (Konfig, Zustand, Technik) und was Lausche meldet; nie ein Knoten.
         foreach (var q in A(b, "quellarten").Where(Sonde))
             z.Add($"quellart {S(q, "namespace")}.{S(q, "name")}{Konstruktor(q)}" + (q["zustand"] is { } zu ? $" zustand={zu}" : "")
-                  + (q["katalog"] is { } ka ? $" katalog={ka}" : "") + $" | Lausche -> strom {Ausgaben(q, "meldet")}");
+                  + (q["katalog"] is { } ka ? $" katalog={ka}" : "")
+                  + (q["annahme"]?.GetValue<bool>() == true ? $" | Annahme -> {Ausgaben(q, "meldet")}" : $" | Lausche -> strom {Ausgaben(q, "meldet")}"));
         // Technik (docs/06 §6.5, ohne Marker: was der Konstruktor einer Funktion nimmt): Klasse oder Schnittstelle, Signatur (Methoden) und Umsetzungen.
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(Gerufen))
             z.Add($"technik {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
@@ -403,7 +404,8 @@ public static class Sonde
         //   verwirklichen können — aus den Typen (Meldung ↦ eine Nachricht seines IDarf), wie die Sicht sie dem Editor gibt.
         foreach (var q in A(b, "quellarten").OfType<JsonObject>())
             foreach (var (ak, us) in sicht.Verwirklicht(q).Where(x => Sonde(x.Akteur)))
-                z.Add($"verwirklicht {S(ak, "namespace")}.{S(ak, "name")} <- {S(q, "name")}{(q["framework"]?.GetValue<bool>() == true ? " (framework)" : "")} | "
+                z.Add($"verwirklicht {S(ak, "namespace")}.{S(ak, "name")} <- {S(q, "name")}{(q["framework"]?.GetValue<bool>() == true ? " (framework)" : "")}"
+                      + $"{(q["annahme"]?.GetValue<bool>() == true ? " annahme" : "")} | "
                       + string.Join(", ", us.Select(u => S(u, "name"))));
 
         // Der Besitz (Hierarchie Anwendung → Blöcke → Glieder): je Typ, der kein Block ist, sein Besitzer — aus den Signaturen.

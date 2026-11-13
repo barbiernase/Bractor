@@ -507,15 +507,17 @@ der Command-Id aus Stream und Version des Frist-Events und trägt sie erst nach 
 Inbox des Ziels einmal. In Sim verschiebt ein Uhr-Versatz die Datenbank-Uhr (Durchspielen).
 
 **Quellen.** Was draußen geschieht — eine Datei ist fertig, ein Intervall beginnt, ein Webhook wird gerufen —, meldet eine **Quellart**: eine Klasse
-`: IQuellart` mit `Lausche(CancellationToken)`, einem asynchronen Strom ihrer **Meldungen** (`IMeldung`, kein Command). Ihr Konstruktor nimmt wie eine
-Funktion Konfig-Records, `IZustand<T>`, Technik und `ILogger<T>`; sie liegt in einem Katalog (die des Frameworks in `Core/Katalog/`) und ist **nie ein
-Knoten eines Graphen** (CQRS115). Jede Meldung nennt die **Kennung** ihres Elements, aus seinem Inhalt.
+`: IQuellart` mit `Lausche(CancellationToken)`, einem asynchronen Strom ihrer **Meldungen** (`IMeldung`, kein Command) — oder eine **Annahme**
+(`: IAnnahme<Aufruf>`), die nicht lauscht: ihre Meldungen nimmt der Host an, was sie meldet, steht im Typargument (ein `Lausche` an ihr ist CQRS100,
+ebenso eine andere Meldung als `Aufruf` — der Host baut aus dem HTTP-Aufruf einen `Aufruf`). Ihr Konstruktor nimmt wie eine Funktion Konfig-Records,
+`IZustand<T>`, Technik und `ILogger<T>`; sie liegt in einem Katalog (die des Frameworks in `Core/Katalog/`) und ist **nie ein Knoten eines Graphen**
+(CQRS115). Jede Meldung nennt die **Kennung** ihres Elements, aus seinem Inhalt.
 
 | Quellart | meldet (Kennung) | Konfig (Werte des Eingangs) | Zustand |
 |---|---|---|---|
 | `Dateiwaechter` | `DateiGefunden` je fertige, noch nicht gemeldete Datei (relativer Pfad, Größe, letzte Änderung) | `Pfad`, `Muster`, `Unterordner`, `Erkennung` (`Abfrage` oder `EreignisUndAbfrage`), `Intervall`, `Fertig` (`Stabil` über ein `Fenster` oder `Marker` mit `Endung`), `Kennung` (`NameGroesse` oder `PfadGroesseZeit`) | `Gesehen`: relativer Pfad → Kennung |
 | `Taktgeber` | `Takt` je Intervall (sein Beginn, auf das Intervall gerundet, UTC) | `Intervall` (mindestens 1 s) | `Taktstand`: das letzte gemeldete Intervall |
-| `Webhook` | `Aufruf` je Aufruf an `POST /eingang/webhook/<Pfad>` (die Kennung des Absenders, Kopf `kennung`) | `Pfad` | keiner |
+| `Webhook` (Annahme) | `Aufruf` je Aufruf an `POST /eingang/webhook/<Pfad>` (die Kennung des Absenders, Kopf `kennung`, Pflicht) | `Pfad` (Pflicht, je Umgebung eindeutig), `Schluessel` (wahlweise, als `${env:NAME}`) | keiner |
 
 Eine Quellart **verwirklicht einen Akteur**: eine **Übersetzung der Akteur-Seite** (`class DateiGefunden_LiesBild_1(DateiGefunden source) :
 ITranslate<DateiGefunden, LiesBild>` in `<Wurzel>.Akteure/Uebersetzungen.cs`) macht aus der Meldung eine Nachricht, die der Akteur darf
@@ -528,18 +530,36 @@ Knoten einer Instanz — drei Verzeichnisse sind drei Eingänge:
 ```
 Der Start prüft jeden Eingang (`Eingaenge.Aus`, Boot-Fehler mit der Karte `eingang:<Client>/<Eingang>`): den Client gibt es und er verkörpert den
 Akteur, die Art ist eine Quellart, je Meldung, die sie melden kann, macht eine Übersetzung daraus eine Nachricht, die der Akteur darf, und im Cluster
-nennt der Eingang seinen Rechner. Werte und Technik-Wahl bindet `BindeTechnik` wie bei den Knoten.
+nennt ein lauschender Eingang seinen Rechner. Eine Annahme nennt keinen Rechner (jeder Host nimmt an; einer ist ein Fehler), dafür ihren `Pfad`
+(Pflicht, je Umgebung eindeutig über alle Annahmen), und die Umgebung braucht den Einblick-Port. Werte und Technik-Wahl bindet `BindeTechnik` wie
+bei den Knoten.
 
-Je Eingang lauscht ein **Läufer** (`Infrastructure/Quellen/QuellLaeufer.cs`, Kind der Wurzel `funktionen`) genau einmal im Cluster: auf dem Host mit
+Hineingegeben wird auf **einem** Weg (`Infrastructure/Quellen/Hineingabe.cs`), für den Läufer wie für die Annahme: die Kennung des Elements folgt
+aus Eingang und Kennung der Meldung (`Kettenvertrag.Element`); die Übersetzungen der Akteur-Seite machen daraus die Nachrichten des Akteurs; ein
+Command an ein Aggregat geht über den Emitter (Id aus Kennung, Übersetzung und Stelle; ein unbekannter Ausgang wird wiederholt), ein Command ohne Ziel
+als offener Eingang am Kopf (`cqrs_eingaenge`, dann der schnelle Weg) — im Namen des Akteurs, mit dem Eingang als Wirker (W9). Kehrt sie zurück, ist
+jede Nachricht des Elements durabel; die Kennungen der offenen Eingänge merkt sie sich für den Gegendruck.
+
+Je lauschendem Eingang lauscht ein **Läufer** (`Infrastructure/Quellen/QuellLaeufer.cs`, Kind der Wurzel `funktionen`) genau einmal im Cluster: auf dem Host mit
 seinem Rechner (bei doppeltem Rechnernamen nur auf dem mit Vorrang). Er aktiviert die Quellart wie ein Kind seine Funktion (Zustand in
-`cqrs_zustaende` unter `eingang:<Client>` und dem Eingang) und gibt je Meldung hinein **wie eine App**, im Namen des Akteurs: die Kennung des Elements
-folgt aus Eingang und Kennung der Meldung (`Kettenvertrag.Element`); ein Command an ein Aggregat geht über den Emitter (Id aus Kennung, Übersetzung
-und Stelle), ein Command ohne Ziel als offener Eingang am Kopf (`cqrs_eingaenge`, dann der schnelle Weg). Ist die Nachricht durabel, sichert er den
-Zustand der Quellart. Was er enthält, meldet die Quelle nicht wieder; was danach kam, meldet sie nach einem Neustart mit derselben Kennung erneut —
+`cqrs_zustaende` unter `eingang:<Client>` und dem Eingang) und gibt je Meldung über die Hineingabe hinein **wie eine App**. Ist die Nachricht
+durabel, sichert er den Zustand der Quellart. Was er enthält, meldet die Quelle nicht wieder; was danach kam, meldet sie nach einem Neustart mit derselben Kennung erneut —
 eine offene Zeile wird nicht doppelt gelegt, ein Command wirkt über die Inbox einmal. **Gegendruck:** sind so viele hineingegebene Elemente offen, wie
 `Offen` erlaubt (Standard 10 000), wartet der Läufer, bevor er die nächste Meldung nimmt. Endet `Lausche` oder wirft es, beginnt er nach einer Pause
 neu, mit dem gesicherten Stand. Meldungen stehen **nicht im Log**; der Dateiwächter **liest** nur (er legt nichts an, verschiebt und löscht nichts),
 ein Weckruf (Intervall, wahlweise ein Dateisystem-Ereignis) löst einen Scan aus, der Scan entscheidet.
+
+Eine **Annahme** hat keinen Läufer: **jeder Host** nimmt `POST /eingang/webhook/<Pfad>` auf seinem Einblick-Port an (`Infrastructure/Quellen/
+AnnahmeEndpunkt.cs`, gemappt, sobald die Umgebung einen Annahme-Eingang hat — unabhängig vom JSON-Eingang der Werkbank; Logik in `Annahmen.cs`):
+```
+POST /eingang/webhook/lieferant          kennung: auftrag-4711          schluessel: <Geheimnis>          {"…": "…"}
+```
+Kein Eingang unter dem Pfad → 404; nennt der Eingang einen `Schluessel`, muss der Kopf `schluessel` ihn tragen (zeitkonstant verglichen) → sonst 401;
+ohne Kopf `kennung` → 400 (aus ihr folgen alle Ids — ohne sie bekäme eine Wiederholung neue Ids und wirkte doppelt). Daraus ein `Aufruf(kennung,
+Körper)`, über die Hineingabe durabel abgelegt — **erst dann 202** mit der Kennung und dem Element. Scheitert es (Aggregat unbekannt, Datenbank, kein
+Kopf), heißt es 503 „später“: der Absender wiederholt mit derselben Kennung, es entstehen dieselben Ids, die Inbox bzw. die offene Zeile macht daraus
+eine Wirkung. **Gegendruck je Host:** sind so viele Elemente des Eingangs offen, wie `Offen` erlaubt — gezählt sind die Kennungen, die dieser Prozess
+hineingab —, antwortet er 503; ein Cluster mit n Hosts nimmt also bis zu n × `Offen` an.
 
 ## 4.8 Dead-Letter & Snapshots
 

@@ -122,6 +122,8 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
         return new JsonObject
         {
             ["art"] = art, ["framework"] = (bool?)q["framework"] == true, ["zustand"] = (string?)q["zustand"],
+            // Eine Annahme (IAnnahme, der Webhook): jeder Host nimmt an — kein Rechner, dafür Pfad und Schlüssel (Werte ihrer Konfig).
+            ["annahme"] = (bool?)q["annahme"] == true, ["route"] = Annahmevertrag.Route,
             ["meldet"] = (q["meldet"] ?? new JsonArray()).DeepClone(),
             ["offenStandard"] = EingangKonfig.StandardOffen, ["konfigs"] = konfigs, ["technik"] = technik,
         };

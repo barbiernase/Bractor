@@ -42,7 +42,8 @@ public sealed record Takt(DateTimeOffset Zeitpunkt) : IMeldung
 }
 
 /// <summary>
-/// Der Webhook nahm einen Aufruf an: sein Inhalt (JSON, wie gesendet) und die Kennung, die der Absender mitgab (sonst eine neue) — sie ist die Kennung
-/// der Meldung: wiederholt der Absender mit derselben Kennung, wirkt der Aufruf einmal.
+/// Der Host nahm einen Aufruf an einen Webhook an (eine Annahme, <see cref="IAnnahme{TMeldung}"/>): sein Inhalt (der Körper, wie gesendet) und die
+/// Kennung, die der Absender im Kopf <c>kennung</c> mitgab — sie ist die Kennung der Meldung: wiederholt der Absender mit derselben Kennung, wirkt der
+/// Aufruf einmal.
 /// </summary>
 public sealed record Aufruf(string Kennung, string Inhalt) : IMeldung;

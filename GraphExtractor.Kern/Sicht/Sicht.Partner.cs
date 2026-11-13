@@ -63,8 +63,9 @@ public sealed partial class Sicht
         }
         else if (k == "meldung")
         {
-            // Eine Meldung (docs/04 §4.7): ◀ die Quellart, die sie meldet (Lausche); ▶ die Übersetzungen der Akteur-Seite, die sie nehmen.
-            foreach (var q in MeldendeQuellarten(nm)) P(ein, QuellartKarte(q), "⚡ " + S(q, "name") + ".Lausche()", "Strom");
+            // Eine Meldung (docs/04 §4.7): ◀ die Quellart, die sie meldet (Lausche; eine Annahme nimmt der Host an); ▶ die Übersetzungen der Akteur-Seite.
+            foreach (var q in MeldendeQuellarten(nm))
+                P(ein, QuellartKarte(q), "⚡ " + S(q, "name") + (B(q, "annahme") ? " (der Host nimmt an)" : ".Lausche()"), B(q, "annahme") ? "Annahme" : "Strom");
             UebersetzungsPartner(nm, ein, aus);
         }
         else if (k == "query")

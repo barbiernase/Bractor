@@ -31,7 +31,7 @@ Exactly-once, Partition, offene Eingänge, Ketten, Orte), wählt der Generator a
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
 | **Funktion** | ein Knoten: je `Auf` eine Nachricht rein, gerechnet je Ankunft (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
 | **Graph** | nennt Knoten (Funktionen, Graphen, eine Funktion auch mehrfach); jede Kante als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; läuft als Instanz, je Kopf-Nachricht eine Kette; jede Kante gesichert oder verlierbar | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
-| **Quellart** | meldet, was draußen geschieht (`Lausche`, Meldungen `IMeldung`); nie ein Knoten — sie verwirklicht einen Akteur, eine Übersetzung der Akteur-Seite macht aus ihrer Meldung seine Nachricht (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | je Eingang eines Clients ein Läufer, genau einmal im Cluster, auf seinem Rechner — §4.7 |
+| **Quellart** | meldet, was draußen geschieht (`Lausche`, Meldungen `IMeldung`; eine Annahme `IAnnahme<Aufruf>` lauscht nicht, der Host nimmt an); nie ein Knoten — sie verwirklicht einen Akteur, eine Übersetzung der Akteur-Seite macht aus ihrer Meldung seine Nachricht (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | je lauschendem Eingang eines Clients ein Läufer, genau einmal im Cluster, auf seinem Rechner; eine Annahme nimmt jeder Host an (`POST /eingang/webhook/<Pfad>`) — §4.7 |
 | Store, Technik | Speicher hinter Projektion/Reader bzw. Technik im Konstruktor einer Funktion | – |
 | **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Verteiler je Knoten; Reaktionen über den Läufer im Client — [konzept-akteure.md](konzept-akteure.md) |
 | *eingebaut:* Uhr, Verteiler | macht aus fälligen Fristen Commands; stellt Pushes und Hinweise an Clients zu | – |
@@ -251,7 +251,7 @@ ein Graph genau einmal. `Rechner` legt die Instanz auf einen Host fest (seinen `
 im Cluster Pflicht, ohne läuft die Instanz auf jedem Host. Den Akteur einer Kette bringt ihr Auslöser mit. Der Start prüft jede Instanz gegen ihren
 Graphen ([04](04-konsum-und-prozess-maschine.md) §4.4).
 
-Eine **Quellart** meldet, was draußen geschieht: eine Klasse `: IQuellart` mit `Lausche(CancellationToken)` statt `Auf`, deren Strom
+Eine **Quellart** meldet, was draußen geschieht: eine Klasse `: IQuellart` mit `Lausche(CancellationToken)` statt `Auf` (oder eine Annahme, unten), deren Strom
 **Meldungen** gibt (`record … : IMeldung`, je Element mit seiner `Kennung` aus dem Inhalt — kein Command). Ihr Konstruktor nimmt dasselbe wie der
 einer Funktion. Das Framework bringt drei mit (`Core/Katalog`: `Dateiwaechter` → `DateiGefunden`, `Taktgeber` → `Takt`, `Webhook` → `Aufruf`); eine
 eigene liegt in einem Katalog (Sonde `Katalog.Funktionen.cs.txt`: `Sensorabfrage` mit Technik und Zustand). Sie ist **nie ein Knoten** (CQRS115). Sie
@@ -271,6 +271,16 @@ Laufen tut sie als **Eingang eines Clients** in der Umgebung (`Clients:Linienrec
 Werte ihrer Konfig, flach) — je Eingang ein Läufer, der hineingibt wie eine App. Was eine Quelle meldet, steht nicht im Log; Doppeltes vermeiden und
 nach einem Neustart weitermachen regelt sie über ihren gesicherten Zustand (Gesehen-Liste, Hochwassermarke), dieselbe Kennung ergibt dieselben Ids
 ([04](04-konsum-und-prozess-maschine.md) §4.7).
+
+Der **Webhook** lauscht nicht, er ist eine **Annahme** (`public sealed class Webhook(Webhookkonfig konfig) : IAnnahme<Aufruf>`): was sie meldet,
+steht im Typargument, und jeder Host nimmt ihre Aufrufe an — `POST /eingang/webhook/<Pfad>` auf dem Einblick-Port, Kopf `kennung` Pflicht, Kopf
+`schluessel`, wenn der Eingang einen nennt; 202 erst, wenn die Nachricht durabel ist, sonst 503 „später“ (der Absender wiederholt mit derselben
+Kennung). Ihr Eingang nennt keinen Rechner, dafür `Pfad` (je Umgebung eindeutig) und wahlweise `Schluessel`:
+
+```json
+"Clients": { "Lieferportal": { "Eingaenge": { "auftraege": { "Art": "Webhook", "Akteur": "Lieferant",
+  "Pfad": "lieferant", "Schluessel": "${env:LIEFERANT_SCHLUESSEL}" } } } }
+```
 
 ### 10.3.6 … Akteure und Clients
 

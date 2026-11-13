@@ -25,9 +25,10 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
   `cqrs_sim_${branch}`.
 - **`AddCqrs`** (`Infrastructure/Umgebung/CqrsUmgebungExtensions.cs`) bindet der Reihe nach: Kestrel (gRPC-Port HTTP/2; Einblick-Port
   HTTP/1.1+2, 0 = aus), Umgebungs-Siegel, `AddCqrsFramework` (Werte aus der Umgebung), `IDbClock` mit Versatz, Projektions-Stand,
-  Pull-Pfade, Monitoring, Fristen, Akteure (`Identitaeten`), die Instanzen der Graphen (`BindeGraphen`), Technik und Konfig-Werte je Knoten (`BindeTechnik`), Einblick.
-- **`LaufeAsync`** mappt gRPC (`CqrsClientService`, bidirektionaler Stream `Connect`), Monitoring, Einblick und den JSON-Eingang samt Webhooks
-  (§6.6). Mit Rolle `Migrator` legt es nur das Schema an und endet (§6.3).
+  Pull-Pfade, Monitoring, Fristen, Akteure (`Identitaeten`), die Instanzen der Graphen (`BindeGraphen`), die Eingänge der Clients samt Annahme
+  (`BindeEingaenge`), Technik und Konfig-Werte je Knoten und Eingang (`BindeTechnik`), Einblick.
+- **`LaufeAsync`** mappt gRPC (`CqrsClientService`, bidirektionaler Stream `Connect`), Monitoring, Einblick, den JSON-Eingang und die Annahme der
+  Webhooks (§6.6). Mit Rolle `Migrator` legt es nur das Schema an und endet (§6.3).
 - **Umgebungs-Siegel** (`<schema>.umgebung`): ein Host startet nur gegen eine DB mit passendem Namen, passender Art und passendem Cluster-Namen;
   eine Sim-DB legt der Host bei Bedarf an. **Uhr** (`<schema>.uhr`): Versatz nur in Sim wirksam.
   Details docs/06 §6.5.
@@ -181,10 +182,15 @@ Beide Endpunkte sind ohne Port-Bindung gemappt; per HTTP/1.1 erreichbar sind sie
 **Am Einblick-Port** (nur dort, `RequireHost`):
 - **Einblick-API** `/einblick/*` (`Infrastructure/Einblick/EinblickEndpunkte.cs`): `stand`, `spur?ab=`, `vorgaenge`, `vorgang/{k}`,
   `auftraege`, `hinweise`, SSE `neu` — die Spur aus den Log-Headern (docs/04 §4.9).
-- **JSON-Eingang** `/eingang/*` (`Infrastructure/Eingang/JsonEingang.cs`): `command`, `query`, `rechte`, `webhook/<Pfad>` —
+- **JSON-Eingang** `/eingang/*` (`Infrastructure/Eingang/JsonEingang.cs`): `command`, `query`, `rechte` —
   Commands und Queries als Akteur (Header `akteur-token` → Akteur-Tor; ein Command ohne Ziel wird ein offener Eingang am Kopf der Instanz, die ihn
-  nimmt), Aufrufe an einen `Webhook` (Postfach seines Pfads, Kopf `kennung` vom
-  Absender, Antwort `202 {kennung}`, voll `503`; docs/04 §4.7). Nur mit `Transport:JsonEingang` (Sim an, Prod aus; CLAUDE.md W6).
+  nimmt). Nur mit `Transport:JsonEingang` (Sim an, Prod aus; CLAUDE.md W6).
+- **Annahme** `POST /eingang/webhook/<Pfad>` (`Infrastructure/Quellen/AnnahmeEndpunkt.cs`, Logik `Annahmen.cs`): auf JEDEM Host, sobald die
+  Umgebung einen Eingang aus einer Annahme hat (der `Webhook`, docs/04 §4.7) — unabhängig vom JSON-Eingang, also auch in Prod; ohne Einblick-Port
+  bricht der Start. Kopf `kennung` Pflicht (sonst 400), Kopf `schluessel`, wenn der Eingang einen `Schluessel` nennt (sonst 401), unbekannter Pfad
+  404; der Körper ist der Inhalt. Antwort `202 {kennung, element}` erst, wenn die Nachricht durabel ist; `503` „später“, wenn das Hineingeben
+  scheitert oder `Offen` Elemente des Eingangs offen sind (gezählt je Host) — der Absender wiederholt mit derselben Kennung. Ein Load-Balancer davor
+  kann auf jeden Host verteilen.
 
 Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
 
@@ -208,5 +214,5 @@ Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
 ## 6.8 Offen
 
 Offene Punkte stehen nur in `docs/13`: Multi-Node nur container-erprobt, Consul im `-dev`-Modus (P1-1); kein TLS, keine Identitäten für Prod,
-Webhook ohne Akteur-Tor (P1-2), nur mit JSON-Eingang und mit einem Postfach je Prozess (GF-2); Monitoring schmal und Default-Credentials (P2-10); Reflection im Codegen (W10-1). Der Migrator ist ein
+Webhook ohne Akteur-Tor (P1-2; er prüft nur den Schlüssel seines Eingangs); Monitoring schmal und Default-Credentials (P2-10); Reflection im Codegen (W10-1). Der Migrator ist ein
 Init-Job, kein laufender Migrationsdienst; Schema-Evolution ist kein Ziel der Werkbank (CLAUDE.md W1–W12).

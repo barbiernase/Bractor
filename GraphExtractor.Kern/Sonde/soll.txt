@@ -488,7 +488,8 @@ besitz Anlagen.Messung.AlarmiereBereitschaft command -> §rand
 
 # ── Warenkatalog (Katalogimport.cs.txt, Katalog.*.cs.txt Teil Import, Uebersetzungen.Warenkatalog.cs.txt, Akteure.Warenkatalog.cs.txt): MASSEN-IMPORT MIT
 #    FORTSCHRITT — zwei Graphen im Katalog: an den Kopf der Dateiannahme gibt die Ablage, die eine QUELLART AUS DEM KATALOG des Frameworks verwirklicht
-#    (Dateiwächter, Core.Katalog: DateiGefunden ↦ Kopf-Command, die Übersetzung der Akteur-Seite); die Annahme startet den Vorgang (übersetzt);
+#    (Dateiwächter, Core.Katalog: DateiGefunden ↦ Kopf-Command, die Übersetzung der Akteur-Seite) und daneben der Webhook (eine Annahme des Frameworks:
+#    Aufruf ↦ Kopf-Command); die Annahme startet den Vorgang (übersetzt);
 #    seine ANTWORT wird der Kopf des Zeilenimports; ein Zeilenleser mit Technik als KLASSE gibt JE Zeile einen Unterlauf und zwischendurch
 #    den Fortschritt (eine Wahl im Strom); am Ende des Stroms schließt der Leser mit seiner Bilanz ab. Leseseite: Store der Klasse 2 (Dateien, jede
 #    Schreib-Fähigkeit nimmt die Herkunft) und der Klasse 3 (nur mit [MindestensEinmal]; ohne Herkunft, mit Abbruch) ──
@@ -544,6 +545,10 @@ record Warenkatalog.Import.ArtikelExistiert rejection aggregat=Artikel | Artikel
 akteur Warenkatalog.Import.Ablage | darf NimmKatalogdateiAn | hoert -
 verwirklicht Warenkatalog.Import.Ablage <- Dateiwaechter (framework) | DateiGefunden_NimmKatalogdateiAn_1
 uebersetzung Warenkatalog.Import.DateiGefunden_NimmKatalogdateiAn_1 akteurseite | DateiGefunden -> NimmKatalogdateiAn [Feld Pfad=Pfad+RelativerPfad=RelativerPfad] | Pfad=Pfad(name), RelativerPfad=RelativerPfad(name)
+# Daneben verwirklicht die Ablage eine ANNAHME des Frameworks (der Webhook, IAnnahme<Aufruf>: kein Lausche, jeder Host nimmt an): was sie meldet, steht im
+#    Typargument; ein Lieferant meldet per Aufruf, wo er eine Katalog-Datei abgelegt hat (Körper = Pfad, Kennung = relativer Pfad)
+verwirklicht Warenkatalog.Import.Ablage <- Webhook (framework) annahme | Aufruf_NimmKatalogdateiAn_1
+uebersetzung Warenkatalog.Import.Aufruf_NimmKatalogdateiAn_1 akteurseite | Aufruf -> NimmKatalogdateiAn [Feld Pfad=Inhalt+RelativerPfad=Kennung] | Pfad=Inhalt(feld), RelativerPfad=Kennung(feld)
 akteur Warenkatalog.Import.Katalogpflege | darf HoleImportstand | hoert ImportFortgeschritten, ImportAbgeschlossen
 client Warenkatalog.Import.KatalogpflegeOberflaeche | verkoerpert Katalogpflege
 readmodel Warenkatalog.Import.Importstand store=IImportUebersicht | Id:Guid { get; set; }, Pfad:string="" { get; set; }, Zeilen:int { get; set; }, Fertig:bool { get; set; }

@@ -156,7 +156,7 @@ public static class ModellMapper
             {
                 Name = q.Name, Namespace = q.Namespace, Meldet = q.MeldetFull.Select(Kurz).ToList(),
                 Konstruktor = q.Konstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
-                Zustand = q.ZustandFull is { } z ? Kurz(z) : null, Framework = q.Framework, Doku = q.Doku, Datei = Rel(q.Datei),
+                Zustand = q.ZustandFull is { } z ? Kurz(z) : null, Framework = q.Framework, Annahme = q.Annahme, Doku = q.Doku, Datei = Rel(q.Datei),
             }).ToList(),
             Akteure = dom.Akteure.Select(x => new Akteur
             {

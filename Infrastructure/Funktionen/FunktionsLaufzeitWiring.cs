@@ -135,10 +135,11 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t)), mitZustand,
                 Festgelegt: instanz.Rechner is not null && !rechner.Einzelknoten));
         }
-        // Die Eingänge aus Quellen, die dieser Host bedient (sein Rechner bzw. jeder im Einzelknoten-Betrieb): je einer ein Läufer (docs/04 §4.7).
+        // Die Eingänge aus lauschenden Quellen, die dieser Host bedient (sein Rechner bzw. jeder im Einzelknoten-Betrieb): je einer ein Läufer (docs/04
+        //   §4.7). Eine Annahme hat keinen Läufer — sie nimmt jeder Host am Endpunkt an (AnnahmeEndpunkt).
         var eingaenge = dienste.GetService<Infrastructure.Quellen.Eingaenge>() ?? Infrastructure.Quellen.Eingaenge.Keine;
         var quellLogger = logs?.CreateLogger("Quellen");
-        var laeufer = eingaenge.Alle.Where(e => rechner.Bedient(e.Rechner)).Select(e => new LaeuferPlan(e.Ort,
+        var laeufer = eingaenge.Lauschende.Where(e => rechner.Bedient(e.Rechner)).Select(e => new LaeuferPlan(e.Ort,
             () => new Infrastructure.Quellen.QuellLaeufer(e, dienste, async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t),
                 koepfe, dienste.GetService<IOffeneEingaenge>(), wege, dienste.GetService<IZustandsAblage>(), quellLogger),
             Festgelegt: e.Rechner is not null && !rechner.Einzelknoten)).ToList();

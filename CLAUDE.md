@@ -90,7 +90,9 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Akteur**: eine Übersetzung der Akteur-Seite (`ITranslate<Meldung, Ziel>` in `<Wurzel>.Akteure/Uebersetzungen.cs`) macht aus der Meldung eine
   Nachricht, die er darf. Sie läuft als **Eingang eines Clients** (Umgebung `Clients:<Name>:Eingaenge:<e>`: Art, Akteur, Rechner, Werte); je Eingang
   ein Läufer (`Infrastructure/Quellen/`) genau einmal im Cluster auf seinem Rechner, der hineingibt wie eine App (Aggregat-Command über den Emitter,
-  Command ohne Ziel als offener Eingang am Kopf) und danach den Zustand der Quellart sichert; nichts im Log. **Zustand** `IZustand<T>` ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach beendeten Aufrufen mit deren Kennungen (nach einem Absturz zählt nichts doppelt).
+  Command ohne Ziel als offener Eingang am Kopf, `Hineingabe`) und danach den Zustand der Quellart sichert; nichts im Log. Der `Webhook` lauscht nicht,
+  er ist eine **Annahme** (`: IAnnahme<Aufruf>`): jeder Host nimmt `POST /eingang/webhook/<Pfad>` an (Kopf `kennung` Pflicht, `schluessel` wenn der
+  Eingang einen nennt), gibt über dieselbe `Hineingabe` hinein und antwortet 202 erst, wenn es durabel ist; ihr Eingang hat keinen Rechner, dafür `Pfad`. **Zustand** `IZustand<T>` ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach beendeten Aufrufen mit deren Kennungen (nach einem Absturz zählt nichts doppelt).
 - **Eingang am Kopf:** ein Command ohne Ziel eines Clients steht nicht im Log; je Instanz, deren Graph ihn am Kopf nimmt, ein offener Eingang
   `cqrs_eingaenge` (`SitzungsActor.AnKopfAsync`), der Zusteller bringt ihn hin. Nennt der Command ein Fakt als `ursache` (`Stream:Version`), ist
   es die Herkunft des Eingangs: die Kette und ihre Commands tragen das Fakt als Ursache.
@@ -133,7 +135,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 |---|---|
 | Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteur.cs`, `Funktion.cs`, `Graph.cs`, `Katalog.cs`, `Zustand.cs`, `Funktionsvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
 | Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Verteilen, Funktionen — Graph-Actor, Parent, Kette —, Eingaenge, Uhr, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
-| Quellarten des Frameworks, Läufer, Store-Treiber | `Core/Katalog/` (`Dateiwaechter`, `Taktgeber`, `Webhook`), `Infrastructure/Quellen/` (Eingänge, `QuellLaeufer`), `Core/` (`MartenStore`, `DateiZiel`) |
+| Quellarten des Frameworks, Läufer, Annahme, Store-Treiber | `Core/Katalog/` (`Dateiwaechter`, `Taktgeber`, `Webhook`), `Infrastructure/Quellen/` (Eingänge, `QuellLaeufer`, `Hineingabe`, `Annahmen`), `Core/` (`MartenStore`, `DateiZiel`) |
 | Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
 | Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |
 | Generatoren und Analyzer | `*.SourceGeneration/`; Codegen vor dem Build (Proto, STJ-Kontexte, Python-Basen): `Cqrs.Codegen` über das Target in `Domain.Leitung` |

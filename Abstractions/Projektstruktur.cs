@@ -80,7 +80,7 @@ static class Projektstruktur
         Technik,
         /// <summary>Ein Akteur (<c>record … : IAkteur</c>) bzw. ein Client (<c>record … : IClient</c>): beim Rand, in <c>Akteure.cs</c> bzw. <c>Clients.cs</c>.</summary>
         Akteur, Client,
-        /// <summary>Eine Quellart (Klasse mit <c>IQuellart</c> und <c>Lausche</c>, docs/04 §4.7): im Katalog, je Quellart eine eigene Datei — nie ein Knoten.</summary>
+        /// <summary>Eine Quellart (Klasse mit <c>IQuellart</c> und <c>Lausche</c>, oder eine Annahme <c>IAnnahme&lt;Aufruf&gt;</c>, docs/04 §4.7): im Katalog, je Quellart eine eigene Datei — nie ein Knoten.</summary>
         Quellart,
         /// <summary>Eine Meldung einer Quellart (<c>record … : IMeldung</c>): im Katalog, in <c>Meldungen.cs</c>.</summary>
         Meldung,
