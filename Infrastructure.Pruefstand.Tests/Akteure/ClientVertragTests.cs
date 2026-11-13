@@ -30,7 +30,8 @@ public class ClientVertragTests
     [Fact]
     public void Die_Clients_der_Domaene_stehen_in_der_Tabelle()
     {
-        GeneratedClientVertraege.Alle.Keys.Should().BeEquivalentTo("KlassifikationsWorker", "TrainingsWorker", "ReaktionsWorker", "Arbeitsplatz");
+        GeneratedClientVertraege.Alle.Keys.Should().BeEquivalentTo("KlassifikationsWorker", "TrainingsWorker", "ReaktionsWorker", "Arbeitsplatz", "Linienrechner");
+        C("Linienrechner").Verkoerpert.Should().Equal("KameraSystem", "ein Client ohne Leitung: seine Eingänge sind Quellen");
         C("ReaktionsWorker").Verkoerpert.Should().BeEquivalentTo("Datensatzpfleger", "Teilmelder");
         C("KlassifikationsWorker").Verkoerpert.Should().Equal("Klassifizierer");
         C("KlassifikationsWorker").Typ.Should().Be(typeof(Domain.Akteure.KlassifikationsWorker), "der Client ist ein Record");

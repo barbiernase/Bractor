@@ -211,7 +211,10 @@ public interface IPost { Task SendeAsync(string an); }
         fehler.Should().BeEmpty();
         quelle.Should().Contain("\"Haken\",").And.Contain("Annahme: true, Meldet: new Type[] { typeof(global::Abstractions.Aufruf) })",
             "was eine Annahme meldet, steht im Typargument — der Start prüft dafür eine Übersetzung der Akteur-Seite");
-        quelle.Should().NotContain("Lausche: ", "eine Annahme hat kein Lausche — ihre Meldungen nimmt der Host an");
+        // Nur der Baustein des Hakens: in derselben Tabelle stehen auch die lauschenden Quellarten des Frameworks (Core/Katalog).
+        var haken = quelle[quelle.IndexOf("\"Haken\",", StringComparison.Ordinal)..];
+        haken = haken[..Math.Max(0, haken.IndexOf("new FunktionsBaustein(", StringComparison.Ordinal) is var n && n > 0 ? n : haken.Length)];
+        haken.Should().NotContain("Lausche: ", "eine Annahme hat kein Lausche — ihre Meldungen nimmt der Host an");
     }
 
     [Theory]

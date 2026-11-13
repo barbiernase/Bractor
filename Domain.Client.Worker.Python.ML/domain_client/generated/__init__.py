@@ -174,27 +174,6 @@ class ImagePairFilterDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class AufrufDto(betterproto.Message):
-    kennung: str = betterproto.string_field(1)
-    inhalt: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class DateiGefundenDto(betterproto.Message):
-    name: str = betterproto.string_field(1)
-    pfad: str = betterproto.string_field(2)
-    relativer_pfad: str = betterproto.string_field(3)
-    groesse: int = betterproto.int64_field(4)
-    geaendert_am: int = betterproto.int64_field(5)
-    erkannt_am: int = betterproto.int64_field(6)
-
-
-@dataclass(eq=False, repr=False)
-class TaktDto(betterproto.Message):
-    zeitpunkt: int = betterproto.int64_field(1)
-
-
-@dataclass(eq=False, repr=False)
 class ResizeFastAuftragDto(betterproto.Message):
     pass
 
@@ -239,6 +218,14 @@ class BildVerkleinertDto(betterproto.Message):
     verkleinert: str = betterproto.string_field(5)
     breite_pixel: int = betterproto.int32_field(6)
     hoehe_pixel: int = betterproto.int32_field(7)
+
+
+@dataclass(eq=False, repr=False)
+class LiesBildDto(betterproto.Message):
+    name: str = betterproto.string_field(1)
+    pfad: str = betterproto.string_field(2)
+    groesse: int = betterproto.int64_field(3)
+    erkannt_am: int = betterproto.int64_field(4)
 
 
 @dataclass(eq=False, repr=False)
