@@ -28,7 +28,7 @@ public static class Webhookpostfaecher
 
 /// <summary>
 /// Der WEBHOOK (Katalog des Frameworks, docs/04 §4.7): eine Quellfunktion am Kopf eines Graphen — je Aufruf ein <see cref="Aufruf"/>, ein neuer Lauf. Er
-/// hält nichts fest: ein Aufruf, dessen Lauf nicht fertig wurde, kommt nach einem Neustart nicht wieder — der Absender wiederholt (seine Kennung reist mit).
+/// hält nichts fest: ein Aufruf, dessen Lauf nicht fertig wurde, kommt nach einem Neustart nicht wieder — der Absender wiederholt; mit derselben Kennung (Kopf „kennung“) ist es dieselbe Meldung, die Kette rechnet dieselben Ids.
 /// </summary>
 public sealed class Webhook(Webhookkonfig konfig) : IFunktion
 {

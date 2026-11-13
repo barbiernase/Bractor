@@ -354,8 +354,9 @@ sofort. Haltbar ist allein der Kopf: fehlt sein „fertig“ (Absturz, Umzug), k
 eines Aufrufs aus der Kennung seiner Nachricht, dem Ort (`instanz/knoten`) und der Operation (`Kettenvertrag.Aufruf`); die Nachricht, die er an
 Knoten desselben Graphen gibt, aus Aufruf, Ort und Stelle (`Kettenvertrag.Weiter`); die Command-Id aus Aufruf, Stelle, Typ und Ziel
 (`Kettenvertrag.Befehl`; die Stelle zählt über den ganzen Aufruf, auch Ausgaben auf Antworten). Am Kopf ist die Nachricht der Eingang, bei einer
-Quelle Instanz und laufende Nummer. Neue Aggregat-Ids leitet die Funktion über `h.NeueId<T>(zweck)` ab (R13). `Herkunft` nennt bei einem Eingang
-eines Clients, der auf ein Fakt reagiert, dessen Stream und Version, aus einer Quelle ihre Instanz, Nummer und Zeit, dazu den Akteur der Kette.
+Quelle Instanz und Kennung ihrer Meldung (`IMeldung`, `Kettenvertrag.Quelle`: aus dem Inhalt des Elements, nie aus seiner Stelle). Neue Aggregat-Ids
+leitet die Funktion über `h.NeueId<T>(zweck)` ab (R13). `Herkunft` nennt bei einem Eingang eines Clients, der auf ein Fakt reagiert, dessen Stream und
+Version, aus einer Quelle die Kennung ihrer Kette als Stream (Version 0) und die Zeit, dazu den Akteur der Kette.
 
 **Fehler und Rückstau.** Das `Zeitlimit` eines Knotens begrenzt eine Rechnung (danach gilt sie als gescheitert). Wirft ein Knoten, rechnet ihn der
 Parent bis `Wiederholungen` erneut; danach antwortet er „gescheitert“, das über die gesicherten Kanten bis zum Kopf reicht: der durable Kopf wird
@@ -515,15 +516,18 @@ Command ohne Ziel (`Abstractions/Katalog.cs`), den der nächste Knoten nimmt; Co
 |---|---|---|---|
 | `Dateiwaechter` | `DateiGefunden` je fertige, noch nicht gemeldete Datei | `Pfad`, `Muster`, `Unterordner`, `Erkennung` (`Abfrage` oder `EreignisUndAbfrage`), `Intervall`, `Fertig` (`Stabil` über ein `Fenster` oder `Marker` mit `Endung`), `Kennung` (`NameGroesse` oder `PfadGroesseZeit`) | `Gesehen`: relativer Pfad → Kennung |
 | `Taktgeber` | `Takt` je Intervall (Beginn, auf das Intervall gerundet, UTC) | `Intervall` (mindestens 1 s) | `Taktstand`: das letzte gemeldete Intervall |
-| `Webhook` | `Aufruf` je Aufruf an `POST /eingang/webhook/<Pfad>` (Postfach je Pfad, voll → „später“) | `Pfad` | keiner: ein Aufruf, dessen Kette nicht fertig wurde, wiederholt der Absender (seine Kennung reist mit) |
+| `Webhook` | `Aufruf` je Aufruf an `POST /eingang/webhook/<Pfad>` (Postfach je Pfad, voll → „später“) | `Pfad` | keiner: ein Aufruf, dessen Kette nicht fertig wurde, wiederholt der Absender — mit derselben Kennung dieselbe Meldung, dieselben Ids |
 
 Der Dateiwächter **liest** nur (er legt nichts an, verschiebt und löscht nichts); ein Weckruf (Intervall, wahlweise ein Dateisystem-Ereignis, das
 nur weckt) löst einen Scan aus, der Scan entscheidet. Quell-Commands stehen **nicht im Log**: ob eine Quelle Doppeltes vermeidet oder nach einem
 Neustart weitermacht, regelt sie über ihren **gesicherten Zustand** (§4.4) — die Architektur liefert nur ihn. Das Kind des Quellknotens lauscht,
 solange der Cluster-Knoten die Instanz hält (eine Quellinstanz läuft genau einmal im Cluster, auf ihrem Rechner); je Element gehen die nächste
 laufende Nummer und der Schnappschuss des Zustands an den Graph-Actor, das nächste Element erst, wenn er die Kette angenommen hat (Gegendruck über
-die Warteschlange des Kopfs). Kennung und Herkunft folgen aus Instanz und Nummer; gesichert werden Zustand und Nummer, sobald die Kette und alle
-früheren beendet sind — auch eine gescheiterte Kette zählt als beendet (er meldet `LaufGescheitert`, die Quelle wiederholt ihn nicht). Endet das
+die Warteschlange des Kopfs). Kennung und Herkunft folgen aus Instanz und der **Kennung der Meldung** (`IMeldung`: beim Dateiwächter relativer
+Pfad, Größe und letzte Änderung, beim Taktgeber der Beginn des Intervalls, beim Webhook die Kennung des Absenders) — meldet die Quelle nach einem
+Neustart dasselbe Element erneut, auch in anderer Reihenfolge, entstehen dieselben Ids, und ein zweites Mal startet der Graph-Actor keine Kette, solange
+er das Element kennt; eine eigene Quelle ohne Meldung zählt bis zum Umbau der Quellen (docs/plan-clients-und-quellen.md) nach der Nummer. Gesichert
+werden Zustand und Nummer, sobald die Kette und alle früheren beendet sind — auch eine gescheiterte Kette zählt als beendet (er meldet `LaufGescheitert`, die Quelle wiederholt ihn nicht). Endet das
 Lauschen (die Quelle warf oder ihr Strom endete), beginnt der Parent es nach einer Pause neu, mit dem zuletzt gesicherten Stand. Eine eigene Quelle
 ist eine Funktion mit `Lausche` wie die des Katalogs.
 

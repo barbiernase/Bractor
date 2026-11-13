@@ -22,8 +22,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 4. **Keine Reflection.** Die Laufzeit nutzt generierte Tabellen/Kontexte; Werkzeuge (Codegen, Schema, Extractor) lesen über Roslyn.
 5. Der Fachcode bleibt rein: Cursor, Weckruf, Ordnung, Exactly-once, Sharding, Prozess-Maschinerie tauchen im Entwickler-Code nie auf.
 6. Persistent genau dann, wenn ein durabler Konsument abhängt. Verlierbares (Tick, Ablehnung, UI-Feedback, Kenntnis-Push an Clients) bleibt
-   auf dem schnellen Kanal. Was eine Quelle meldet, steht nicht im Log: durabel ist sie über ihren gesicherten Zustand (was sie gesehen hat,
-   ihre laufende Nummer), gesichert, wenn die Kette des Elements fertig ist.
+   auf dem schnellen Kanal. Was eine Quelle meldet, steht nicht im Log: durabel ist sie über ihren gesicherten Zustand (was sie gesehen hat),
+   gesichert, wenn die Kette des Elements fertig ist; die Kennung eines Elements kommt aus seinem Inhalt (`IMeldung`), nie aus seiner Stelle.
 
 
 ## Werkbank-Leitsätze (Kurzform; das ausführliche Werkbank-Konzept liegt im Git-Verlauf, der Editor heute: docs/10 §10.9)

@@ -59,6 +59,15 @@ public static class Kettenvertrag
     /// </summary>
     public static Guid Aufruf(Guid nachricht, string ort, int auf) => Herkunft.Ableite($"aufruf:{ort}:{nachricht:N}:{auf}");
 
+    /// <summary>
+    /// Die Kennung der Kette, die ein Element einer Quelle der Instanz <paramref name="instanz"/> startet — aus der Kennung seiner Meldung
+    /// (<see cref="IMeldung"/>), nie aus einer Reihenfolge: meldet die Quelle nach einem Neustart dasselbe Element, auch an anderer Stelle, ergibt es
+    /// dieselben Ids. Ein Element ohne Meldung (eine eigene Quelle, die noch keine nennt) zählt bis zum Umbau der Quellen nach seiner laufenden
+    /// <paramref name="nummer"/> (docs/plan-clients-und-quellen.md, Schritt 3: dann ist jedes Element eine Meldung).
+    /// </summary>
+    public static Guid Quelle(string instanz, object element, long nummer) =>
+        Herkunft.Ableite(element is IMeldung m ? $"quelle:{instanz}:meldung:{m.Kennung}" : $"quelle:{instanz}:{nummer}");
+
     /// <summary>Die Kennung der Nachricht an <paramref name="stelle"/>, die der Aufruf <paramref name="aufruf"/> am <paramref name="ort"/> an Knoten desselben Graphen gibt.</summary>
     public static Guid Weiter(Guid aufruf, string ort, int stelle) => Herkunft.Ableite($"weiter:{ort}:{aufruf:N}:{stelle}");
 

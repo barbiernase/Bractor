@@ -98,7 +98,7 @@ public class AblaufE2ETests
             var es = host.Services.GetRequiredService<IEventStoreRepository>();
             var t = Zufallszeit(8);
             var dc0 = Datei(eingang, t, BildVersion.Dc0);
-            Datei(eingang, t, BildVersion.Dc2);
+            var dc2 = Datei(eingang, t, BildVersion.Dc2);
             var paar = Aufnahmename.Resolve(dc0.Name)!.Paar;
 
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is ImagePairKomplett), TimeSpan.FromSeconds(60),
@@ -115,12 +115,20 @@ public class AblaufE2ETests
             File.Exists(bilder[0].Pfad).Should().BeTrue();
             bilder.Single(b => b.Version == BildVersion.Dc0).Meta.HoehePixel.Should().Be(Bildverkleinerung.VorschauHoehe);
 
-            // Spur: der Command trägt den letzten Knoten; seine Ursache ist der Lauf der Quelle (Instanz und Nummer) — ein Quell-Command steht nie im Log.
+            // Spur: der Command trägt den letzten Knoten; seine Ursache ist das Element der Quelle (Instanz und Kennung der Datei, Version 0) — ein
+            //   Quell-Command steht nie im Log.
             var bildEnv = stream.First(e => e.Payload is BildVerfuegbar);
             bildEnv.Wirker.Should().Be("decide:ImagePair/NimmBildAuf");
             bildEnv.Ueber.Should().Be("knoten:Linienimport/Aufnehmen", "der Absender des Commands ist der Knoten, der ihn ausgab (W9)");
-            Spur.ZerlegeUrsache(bildEnv.Ursache, out var quelle, out _).Should().BeTrue();
-            quelle.Should().Be(Herkunft.Ableite("quelle:Linienimport"), "die Ursache ist der Lauf der Quelle der Instanz");
+            Spur.ZerlegeUrsache(bildEnv.Ursache, out var quelle, out var version).Should().BeTrue();
+            Guid Element((string Name, string Pfad) d)
+            {
+                var fi = new FileInfo(d.Pfad);
+                return Kettenvertrag.Quelle(nameof(Linienimport), new DateiGefunden(d.Name, d.Pfad, d.Name, fi.Length,
+                    new DateTimeOffset(fi.LastWriteTimeUtc, TimeSpan.Zero), default), 0);
+            }
+            new[] { Element(dc0), Element(dc2) }.Should().Contain(quelle, "die Ursache ist das Element der Quelle — aus Instanz und Kennung der Datei");
+            version.Should().Be(0);
         }
         finally
         {

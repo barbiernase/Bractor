@@ -45,7 +45,7 @@ public sealed class GraphActor(
     private readonly List<Guid> _auszutragen = new();
     private readonly List<(Guid Kennung, string Grund)> _zuParken = new();
     // Der Zustand der Quelle: die Schnappschüsse in Reihenfolge, mit der Kette, die ihr Element startete; gesichert wird der letzte, dessen Kette und
-    //   alle früheren beendet sind (ein Element, dessen Kette nicht fertig war, meldet sie nach einem Neustart unter derselben Nummer erneut).
+    //   alle früheren beendet sind (ein Element, dessen Kette nicht fertig war, meldet sie nach einem Neustart erneut — mit derselben Kennung, aus seinem Inhalt).
     private readonly Queue<(Guid Kette, GesicherterZustand Zustand)> _quellStaende = new();
     private GesicherterZustand? _zuSichern;
     private readonly Queue<QuellMeldung> _quellRueckstau = new();
@@ -110,32 +110,42 @@ public sealed class GraphActor(
     private int QuellGrenze => instanz.Graph.Quelle is { } q && instanz.Konfig(q).Warteschlange is > 0 and var w ? w : FunktionsOrtKonfig.StandardWarteschlange;
 
     /// <summary>
-    /// Ein Element der Quelle startet eine Kette — Kennung aus Instanz und Nummer (nach einem Neustart rechnet sie mit derselben Nummer dieselben Ids),
-    /// Herkunft aus Instanz, Nummer und Zeit, der Akteur der Instanz; es geht an die Knoten, die die Quelle nennen. Ein Hinweis der Quelle geht an die,
-    /// die ihn hören. Ihr Schnappschuss wird gesichert, sobald diese Kette und alle früheren beendet sind.
+    /// Ein Element der Quelle startet eine Kette — Kennung aus Instanz und der Kennung seiner Meldung (<see cref="Kettenvertrag.Quelle"/>: meldet die
+    /// Quelle es nach einem Neustart erneut, auch in anderer Reihenfolge, rechnet die Kette dieselben Ids), Herkunft wie ein Eingang ohne Vorgänger im
+    /// Log (Stream = die Kennung, Version 0 — so leitet auch <c>NeueId</c> aus dem Element ab, nicht aus seiner Stelle), der Akteur der Instanz; es geht
+    /// an die Knoten, die die Quelle nennen. Ein Hinweis der Quelle geht an die, die ihn hören. Ihr Schnappschuss wird gesichert, sobald diese Kette und
+    /// alle früheren beendet sind.
     /// </summary>
     private void Quelle(IContext context, QuellMeldung m)
     {
         var quelle = instanz.Graph.Quelle!;
-        var kennung = Herkunft.Ableite($"quelle:{instanz.Name}:{m.Nummer}");
-        var stream = Herkunft.Ableite($"quelle:{instanz.Name}");
+        var kennung = Kettenvertrag.Quelle(instanz.Name, m.Nachricht, m.Nummer);
+        var stream = kennung;
         var zustand = new GesicherterZustand(m.Zustand, m.Nummer);
         if (m.Nachricht is ITransientEvent h)
         {
-            hinweise?.Invoke(new HinweisZustellen(kennung, h, stream, (int)m.Nummer, DateTimeOffset.UtcNow, kennung.ToString(), instanz.Akteur, null));
+            hinweise?.Invoke(new HinweisZustellen(kennung, h, stream, 0, DateTimeOffset.UtcNow, kennung.ToString(), instanz.Akteur, null));
             if (ablage is not null) _quellStaende.Enqueue((Guid.Empty, zustand));
             m.Angenommen.TrySetResult();
             PruefeSicherung(context);
             return;
         }
-        if (_ketten.ContainsKey(kennung) || _fertig.Contains(kennung)) { m.Angenommen.TrySetResult(); return; }   // nach einem Neustart der Quelle
-        var kopf = new EingangZustellen(kennung, instanz.Name, m.Nachricht, Eingangsart.Quelle, stream, (int)m.Nummer, DateTimeOffset.UtcNow, instanz.Akteur,
+        if (_ketten.ContainsKey(kennung) || _fertig.Contains(kennung))
+        {
+            // Dasselbe Element noch einmal (die Quelle meldete es nach einem Neustart erneut, ein Absender wiederholte): keine zweite Kette; ihr Stand
+            //   wird gesichert, sobald die Kette des Elements beendet ist (ist sie es schon, gleich).
+            if (ablage is not null) _quellStaende.Enqueue((kennung, zustand));
+            m.Angenommen.TrySetResult();
+            PruefeSicherung(context);
+            return;
+        }
+        var kopf = new EingangZustellen(kennung, instanz.Name, m.Nachricht, Eingangsart.Quelle, stream, 0, DateTimeOffset.UtcNow, instanz.Akteur,
             kennung.ToString(), null);
         var o = new Offen(kopf);
         _ketten[kennung] = o;
         if (ablage is not null) _quellStaende.Enqueue((kennung, zustand));
         m.Angenommen.TrySetResult();
-        var kontext = new KettenKontext(kennung, stream, (int)m.Nummer, kopf.Zeit, instanz.Akteur, kopf.Korrelation, null);
+        var kontext = new KettenKontext(kennung, stream, 0, kopf.Zeit, instanz.Akteur, kopf.Korrelation, null);
         var op = instanz.Graph.KnotenNamens(quelle)!.Operationen.Single(x => x.Eingang is null);
         var nachricht = Kettenvertrag.Weiter(kennung, instanz.Ort(quelle), 0);
         foreach (var w in instanz.Graph.Wege(quelle, op.Auf, m.Nachricht.GetType()))
