@@ -1,5 +1,5 @@
 using Abstractions;
-using Pruefwerk.Katalog.Import;
+using Pruefwerk.Katalog;
 using Pruefdomaene.Import;
 
 namespace Pruefdomaene.Uebersetzungen.Import;

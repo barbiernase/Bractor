@@ -824,19 +824,16 @@
 #de .kom-ue-pfeil{align-self:center;color:#8fc9c1;font-size:14px}
 #de .kom-ue-fehler{padding:0 6px 6px;font-size:10px;color:#f08a5d;white-space:normal;max-width:360px}
 /* Katalog-Modal (docs/konzept-funktionen-im-editor.md, Stufe 1): Kataloge · Funktion als Reihe · Command-Listen */
-#de .kom-leib.kat{grid-template-columns:minmax(170px,230px) 1fr minmax(220px,290px)}
+#de .kom-leib.kat,#de .kom-leib.innen.mit-links{grid-template-columns:minmax(140px,230px) minmax(0,1fr)}
 #de .kat-rechts{border-right:none;border-left:1px solid #232a38;display:flex;flex-direction:column;gap:4px}
-#de .kat-mitte{overflow:auto;padding:22px 26px}
+#de .kat-mitte{overflow:auto;padding:18px 20px;min-width:0}
 #de .kat-leer{color:#7f8aa0;font-size:13px;padding:30px}
-#de .kat-reihe{display:grid;grid-template-columns:minmax(200px,250px) 34px minmax(170px,220px) 34px minmax(190px,280px);gap:12px 0;align-items:start}
 #de .kat-pfeil{color:#6f7d96;font:13px ui-monospace,monospace;text-align:center;padding-top:9px}
 #de .kat-pfeil.leise{opacity:.35}
-#de .kat-fn{align-self:stretch;background:#1d1830;border:1px solid #7a63c8;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
 #de .kat-fn-n{font:700 14px ui-monospace,monospace;color:#e6defc}
 #de .kat-fn-u{font-size:11px;color:#9a8fc0}
 #de .kat-chips{display:flex;flex-wrap:wrap;gap:4px}
 #de .kat-chip{font:11px ui-monospace,monospace;color:#d6cdf5;background:#2a2346;border:1px solid #4b3f7a;border-radius:5px;padding:1px 6px}
-#de .kat-akte{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
 #de .kat-aus{display:flex;flex-direction:column;gap:6px}
 #de .kat-cmd{background:#13203a;border:1px solid #35507a;border-radius:8px;padding:6px 8px;font-size:12px;color:#d5e2f7}
 #de .kat-cmd.hinweis{background:#22192a;border-color:#7a4f8a}
@@ -844,7 +841,7 @@
 #de .kat-cmd.leise{opacity:.6}
 #de .kat-cmd-k{display:flex;align-items:center;gap:6px}
 #de .kat-cmd-n{font:12px ui-monospace,monospace;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
-#de .kat-herk,#de .kat-mult,#de .kat-nutz{font-size:10px;color:#8f9bb0;white-space:nowrap}
+#de .kat-mult,#de .kat-nutz{font-size:10px;color:#8f9bb0;white-space:nowrap}
 #de .kat-mult{color:#ffd27a}
 #de .kat-felder{font:11px ui-monospace,monospace;color:#8fa3c4;margin-top:3px}
 #de .kat-cmd .ag-edit{margin-top:6px;display:flex;flex-direction:column;gap:5px}
@@ -911,3 +908,60 @@
 #de .fl-g-port.s-hinweis{color:#e0a0c8}
 #de .fl-g-m{color:#ffd27a;font-size:10px}
 #de .fl-ab-plus.frei{border-color:#d9822b;color:#ffb35c}
+/* Katalog-Modal: ein Modal je Katalog (Dropdown oben, Funktionen links, die Funktion in der Mitte, alle Nachrichten rechts) */
+#de .kat-dd{background:#1b2232;color:#eef2f8;border:1px solid #3a4560;border-radius:6px;padding:3px 8px;font:600 13px system-ui;cursor:pointer}
+#de .kat-fnbox{max-width:760px;display:flex;flex-direction:column;gap:6px}
+#de .kat-fn-kopf{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding-bottom:6px;border-bottom:1px solid #2a3245}
+#de .kat-fnbox .kom-sec{margin:12px 0 2px}
+#de .kat-chip{display:inline-flex;align-items:center;gap:4px}
+#de .kat-chip-x{background:none;border:none;color:#8f84b8;cursor:pointer;padding:0 0 0 2px;font-size:10px}
+#de .kat-chip-x:hover{color:#ff9a9a}
+#de .kat-chip.plus{cursor:pointer;color:#ffd27a;border-style:dashed;background:transparent}
+#de .kat-zeile{display:grid;grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);align-items:start;margin-top:8px}
+#de .kat-fuss{display:flex;gap:6px;align-items:center;font-size:11px;color:#6f7d96;padding:3px 0 4px 2px}
+#de .kat-link{background:none;border:none;padding:0;color:#9fb3d6;font-size:11px;cursor:pointer;text-decoration:underline dotted}
+#de .kat-link:hover,#de .kat-link.an{color:#ffd27a}
+#de .kat-rumpf{border:1px solid #2a3245;border-radius:8px;padding:8px 10px;background:#0f141e;display:flex;flex-direction:column;gap:2px;margin-top:6px}
+#de .kat-neu.an{border-style:solid;border-color:#ffd27a;background:#2a2412}
+#de .kat-cmd.fw{background:#1a1d24;border-color:#4a5060;color:#b9c0cc}
+#de .kat-cmd.passt{outline:2px solid #ffd27a;cursor:pointer}
+#de .kat-cmd.passt:hover{background:#2a2412}
+#de .kat-rechts .kat-cmd .kat-nutz{display:block;margin-top:2px;white-space:normal}
+#de .kat-rechts{overflow-x:hidden}
+#de .kat-wahl{position:sticky;top:-10px;z-index:1;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;justify-content:space-between;background:#2a2412;border:1px solid #a8843a;
+  border-radius:8px;padding:6px 8px;color:#ffd27a;font-size:11px}
+/* Katalog-Modal: ein Graph steht an derselben Stelle wie die Funktion (seine Leinwand füllt die Mitte) */
+#de .kat-mitte.graph{padding:0;display:flex;flex-direction:column;overflow:hidden}
+#de .kat-graph{display:flex;flex-direction:column;flex:1;min-height:0}
+#de .kat-gr-kopf{padding:10px 16px;margin:0}
+#de .kat-graph .kom-lw{flex:1;min-height:0}
+#de .kom-bk .kom-b.hier{color:#ffd27a}
+#de .kat-schalter{display:inline-flex;gap:3px;align-items:center;cursor:pointer;color:#9fb3d6}
+
+/* Katalog von innen: Bandkopf je Funktion (klickbar im sonst durchlässigen Band), wer eine Nachricht gibt bzw. nimmt, Kopf mit Katalog und Graphen */
+#de .kom-band .kat-band{pointer-events:auto;display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;letter-spacing:0;font-size:11px;color:#9fb3d6}
+#de .kat-band b{color:#e6ebf3;font-size:12px;font-weight:600}
+#de .kat-band .kat-chip.an{border-color:#ffd27a;color:#ffd27a;background:#2a2412}
+#de .kat-band-wo{display:inline-flex;gap:4px;align-items:center;color:#6f7d96}
+#de .kat-band .ag-loesch{position:static}
+#de .kat-wer{font-size:10px;color:#9fb3d6;white-space:nowrap;margin-left:4px}
+#de .kat-wahl-kopf{display:inline-flex;gap:6px;align-items:center}
+/* Katalog: Abhängigkeiten als Stapel über dem Band (Schnittstelle unten, Umsetzungen darüber) */
+#de .kat-stapel{position:absolute;border:1px dashed #3a3560;border-radius:12px;background:#151327;pointer-events:none;z-index:0}
+#de .kat-stapel-t{position:absolute;left:10px;bottom:6px;font-size:10px;color:#9a8fe0;letter-spacing:.03em}
+#de .kat-stapel-plus{position:absolute;border:1px dashed #4b3f7a;border-radius:10px;background:transparent;color:#c5bcf2;padding:10px 14px;font-size:12px;cursor:pointer}
+#de .kat-stapel-plus:hover{background:#221d3d}
+#de .gnode2.n-schnittstelle{border-color:#7f77dd}#de .gnode2.n-schnittstelle .ghead{background:#afa9ec}
+#de .gnode2.n-tumsetzung{border-color:#2f8f6a}#de .gnode2.n-tumsetzung .ghead{background:#5dcaa5}
+#de .gnode2.n-faehigkeit{border-color:#2f8f88}#de .gnode2.n-faehigkeit .ghead{background:#2f9d95}
+#de .fk-port.s-stand-geschrieben .fk-dot{border-color:#57b673;background:#57b673}
+#de .fk-port.s-stand-fehlt .fk-dot,#de .fk-port.s-stand-neu .fk-dot{border-color:#e0b46a}
+#de .fk-port.s-stand-leer .fk-dot{border-color:#8f9bb0}
+#de .fk-port.s-stand-fehlt .fk-pl{color:#e0b46a}
+/* Akteure und Clients (docs/10 §10.9): Gruppe je Client auf der Fläche, Liste links im Modal, Gegenüber und Reaktion in den Bändern */
+#de .fl-gruppe.client{border-color:#8a7fd0}#de .fl-gruppe.client .fl-gruppe-t{color:#b9b1f0}
+#de .fl-gruppe.client.ohne{border-color:#c99a3e}#de .fl-gruppe.client.ohne .fl-gruppe-t{color:#e0b46a;cursor:default}
+#de .kom-b.kand{border-color:#57b673;border-style:dashed;color:#bfe8cc}#de .kom-b.leise{opacity:.4}
+#de .gnode2.n-gegenueber{border-style:dashed;opacity:.85}#de .gnode2.n-gegenueber .ghead{background:#3a4258}
+#de .gnode2.n-reaktion{border-color:#2f8f6a}#de .gnode2.n-reaktion .ghead{background:#5dcaa5}#de .gnode2.n-reaktion .ghead .gk,#de .gnode2.n-reaktion .ghead .gn{color:#0b2a20}
+#de .kom-mark.s-stand-fehlt{color:#e0b46a}#de .kom-mark.s-stand-geschrieben{color:#57b673}#de .kom-mark.s-stand-leer{color:#8f9bb0}

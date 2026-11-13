@@ -19,6 +19,12 @@ public interface IBuendel
     IReadOnlyList<IEvent> Events { get; }
 }
 
+/// <summary>Die Grenzen eines Bündels — dieselben wie die Typen unten (Buendel&lt;T1, T2&gt; bis Buendel&lt;T1, …, T16&gt;); eine Quelle für Werkzeuge.</summary>
+public static class Buendelgrenzen
+{
+    public const int Mindestens = 2, Hoechstens = 16;
+}
+
 /// <summary>
 /// Wählt den Schlüssel eines Bündels, wenn seine Events mehrere typisierte Ids gemeinsam haben:
 /// <c>Auf([Ueber&lt;Bestellung&gt;] Buendel&lt;WareReserviert, ZahlungEingegangen&gt; b, …)</c>.

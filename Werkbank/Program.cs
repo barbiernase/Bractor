@@ -94,7 +94,7 @@ app.MapPost("/api/werkbank/rumpf", async (System.Text.Json.Nodes.JsonObject b, C
 });
 app.MapPost("/api/werkbank/rueckgaengig", async (CancellationToken ct) => GestenErgebnis(await werkbank.Gesten.RueckgaengigAsync(ct)));
 // Kataloge (docs/07 §7.2): anlegen (Projekt, Solution, Referenz der Übersetzungen) und nutzen bzw. nicht mehr nutzen;
-//   mit „nutzer“ nutzt ein Katalog den genannten (der allgemeine Katalog entsteht dabei, wenn es ihn noch nicht gibt).
+//   mit „nutzer“ nutzt ein Katalog den genannten, vorhandenen (Referenz in seiner Projektdatei).
 app.MapPost("/api/werkbank/katalog", async (System.Text.Json.Nodes.JsonObject b, CancellationToken ct) =>
     GestenErgebnis((string?)b["katalog"] is { } katalog
         ? await werkbank.Gesten.KatalogNutzenAsync(katalog, (bool?)b["nutzen"] ?? true, ct)

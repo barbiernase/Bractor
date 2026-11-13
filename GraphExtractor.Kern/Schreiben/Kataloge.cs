@@ -43,13 +43,14 @@ public static class Kataloge
         Referenz(puffer, P.Projekt(wurzel, P.Rolle.Speicher), katalog, true, $"die Anwendung {wurzel} hat keinen Speicher");
 
     /// <summary>
-    /// Der Katalog <paramref name="nutzer"/> nutzt den Katalog <paramref name="katalog"/> (Referenz in seiner Projektdatei) — etwa den allgemeinen,
-    /// dessen Commands er als Input oder Output nimmt. Kreise sind verboten.
+    /// Der Katalog <paramref name="nutzer"/> nutzt den vorhandenen Katalog <paramref name="katalog"/> (Referenz in seiner Projektdatei) — etwa, weil er
+    /// dessen Commands als Input oder Output nimmt. Kreise sind verboten.
     /// </summary>
     public static void KatalogNutzt(Dateipuffer puffer, string nutzer, string katalog)
     {
         if (!P.IstKatalog(nutzer)) throw new ArgumentException($"{nutzer} ist kein Katalog (<Name>{P.Katalog.Suffix}).");
         if (nutzer == katalog) return;
+        if (puffer.Lies($"{katalog}/{katalog}.csproj") == null) throw new InvalidOperationException($"Den Katalog {katalog} gibt es nicht.");
         if (P.KatalogeIn(puffer.Lies($"{katalog}/{katalog}.csproj") ?? "").Contains(nutzer, StringComparer.Ordinal))
             throw new InvalidOperationException($"{katalog} nutzt schon {nutzer} — umgekehrt wäre es ein Kreis.");
         Referenz(puffer, nutzer, katalog, true, $"den Katalog {nutzer} gibt es nicht");
@@ -80,7 +81,7 @@ public static class Kataloge
     {
         var n = (name ?? "").Trim();
         if (n.EndsWith(P.Katalog.Suffix, StringComparison.Ordinal)) n = n[..^P.Katalog.Suffix.Length];
-        if (!Regex.IsMatch(n, @"^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*(\.[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*)*$"))
+        if (!Regex.IsMatch(n, "^" + DomainEditor.Grammatik.Typname + @"(\." + DomainEditor.Grammatik.Typname + ")*$"))
             throw new ArgumentException("Ein Katalogname ist ein Namespace: groß beginnen, nur Buchstaben und Ziffern, Teile durch Punkte getrennt.");
         return n + P.Katalog.Suffix;
     }

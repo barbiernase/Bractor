@@ -3,7 +3,7 @@ using Abstractions;
 // SONDE — fremdes Szenario (docs/04 §4.4): GENERISCHE FUNKTIONEN, ZUSTAND UND HINWEISE — die Domäne.
 //
 // Wetterstationen melden Temperaturen (Fakten im Log). Die Domäne ist rein: die Prognose und die Kartenausgabe sind Graphen des fremden Katalogs
-// (Katalog.Vorhersage.*); was sie hier bedeuten, sagen die Übersetzungen (Uebersetzungen.Vorhersage.cs.txt) — die Nachricht des Warndiensts an den
+// (Katalog.*.cs.txt, Teil Vorhersage); was sie hier bedeuten, sagen die Übersetzungen (Uebersetzungen.Vorhersage.cs.txt) — die Nachricht des Warndiensts an den
 // Kopf der Prognose, die Prognose als Command an die Station. Der Warndienst (Akteure.Vorhersage.cs.txt) gibt auf eine gemeldete Temperatur den Kopf
 // der Prognose hinein, bestellt und löscht Karten direkt beim Katalog und hört dessen Hinweise.
 

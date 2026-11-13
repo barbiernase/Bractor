@@ -1,5 +1,5 @@
 using Abstractions;
-using Sondenkatalog.Katalog.Vorhersage;
+using Sondenkatalog.Katalog;
 
 // SONDE — draußen beim Wetterdienst: der Warndienst meldet Temperaturen, bestellt und löscht Karten beim Katalog und hört die Warnung, die Stilllegung
 // und die Karten (Hinweise: Kenntnis); auf eine gemeldete Temperatur reagiert er mit dem Kopf der Prognose; die Wetter-App verkörpert ihn. Er nennt

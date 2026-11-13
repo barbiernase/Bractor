@@ -1,6 +1,6 @@
 using Abstractions;
 using Warenkatalog.Import;
-using Sondenkatalog.Katalog.Import;
+using Sondenkatalog.Katalog;
 
 // SONDE — die Übersetzungen des Warenkatalogs (docs/04 §4.4): der Import an den Vorgang, seine ANTWORT in den Kopf des Zeilenimports,
 // Fortschritt und Bilanz an den Vorgang, jeder Artikel an seinen Stream — Guid ⇄ Id ausdrücklich, der Rest nach Namen.

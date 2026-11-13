@@ -422,34 +422,35 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
 
 - **Die Fläche** (`board.sicht.flaeche`, `Sicht.Flaeche.cs`) ordnet nach dem Ablauf, von links nach rechts: Client-Ausgang (je Akteur, was er darf),
   Quellen (die Quellknoten der Graphen), Graphen (nur die obersten, mit ihrer Signatur), Aggregate, Projektionen (Projektion und Reader je Store
-  gruppiert), Client-Eingang (je Akteur, was er hört, dazu die Antworten auf seine Queries). Ein Akteur steht also zweimal. Die Domänen sind Bänder
-  über Quellen bis Projektionen; das Band eines Graphen sind die Aggregate, an die er schreibt.
+  gruppiert), Client-Eingang (je Akteur, was er hört, dazu die Antworten auf seine Queries). Ein Akteur steht also zweimal, beide Male unter dem
+  Client, der ihn verkörpert (eine Gruppe je Client, links und rechts auf derselben Höhe; ohne Client in der Gruppe „ohne Client“). Hat ein Client
+  eine Implementierung, läuft ein Rücklauf-Bogen von seiner Gruppe rechts zu seiner Gruppe links: er reagiert auf, was seine Akteure hören, mit dem,
+  was sie dürfen. Die Domänen sind Bänder über Quellen bis Projektionen; das Band eines Graphen sind die Aggregate, an die er schreibt.
 - **Nachrichten sind Ports** an den Karten, mit Sorte (Command, Event, Hinweis, Query, Antwort, Frist). Deklariert wird ein Typ am Port seines
   Besitzers (`Sicht.Besitz`).
 - **Klick und Doppelklick:** ein Klick auf eine Karte oder einen Port hebt seine Kette bzw. seine Kanten hervor; ein Doppelklick öffnet ihn im
-  Modal — Graph, Aggregat und Store von innen, ein Glied (Decide, Auf, Projektion, Reader, eine Nachricht des Aggregats) in seinem Block gewählt,
-  alles andere (Akteur, Client, Instanz, Umgebung, Funktion) als Formular. Ein Panel neben der Fläche gibt es nicht; Brotkrumen führen zurück.
+  Modal — Aggregat, Store und Katalog von innen, ein Graph im Katalog-Modal, ein Glied (Decide, Auf, Projektion, Reader, eine Nachricht des Aggregats) in seinem Block gewählt,
+  eine Funktion im Katalog-Modal, Akteur und Client (auch der Kopf einer Client-Gruppe) im Modal „Akteure und Clients“, alles andere (Instanz, Umgebung) als Formular. Ein Panel neben der Fläche gibt es nicht; Brotkrumen führen zurück.
 - **Kanten** laufen von Port zu Port und haben eine Art: schreiben, Quelle, lesen, Kenntnis (ein Event oder Hinweis an den Akteur, der es hört),
-  Rücklauf (die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store).
-- **Von innen** (Modal): ein Graph zeigt seine Komposition (`board.sicht.komposition`, `Sicht.Komposition.cs`: Knoten nach Tiefe, je `[Von]` eine
-  Kante, Köpfe und Ausgänge, Technik und Konfig als Chips) mit dem Baukasten (`board.sicht.baukasten`) und seinen Instanzen; ein Aggregat
+  Rücklauf (die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store), Reaktion (Gruppe eines Clients rechts → links).
+- **Von innen** (Modal): ein Graph zeigt seine Komposition in der Mitte des Katalog-Modals (`board.sicht.komposition`, `Sicht.Komposition.cs`:
+  Knoten nach Tiefe, je `[Von]` eine Kante, Köpfe und Ausgänge, Technik und Konfig als Chips; eingesetzt wird aus der Liste links); ein Aggregat
   Commands → Decide → Ergebnisse → Apply → Zustand; ein Store in zwei Bändern Eingang → Auf bzw. Frage → Fähigkeit → Umsetzung, dazu Read-Models
   und Antworten (s. u.). Auch im Modal gibt es kein Panel: ein Klick wählt einen Knoten bzw. ein Glied und hebt seine Kanten hervor, ein
-  Doppelklick öffnet ihn (ein Graph eine Ebene tiefer); in Aggregat und Store schaltet er stattdessen die Detailstufe. Ein Klick im Baukasten
-  öffnet den Baustein.
+  Doppelklick öffnet ihn (im Graphen: Funktion bzw. Graph in der Mitte); in Aggregat und Store schaltet er stattdessen die Detailstufe.
 - **Gesten** sind Änderungen am Board, die der Server als Patch in den Code schreibt (↶ nimmt ihn zurück). Pfeile zieht man nie von Hand —
   überall gilt dieselbe Port-Logik: links die Eingänge, rechts die Ausgänge; „＋“ an einem Port hebt die Ports bzw. Karten hervor, die dort
-  angeschlossen werden können, ein Klick verbindet, Esc bricht ab; ✕ an einem Port löst. Auf der Fläche: Akteur links „＋ darf“ (Eingänge von
-  Graphen, Aggregaten, Readern → `IDarf`), Akteur rechts „＋ hört“ (Events, Hinweise → `IHoert`), Projektion „＋ Event“ (ein
-  `Auf`), „＋ Store“ im Kopf der Spalte Projektionen (Store-Klasse, Bereich, Name). In der Komposition stehen die Ports eines Funktionsknotens je Auf — sein Eingang, darunter seine
+  angeschlossen werden können, ein Klick verbindet, Esc bricht ab; ✕ an einem Port löst. Je Absicht gibt es genau eine Geste an genau einem Ort:
+  Akteure und Clients entstehen, bekommen Rechte und werden gelöscht nur im Modal „Akteure und Clients“ (s. u.); die Fläche zeigt sie nur. Auf der Fläche: Projektion „＋ Event“ (ein Event eines
+  Aggregats → `Auf`), „＋ Store“ im Kopf der Spalte Projektionen (Store-Klasse, Bereich, Name). In einem Graphen (Mitte des Katalog-Modals) stehen die Ports eines Funktionsknotens je Auf — sein Eingang, darunter seine
   Ausgänge mit Vielfachheit (1 · 0..1 · 0..n); eine Antwort vom Aggregat hat kein „＋“. „＋“ an einem Eingang hebt die Knoten hervor, die den Typ
   ausgeben (→ `[Von]`), dazu „von außen“ (→ `[Kopf]`), gestrichelt „neue Funktion davor“ (gibt den Typ aus, nimmt eine neue Nachricht von außen);
-  „＋“ an einem Ausgang die Knoten, die ihn nehmen (→ `[Von]` am Nehmer), gestrichelt „neue Funktion dahinter“ (nimmt den Typ und öffnet sich von
-  innen) — eine neue Funktion liegt in einem Katalog, der den Typ kennt (eine Anwendung hat keine Funktionen). Am linken Rand „＋ Quelle“ (nur ohne Kopf), am rechten
+  „＋“ an einem Ausgang die Knoten, die ihn nehmen (→ `[Von]` am Nehmer), gestrichelt „neue Funktion dahinter“ (nimmt den Typ und steht danach
+  in der Mitte) — eine neue Funktion liegt in einem Katalog, der den Typ kennt (eine Anwendung hat keine Funktionen). Am linken Rand „＋ Quelle“ (nur ohne Kopf), am rechten
   je Command ohne Ziel sein Empfänger bzw. „⚠ kein Empfänger“ und „＋“: ein Knoten eines anderen Graphen wird Kopf, oder ein neuer Graph entsteht mit
-  einem Kopf dafür (Verbindung). Der Baukasten öffnet per Klick und setzt per „＋“ als Knoten ein (Funktion, Graph als Schachtel, Quelle) — gezogen
-  wird nicht mehr. „＋ Technik/Konfig“ am Knoten (Konstruktor), Klick auf eine Kante (verlierbar, lösen), ✕ am Knoten: aus dem Graphen bzw. samt
-  Funktion, wenn sie sonst in keinem Knoten steht. Ein Doppelklick öffnet eine Funktion von innen, einen Graphen eine Ebene tiefer.
+  einem Kopf dafür (Verbindung). Links im Katalog-Modal setzt „＋“ neben einer Funktion bzw. einem Graphen sie als Knoten ein (ein Graph als Schachtel) — gezogen
+  wird nicht. „＋ Technik/Konfig“ am Knoten (Konstruktor), Klick auf eine Kante (verlierbar, lösen), ✕ am Knoten: aus dem Graphen bzw. samt
+  Funktion, wenn sie sonst in keinem Knoten steht. Ein Doppelklick auf einen Knoten zeigt ihn in der Mitte (Funktion bzw. Graph).
 - **Übersetzungen und Eingänge:** eine Übersetzung entsteht **auf der Fläche**: ein Klick auf eine Nachricht am Ausgang eines Graphen (auch ein
   Zwischenstand) hebt die Commands an den Eingängen der Aggregate hervor, ein Klick auf einen davon legt die Übersetzung an — ein neuer Knoten
   in der Spalte Übersetzungen, ohne Kopf (die Klasse `{Nachricht}_{Command}_{n}`; gleich zugeordnet: gleiche Namen und die Id des Ziels, wenn genau
@@ -457,13 +458,32 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Ein Doppelklick auf den Knoten öffnet die Verknüpfung der Felder: links die Felder der Quelle, rechts die Parameter des Ziels mit ihrer Regel („=“
   gleicher Name, „⇐“ anderer Name, „∅“ Standardwert, „⚠“ offen — dann baut die Klasse nicht); „＋“ an einem Ziel hebt die passenden Felder hervor
   (der Server rechnet sie), ein Klick verknüpft (der Server schreibt `Translate()` neu), ✕ löst es. Am Eingang eines Graphen „＋ Eingang“: eine Quelle (nur
-  ohne Kopf) oder ein Client — direkt (ein Akteur darf den Eingang des Katalogs) oder eine neue bzw. vorhandene Nachricht der Domäne, die eine
-  Kopf-Übersetzung in den Eingang macht (die neue Nachricht bekommt dessen Felder), danach der Akteur, der sie hineingibt (`IDarf`). „＋“ an einem
+  ohne Kopf) oder ein Client — eine neue bzw. vorhandene Nachricht der Domäne, die eine Kopf-Übersetzung in den Eingang macht (die neue Nachricht
+  bekommt dessen Felder); wer sie bzw. den Eingang direkt hineingibt (`IDarf`), legt man im Modal „Akteure und Clients“ fest. „＋“ an einem
   Ausgang bietet gestrichelt „↦ ▣ Command an …“: ein vorhandener Command oder ein neuer samt Decide, Event und Apply; die Übersetzung dazwischen nennt
   die Id des Ziels ausdrücklich, wenn genau ein Feld in Frage kommt. Der Server legt jede neue Übersetzung nach
   `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` (Bereich der Domäne), nie in die Domäne. Unter den Ergebnissen eines Decide steht kein
   Command. Der Picker der Fläche legt einen Graphen nur mit erstem Knoten an — in einem Katalog (dem seines ersten Knotens, sonst dem ersten genutzten
-  bzw. dem allgemeinen); er öffnet sich danach.
+  ); er öffnet sich danach.
+- **Akteure und Clients** (Modal, `board.sicht.akteure`, `Sicht.Akteure.cs`): links die Liste — „＋ Akteur“ (`record X : IAkteur`) und „＋ Client“
+  (`record X : IClient`) sind der einzige Weg, sie anzulegen —, in der Mitte das Gewählte mit derselben Mechanik wie Aggregat, Store und Katalog
+  (`innenZeige`). Ein **Akteur** in vier Spalten Herkunft · hört · darf · Ziel, ein Band je Gegenüber auf der Fläche (wohin seine Nachrichten gehen,
+  woher kommt, was er hört: Aggregat, Graph, Übersetzung, Reader); „＋“ im Spaltenkopf „hört“ bzw. „darf“ zeigt gestrichelt, was die Grammatik dort
+  erlaubt und er noch nicht hat (ein Klick schreibt `IHoert<T>` bzw. `IDarf<T>`), ✕ am Port nimmt es heraus; im Kopf die Clients, die ihn verkörpern,
+  und ✕ (löscht ihn, samt `IVerkoerpert` an den Clients). Ein **Client** in vier Spalten hört · Reaktion · sendet · Ziel, ein Band je verkörpertem
+  Akteur (✕ am Band: nicht mehr verkörpern); die Reaktion ist die Methode seiner Implementierung je gehörtem Fakt (Stand, ✎ Code, 🤖 Prompt — Platz
+  `zusage|Client|Event@Klasse`); im Kopf „＋ verkörpert“ (links leuchten die Akteure, ein Klick schreibt `IVerkoerpert<A>`), seine Implementierungen
+  bzw. „＋ 🐍 Implementierung“ und ✕. Neue Nachrichten entstehen hier nicht — sie gehören einem Aggregat bzw. Katalog.
+- **Was passt und wo etwas verwendet wird, rechnet der Server** — der Editor schlägt in Fläche, Aggregat und Store nur nach (W3):
+  `board.sicht.flaeche.anschluss` nennt je „＋“ der Fläche (`event|Projektion`, `uebersetzen|Typ`) die Ports,
+  die die Grammatik dort erlaubt und die noch frei sind; ✕ steht an einem Port, den der Server `loesbar` nennt. `board.sicht.innen`
+  (`Sicht.Innen.cs`) trägt je Typ seine Verwendungen (Art, Aggregat bzw. Besitzer, Karte der Stelle, `erzeugt`) — daraus Löschplan, „hat schon
+  einen Erzeuger“ und „unverbunden“ —, je Decide die möglichen Ergebnisse und Fristen, je Frage eines Aggregats die möglichen Antworten, je Auf
+  bzw. Frage eines Readers die Fähigkeiten derselben Richtung und die Antworten und je Fähigkeit die Read-Models ihrer Signatur. Wer einen Command
+  schickt, steht in `board.sicht.partner`; `komposition[…].offen` nennt die Ausgänge eines Graphen ohne Empfänger, `komposition[…].quellen` die
+  Quellen, deren Meldung ein Kopf nimmt. Regeln als Daten kommen aus der Grammatik (`rahmen.grammatik`): die Store-Klassen (Herkunft in
+  Schreib-Fähigkeiten, `[MindestensEinmal]`), die Grenzen eines Bündels (`Abstractions.Buendelgrenzen`) und das Muster eines Typnamens.
+  Namen schlägt der Editor nicht vor: das Feld beginnt leer.
 - **Zoom:** in jedem Modal mit ＋/−/0 (auch mit Strg/⌘), Strg/⌘ + Mausrad bzw. Zwei-Finger-Zoom und der Anzeige im Kopf; auf der Fläche ebenso
   mit ＋/−/0 und dem Mausrad.
 - **Im Aggregat** (von innen) hat jede Karte drei Detailstufen: nur Kopf · Kopf mit Ports (Standard) · Bearbeiten. Ein Doppelklick schaltet
@@ -474,7 +494,7 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   nennt, was mitgeht — im Aggregat ein Record mit seinem Decide, seinem Platz in den Ergebnissen, seinem Apply bzw. seiner Frage (ein Decide löscht
   seinen Command, ein Apply nur sich); im Store ein Auf samt Bündel-Karte (mit dem letzten Auf die Projektion), eine Frage samt Query, eine
   Fähigkeit samt Umsetzung (wer sie nimmt, lässt sie los), ein Read-Model, eine Antwort; immer dazu `IDarf`/`IHoert` der Akteure. Wird es
-  außerhalb noch verwendet (Projektion, Reader, Funktion, ein anderes Aggregat, ein Feld; ein Read-Model in der Signatur einer Fähigkeit), ist ✕
+  außerhalb noch verwendet (Projektion, Reader, Funktion, Übersetzung, ein anderes Aggregat, ein Feld; ein Read-Model in der Signatur einer Fähigkeit), ist ✕
   gesperrt und nennt die Stellen. Was der Server nicht löschen konnte und welche Fehler der Build danach neu meldet, kommt als Meldung; die
   Befunde stehen zudem an ihrer Karte. Zustand und Fragen-Karte gehören dem Aggregat (Felder haben ihr eigenes ✕), Events im Store dem Aggregat.
   Ein Decide steht neben seinem Command, ein Apply neben seinem Event (1:1, oben bündig). „⇅“ im Kopf der Spalte Commands bzw. Ergebnisse
@@ -513,27 +533,54 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Readers, der zu einem anderen Store gehört, steht leise mit „gehört zu …“. Ein neuer Store wählt seine Klasse; die Umsetzung erbt die Basis
   aus `Storeklassen` (`MartenStore`, `DateiZiel`, `DateiSink`), bei Klasse 3 trägt die Projektion `[MindestensEinmal]`. Entfernen: ✕ Auf bzw.
   Frage an seiner Methode (die letzte nimmt die Klasse mit), ✕ Fähigkeit samt Schnittstelle, Umsetzung und Platz im Bündel, wenn sie niemand nimmt.
-- **Kataloge** (docs/10 §10.9): „📚 Kataloge“ in der Kopfleiste (und im Baukasten) öffnet das Katalog-Modal. Links
-  die Kataloge, darunter Funktionen und Graphen des gewählten; in der Mitte die gewählte Funktion als Reihe Input ─▶ ƒ ─▶ Outputs — je Input ein
-  `Auf`, mehrere Outputs sind ein `OneOf` (Vielfachheit 1 · 0..1 · 0..n, „Strom“ und „asynchron“ je Zeile), die Funktionskarte trägt den Konstruktor
-  („＋ Rahmen“) und „⤢ ausführlich“ (das Funktions-Modal unten); rechts die Command-Liste des Katalogs mit „nimmt n · gibt m“ bzw. „unverbunden“,
-  die des allgemeinen Katalogs (`Projektstruktur.AllgemeinerKatalog`, Commands, die alle Kataloge teilen) und die Commands der Quellen des Frameworks
-  (nur als Input). „＋ Input“ und „＋ Output“ bieten einen neuen Command (bzw. Hinweis), einen neuen im allgemeinen Katalog oder einen aus den
-  Listen; was neu entsteht, landet in der Liste, und wer einen Command aus der Liste als Input wählt, wird im Graphen zum Nachfolger jeder
-  Funktion, die ihn ausgibt. Ein Command aus dem allgemeinen Katalog setzt die Projektreferenz des Katalogs (Geste `/api/werkbank/katalog` mit
-  `nutzer`; der allgemeine Katalog entsteht beim ersten Gebrauch, `Kataloge.KatalogNutzt`, kein Kreis). ✎ an einem Command: Name, Felder,
-  Command ⇄ Hinweis; ✕ an Input bzw. Output löst ihn aus der Funktion (der Command bleibt in der Liste), ✕ in der Liste löscht ihn, solange ihn
-  keine Funktion mehr nimmt oder gibt. Welche Kataloge ein Katalog nutzt, steht im Rahmen (`Rahmen.KatalogNutzt`, aus seiner Projektdatei).
-- **Graphen im Katalog** (Stufe 2): „＋ ⬡ Graph“ im Katalog-Modal fragt Name und erste Funktion (neu, aus diesem oder einem anderen Katalog, oder ein
-  Graph als Schachtel); der Graph entsteht im Bereich seiner ersten Funktion mit ihr als `[Kopf]`, baut sofort und öffnet sich im Graph-Modal über
-  dem Katalog. Dort bietet „＋“ an einem Output gestrichelt jede Funktion aller Kataloge, deren Input genau dieser Command ist („ƒ X einsetzen“ →
-  `[Von]` am neuen Knoten), und „neue Funktion mit diesem Input“ (sie öffnet sich im Katalog-Modal); „＋“ an einem Input spiegelbildlich die
+- **Kataloge — ein Modal** (docs/10 §10.9): „📚 Kataloge“ in der Kopfleiste öffnet das Katalog-Modal; jede Funktion und jeder Graph eines
+  Katalogs öffnen sich dort (Doppelklick auf der Fläche, auf einen Knoten im Graphen) — ein eigenes Funktions- oder Graph-Modal gibt es nicht. Ein Katalog ist eine
+  geschlossene Einheit, jede seiner Funktionen sieht alle seine Nachrichten. **Oben** ein Dropdown mit dem Katalog, darin „＋ neuer Katalog“ (ein eigenes
+  Projekt `<Name>.Katalog`). **Ein Modal, kein Springen:** links die Auswahl — die Funktionen und Graphen des Katalogs, „＋ Funktion“, „＋ Graph“ —,
+  in der Mitte genau das Gewählte. **Eine Funktion steht von innen wie Aggregat und Store** (dieselbe Innenansicht: Karten mit Ports, Kanten, ＋ am
+  Port, ✎ an der Karte, ✕ mit Löschplan): waagerecht das Band mit den Spalten **Eingänge · Auf · Lausche · Ausgänge · Liest**, senkrecht darüber
+  ihre **Abhängigkeiten** — je Technik im Konstruktor ein eigener Stapel, nebeneinander: unten die Schnittstelle (Methoden mit Signatur, ✕ nimmt eine
+  heraus, „＋ Methode“ fragt eine Zeile C#, „＋ Umsetzung ▲“), darüber ihre Umsetzungen (je Methode ihr Stand: geschrieben, leer, fehlt; ✎ öffnet
+  je Methode den Rumpf, dazu „＋ braucht“ und wo sie gewählt ist), darüber, was eine Umsetzung selbst nimmt — ab der dritten Ebene zu, bis man es an
+  der Umsetzung aufklappt („▲ braucht …“). Wer braucht, steht unten, wer liefert, darüber; die Kanten laufen senkrecht, die Schnittstelle geht in
+  jedes Auf. „＋ Abhängigkeit“ neben den Stapeln nimmt eine vorhandene oder neue Technik in den Konstruktor, ✕ an der Schnittstelle nimmt sie heraus
+  (die Technik bleibt im Katalog). Lese-Fähigkeiten und alles der Anwendung (Stores, Projektionen) stehen hier nicht: eine Lese-Fähigkeit ist ein
+  Port „liest …“ am Auf. Was die Stapel zeigen, rechnet der Server (`board.sicht.technik`, `Sicht.Technik.cs`). Im Kopf die Funktion, was ihr Konstruktor außer Technik nimmt (Chips: Konfig,
+  Zustand, Logger; ✕ nimmt es heraus, „＋ braucht“ fügt hinzu), „＋ Eingang“ (ein weiteres `Auf`), die Graphen, in denen sie steht, und ✕ (nur,
+  wenn sie in keinem Graphen steht). An jeder Nachricht steht, wer sie im Katalog sonst gibt bzw. nimmt — bei den Eingängen „← ƒ …“, „vom
+  Framework“ bzw. „von außen“, bei den Ausgängen „→ ƒ …“ bzw. „verlässt den Katalog“. Die **Auf-Karte** hat links ihren Eingang,
+  rechts ihre Ausgänge (✕ löst, „＋ Ausgang“) und was sie liest (✕, „＋ liest“: die Lese-Fähigkeiten des Katalogs, s. u.);
+  ✎ öffnet, wie viele herauskommen („genau eins“ bzw. bei mehreren „einer davon“ folgt aus der Zahl der Ausgänge, ein Klick schaltet „keiner bis
+  viele“, den Strom), „asynchron“, „Herkunft“ und den **Rumpf** über dasselbe Werkzeug wie Decide, Apply, Handhabung und Store-Fähigkeit (ein Modell
+  für jeden Code-Teil): der Ausschnitt aus der Datei, „✎“ als Code („✓ Speichern“, ⌘S, ersetzt genau diesen Bereich als Geste) oder „🤖“ als
+  Auftrag (`claude -p` füllt bzw. passt an, geprüft im warmen Workspace, geprüft sofort in der Datei, sonst Vorschlag ✓/✗; ↶ nimmt die Übernahme
+  zurück). Der Platz eines Funktions-Rumpfs heißt `funktion|<Klasse>|<Eingang>` (bzw. `…|Lausche`, bei einer Technik
+  `funktion|<Umsetzung>|<Methode>`); der Prompt trägt Signatur, Vertrag, Konstruktor-Typen, die Knoten in Graphen samt Kanten und den Rumpf der
+  genommenen Technik. Lausche hat seinen Rumpf ebenso hinter ✎. Eine Nachricht: ✎ für Name, Felder und
+  Command ⇄ Hinweis, ✕ löscht, solange sie nirgends verwendet wird. **Verbunden wird über ＋:** „＋ Ausgang“ bzw. „＋ Eingang“ hebt die Karten
+  hervor, die passen (als Eingang ein Command des Katalogs oder einer Quelle, den die Funktion weder nimmt noch ausgibt; als Ausgang ein Command
+  oder Hinweis, den das Auf noch nicht ausgibt und die Funktion nicht nimmt), gestrichelt steht, was passt, aber nicht im Bild ist, und je Art
+  „＋ neuer …“ (eine Nachricht entsteht so immer schon verbunden); ein Klick verbindet, Esc bricht ab, nach einem Eingang ist gleich sein Ausgang
+  dran. „＋“ im Kopf der Spalten Eingänge bzw. Ausgänge startet dieselbe Wahl. „＋ Funktion“ fragt nur den Namen (die Klasse entsteht ohne `Auf` und
+  baut erst mit einem Eingang, W1; ihre Karte „noch ohne Eingang“ hat ＋ am Port, die Wahl des Eingangs läuft gleich). Ein gewählter **Graph** steht
+  an derselben Stelle in der Mitte: seine Leinwand (s. Gesten oben); links setzt „＋“ neben einer Funktion bzw. einem Graphen sie als Knoten ein. Ein Katalog hat keine
+  **Bereiche** (docs/07 §7.3): alles Neue liegt flach in ihm, im Namespace `<Name>.Katalog` (der Server legt es so ab, `Strukturort.Flach`). Welche
+  Kataloge ein Katalog nutzt, steht im Rahmen (`Rahmen.KatalogNutzt`, aus seiner Projektdatei). **Alles, was das Modal zeigt, rechnet der Server**
+  (`board.sicht.kataloge`, `Sicht.Kataloge.cs`): je Katalog seine Nachrichten mit „gibt“/„nimmt“, was die Quellen melden, seine Funktionen mit
+  Konstruktor-Chips, Graphen und den passenden Ein- und Ausgängen (Grammatik: Konsum bzw. Erzeugung einer Funktion, kein Kreis an einem Knoten),
+  dazu die Arten von Nachrichten, die ein Katalog hält (Projektstruktur × Grammatik — sie geben die Gruppen rechts und ihr „＋“); was im Graphen
+  aneinander passt, steht in `komposition[…].flach.passt`, was Technik ist, in `baukasten.technik`. Der Editor schlägt nur nach; einen Katalog, der Nachrichten mehrerer Kataloge
+  hält, legt man an wie jeden anderen — eine Sonderrolle hat keiner.
+- **Graphen im Katalog** (Stufe 2): „＋ Graph“ im Katalog-Modal fragt Name und erste Funktion (neu, aus diesem oder einem anderen Katalog, oder ein
+  Graph als Schachtel); der Graph entsteht im Katalog seiner ersten Funktion mit ihr als `[Kopf]`, baut sofort und steht danach in der Mitte des
+  Katalog-Modals (eine neue erste Funktion steht zuerst selbst dort, ihr Eingang ist zu wählen). Im Graphen bietet „＋“ an einem Output gestrichelt jede Funktion aller Kataloge, deren Input genau dieser Command ist („ƒ X einsetzen“ →
+  `[Von]` am neuen Knoten), und „neue Funktion mit diesem Input“ (sie steht danach in der Mitte); „＋“ an einem Input spiegelbildlich die
   Funktionen, die ihn ausgeben (der neue Knoten nimmt von außen: `[Kopf]`), und „neue Funktion davor“. Eine Funktion aus einem anderen Katalog setzt
-  die Projektreferenz mit. **Alles liegt auf einer Ebene:** steht ein Graph als Knoten in einem anderen, zeigt das Graph-Modal seine Knoten
-  aufgefaltet im selben Bild (Pfad `Teil.Knoten`), umrahmt mit seinem Namen (Doppelklick auf den Rahmen: der Teilgraph für sich); die Sicht liefert
+  die Projektreferenz mit. **Alles liegt auf einer Ebene:** steht ein Graph als Knoten in einem anderen, zeigt die Mitte seine Knoten
+  aufgefaltet im selben Bild (Pfad `Teil.Knoten`), umrahmt mit seinem Namen (Doppelklick auf den Rahmen: der Teilgraph für sich in der Mitte); die Sicht liefert
   das als `komposition[…].flach`, jeder Knoten mit dem Graphen, dem er gehört — eine Geste trifft dessen Record. Ein Graph im Katalog hat keinen
   Eingang (Client, Quelle), kein „↦ ▣ Command an …“, keinen Empfänger am rechten Rand
-  und keinen Reiter Instanzen; rechts stehen seine **Outputs** (die Signatur), der Baukasten zeigt nur Katalog-Inhalte. Er ist eine Blaupause:
+  und keine Instanzen; rechts stehen seine **Outputs** (die Signatur). Er ist eine Blaupause:
   CQRS116 zählt seine Köpfe und Ausgänge erst dort, wo er als Knoten eines Graphen der Anwendung steht.
 - **Graph an eine Domäne binden:** im Kopf jedes Domänen-Bands der Fläche steht „＋ Graph“ (über der Spalte Graphen). Er bietet die Graphen der
   Kataloge an, dann einen ihrer Ausgänge und den Command an ein Aggregat dieser Domäne — es entsteht eine **Übersetzung**, kein Knoten und kein
@@ -546,17 +593,11 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Übersetzung nimmt nach dem Typ jede solche Nachricht, aus jeder Instanz. **Übersetzungen stehen in ihrer eigenen Spalte** zwischen Graphen und
   Aggregaten, im Band ihrer Domäne: je Übersetzung eine Karte `↦ <Name>`, `TEin` links (Kante vom Port des Graphen bzw. vom Akteur), `TAus` rechts
   (Kante zum Command bzw. zum Kopf eines Graphen), dazu „✓ alle Felder zugeordnet“ bzw. „⚠ n offen“; Doppelklick öffnet die Feldzuordnung, ✕ an der
-  Karte entfernt sie. Doppelklick auf einen Graphen öffnet ihn im Graph-Modal, auf eine Funktion im Katalog-Modal. Im Aggregat-Modal steht an jedem
+  Karte entfernt sie. Doppelklick auf einen Graphen oder eine Funktion öffnet sie im Katalog-Modal. Im Aggregat-Modal steht an jedem
   Command „＋ wer schickt ihn“: die offenen Ausgänge laufender Graphen (ein Klick übersetzt in den Command) und „＋ Graph an … binden“.
-- **Funktion von innen:** dieselbe Mechanik in vier Spalten — Eingänge · Auf · Ausgänge · Rahmen
-  (Konstruktor). Eingang ↔ Auf ist 1:1 (R2), Auf → Ausgänge frei; jeder Ausgang trägt seine Vielfachheit (1 Folge, 0..1 Wahl, 0..n Strom), im ✎ des
-  Auf stehen Strom, asynchron (`Task`/`IAsyncEnumerable`) und Herkunft, dazu der Rumpf. „＋ Ausgang“ bietet gestrichelt eine neue Nachricht und einen
-  neuen Hinweis; der Spaltenkopf Eingänge eine neue Nachricht mit Auf und eine vorhandene Nachricht; der Rahmen Konfig (neu oder vorhanden), Technik
-  (neu als Schnittstelle mit Umsetzung oder vorhanden) und den Logger. Eine Funktion im Katalog kennt keine Domäne: kein Command an ein Aggregat
-  (dafür gibt es die Übersetzung). **Lesen** über eine Lese-Fähigkeit des Katalogs (`: IReadStore` im Katalog, umgesetzt von einem Store im Speicher der
-  Anwendung, CQRS124): im ✎ des Auf bzw. im Katalog-Modal „⌕ liest ▾“ am Auf an- und abwählen; „＋ neue Lese-Fähigkeit …“ fragt Interface, Methode
-  (`Task<int> ZaehleAsync(Guid paar)`) und die Domäne des Stores — es entstehen das Interface im Bereich der Funktion, der Parameter am Auf und der
-  Store `<Wurzel>.Infrastructure/<Bereich>/<Name>.cs` mit Stub; der Speicher bekommt die Referenz auf den Katalog. Ein Auf übernimmt Herkunft und
-  Lese-Fähigkeiten auch an einer bestehenden Funktion (die Nachricht und ein `CancellationToken` bleiben). Ein Doppelklick auf eine Funktion (Komposition, Baukasten) öffnet dieses Modal; Technik
-  und alles Übrige („✎ Formular“) das bisherige Formular. Neue Zustandsklassen legt das Modal noch nicht an.
+- **Lesen in einer Funktion** über eine Lese-Fähigkeit des Katalogs (`: IReadStore` im Katalog, umgesetzt von einem Store im Speicher der Anwendung,
+  CQRS124): im Katalog-Modal „liest …“ am Auf an- und abwählen; „＋ neue Lese-Fähigkeit …“ fragt Interface, Methode (`Task<int> ZaehleAsync(Guid paar)`)
+  und die Domäne des Stores — es entstehen das Interface im Katalog der Funktion, der Parameter am Auf und der Store
+  `<Wurzel>.Infrastructure/<Bereich>/<Name>.cs` mit Stub; der Speicher bekommt die Referenz auf den Katalog. Eine Funktion im Katalog kennt keine
+  Domäne: kein Command an ein Aggregat (dafür gibt es die Übersetzung). Neue Zustandsklassen legt das Modal noch nicht an.
 - `--check` prüft die Fläche mit (Kanten an vorhandenen Ports, je Typ höchstens ein deklarierender Port).

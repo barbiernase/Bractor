@@ -367,8 +367,6 @@ public sealed record Rahmen
     public string ApplyMethode { get; init; } = Abstractions.Aggregatvertrag.Apply;
     /// <summary>Namespace → Verzeichnis (relativ zur Solution, „/"-getrennt). Enthält auch die Wurzel-Namespaces der Projekte.</summary>
     public IReadOnlyDictionary<string, string> Verzeichnisse { get; init; } = new Dictionary<string, string>();
-    /// <summary>Der allgemeine Katalog (Projektstruktur): die Commands, die alle Kataloge teilen dürfen; die Werkbank legt ihn beim ersten Gebrauch an.</summary>
-    public string AllgemeinerKatalog { get; init; } = Abstractions.Projektstruktur.AllgemeinerKatalog;
     /// <summary>Je Katalog die Kataloge, die er referenziert (aus seiner Projektdatei) — wer einen Command eines anderen nimmt, braucht die Referenz.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> KatalogNutzt { get; init; } = new Dictionary<string, IReadOnlyList<string>>();
     /// <summary>

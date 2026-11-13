@@ -44,6 +44,7 @@ static class Projektstruktur
         /// <summary>
         /// <c>&lt;Name&gt;.Katalog</c>: ein FUNKTIONSKATALOG (docs/07 §7.2) — Funktionen, ihre Nachrichten (Commands ohne Ziel,
         /// Hinweise), Konfig-Records, Technik und Graphen, domänenneutral: er referenziert nur Abstractions (und andere Kataloge), keine Anwendung.
+        /// Flach: keine Bereichs-Ordner, alle Dateien direkt im Projekt, der Namespace ist der Projektname.
         /// Keine Rolle EINER Anwendung: seine Wurzel ist sein eigener Name; eine Anwendung nutzt ihn per Referenz (ihre Domäne übersetzt ihn,
         /// docs/07 §7.2). Funktionen und Graphen gibt es nur hier.
         /// </summary>
@@ -152,22 +153,16 @@ static class Projektstruktur
     };
 
     /// <summary>
-    /// Ein Funktionskatalog (<see cref="Rolle.Katalog"/>): <c>&lt;Name&gt;.Katalog</c> mit Bereichs-Ordnern; er referenziert keine Rolle einer
-    /// Anwendung. Nicht in <see cref="Rollen"/> — die Rollen-Projekte EINER Anwendung (<see cref="Projekte"/>) kennen ihn nicht, eine Anwendung
-    /// nutzt beliebig viele Kataloge.
+    /// Ein Funktionskatalog (<see cref="Rolle.Katalog"/>): <c>&lt;Name&gt;.Katalog</c> ohne Bereichs-Ordner — eine geschlossene, flache Einheit, jede
+    /// Datei direkt im Projekt, Namespace genau der Projektname (docs/07 §7.3); er referenziert keine Rolle einer Anwendung. Nicht in
+    /// <see cref="Rollen"/> — die Rollen-Projekte EINER Anwendung (<see cref="Projekte"/>) kennen ihn nicht, eine Anwendung nutzt beliebig viele Kataloge.
     /// </summary>
-    public static readonly Eintrag Katalog = new Eintrag(Rolle.Katalog, ".Katalog", true, new Rolle[0],
+    public static readonly Eintrag Katalog = new Eintrag(Rolle.Katalog, ".Katalog", false, new Rolle[0],
         new[] { "Commands.cs", "Events.cs", "ValueObjects.cs", "Enums.cs", "Graphen.cs", "Konfigs.cs" });
 
     /// <summary>Was ein Projekt außer Abstractions (und anderen Katalogen) referenzieren darf, wenn es ein Katalog ist: das Framework (<c>Core</c>
     /// mit den Quellen des Framework-Katalogs).</summary>
     public static readonly IReadOnlyList<string> KatalogDarfReferenzieren = new[] { "Abstractions", "Core" };
-
-    /// <summary>
-    /// Der allgemeine Katalog (docs/10 §10.9): ein Katalog wie jeder andere, der die Commands hält, die mehrere Kataloge
-    /// teilen; jeder Katalog darf ihn nutzen. Die Werkbank legt ihn beim ersten Gebrauch an.
-    /// </summary>
-    public const string AllgemeinerKatalog = "Allgemein.Katalog";
 
     /// <summary>
     /// Die Rollen einer Anwendung, die Kataloge nutzen dürfen: die Übersetzungen (sie machen Graphen aus Katalogen domänenspezifisch), der Speicher (er
@@ -193,7 +188,10 @@ static class Projektstruktur
     public static bool IstKatalog(string projekt) =>
         projekt.EndsWith(Katalog.Suffix, StringComparison.Ordinal) && projekt.Length > Katalog.Suffix.Length;
 
-    /// <summary>Der Katalog, in dessen Projekt der Namespace <paramref name="ns"/> liegt (<c>Bild.Katalog.Skalierung</c> → <c>Bild.Katalog</c>), sonst <c>null</c>.</summary>
+    /// <summary>
+    /// Der Katalog, in dessen Projekt der Namespace <paramref name="ns"/> liegt (<c>Bild.Katalog</c> → <c>Bild.Katalog</c>), sonst <c>null</c>. Ein
+    /// tieferer Namespace (<c>Bild.Katalog.Skalierung</c>) gehört ebenso zum Katalog — dort liegt er falsch (flach, docs/07 §7.3), die Lage-Prüfung meldet es.
+    /// </summary>
     public static string? KatalogVon(string ns)
     {
         for (var i = ns.IndexOf(Katalog.Suffix, StringComparison.Ordinal); i > 0; i = ns.IndexOf(Katalog.Suffix, i + 1, StringComparison.Ordinal))

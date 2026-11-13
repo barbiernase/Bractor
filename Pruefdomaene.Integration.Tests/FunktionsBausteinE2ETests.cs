@@ -5,8 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Pruefdomaene.Abrechnung;
 using Pruefdomaene.Import;
-using Pruefwerk.Katalog.Abrechnung;
-using Pruefwerk.Katalog.Import;
+using Pruefwerk.Katalog;
 using Xunit;
 using static Pruefdomaene.Integration.Tests.Pruefstand;
 

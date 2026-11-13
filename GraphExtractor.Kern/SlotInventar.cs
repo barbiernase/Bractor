@@ -83,6 +83,17 @@ public sealed class SlotInventar
                 foreach (var auf in Projektionsform.LiesProjektion(t).Aufs) Add("projektion", t, auf.Methode, null);
             if (Projektionsform.IstReader(t))
                 foreach (var frage in Projektionsform.LiesReader(t).Fragen) Add("reader", t, frage.Methode, null);
+            // Funktion (IFunktion, eine Klasse in einem Katalog): je Auf ein Slot (Disc = der Eingang), dazu Lausche bei einer Quelle. Ein Auf, das die
+            //   Funktionsform (noch) nicht annimmt, ist trotzdem ein Rumpf — er steht als Slot da, den Fehler meldet der Build.
+            if (t.TypeKind == TypeKind.Class && Funktionsform.IstFunktion(t))
+            {
+                var form = Funktionsform.Lies(t);
+                foreach (var auf in form.Aufs) Add("funktion", t, auf.Methode, null, auf.Eingang.Name);
+                foreach (var m in t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>()
+                             .Where(m => m.MethodKind == MethodKind.Ordinary && m.Parameters.Length > 0 && !Slots.Any(s => SymbolEqualityComparer.Default.Equals(s.Methode, m))))
+                    Add("funktion", t, m, null, m.Parameters[0].Type.Name);
+                if (form.Lausche is { } l) Add("funktion", t, l.Methode, null, Abstractions.Funktionsvertrag.Lausche);
+            }
             foreach (var m in Methoden(t))
             {
                 var p0 = m.Parameters.FirstOrDefault()?.Type;
@@ -102,6 +113,23 @@ public sealed class SlotInventar
                             && !Slots.Any(s => SymbolEqualityComparer.Default.Equals(s.Methode, impl)))
                             Add("store", t, impl, null, impl.Name);
 
+        }
+
+        // Technik einer Funktion (eine Schnittstelle ohne Marker, im Konstruktor genommen): je Umsetzung und Methode ihr Rumpf — Disc = die Methode,
+        //   Besitzer = die Umsetzung. Die Umsetzung darf im Host liegen; gesucht wird in allen Compilations.
+        foreach (var bf in _dom.BausteinFunktionen.Where(f => !f.Klasse))
+        {
+            var iface = _comps.Select(c => c.GetTypeByMetadataName(bf.Full)).FirstOrDefault(x => x != null);
+            if (iface == null) continue;
+            foreach (var full in bf.UmsetzungenFull)
+            {
+                var c = _comps.Select(x => x.GetTypeByMetadataName(full)).FirstOrDefault(x => x != null);
+                if (c == null) continue;
+                foreach (var me in Funktionsform.TechnikMethoden(iface))
+                    if (c.FindImplementationForInterfaceMember(me) is IMethodSymbol impl && Rumpf(impl) != null
+                        && !Slots.Any(s => SymbolEqualityComparer.Default.Equals(s.Methode, impl)))
+                        Add("funktion", c, impl, null, me.Name);
+            }
         }
     }
 
@@ -250,7 +278,7 @@ public sealed class SlotInventar
     public string Bericht()
     {
         var b = new StringBuilder();
-        var arten = new[] { "decide", "apply", "projektion", "reader", "store" };
+        var arten = new[] { "decide", "apply", "projektion", "reader", "store", "funktion" };
         b.AppendLine("── Slot-Inventar: Isolation der Code-Block-Stellen ──\n");
         b.AppendLine($"   {"Art",-11}{"Slots",6}{"Symb/Slot",10}{"Spielraum",11}{"+Graph",8}{"+Nachbar",10}{"+Artgen.",10}{"Rest",7}   {"nutzt F",8}{"nutzt H",8}{"nutzt X",8}");
         foreach (var art in arten)

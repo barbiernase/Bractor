@@ -1,6 +1,0 @@
-using Abstractions;
-
-namespace Sondenkatalog.Katalog.Pruefung;
-
-public sealed record Seitenpruefungslauf([Kopf] Pruefungsstart Start, [Von(nameof(Start))] Seitenpruefer Pruefer) : IGraph;
-public sealed record Mahnbemessung([Kopf] Offenzaehlung Zaehlung) : IGraph;

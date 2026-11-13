@@ -1,9 +1,0 @@
-using System.Threading.Tasks;
-
-namespace Sondenkatalog.Katalog.Peilung;
-
-/// <summary>Die eine Umsetzung des Empfängers: Richtung aus der Frequenz, feste Güte.</summary>
-public sealed class Peilempfaenger : IPeilempfaenger
-{
-    public Task<double[]> PeileAsync(double frequenzMhz, int dauerMs) => Task.FromResult(new[] { frequenzMhz % 360, 0.9 });
-}

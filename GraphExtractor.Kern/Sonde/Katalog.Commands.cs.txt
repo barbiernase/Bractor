@@ -1,0 +1,115 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog;
+
+// ── Gebuehren ──
+
+// SONDE — fremder Katalog, Teil Gebuehren (docs/04 §4.4): Rückgabeprüfung und Schadensbewertung domänenneutral — Fall, Leser und
+// Vorgang sind Guids.
+
+public record Rueckgabe(Guid LeserId, bool Beschaedigt) : ICommand;
+public record Schaden(Guid Fall, Guid LeserId) : ICommand;
+
+public record Schaetze(Guid Fall, Guid LeserId) : ICommand;
+// Was nur Knoten einander geben — und was den Graphen verlässt: die Begutachtung vor Ort, die Mahnung.
+public record SchadenErfasst(Guid LeserId, decimal Neuwert, int AlterJahre) : ICommand;
+public record SchadenGeschaetzt(Guid LeserId, decimal Betrag) : ICommand;
+public record GutachtenErhalten(Guid LeserId, decimal Betrag, decimal Zuschlag) : ICommand;
+public record VorOrt(Guid Fall, Guid LeserId) : ICommand;
+public record Mahnbetrag(Guid Vorgang, decimal Betrag) : ICommand;
+
+// ── Import ──
+
+// SONDE — fremder Katalog, Teil Import (docs/04 §4.4): Dateiannahme und Zeilenimport domänenneutral — Import und Artikel sind Guids.
+
+public record Importieren(Guid Import, string Pfad) : ICommand;
+/// <summary>Der Kopf des Zeilenimports: die Anwendung hat den Import gestartet (aus ihrer Antwort übersetzt).</summary>
+public record KatalogBereit(Guid Import, string Pfad) : ICommand;
+public record Zeile(Guid Import, int Nummer, string[] Felder) : ICommand;
+public record Fortschritt(Guid Import, int Zeilen) : ICommand;
+public record Bilanz(Guid Import, int Zeilen, int Fehler) : ICommand;
+public record Artikeldaten(Guid Artikel, string Nummer, string Bezeichnung, decimal Preis) : ICommand;
+
+// ── Konten ──
+
+// SONDE — fremder Katalog, Teil Konten (docs/04 §4.4): die Registrierung domänenneutral — Benutzer und Adresse sind Guids.
+
+public record Reserviere(Guid Benutzer, string Email) : ICommand;
+public record Reservierung(Guid Adresse, string Email, Guid Benutzer) : ICommand;
+// Die Antworten der Anwendung (aus den Events ihres Adress-Aggregats übersetzt) und was daraus folgt.
+public record Reserviert(Guid Benutzer) : ICommand;
+public record Vergeben(Guid Benutzer) : ICommand;
+public record Bestaetige(Guid Benutzer) : ICommand;
+public record Ablehnen(Guid Benutzer, string Grund) : ICommand;
+
+// ── Messung ──
+
+// SONDE — fremder Katalog, Teil Messung (docs/04 §4.4): Messkette, Störungsöffnung und Alarmierung domänenneutral — Sensor und
+// Fall sind Guids.
+
+// Die Messkette: der rohe Wert aus der Quelle, der plausible, der geprüfte (ihr Ergebnis).
+public record Rohwert(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
+public record Plausibel(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
+public record Geprueft(Guid Sensor, double Wert, DateTimeOffset GemessenAm) : ICommand;
+
+// Die Störungsöffnung: aus dem Alarm eines Sensors die Störung desselben Falls (dieselbe Id).
+public record Alarm(Guid Sensor, double Wert) : ICommand;
+public record Stoerung(Guid Fall, double Wert) : ICommand;
+
+// RENNEN: die Bereitschaft wird über zwei Wege gesucht — jeder meldet für sich.
+public record Alarmiere(Guid Fall) : ICommand;
+public record AlarmVerteilt(Guid Fall) : ICommand;
+public record PerAnrufErreicht(Guid Fall, string Nummer) : ICommand;
+public record PerFunkErreicht(Guid Fall, string Kanal) : ICommand;
+public record Erreicht(Guid Fall, string Weg) : ICommand;
+
+// ── Peilung ──
+
+// SONDE — ein fremder FUNKTIONSKATALOG (docs/07 §7.2): ein eigenes Projekt Sondenkatalog.Katalog, das nur Abstractions kennt,
+// mit Funktionen, ihren Nachrichten (Commands ohne Ziel, Hinweise), Konfig, Technik und einem Graphen — domänenneutral. Die Übersetzungen der
+// Anwendung nutzen ihn per Referenz; keine Anwendung liegt darunter.
+
+/// <summary>Eine Peilung ist anzufordern: der Auftrag (ein Guid — der Katalog kennt keine Id einer Anwendung), Frequenz und Dauer.</summary>
+public record Peile(Guid Auftrag, double FrequenzMhz, int DauerMs) : ICommand;
+
+/// <summary>Die Peilung ist gelungen: der Auftrag, aus dem sie kam, Richtung in Grad und Güte.</summary>
+public record Gepeilt(Guid Auftrag, double FrequenzMhz, double RichtungGrad, double Guete) : ICommand;
+
+/// <summary>Die Anwendung hat die Peilung bestätigt (aus der Antwort ihres Aggregats übersetzt): Richtung und Güte, wie sie vermerkt wurden.</summary>
+public record PeilungBestaetigt(double RichtungGrad, double Guete) : ICommand;
+
+// ── Pruefung ──
+
+// SONDE — fremder Katalog, Teil Pruefung (docs/04 §4.4): Seitenprüfung und Mahnbemessung domänenneutral.
+
+public record Scan(Guid LeserId, IReadOnlyList<string> Seiten) : ICommand;
+public record Starte(Guid Pruefung, Guid LeserId, IReadOnlyList<string> Seiten) : ICommand;
+/// <summary>Die Antwort der Anwendung auf den Start (aus ihrem Event übersetzt).</summary>
+public record Gestartet(Guid Pruefung, IReadOnlyList<string> Seiten) : ICommand;
+// Was nur Knoten einander geben: je Seite ein Unterlauf.
+public record SeiteZuPruefen(Guid Pruefung, int Nummer, string Seite) : ICommand;
+public record Seitenbefund(Guid Pruefung, int Nummer, bool Beschaedigt) : ICommand;
+
+public record Bemesse(Guid LeserId) : ICommand;
+
+// ── Vorhersage ──
+
+// SONDE — fremder Katalog, Teil Vorhersage (docs/04 §4.4): die Prognose und die Kartenausgabe domänenneutral — eine Station ist ein
+// Guid, keine Id einer Anwendung.
+
+/// <summary>Der Eingang der Prognose: eine Temperatur einer Station.</summary>
+public record Bilde(Guid Station, double Grad) : ICommand;
+
+// Was nur Knoten einander geben — auch generisch (das Typargument unterscheidet die beiden Glättungen).
+public record Tendenz(Guid Station, double Grad) : ICommand;
+public record Geglaettet<TFenster>(Guid Station, double Grad) : ICommand where TFenster : IFenster;
+
+/// <summary>Das Ergebnis der Prognose: was das Modell für die Station gelernt hat — die Anwendung übersetzt es.</summary>
+public record Prognostiziert(Guid Station, double Grad, int Gelernt) : ICommand;
+
+/// <summary>Ein Command ohne Ziel an den Kopf der Kartenausgabe: die Karte einer Station ist zu zeichnen.</summary>
+public record ZeichneKarte(Guid Station, double Grad) : ICommand;
+/// <summary>Ein Command ohne Ziel an die Ablage (ein Kopf, der auch von innen nimmt): die Karte ist zu löschen.</summary>
+public record LoescheKarte(Guid Station) : ICommand;
+public record KarteGezeichnet(Guid Station, int Breite) : ICommand;
+public record KarteSkaliert(Guid Station, int Breite) : ICommand;

@@ -1,7 +1,0 @@
-using Abstractions;
-
-namespace Sondenkatalog.Katalog.Vorhersage;
-
-public interface IFenster { }
-public sealed record Kurzfenster : IFenster;
-public sealed record Langfenster : IFenster;

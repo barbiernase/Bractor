@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using DomainEditor;
 
 namespace GraphExtractor;
 
@@ -19,18 +20,22 @@ public sealed partial class Sicht
     /// <summary>
     /// Eine Karte der Fläche: Id (eindeutig auf der Fläche; ein Akteur steht zweimal, <c>…|aus</c> und <c>…|ein</c>), die Karte der Sicht dahinter
     /// (Panel; leer bei einer Katalog-Quelle), Art, Name, Spalte, Band (Domäne; Akteure haben keins), Gruppe (der Store einer Projektion bzw. eines
-    /// Readers) und Ports.
+    /// Readers, der Client eines Akteurs) und Ports.
     /// </summary>
     public sealed record FlaechenKarte(string Id, string Karte, string Art, string Name, string Spalte, string? Band, string? Gruppe, List<FlaechenPort> Ports);
 
     /// <summary>
     /// Eine Kante von einem Ausgangsport (<paramref name="Von"/>, Typ) zu einem Eingangsport (<paramref name="Nach"/>, Typ). Art: <c>schreiben</c>,
     /// <c>lesen</c>, <c>kenntnis</c>, <c>ruecklauf</c>, <c>quelle</c>; <c>liest</c> verbindet einen Graphen mit der Gruppe eines Stores
-    /// (Typ = die Lese-Fähigkeit, keine Ports).
+    /// (Typ = die Lese-Fähigkeit, keine Ports), <c>reaktion</c> die Gruppe eines Clients rechts mit seiner Gruppe links (Typ = die Klasse seiner
+    /// Implementierung, keine Ports).
     /// </summary>
     public sealed record FlaechenKante(string Von, string Nach, string Typ, string Art);
 
     public sealed record FlaechenGruppe(string Id, string Name, string? Band);
+
+    /// <summary>Die Gruppe der Akteure, die kein Client verkörpert (je Seite <c>…|aus</c>, <c>…|ein</c>).</summary>
+    public const string OhneClient = "§ohne-client";
 
     public sealed record FlaechenBild(List<FlaechenKarte> Karten, List<FlaechenKante> Kanten, List<string> Baender, List<FlaechenGruppe> Gruppen);
 
@@ -132,12 +137,25 @@ public sealed partial class Sicht
         // Ports, die nicht über den Typ verbunden werden (Quellen und ihre Eingänge, Antworten an Akteure): ihre Kanten stehen ausdrücklich.
         var ausdruecklich = new HashSet<(string, string)>();
 
-        // ① und ⑥: je Akteur zwei Karten.
+        // ① und ⑥: je Akteur zwei Karten, gruppiert unter dem Client, der ihn verkörpert (der erste nach Namen; keiner: „ohne Client“). Die Gruppe
+        //   steht auf beiden Seiten: links mit dem, was die Akteure dürfen, rechts mit dem, was sie hören.
+        var gruppen = new List<FlaechenGruppe>();
+        foreach (var c in _clients.OrderBy(ClientAnzeige, StringComparer.Ordinal))
+            foreach (var seite in new[] { "aus", "ein" })
+                gruppen.Add(new("cl:" + S(c, "_id") + "|" + seite, ClientAnzeige(c), null));
+        string ClientGruppe(JsonObject a, string seite)
+        {
+            var c = _clients.Where(c => L(c, "verkoerpert").Contains(S(a, "name"))).OrderBy(ClientAnzeige, StringComparer.Ordinal).FirstOrDefault();
+            if (c != null) return "cl:" + S(c, "_id") + "|" + seite;
+            var g = OhneClient + "|" + seite;
+            if (!gruppen.Any(x => x.Id == g)) gruppen.Add(new(g, "ohne Client", null));
+            return g;
+        }
         foreach (var a in _akteure)
         {
             var id = "akt:" + S(a, "_id");
             var darf = L(a, "darf").Where(IstRec).Distinct().ToList();
-            karten.Add(new(id + "|aus", id, "akteur", S(a, "name"), "ausgang", null, null,
+            karten.Add(new(id + "|aus", id, "akteur", S(a, "name"), "ausgang", null, ClientGruppe(a, "aus"),
                 darf.Select(t => new FlaechenPort(t, "aus", Sorte(t), false)).ToList()));
             flaecheVon[id] = id + "|aus";
             var ein = L(a, "hoert").Distinct().Select(t => new FlaechenPort(t, "ein", Sorte(t), false)).ToList();
@@ -149,8 +167,13 @@ public sealed partial class Sicht
                     ausdruecklich.Add((id + "|ein", antwort));
                     if (!kanten.Contains(new(quelle, id + "|ein", antwort, "lesen"))) kanten.Add(new(quelle, id + "|ein", antwort, "lesen"));
                 }
-            karten.Add(new(id + "|ein", id, "akteur", S(a, "name"), "eingang", null, null, ein));
+            karten.Add(new(id + "|ein", id, "akteur", S(a, "name"), "eingang", null, ClientGruppe(a, "ein"), ein));
         }
+        // Eine Reaktion: der Client reagiert auf, was seine Akteure hören, mit dem, was sie dürfen — ein Rücklauf von seiner Gruppe rechts zu
+        //   seiner Gruppe links, je Client einer (Typ = die Klassen seiner Implementierungen).
+        foreach (var c in _clients)
+            if (Alle(c["implementierungen"]).Select(i => S(i, "klasse")).Distinct().ToList() is { Count: > 0 } kl)
+                kanten.Add(new("cl:" + S(c, "_id") + "|ein", "cl:" + S(c, "_id") + "|aus", string.Join(", ", kl), "reaktion"));
 
         // ③ Graphen (nur die obersten) und ② ihre Quellen.
         foreach (var g in _graphen.Where(AufFlaeche))
@@ -225,7 +248,6 @@ public sealed partial class Sicht
         }
 
         // ⑤ Projektionen und Reader, je Store gruppiert.
-        var gruppen = new List<FlaechenGruppe>();
         string? Gruppe(string kartenId, JsonObject o)
         {
             var b = KarteVon.TryGetValue(kartenId, out var k) ? Besitzer(k) : "";
@@ -344,9 +366,11 @@ public sealed partial class Sicht
             var o = new JsonObject { ["id"] = k.Id, ["karte"] = k.Karte, ["art"] = k.Art, ["name"] = k.Name, ["spalte"] = k.Spalte };
             if (k.Band != null) o["band"] = k.Band;
             if (k.Gruppe != null) o["gruppe"] = k.Gruppe;
-            o["ports"] = new JsonArray(k.Ports.Select(p => (JsonNode)new JsonObject
+            o["ports"] = new JsonArray(k.Ports.Select(p =>
             {
-                ["typ"] = p.Typ, ["richtung"] = p.Richtung, ["sorte"] = p.Sorte, ["eigen"] = p.Eigen,
+                var po = new JsonObject { ["typ"] = p.Typ, ["richtung"] = p.Richtung, ["sorte"] = p.Sorte, ["eigen"] = p.Eigen };
+                if (Loesbar(k, p)) po["loesbar"] = true;
+                return (JsonNode)po;
             }).ToArray());
             return o;
         }
@@ -364,7 +388,44 @@ public sealed partial class Sicht
             }).ToArray()),
             ["karten"] = new JsonArray(f.Karten.Select(k => (JsonNode)Karte(k)).ToArray()),
             ["kanten"] = new JsonArray(f.Kanten.Select(k => (JsonNode)new JsonObject { ["von"] = k.Von, ["nach"] = k.Nach, ["typ"] = k.Typ, ["art"] = k.Art }).ToArray()),
+            ["anschluss"] = Anschluss(f),
         };
+    }
+
+    /// <summary>
+    /// Was ✕ an einem Port löst, steht im Code als Liste: ein Auf einer Projektion. Was ein Akteur darf und hört, ändert man nur im Modal „Akteure
+    /// und Clients“ (je Absicht eine Geste).
+    /// </summary>
+    private static bool Loesbar(FlaechenKarte k, FlaechenPort p) => k.Art == "projektion" && p.Richtung == "ein";
+
+    /// <summary>
+    /// Was an einen „＋“ der Fläche passt — je Start (<c>event|Karte</c>, <c>uebersetzen|Typ</c>) die Ports <c>Karte|Richtung|Typ</c>, die die
+    /// Grammatik dort erlaubt und die noch nicht verbunden sind: eine Projektion nimmt ein Event vom Aggregat, das es entscheidet; ein Command ohne
+    /// Ziel wird in einen Command an einem Aggregat übersetzt (GR-UEBERSETZUNG).
+    /// </summary>
+    private JsonObject Anschluss(FlaechenBild f)
+    {
+        var o = new JsonObject();
+        string Key(FlaechenKarte k, FlaechenPort p) => k.Id + "|" + p.Richtung + "|" + p.Typ;
+        IEnumerable<(FlaechenKarte K, FlaechenPort P)> Ports(string ri) => f.Karten.SelectMany(k => k.Ports.Where(p => p.Richtung == ri).Select(p => (k, p)));
+        bool Erzeugt(string baustein, string typ) => GrSorte(Basis(typ)) is { } s && Grammatik.ErzeugungVon(baustein, s) != null;
+        bool Nimmt(string typ, string baustein) => GrSorte(Basis(typ)) is { } s && Grammatik.KonsumVon(s, baustein) != null;
+        foreach (var p in _projektionen)
+        {
+            var hat = Alle(p["handles"]).SelectMany(HandleEvents).ToHashSet(StringComparer.Ordinal);
+            o["event|prj:" + S(p, "_id")] = Arr(Ports("aus").Where(x => x.K.Art == "aggregate" && Erzeugt(Grammatik.Aggregat, x.P.Typ)
+                    && GrSorte(Basis(x.P.Typ)) == Grammatik.Event && Nimmt(x.P.Typ, Grammatik.Projektion) && !hat.Contains(Basis(x.P.Typ)))
+                .Select(x => Key(x.K, x.P)).Distinct());
+        }
+        foreach (var r in _records.Where(r => GrSorte(S(r, "name")) == Grammatik.Command && RecordAgg(S(r, "name")).Length == 0))
+        {
+            var t = S(r, "name");
+            var schon = _uebersetzungen.Where(u => Basis(S(u, "ein")) == t).Select(u => Basis(S(u, "aus"))).ToHashSet(StringComparer.Ordinal);
+            o["uebersetzen|" + t] = Arr(Ports("ein").Where(x => x.K.Art == "aggregate" && GrSorte(Basis(x.P.Typ)) == Grammatik.Command
+                    && RecordAgg(Basis(x.P.Typ)).Length > 0 && !schon.Contains(Basis(x.P.Typ)))
+                .Select(x => Key(x.K, x.P)).Distinct());
+        }
+        return o;
     }
 
     /// <summary>
@@ -379,6 +440,11 @@ public sealed partial class Sicht
         bool Hat(string id, string ri, string typ) => karte.TryGetValue(id, out var k) && k.Ports.Any(p => p.Richtung == ri && p.Typ == typ);
         foreach (var k in f.Kanten)
         {
+            if (k.Art == "reaktion")
+            {
+                if (!f.Gruppen.Any(g => g.Id == k.Von) || !f.Gruppen.Any(g => g.Id == k.Nach)) yield return ("error", $"Fläche: Reaktion {k.Typ} ohne Gruppe {k.Von} bzw. {k.Nach}");
+                continue;
+            }
             if (k.Art == "liest")
             {
                 if (!karte.ContainsKey(k.Von) || !f.Gruppen.Any(g => g.Id == k.Nach)) yield return ("error", $"Fläche: Kante liest {k.Von} → {k.Nach} ohne Karte bzw. Gruppe");

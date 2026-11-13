@@ -1,3 +1,0 @@
-namespace Sondenkatalog.Katalog.Import;
-
-public record CsvKonfig(string Trenner = ";");

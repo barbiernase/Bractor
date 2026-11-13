@@ -1,5 +1,0 @@
-using Abstractions;
-
-namespace Sondenkatalog.Katalog.Gebuehren;
-
-public record NichtSchaetzbar(string Grund) : ITransientEvent;

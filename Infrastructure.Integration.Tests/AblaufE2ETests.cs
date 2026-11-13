@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using Abstractions;
 using Domain.ImagePair;
-using Bildvorschau.Katalog.Aufbereitung;
+using Bildvorschau.Katalog;
 using FluentAssertions;
 using Infrastructure.Extensions;
 using Infrastructure.Funktionen;

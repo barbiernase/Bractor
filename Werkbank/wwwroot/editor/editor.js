@@ -65,8 +65,6 @@
   function haeufigsterNs(liste){const z=new Map();(liste||[]).forEach(x=>x.namespace&&z.set(x.namespace,(z.get(x.namespace)||0)+1));
     return [...z.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||null;}
   // Was ein Akteur selbst hineingeben darf — die Sorten aus der Grammatik (Erzeugungen des Bausteins Akteur), nie hart kodiert.
-  function akteurSorten(){return ((GR()||{}).erzeugungen||[]).filter(e=>e.baustein==="akteur").map(e=>e.sorte);}
-  const akteurDarfLabel=()=>akteurSorten().map(x=>grName("sorten",x)).join(" · ")||"Command · Query";
   function defaultNsGlobal(){const w=Object.keys((MODEL.rahmen||{}).verzeichnisse||{}).sort((a,b)=>a.length-b.length)[0];
     return MODEL.aggregate[0]?.namespace||MODEL.records[0]?.namespace||(w?w+".Neu":"Neu");}
 
@@ -168,8 +166,6 @@
     else if(kind==="funktion")neueFunktion(defaultNs(),pos);
     else if(kind==="gerufen")neueGerufene(defaultNs(),pos);
     else if(kind==="quelle")neueQuellFunktion(defaultNs(),pos);
-    else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
-    else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),verkoerpert:[],kenntnis:[],...pos});
     else MODEL.records.push({name:uniq((opt&&opt.name)||"Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],
       // Ein Command, der im Block eines Aggregats entsteht, zielt auf es (ICommand<TAggregat>) — damit gehört er ihm.
       ...(kind==="command"&&AGG&&opt&&opt.reg?{aggregat:AGG}:{}),...pos});
@@ -180,10 +176,6 @@
     // In einem Decide angelegt (Event/Ablehnung): das Decide gibt die neue Nachricht aus (OneOf) — damit gehört sie seinem Aggregat.
     if(opt&&opt.ausDecide){const neu=graphNodes().find(n=>!vorher.has(n.id)),d=MODEL.decider.find(x=>x._id===opt.ausDecide);
       if(neu&&d&&!(d.ergibt=d.ergibt||[]).some(o=>o.event===neu.ref.name))d.ergibt.push({event:neu.ref.name});}
-    // Im Akteur-Rahmen angelegt: der Akteur darf den neuen Eingang sofort (IDarf) — so bleibt er auch in seinem Rahmen.
-    if(opt&&opt.akt){const neu=graphNodes().find(n=>!vorher.has(n.id)),ak=MODEL.akteure.find(a=>a.name===opt.akt);
-      if(neu&&ak){const nm=neu.ref.name;if(nm&&!(ak.darf=ak.darf||[]).includes(nm))ak.darf.push(nm);
-        VIEW.heimAkteur={...(VIEW.heimAkteur||{}),[neu.id]:opt.akt};speichereAnsicht();}}
     render();
     if(!(opt&&opt.still))fokussiereNeu(vorher,true);
   }
@@ -245,8 +237,6 @@
     fokussiere("menge",ids,"🔌 "+clientAnzeige(c)+" · aufgefächert");drawEdges();}
   window.deClients=()=>MODEL.clients.map(c=>({name:c.name,handshake:clientAnzeige(c),akteure:clientAkteure(c),
     buendel:clientBuendel(c).map(b=>({ziel:b.key,durabel:b.durabel,text:buendelText(b)}))}));
-  // Der Akteur-Eingang einer Nachricht (Command/Query/Trigger): ⊕ → Akteure leuchten → anklicken = ihm das Recht geben.
-  const darfPort=nm=>slotRow("darf","+ Akteur ⊕ (darf)","l",{type:"darf",dir:"in",rec:nm},"darf:in:"+nm);
   // Kardinalität der Konsumenten-Seite AUS DER GRAMMATIK (nie im Board-Code): „genau eins" / „dieselbe" / „beliebig".
   function grKardinalitaet(sorte){const g=GR();if(!g||!sorte)return "";const ks=(g.konsume||[]).filter(k=>k.sorte===sorte);
     if(!ks.length)return "";if(ks.every(k=>k.kardinalitaet==="eins"))return "genau eins";if(ks.some(k=>k.kardinalitaet==="dieselbe"))return "dieselbe Pipeline";return "beliebig viele";}
@@ -321,8 +311,6 @@
        aus=slotRow(c,"+ Konsument ⊕ ("+(r.kind==="event"?"Projektion · Akteur · Antwort an Funktion":"Akteur")+") ▶","r",{type:"evtUse",dir:"out",rec:r.name},"evt:out:"+r.name);}
      else if(r.kind==="query")aus=slotRow("query","+ Konsument ⊕ (Reader) ▶","r",{type:"query",dir:"out",rec:r.name},"qry:out:"+r.name);
      else if(r.kind==="queryresponse")ein=slotRow("qrsp","+ Erzeuger ⊕ (Reader)","l",{type:"qrsp",dir:"in",rec:r.name},"qrsp:in:"+r.name);
-     // Akteur-Eingang: Command und Query (was ein Akteur hineingeben darf).
-     if(akteurSorten().includes(grNachrichtSorte(r.name))){const dp=darfPort(r.name);ein=ein?h("div",{},ein,dp):dp;}
      if(ein||aus){if(INSP)zweiSeiten(body,r.name,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
     if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
     body.append(h("div",{class:"gsec"},"Felder"));
@@ -413,12 +401,12 @@
       case "handle":{const o=n.own,k=o.kind==="reader"?"reader|"+o.ref.name+"|"+r.query:"projektion|"+o.ref.name+"|"+r.event;
         return [T(o.kind==="reader"?"Reader-Logik":"Handle-Logik",r.rumpf,r._ort,k,true,{kachel:"Handle "+(r.query||r.event||"")})];}
       case "fn":return [T("Impl-Logik",r.rumpf,r._rumpf,"store|"+n.own.ref.name+"|"+r.name,true,{kachel:r.name||"Store-Fn"})];
-      // Gerufene Funktion: je Umsetzung je Methode ihr Rumpf (aus der Datei); ✎ als Geste an der Methode.
-      case "bausteinfunktion":return istGerufen(r)?(r.umsetzungen||[]).flatMap((u,ii)=>(u.rumpfe||[]).map(x=>T(u.name+"."+x.methode,x.rumpf,x._rumpf,null,true,
+      // Gerufene Funktion (Technik): je Umsetzung je Methode ihr Rumpf (aus der Datei); Platz „funktion|Umsetzung|Methode“ — ✎ und 🤖 wie überall.
+      case "bausteinfunktion":return istGerufen(r)?(r.umsetzungen||[]).flatMap((u,ii)=>(u.rumpfe||[]).map(x=>T(u.name+"."+x.methode,x.rumpf,x._rumpf,"funktion|"+u.name+"|"+x.methode,true,
         {kachel:u.name+"."+x.methode,impl:ii,methode:x.methode})))
-        // Funktion: je Auf sein Rumpf, bei einer Quelle der von Lausche (Ort aus dem Code, ✎ als Geste an der Methode).
-        :[...(r.eingaenge||[]).map((e,ei)=>T("Auf("+e.eingang+")",e.rumpf,e._ort,null,true,{kachel:r.name+".Auf("+e.eingang+")",ein:ei})),
-          ...((r.lauscht||[]).length?[T("Lausche",r.lauscheRumpf,r._lausche,null,true,{kachel:r.name+".Lausche",lausche:true})]:[])];
+        // Funktion: je Auf sein Rumpf, bei einer Quelle der von Lausche; Platz „funktion|Klasse|Eingang“ bzw. „…|Lausche“ — ✎ und 🤖 wie überall.
+        :[...(r.eingaenge||[]).map((e,ei)=>T("Auf("+e.eingang+")",e.rumpf,e._ort,"funktion|"+r.name+"|"+e.eingang,true,{kachel:r.name+".Auf("+e.eingang+")",ein:ei})),
+          ...((r.lauscht||[]).length?[T("Lausche",r.lauscheRumpf,r._lausche,"funktion|"+r.name+"|Lausche",true,{kachel:r.name+".Lausche",lausche:true})]:[])];
       case "client":return (r.implementierungen||[]).length?(r.implementierungen||[]).flatMap(im=>(im.rumpfe||[]).map(x=>T(im.klasse+"."+x.methode,x.rumpf,null,
         "zusage|"+clientAnzeige(r)+"|"+x.event+"@"+im.klasse,im.klasse+"."+x.methode,{python:{datei:im.datei,klasse:im.klasse,methode:x.methode,signatur:x.signatur||null},event:x.event,impl:im}))):null;
     }
@@ -434,8 +422,6 @@
     else if(t.k==="writeFn"||t.k==="readFn")id="fn:"+t.fn;
     else if(t.k==="pjHandle"||t.k==="rdHandle"){const [coll,pre]=t.k==="pjHandle"?["projektionen","prj"]:["reader","rdr"];
       const o=MODEL[coll].find(x=>x._id===(t.proj||t.reader||t.reaktion));if(o)id=handleIds(o,pre+":"+o._id)[t.hi];}
-    else if(t.k==="clientAuf"){id="cl:"+t.client;const c=MODEL.clients.find(x=>x._id===t.client);
-      i=c?(c.implementierungen||[]).flatMap((im,ii)=>(im.rumpfe||[]).map(x=>[ii,x.event])).findIndex(([ii,e])=>ii===t.impl&&e===t.event):-1;}
     else if(t.k==="gerufen"){id="fb:"+t.fb;i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.impl===t.impl&&x.methode===t.methode);}
     const n=id&&NODEBY.get(id),teile=n&&rumpfTeile(n);return teile&&i>=0&&teile[i]?{n,i,teil:teile[i]}:null;}
   function codePort(key,target,_alt,label){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
@@ -455,8 +441,11 @@
     const ort=t.ort||t.python;if(ort)box.append(h("div",{class:"blab",style:"opacity:.6;font-size:10px"},(ort.datei||"")+(ort.zeile?":"+ort.zeile:"")+(ort.lambda!=null?" · λ "+ort.lambda:"")));
     if(!leer||v)box.append(h("pre",{class:"gcodeprev"+(v?" vorschlag":""),style:"cursor:default",title:v?"🤖 Vorschlag — noch nicht in der Datei":"aus der Datei (warm gelesen)"},
       codePreview(v?v.rumpf:t.text,undefined,voll)));
-    if(RUMPF_EDIT[key]!=null){const ta=h("textarea",{class:"code",rows:Math.max(4,String(RUMPF_EDIT[key]).split("\n").length+1)});ta.value=RUMPF_EDIT[key];
-      ta.oninput=e=>{RUMPF_EDIT[key]=e.target.value;};
+    if(RUMPF_EDIT[key]!=null){const ta=h("textarea",{class:"code",spellcheck:"false",rows:Math.max(4,String(RUMPF_EDIT[key]).split("\n").length+1)});ta.value=RUMPF_EDIT[key];
+      ta.oninput=e=>{RUMPF_EDIT[key]=e.target.value;ta.rows=Math.max(4,e.target.value.split("\n").length+1);};
+      ta.onkeydown=e=>{e.stopPropagation();
+        if(e.key==="Tab"){e.preventDefault();ta.setRangeText("    ",ta.selectionStart,ta.selectionEnd,"end");ta.oninput({target:ta});}
+        if(e.key==="s"&&(e.metaKey||e.ctrlKey)){e.preventDefault();rumpfSpeichern(t,key);}};
       box.append(ta,h("div",{class:"llmrow"},h("button",{class:"llmok",title:"Als Geste schreiben (↶ nimmt sie zurück)",onclick:()=>rumpfSpeichern(t,key)},"✓ Speichern"),
         h("button",{class:"codeadd",onclick:()=>{delete RUMPF_EDIT[key];neuZeichnen();}},"Abbrechen")));}
     if(v){const gut=v.ok&&!(v.befunde||[]).length;
@@ -466,11 +455,11 @@
       if(LAUF[kid]||EINLESEN){ok.disabled=true;weg.disabled=true;}box.append(h("div",{class:"llmrow"},ok,weg));}
     else if(kid&&ZULETZT[kid])box.append(h("div",{class:"llmrow"},h("span",{class:"llmmeld ok",style:"flex:1"},"🤖 übernommen"),
       h("button",{class:"codeadd",title:"Die Übernahme ist eine Geste — ↶ nimmt sie zurück (der letzte Patch, solange die Datei seitdem unverändert ist)",onclick:()=>llmRueckgaengig(kid)},"↶ Rückgängig")));
-    if(kid&&RUMPF_LLM[key]){const ta=h("textarea",{class:"code",rows:2,placeholder:leer?"Auftrag, z. B. „Bestätige nur, wenn Betrag > 0.“":"Anpassung, z. B. „lehne auch ab, wenn Betrag > 1000“"});
+    if(kid&&RUMPF_LLM[key]){const ta=h("textarea",{class:"code",rows:2,placeholder:leer?"Auftrag: was dieser Rumpf tun soll":"Anpassung: was sich am Rumpf ändern soll"});
       const ohneKontext=!LLM_STATUS||!LLM_STATUS.index;
       const senden=async()=>{const text=ta.value.trim();if(!text||LAUF[kid]||EINLESEN)return;ta.value="";
         await llmAusfuehren(kid,leer?text:"Ändere den bestehenden Rumpf.",leer?null:text,t.text);};
-      ta.onkeydown=e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();senden();}};
+      ta.onkeydown=e=>{e.stopPropagation();if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();senden();}};
       const knopf=h("button",{class:"llmrun",title:"Senden (Cmd/Ctrl+Enter): claude -p → Prüfung im warmen Workspace → Datei",onclick:senden},"▶ füllen");
       if(LAUF[kid]||EINLESEN||ohneKontext)knopf.disabled=true;
       box.append(ta,h("div",{class:"llmrow"},knopf,h("a",{class:"codeadd",href:"/konsole#id="+encodeURIComponent(kid),target:"_blank",title:"Runden, Prompt und Token dieses Rumpfs",style:"text-decoration:none"},"Details ↗")));}
@@ -681,7 +670,10 @@
   // ══ GERUFENE FUNKTION (IFunktion ohne Auf, docs/06 §6.5): Signatur (Methoden) · Umsetzungen (je ihr Konstruktor, ⊕ weitere gerufene) · Rümpfe aus
   //   der Datei. Sie steht nur im Konstruktor einer Funktion bzw. Umsetzung (CQRS089) — ⊕ „🧩 braucht". Welche Umsetzung läuft, sagt die Umgebung
   //   (🖥 Host-Rahmen → Funktionen); gebunden wird generiert (GeneratedGerufene).
-  const istGerufen=f=>!!f&&(f.methoden||[]).length>0&&!(f.eingaenge||[]).length;
+  // Technik (gerufen, ohne Auf): was der Server als Technik liest (sicht.baukasten.technik) — eine eben angelegte, noch nicht geschriebene trägt
+  //   _neuTechnik. Der Editor leitet es nicht selbst aus der Form ab (W3).
+  const istGerufen=(()=>{let quelle=null,namen=new Set();return f=>{if(!f)return false;if(f._neuTechnik)return true;const b=SICHT();
+    if(b!==quelle){quelle=b;namen=new Set(((b.baukasten||{}).technik||[]).map(t=>t.name));}return namen.has(f.name);};})();
   const gerufenByName=nm=>MODEL.bausteinFunktionen.find(f=>f.name===String(nm||"").replace(/\?$/,"").trim()&&istGerufen(f));
   const paramName=(t,belegt)=>{let n=String(t||"x").replace(/^I(?=[A-ZÄÖÜ])/,"");n=n.charAt(0).toLowerCase()+n.slice(1);
     const b=new Set(belegt||[]);if(!b.has(n))return n;let i=2;while(b.has(n+i))i++;return n+i;};
@@ -691,7 +683,7 @@
     return teile.map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.lastIndexOf(" ");return i<0?{typ:x,name:paramName(x)}:{typ:x.slice(0,i).trim(),name:x.slice(i+1).trim()};});}
   // Eine neue gerufene Funktion — EIN Weg (Funktion „＋", Menü): Schnittstelle I<Stamm> mit einer Methode und einer Umsetzung <Stamm>.
   function neueGerufene(ns,pos){const nm=uniq("INeueFunktion"),impl=uniq(nm.replace(/^I(?=[A-ZÄÖÜ])/,""));
-    const f={_id:"fb"+(NID++),name:nm,namespace:ns,klasse:false,eingaenge:[],konstruktor:[],
+    const f={_id:"fb"+(NID++),name:nm,namespace:ns,klasse:false,_neuTechnik:true,eingaenge:[],konstruktor:[],
       methoden:[{name:"Fuehre",rueckgabe:"string",parameter:[{typ:"string",name:"eingabe"}]}],umsetzungen:[{name:impl,konstruktor:[]}],...(pos||{})};
     MODEL.bausteinFunktionen.push(f);return f;}
   // Eine gerufene Funktion in einen Konstruktor nehmen (einmal je Konstruktor, nie sich selbst).
@@ -927,102 +919,6 @@
     for(let i=0;b&&!b.startsWith("§")&&i<8;i++){id=b;b=besitzVon(b);}
     return b===ANW_KEY?id:b;}
   const istRegionKarte=ns=>typeof ns==="string"&&/^(agg|gr|fb|dn|sto):/.test(ns);
-  // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries
-  //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
-  function akteurCard(body,a){
-    body.append(h("div",{class:"gsec"},"Name · Namespace"));
-    body.append(nameInp(a,"name","AkteurName","akteur"));
-    body.append(h("input",{value:a.namespace??"",oninput:e=>a.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    body.append(h("div",{class:"gsec",title:"public sealed record "+a.name+" : IAkteur, IDarf<…>, IHoert<…>"},"darf ▶ — was er SELBST hineingibt (Command, Query, Hinweis)"));
-    if(!(a.darf||[]).length)body.append(h("div",{class:"gp-row gp-leer"},"— noch nichts (am Tor käme er nirgends durch)"));
-    (a.darf||[]).forEach(nm=>{const r=recByName(nm);
-      const art=r?kindLabel(r.kind):"⚠ unbekannt";
-      const s=anchorDot("darf");s.classList.add("o");reg("akt:darf:"+a._id+":"+nm,s,{type:"darf",dir:"out",akt:a._id,anker:true});
-      body.append(h("div",{class:"slotrow o"},
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},nm+" · "+art),
-        h("button",{class:"rm",title:"Recht entziehen",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕"),s));});
-    body.append(slotRow("darf","+ darf ⊕ ("+akteurDarfLabel()+") ▶","r",{type:"darf",dir:"out",akt:a._id},"akt:darf:"+a._id+":open"));
-    // Was zu ihm kommt (IHoert<T>): ein Event oder Hinweis — ein Fakt; sein Client reagiert darauf (mit Commands seines IDarf) oder nimmt es zur
-    //   Kenntnis. Einen Command hört kein Akteur (CQRS058).
-    body.append(h("div",{class:"gsec",title:"IHoert<T> — ein Event oder Hinweis: der Client reagiert darauf oder nimmt es zur Kenntnis"},"hört ◀ — Fakten"));
-    if(!(a.hoert||[]).length)body.append(h("div",{class:"gp-row gp-leer"},"— nichts"));
-    (a.hoert||[]).forEach(nm=>{const r=recByName(nm);
-      body.append(h("div",{class:"slotrow"},anchorDot(r&&r.kind==="rejection"?"rejection":"event"),
-        h("span",{class:"slotlbl",style:"flex:1;cursor:pointer",onclick:()=>zeigeLadend("rec:"+nm)},nm),
-        h("button",{class:"rm",title:"hört es nicht mehr",onclick:()=>{a.hoert=ohneX(a.hoert,nm);render();}},"✕")));});
-    body.append(slotRow("event","+ hört ⊕ (Event · Hinweis)","l",{type:"evtUse",dir:"in",akt:a._id,hoert:true},"akt:kenntnis:"+a._id));
-    // Was in seinem Namen über eine Kette entsteht (abgeleitet, nicht deklariert): Fluss/Prozess aus seinen Events.
-    {const bew=Object.entries((MODEL.rahmen||{}).akteurMengen||{}).filter(([nm,m])=>(m.kette||[]).includes(a.name)&&!(m.direkt||[]).includes(a.name)&&istEingangName(nm)).map(([nm])=>nm).sort();
-      body.append(h("div",{class:"gsec",title:"abgeleitet: Commands, die ein Graph oder eine Frist in seinem Namen erzeugt — kein IDarf nötig, am Tor nicht erlaubt"},"bewirkt über die Kette (abgeleitet)"));
-      body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},bew.length?bew.join(", "):"— nichts"));}
-    const wirkt=akteurDomaenen(a.name);
-    if(wirkt.length){body.append(h("div",{class:"gsec"},"wirkt in"));
-      body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px"},...wirkt.map(d=>h("button",{class:"akt-dom",title:"Rahmen "+domLabel(d)+" · "+a.name+" einpassen",
-        onclick:()=>{const fr=world&&[...world.querySelectorAll(".grahmen.akt")].find(x=>x.dataset.ns===d&&x.dataset.akt===a.name);
-          if(fr)einpassenRahmen({x1:fr.offsetLeft,y1:fr.offsetTop,x2:fr.offsetLeft+fr.offsetWidth,y2:fr.offsetTop+fr.offsetHeight});}},domLabel(d)))));}
-    // 🔌 Clients (docs/konzept-akteure.md §4): wer diesen Vertrag trägt (Port für „trägt ⊕") und wo der Akteur sonst ankommt.
-    // 🔌 verkörpert von: Port für „verkörpert ⊕" am Client (IVerkoerpert<A>).
-    {const tp=port("traegt");tp.classList.add("i");reg("akt:verkoerpert:"+a._id,tp,{type:"verkoerpert",dir:"in",akt:a._id});
-      const cs=MODEL.clients.filter(c=>(c.verkoerpert||[]).includes(a.name));
-      body.append(h("div",{class:"slotrow"},tp,h("span",{class:"slotlbl",style:"flex:1"},"🔌 verkörpert von: "+(cs.length?cs.map(clientAnzeige).join(", "):"keinem Client"))));}
-    {const cs=MODEL.clients.filter(c=>clientAkteure(c).includes(a.name));
-      if(cs.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},h("span",{class:"slotlbl"},"🔌 Clients:"),
-        ...cs.map(c=>h("button",{class:"akt-dom",onclick:()=>waehle("cl:"+c._id)},clientAnzeige(c)))));}
-  }
-  // 🔌 CLIENT-Panel (docs/konzept-akteure.md §4): ein Record, der nur nennt, wen er verkörpert (IVerkoerpert<A>, ⊕ → Akteure leuchten).
-  //   Was über seine Leitung geht — was er sendet, fragt und hört —, folgt aus IDarf und IHoert der Akteure.
-  function clientCard(body,c){
-    body.append(h("div",{class:"gsec",title:"public sealed record "+c.name+" : IClient, IVerkoerpert<…>"},"Name · Namespace"));
-    if(!c.datei)body.append(nameInp(c,"name","IClient","client"));
-    else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},c.name+" — aus dem Code (Umbenennen ist ein Refactoring)"));
-    body.append(h("input",{value:c.namespace??"",oninput:e=>c.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"Handshake: „"+clientAnzeige(c)+"“ · Python-Basis "+clientAnzeige(c)
-      +"Basis (domain_client/generated/vertraege.py) · Server: GeneratedClientVertraege"));
-    // 👤 verkörpert: die Akteure (IVerkoerpert<A>) — ⊕ → Akteure leuchten → anklicken = verbinden; ✕ = lösen.
-    body.append(h("div",{class:"gsec",title:"IVerkoerpert<A> — befugt ist der Akteur: was über die Leitung geht, sind seine IDarf. Am Handshake gilt: ∩ Akteure des Tokens"},"👤 verkörpert"));
-    (c.verkoerpert||[]).forEach(n=>{const a=MODEL.akteure.find(x=>x.name===n),s=anchorDot("traegt");s.classList.add("o");
-      reg("cl:verkoerpert:"+c._id+":"+n,s,{type:"verkoerpert",dir:"out",client:c._id,anker:true});
-      body.append(h("div",{class:"slotrow o"},h("button",{class:"akt-dom",style:"flex:1;text-align:right",onclick:()=>a&&waehle("akt:"+a._id)},"👤 "+n+(a?"":" · ⚠ kein Akteur")),
-        h("button",{class:"rm",title:"nicht mehr verkörpern",onclick:()=>{c.verkoerpert=ohneX(c.verkoerpert,n);render();}},"✕"),s));});
-    body.append(slotRow("traegt","+ verkörpert ⊕ (Akteur) ▶","r",{type:"verkoerpert",dir:"out",client:c._id},"cl:verkoerpert:"+c._id+":open"));
-    // ↺ trägt · ▶ sendet · ? fragt: abgeleitet aus den IDarf der verkörperten Akteure (nur lesend; ändern am Akteur).
-    {const ps=clientPorts(c).filter(p=>p.ri!=="kenntnis");
-      body.append(h("div",{class:"gsec",title:"aus IDarf und IHoert der verkörperten Akteure — gehört (Event, Hinweis), gesendet (Command, Hinweis), gefragt (Query)"},"über die Leitung (abgeleitet)"));
-      body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},ps.length
-        ?ps.map(p=>(p.ri==="traegt"?"↺ ":p.ri==="fragt"?"? ":"▶ ")+p.msg+" · als "+(p.akteure||[]).join("/")).join("\n"):"— nichts"));}
-    // ◀ hört (Kenntnis): abgeleitet aus dem IHoert seiner Akteure — geändert wird am Akteur.
-    body.append(h("div",{class:"gsec",title:"Events und Hinweise, die seine Akteure hören (IHoert) — verlierbar gepusht"},"◀ hört (abgeleitet)"));
-    body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},(c.kenntnis||[]).length?c.kenntnis.join(", "):"— nichts"));
-    clientImplementierung(body,c,null);
-    // Die Leitungen dieses Clients (je Ziel-Rahmen ein Bündel) — Klick fächert auf.
-    const bs=clientBuendel(c);
-    if(bs.length){body.append(h("div",{class:"gsec"},"🔌 Leitungen (je Ziel-Rahmen)"));
-      bs.forEach(b=>{const row=h("div",{class:"gp-row",title:buendelText(b)},h("span",{class:"gp-t"},rahmenLabel(b.key)),
-        h("span",{class:"gp-mark"},(b.durabel?"durabel · ":"")+buendelText(b)));row.onclick=()=>auffaechern(c,{keys:[b.key]});body.append(row);});}
-  }
-  // ⚙ IMPLEMENTIERUNG eines Clients — das Verhalten des Akteurs DRAUSSEN: je gehörtem Fakt ein Logik-Element (◀ Event, Ausgänge ▶ =
-  //   Ausgabe-Vertrag, 📝 Rumpf + optional 🤖). Code-Fakt: eine Python-Klasse, die die aus dem Vertrag generierte Basis erbt.
-  //   nurEvent: nur diese eine Zusage (Ansicht an der Zusage-Karte).
-  function clientImplementierung(body,c,nurEvent){const ims=c.implementierungen||[];
-    if(!nurEvent)body.append(h("div",{class:"gsec",title:"class X("+clientAnzeige(c)+"Basis[…]) im Python-Projekt — die Basis erzeugt der Codegen aus dem Vertrag; je Auf ihre Methode"},"⚙ Implementierung (Verhalten draußen)"));
-    if(!ims.length){if(nurEvent)return;
-      body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},
-        "— noch keine: eine Python-Klasse, die "+clientAnzeige(c)+"Basis erbt (die Basis entsteht beim Bauen aus dem Vertrag)."));
-      const pk=(MODEL.rahmen||{}).pythonPaket;
-      if(pk)body.append(h("button",{class:"add",title:"⟳ legt nach dem Bauen der Basis "+pk+"/… an: die Klasse mit je gehörtem Fakt der Methode der generierten Basis (Platzhalter-Rumpf) — danach je Methode 📝/🤖",
-        onclick:()=>{const kl=clientAnzeige(c)||"Client";(c.implementierungen=c.implementierungen||[]).push({sprache:"python",klasse:kl,
-          datei:pk+"/"+kl.replace(/(?<=[a-z0-9])([A-Z])|(?<=[A-Z])([A-Z][a-z])/g,"_$1$2").toLowerCase()+".py",rumpfe:[],neu:true});render();}},"+ 🐍 Python-Implementierung"));
-      return;}
-    ims.forEach((im,ii)=>{const rs=(im.rumpfe||[]).filter(x=>!nurEvent||x.event===nurEvent);if(!rs.length&&!(im.neu&&!nurEvent))return;
-      if(im.neu&&!rs.length&&!nurEvent){body.append(h("div",{class:"gsec",style:"opacity:.85",title:im.datei},"🐍 "+im.klasse+" · "+im.datei+" (neu)"),
-        h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"Entsteht beim nächsten ⟳ (nach dem Bauen der Basis) — je gehörtem Fakt eine Methode, dann hier je Methode 📝/🤖."),
-        h("button",{class:"rm",title:"doch nicht anlegen",onclick:()=>{c.implementierungen.splice(ii,1);render();}},"✕"));return;}
-      body.append(h("div",{class:"gsec",style:"opacity:.85",title:im.datei},"🐍 "+im.klasse+" · "+(im.datei||"").split("/").pop()+(nurEvent?" · 🔌 "+clientAnzeige(c):"")));
-      rs.forEach(x=>{if(!nurEvent)body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"flex:1"},
-          "◀ "+x.event+((x.ausgaenge||[]).length?"  → "+x.ausgaenge.join(" | ")+" ▶":"  · Kenntnis"))));
-        body.append(codePort("cla:"+c._id+":"+ii+":"+x.event+(nurEvent?":z":""),{k:"clientAuf",client:c._id,impl:ii,event:x.event},null,
-          x.methode+(x.rumpf==null?" (fehlt)":"")));});});}
-
   // Code-Karte (Werkbank P7.1/P7.4, Zielbild §9): ein Typ, den das Lesen nicht als Baustein erkennt — roh aus der Datei; ⚠ mit Grund, wenn
   //   ein Basistyp nicht aufgelöst ist (die Karte verschwindet, sobald er es wieder ist), sonst Hilfscode ohne Baustein-Rolle.
   function codeKarteCard(body,c){const o=c._ort||{};
@@ -1067,7 +963,7 @@
       await gesteFlush();try{await fetch("/api/llm/aktualisieren",{method:"POST"});}catch(e){}
       LAUF[kid].was="LLM schreibt · prüft · baut";neuZeichnen();
       try{r=await postLlm("/api/llm/ausfuehren",anfrage);}catch(e){r={ok:false,grund:"Werkbank offline"};}
-      if(r&&!r.ok&&r.unbekannt)r.grund=kid.startsWith("funktion|")?"Implementierung konnte nicht angelegt werden — Funktion vollständig (Auftrag ⊕, mindestens ein Ergebnis ⊕)?"
+      if(r&&!r.ok&&r.unbekannt)r.grund=kid.startsWith("funktion|")?"Die Methode steht noch nicht im Code — erst Eingang und Ausgang der Funktion anlegen (Geste), dann 🤖"
         :"Methode konnte nicht angelegt werden — Decider/Applier vollständig verdrahtet (Command/Event, Aggregat, Ausgänge)?";}
     delete LAUF[kid];
     if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+(r.grund||"Fehler")};neuZeichnen();return;}
@@ -1312,10 +1208,8 @@
     else if(n.kind==="store")storeCard(body,n.ref);
     else if(n.kind==="projektion")projektionCard(body,n.ref);
     else if(n.kind==="reader")readerCard(body,n.ref);
-    else if(n.kind==="akteur")akteurCard(body,n.ref);
     else if(n.kind==="bausteinfunktion")funktionsKarte(body,n.ref);
     else if(n.kind==="graph")graphKarte(body,n.ref);
-    else if(n.kind==="client")clientCard(body,n.ref);
     else if(n.kind==="rumpf")rumpfKachelCard(body,n);
     else if(n.kind==="handle")handleCard(body,n);
     else if(n.kind==="fn")fnCard(body,n);
@@ -1491,11 +1385,7 @@
 
   function applyLink(a,b){
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;gTitel("verbinden ("+O.type+")");
-    if(O.type==="verkoerpert"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);
-      if(c&&a&&!(c.verkoerpert=c.verkoerpert||[]).includes(a.name))c.verkoerpert.push(a.name);}
-    else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak&&I.rec&&!(ak.darf=ak.darf||[]).includes(I.rec))ak.darf.push(I.rec);}
-    else if((O.type==="cmd"||O.type==="evtUse")&&I.akt&&I.hoert){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak&&O.rec&&!(ak.hoert=ak.hoert||[]).includes(O.rec))ak.hoert.push(O.rec);}
-    else if(O.type==="cmd"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);
+    if(O.type==="cmd"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);
       if(f&&!(f.eingaenge=f.eingaenge||[]).some(e=>e.eingang===O.rec))f.eingaenge.push({eingang:O.rec,hinweis:false,herkunft:false,strom:false,faehigkeiten:[],ausgaben:[],ports:[]});}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d)d.command=O.rec;}
     else if(O.type==="evtOut"&&O.dec){const d=dec(O.dec);if(d&&!(d.ergibt||[]).some(x=>x.event===I.rec))(d.ergibt=d.ergibt||[]).push({event:I.rec});}
@@ -1546,10 +1436,7 @@
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;gTitel("lösen ("+O.type+")");
     const ohne=(arr,x)=>(arr||[]).filter(v=>v!==x);
     const handle=(liste,id,idx)=>{const o=liste.find(x=>x._id===id);return o&&typeof idx==="number"?(o.handles||[])[idx]:null;};
-    if(O.type==="verkoerpert"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);if(c&&a)c.verkoerpert=ohne(c.verkoerpert,a.name);}
-    else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak)ak.darf=ohne(ak.darf,I.rec);}
-    else if((O.type==="cmd"||O.type==="evtUse")&&I.akt&&I.hoert){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak)ak.hoert=ohne(ak.hoert,O.rec);}
-    else if(O.type==="cmd"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f)f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==O.rec);}
+    if(O.type==="cmd"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f)f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==O.rec);}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
     else if(O.type==="evtOut"&&O.dec){const d=dec(O.dec);if(d)d.ergibt=(d.ergibt||[]).filter(x=>x.event!==I.rec);}
     else if(O.type==="evtUse"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f)f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==O.rec);}
@@ -2009,17 +1896,22 @@
   // ══ FLÄCHE IN SECHS SPALTEN (docs/10 §10.9): was Akteure hineingeben · Quellen · Graphen · Aggregate · Projektionen · was zu
   //   Akteuren kommt. Karten, Ports, Bänder und Kanten rechnet der Server (board.sicht.flaeche); hier nur Anordnung und Zeichnen. Eine Karte der
   //   Fläche öffnet (Doppelklick) die Karte der Sicht dahinter im Modal, ein Port den Typ seiner Nachricht; ein Klick hebt die Kette hervor.
-  const FL_SPALTE={ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf)",neu:["akteur","client"]},quellen:{t:"Quellen",u:"lauschen am Kopf eines Graphen",neu:["quelle"]},
+  const FL_SPALTE={ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf) — je Client gruppiert",neu:[]},quellen:{t:"Quellen",u:"lauschen am Kopf eines Graphen",neu:["quelle"]},
     graphen:{t:"Graphen",u:"rechnen vor dem Aggregat",neu:["graph"]},
     uebersetzungen:{t:"Übersetzungen",u:"Nachricht ↦ Command — Ausgang anklicken, dann den Command am Aggregat",neu:[]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
-    projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["store"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört)",neu:["akteur"]}};
+    projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["store"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört) — je Client gruppiert",neu:[]}};
   const FL_SYM={akteur:"👤",quelle:"⚡",graph:"⬡",uebersetzung:"↦",aggregate:"▣",projektion:"⇶",reader:"⌕",store:"🗄"};
   const FL_SORTE={command:"",event:"",hinweis:"✉ ",query:"? ",antwort:"↩ ",frist:"⏱ "};
   // Kantenarten: Farbe, Strich, leise (tritt zurück, bis eine ihrer Karten gewählt ist).
-  const FL_KANTE={schreiben:{c:"#9aa6bb"},quelle:{c:"#9aa6bb"},lesen:{c:"#7aa2e0",d:"2 4",leise:1},kenntnis:{c:"#8a8f9c",d:"6 4",leise:1},
+  const FL_KANTE={reaktion:{c:"#e08a3c",d:"8 5",leise:1},schreiben:{c:"#9aa6bb"},quelle:{c:"#9aa6bb"},lesen:{c:"#7aa2e0",d:"2 4",leise:1},kenntnis:{c:"#8a8f9c",d:"6 4",leise:1},
     ruecklauf:{c:"#e08a3c",d:"8 5"},liest:{c:"#a07ad6",d:"1 4",leise:1}};
   const FL_LEER={spalten:["ausgang","quellen","graphen","uebersetzungen","aggregate","projektionen","eingang"],baender:[],gruppen:[],karten:[],kanten:[]};
   const FL=()=>SICHT().flaeche||FL_LEER;
+  // Aggregat und Store von innen (board.sicht.innen, GraphExtractor.Kern/Sicht/Sicht.Innen.cs): Verwendungen je Typ, was an einen „＋“ passt, die
+  //   Read-Models je Fähigkeit. Regeln als Daten aus der Grammatik (rahmen.grammatik: Store-Klassen, Bündel, Typname). Der Editor schlägt nur nach (W3).
+  const INNEN=()=>SICHT().innen||{verwendungen:{},aggregate:{},handles:{},readModels:{}};
+  const GRAM=()=>(MODEL.rahmen||{}).grammatik||{};
+  const typnameMuster=()=>String(GRAM().typname||"^$");
   const FL_KOPF=96, FL_BAND_PAD=30, FL_GAP_Y=16, FL_GR_KOPF=22, FL_GR_PAD=10;
   let FLGEO={spalten:{},baender:[],gruppen:new Map()}, FLKARTE=new Map();
   // Die Panel-Karte einer Flächen-Karte: die Karte der Sicht dahinter; eine Katalog-Quelle öffnet ihren Graphen.
@@ -2034,16 +1926,9 @@
   //   Akteur links „＋ darf“ → Eingänge (Command, Query) von Graphen, Aggregaten, Readern; Akteur rechts „＋ hört“ → Ausgänge (Event,
   //   Hinweis); Projektion „＋ Event“ → Events der Aggregate. ✕ an einem Port löst (darf, hört, Auf der Projektion). ──
   let FLPORT=null;
-  function flPassend(fk,p){if(!FLPORT)return false;const a=FLPORT;
-    if(a.art==="darf")return p.richtung==="ein"&&(p.sorte==="command"||p.sorte==="query")&&["graphen","aggregate","projektionen"].includes(fk.spalte)&&!(a.akteur.darf||[]).includes(p.typ)
-      &&MODEL.records.some(r=>r.name===komBasis(p.typ));
-    if(a.art==="hoert")return p.richtung==="aus"&&["graphen","aggregate"].includes(fk.spalte)&&!(a.akteur.hoert||[]).includes(p.typ)
-      &&(p.sorte==="event"||p.sorte==="hinweis"||(p.sorte==="command"&&!(MODEL.records.find(r=>r.name===komBasis(p.typ))||{}).aggregat));
-    if(a.art==="event")return p.richtung==="aus"&&fk.art==="aggregate"&&p.sorte==="event"&&!(a.projektion.handles||[]).some(x=>x.event===p.typ);
-    // Eine Nachricht eines Graphen ↦ ein Command am Eingang eines Aggregats: daraus wird eine Übersetzung (docs/04 §4.4).
-    if(a.art==="uebersetzen")return p.richtung==="ein"&&fk.art==="aggregate"&&p.sorte==="command"&&!!(recByName(komBasis(p.typ))||{}).aggregat
-      &&!(MODEL.uebersetzungen||[]).some(u=>komBasis(u.ein)===komBasis(a.typ)&&komBasis(u.aus)===komBasis(p.typ));
-    return false;}
+  // Was passt, nennt der Server (sicht.flaeche.anschluss: je Start die Ports Karte|Richtung|Typ, die die Grammatik dort erlaubt und die noch frei sind).
+  function flPassend(fk,p){if(!FLPORT)return false;const a=FLPORT,start=a.art==="uebersetzen"?"uebersetzen|"+a.typ:a.art+"|"+a.karte;
+    return ((FL().anschluss||{})[start]||[]).includes(fk.id+"|"+p.richtung+"|"+p.typ);}
   function flMarkiere(){if(!world)return;let n=0;world.classList.toggle("auswahl",!!FLPORT);
     if(!FLPORT)world.querySelectorAll(".fl-g-port.start").forEach(x=>x.classList.remove("start"));
     world.querySelectorAll(".gnode2.fk").forEach(el=>{const fk=FLKARTE.get(el.dataset.id);if(!fk)return;let hat=false;
@@ -2051,13 +1936,11 @@
         const ja=!!p&&flPassend(fk,p);pe.classList.toggle("kand",ja);if(ja){hat=true;n++;}});
       el.classList.toggle("kand-karte",hat);el.classList.toggle("leise",!!FLPORT&&!hat&&el.dataset.id!==(FLPORT&&FLPORT.karte));});
     return n;}
-  function flPlus(art,fk,ev){const a=art==="event"?{art,projektion:projektionVonKarte(fk),karte:fk.id}:{art,akteur:akteurVonKarte(fk),karte:fk.id};
-    if(!a.akteur&&!a.projektion)return;FLPORT=a;const n=flMarkiere();
+  function flPlus(art,fk,ev){const a={art,projektion:projektionVonKarte(fk),karte:fk.id};
+    if(!a.projektion)return;FLPORT=a;const n=flMarkiere();
     deFlash(n?"ℹ "+n+" passende Ports hervorgehoben — anklicken verbindet · Esc bricht ab":"ℹ Kein passender Port auf der Fläche",true);if(!n)FLPORT=null,flMarkiere();}
   function flAnschliessen(fk,p){const a=FLPORT;FLPORT=null;if(!a)return;
-    if(a.art==="darf"){a.akteur.darf=[...(a.akteur.darf||[]),p.typ];gTitel("👤 "+a.akteur.name+" darf "+p.typ);}
-    else if(a.art==="hoert"){a.akteur.hoert=[...(a.akteur.hoert||[]),p.typ];gTitel("👤 "+a.akteur.name+" hört "+p.typ);}
-    else if(a.art==="event"){a.projektion.handles=[...(a.projektion.handles||[]),{event:p.typ,effekt:""}];gTitel(a.projektion.name+": Auf("+p.typ+")");}
+    if(a.art==="event"){a.projektion.handles=[...(a.projektion.handles||[]),{event:p.typ,effekt:""}];gTitel(a.projektion.name+": Auf("+p.typ+")");}
     else if(a.art==="uebersetzen"){komUebersetzungAn(a.typ,komBasis(p.typ));flMarkiere();return;}
     render();}
   // Klick auf eine Nachricht am Ausgang eines Graphen (auch ein Zwischenstand): die Commands an den Eingängen der Aggregate leuchten auf — ein Klick
@@ -2068,33 +1951,30 @@
     deFlash(n?"ℹ "+typ+": jetzt den Command am Eingang eines Aggregats anklicken — es entsteht eine Übersetzung · Esc bricht ab"
       :"ℹ Kein Command an einem Aggregat auf der Fläche (oder alle übersetzen "+typ+" schon)",true);
     if(!n){FLPORT=null;flMarkiere();}}
-  function flLoesen(fk,p){if(fk.art==="akteur"&&fk.spalte==="ausgang"){const a=akteurVonKarte(fk);if(a&&(a.darf||[]).includes(p.typ)){a.darf=ohneX(a.darf,p.typ);gTitel("👤 "+a.name+" darf "+p.typ+" nicht mehr");render();}}
-    else if(fk.art==="akteur"){const a=akteurVonKarte(fk);if(a&&(a.hoert||[]).includes(p.typ)){a.hoert=ohneX(a.hoert,p.typ);gTitel("👤 "+a.name+" hört "+p.typ+" nicht mehr");render();}}
-    else if(fk.art==="projektion"){const pr=projektionVonKarte(fk);if(pr){pr.handles=(pr.handles||[]).filter(x=>x.event!==p.typ);gTitel(pr.name+": Auf("+p.typ+") entfernt");render();}}}
-  const flLoesbar=(fk,p)=>(fk.art==="akteur"&&fk.spalte==="ausgang"&&p.richtung==="aus")||(fk.art==="akteur"&&fk.spalte==="eingang"&&p.richtung==="ein"&&p.sorte!=="antwort")
-    ||(fk.art==="projektion"&&p.richtung==="ein");
+  function flLoesen(fk,p){if(fk.art==="projektion"){const pr=projektionVonKarte(fk);if(pr){pr.handles=(pr.handles||[]).filter(x=>x.event!==p.typ);gTitel(pr.name+": Auf("+p.typ+") entfernt");render();}}}
+  const flLoesbar=(fk,p)=>!!p.loesbar;
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&FLPORT&&!KOM){e.stopImmediatePropagation();FLPORT=null;flMarkiere();}},true);
   // ══ EIN GRAPH AUF DER FLÄCHE, aufgeklappt (docs/04 §4.4): der Graph aus einem Katalog mit allen Funktionen, oben sein Eingang (wer
   //   an seinen Kopf gibt: ein Akteur, eine Kopf-Übersetzung der Domäne), an jedem Command-Port „＋ ↦“ — eine Übersetzung in einer Domäne nimmt die
   //   Nachricht nach ihrem Typ (ein Ausgang oder ein Zwischenstand). Der Graph bleibt domänenneutral; die Übersetzungen stehen in ihrer Spalte.
-  //   Doppelklick auf eine Funktion öffnet sie im Katalog-Modal, auf den Graphen sein Graph-Modal.
+  //   Doppelklick auf eine Funktion oder den Graphen öffnet sie im Katalog-Modal.
   const ueVon=karte=>(MODEL.uebersetzungen||[]).find(u=>"ue:"+u._id===karte);
   const ueNehmen=t=>(MODEL.uebersetzungen||[]).filter(u=>komBasis(u.ein)===komBasis(t));
   function ablaufVon(gid){const d=komDaten(gid),g=komModell(gid);if(!d||!g)return null;
-    const offen=(d.ausgaenge||[]).filter(a=>a.sorte==="command"&&!(recByName(komBasis(a.typ))||{}).aggregat&&!ueNehmen(a.typ).length);
-    return {id:gid,g,d,offen};}
+    return {id:gid,g,d,offen:(d.offen||[]).map(typ=>({typ}))};}
   function ablaeufeAufFlaeche(){return FL().karten.filter(k=>k.art==="graph").map(k=>ablaufVon(k.id)).filter(Boolean);}
   function flAblaufInnen(fk){const ab=ablaufVon(fk.id);if(!ab||!funKatalog(ab.g))return null;const {d}=ab;
     const zu=(ANSICHT.ablaufZu||[]).includes(ab.g.name),box=h("div",{class:"fl-ablauf"});
     ["click","dblclick","pointerdown"].forEach(x=>box.addEventListener(x,e=>e.stopPropagation()));
     box.append(h("div",{class:"fl-ab-kopf"},h("button",{class:"fl-ab-zu",title:zu?"Aufklappen":"Zuklappen (nur die Signatur)",onclick:()=>{
         const l=new Set(ANSICHT.ablaufZu||[]);if(zu)l.delete(ab.g.name);else l.add(ab.g.name);ANSICHT.ablaufZu=[...l];ansichtSpeichern();render();}},zu?"▸":"▾"),
-      h("span",{class:"fl-ab-graph",title:"Graph-Modal öffnen",onclick:()=>komOeffne(fk.id)},"⬡ "+ab.g.name),
+      h("span",{class:"fl-ab-graph",title:"Im Katalog-Modal zeigen",onclick:()=>komOeffne(fk.id)},"⬡ "+ab.g.name),
       h("span",{class:"fl-ab-kat"},"📚 "+String(funKatalog(ab.g)).replace(/\.Katalog$/,""))));
     // Eingang: je Kopf, wer an ihn gibt — Akteure (IDarf) und Kopf-Übersetzungen der Domäne (die Nachricht eines Clients ↦ der Eingang); sonst offen.
     const eing=h("div",{class:"fl-ab-ein"});
-    d.koepfe.forEach(k=>{const akt=MODEL.akteure.filter(a=>(a.darf||[]).includes(komBasis(k.typ))).map(a=>"👤 "+a.name);
-      const ue=(MODEL.uebersetzungen||[]).filter(u=>komBasis(u.aus)===komBasis(k.typ));
+    d.koepfe.forEach(k=>{const von=(((SICHT().partner||{})[komBasis(k.typ)]||{}).ein||[]).filter(q=>q.id);
+      const akt=von.filter(q=>q.id.startsWith("akt:")).map(q=>"👤 "+(NODEBY.get(q.id)||{name:q.text}).name);
+      const ue=von.filter(q=>q.id.startsWith("ue:")).map(q=>ueVon(q.id)).filter(Boolean);
       eing.append(h("div",{class:"fl-ab-z"},"◀ "+k.typ+(akt.length?" · "+akt.join(", "):ue.length?"":" · offen")));
       ue.forEach(u=>{const oe=()=>ueOeffne({karte:"ue:"+u._id});
         eing.append(h("div",{class:"fl-ab-ue",title:"↦ "+u.name+" — Klick: die Feldzuordnung",onclick:oe},
@@ -2127,12 +2007,11 @@
         gr.append(sp);});
       box.append(gr);}
     return box;}
-  // ＋ Eingang an einem Graphen: ein Akteur gibt den Eingang direkt (IDarf), oder ein Client gibt eine Nachricht seiner Domäne, die eine
-  //   Kopf-Übersetzung in den Eingang macht; oder eine Quelle aus dem Katalog des Frameworks speist den Kopf.
-  function flEingang(ab,ev){const {id,g,d}=ab,bk=komBaukasten(),ein=d.koepfe.map(k=>k.typ);
-    const quellen=bk.katalog.filter(k=>(k.meldet||[]).some(m=>ein.some(t=>komBasis(t)===komBasis(m))));
+  // ＋ Eingang an einem Graphen: ein Client gibt eine Nachricht seiner Domäne, die eine Kopf-Übersetzung in den Eingang macht, oder eine Quelle
+  //   aus dem Katalog des Frameworks speist den Kopf. Wer etwas hineingibt (IDarf), legt man im Modal „Akteure und Clients“ fest.
+  function flEingang(ab,ev){const {id,g,d}=ab,ein=d.koepfe.map(k=>k.typ),quellen=d.quellen||[];
     menueFix(ev.clientX,ev.clientY,"Eingang von "+g.name,[{kopf:"Client — ein Akteur gibt hinein"},
-      ...ein.map(t=>({t:"👤 "+t+" direkt (IDarf) …",fn:()=>komAkteurWahl(komBasis(t),ev)})),
+      {t:"👤 Ein Akteur darf einen Eingang direkt … (im Modal Akteure und Clients)",fn:()=>aktOeffne(MODEL.akteure[0]?"akt:"+MODEL.akteure[0]._id:"")},
       ...ein.map(t=>({t:"↦ "+t+" aus einer Nachricht einer Domäne …",fn:()=>komKopfUebersetzung(t,ev)})),
       ...(quellen.length?[{trenn:1},{kopf:"Quelle — lauscht"},...quellen.map(q=>({t:"⚡ "+q.name+" → "+(q.meldet||[]).join(", "),fn:()=>{
         const gm=komModell(id),z=(gm.knoten||[]).find(x=>d.koepfe.some(k=>k.knoten.includes(x.name)));if(!z)return;const qn=komKnotenName(gm,q.name);
@@ -2142,7 +2021,8 @@
     const dg=n?diagFuer(n.id):[],nurWarn=dg.length>0&&dg.every(x=>x.art==="warnung");
     const el=h("div",{class:"gnode2 fk fk-"+fk.art+" n-"+(fk.art==="quelle"?"funktion":fk.art)+(dg.length?(nurWarn?" diagwarn":" diag"):"")});
     el.dataset.id=fk.id;el.dataset.karte=pid||"";
-    const loeschbar=n&&fk.art!=="quelle"&&fk.art!=="uebersetzung"&&fk.spalte!=="eingang";
+    // Ein Akteur wird nur im Modal „Akteure und Clients“ gelöscht (je Absicht eine Geste); ⧉ öffnet ihn dort.
+    const loeschbar=n&&fk.art!=="quelle"&&fk.art!=="uebersetzung"&&fk.art!=="akteur"&&fk.spalte!=="eingang";
     const head=h("div",{class:"ghead"},
       h("span",{class:"gtitle hatname",title:(NODELABEL[n?n.kind:fk.art]||fk.art)+" · "+fk.name+(pid?" — Klick: Kette · Doppelklick: öffnen":"")},
         // Eine Übersetzung trägt keinen Kopf auf der Fläche — sie ist der Knoten zwischen Nachricht und Command; Name und Typen im Tooltip.
@@ -2179,11 +2059,9 @@
     const plus=(ri,label,art)=>{const r=h("div",{class:"fk-port "+ri+" plus",title:"Klick: passende Ports hervorheben, dann einen anklicken",
       onclick:e=>{e.stopPropagation();flPlus(art,fk,e);}},h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},label));return r;};
     fk.ports.filter(p=>p.richtung==="ein").forEach(p=>ports.append(zeile(p)));
-    if(fk.art==="akteur"&&fk.spalte==="eingang")ports.append(plus("ein","＋ hört","hoert"));
     if(fk.art==="projektion")ports.append(plus("ein","＋ Event","event"));
     // Steht ein Ausgang schon im Graphen der Karte (Ablauf aufgeklappt), hängt seine Kante dort — keine zweite Zeile.
     fk.ports.filter(p=>p.richtung==="aus"&&!el.querySelector('.fl-g [data-port="'+CSS.escape("aus|"+p.typ)+'"]')).forEach(p=>ports.append(zeile(p)));
-    if(fk.art==="akteur"&&fk.spalte==="ausgang")ports.append(plus("aus","＋ darf","darf"));
     if(ports.childNodes.length)el.append(ports);
     return el;
   }
@@ -2214,7 +2092,15 @@
               if(mit){FLGEO.gruppen.set(g,{x1:sx-FL_GR_PAD,y1:gy,x2:sx+FLGEO.spalten[s].w+3*FL_GR_PAD,y2:cy-FL_GAP_Y+FL_GR_PAD});cy+=FL_GR_PAD+FL_GAP_Y;}});}
           hmax=Math.max(hmax,cy-y0);});
         const hg=Math.max(hmax+FL_BAND_PAD-FL_GAP_Y,140);FLGEO.baender.push({id:b,y:y0,h:hg});y+=hg+44;});
-      ["ausgang","eingang"].forEach(s=>{let cy=FL_KOPF+FL_BAND_PAD;(zellen.get(zk(null,s))||[]).forEach(k=>{setze(k,FLGEO.spalten[s].x,cy);cy+=sz(k.id).h+FL_GAP_Y;});});};
+      // Die Akteure links und rechts, je Client eine Gruppe (Reihenfolge des Servers); beide Seiten eines Clients auf derselben Höhe.
+      {const basen=[];FL().gruppen.forEach(g=>{const m=/^(.*)\|(aus|ein)$/.exec(g.id);if(m&&!basen.includes(m[1]))basen.push(m[1]);});
+        const SEITEN=[["ausgang","aus"],["eingang","ein"]];let cy=FL_KOPF+FL_BAND_PAD;
+        basen.forEach(b=>{let hb=0;
+          SEITEN.forEach(([s,seite])=>{const drin=(zellen.get(zk(null,s))||[]).filter(k=>k.gruppe===b+"|"+seite).sort((x,y)=>x.name.localeCompare(y.name,"de"));
+            let y=cy+FL_GR_KOPF;drin.forEach(k=>{setze(k,FLGEO.spalten[s].x+FL_GR_PAD,y);y+=sz(k.id).h+FL_GAP_Y;});if(!drin.length)y+=24;hb=Math.max(hb,y-cy);});
+          SEITEN.forEach(([s,seite])=>{const sx=FLGEO.spalten[s].x;FLGEO.gruppen.set(b+"|"+seite,{x1:sx-FL_GR_PAD,y1:cy,x2:sx+FLGEO.spalten[s].w+3*FL_GR_PAD,y2:cy+hb-FL_GAP_Y+FL_GR_PAD});});
+          cy+=hb+FL_GR_PAD+FL_GAP_Y;});
+        SEITEN.forEach(([s])=>{let y=cy;(zellen.get(zk(null,s))||[]).filter(k=>!k.gruppe).forEach(k=>{setze(k,FLGEO.spalten[s].x,y);y+=sz(k.id).h+FL_GAP_Y;});});}};
     lege();
     // Reihenfolge je Zelle (bei Projektionen je Store-Gruppe): zur mittleren Höhe der Nachbarn in anderen Zellen.
     for(let i=0;i<2;i++){
@@ -2228,9 +2114,7 @@
   function flRahmen(ebene){const aus={x2:0,y2:0};
     FL().spalten.forEach(s=>{const g=FLGEO.spalten[s];if(!g)return;const d=FL_SPALTE[s];
       const neu=e=>{e.stopPropagation();if(d.neu[0]==="store"){stoNeuAnlegen(e);return;}if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
-      const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),d.neu.length?h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋"):null),h("div",{class:"fl-u"},d.u),
-        s==="ausgang"&&MODEL.clients.length?h("div",{class:"fk-chips"},...MODEL.clients.map(c=>h("button",{class:"fk-chip",title:"Client "+c.name+" verkörpert "+(c.verkoerpert||[]).join(", ")+" — Klick: Panel",
-          onclick:e=>{e.stopPropagation();komKarte("cl:"+c._id);}},"🔌 "+clientAnzeige(c)))):null);
+      const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),d.neu.length?h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋"):null),h("div",{class:"fl-u"},d.u));
       Object.assign(k.style,{left:g.x+"px",top:"0px",width:g.w+"px"});ebene.append(k);aus.x2=Math.max(aus.x2,g.x+g.w);});
     const sq=FLGEO.spalten.quellen,sp=FLGEO.spalten.projektionen;
     if(sq&&sp)FLGEO.baender.forEach(b=>{const x1=sq.x-40,x2=sp.x+sp.w+40,name=b.id?(FL().baender.find(x=>x.id===b.id)||{}).name||b.id:"ohne Domäne";
@@ -2240,8 +2124,11 @@
       if(b.id&&sg&&!funKatalog({namespace:b.id})){const plus=h("button",{class:"fl-band-plus",title:"Einen Graphen aus einem Katalog an "+name+" binden — eine Übersetzung dieser Domäne nimmt einen seiner Ausgänge",
         onclick:e=>{e.stopPropagation();flBandGraph(b.id,name,e);}},"＋ Graph");plus.style.left=(sg.x-x1)+"px";fr.append(plus);}
       Object.assign(fr.style,{left:x1+"px",top:b.y+"px",width:(x2-x1)+"px",height:b.h+"px"});ebene.append(fr);aus.y2=Math.max(aus.y2,b.y+b.h);});
-    FLGEO.gruppen.forEach((r,id)=>{const g=FL().gruppen.find(x=>x.id===id)||{name:id};
-      const fr=h("div",{class:"fl-gruppe"},h("span",{class:"fl-gruppe-t",title:"Store "+g.name+" — Klick: von innen öffnen",onclick:e=>{e.stopPropagation();komOeffne(id);}},"⧉ Store "+g.name));
+    FLGEO.gruppen.forEach((r,id)=>{const g=FL().gruppen.find(x=>x.id===id)||{name:id},cl=/\|(aus|ein)$/.test(id),karte=id.replace(/\|(aus|ein)$/,""),echt=karte.startsWith("cl:");
+      // Die Gruppe eines Clients (links und rechts dieselbe): Klick öffnet ihn im Modal „Akteure und Clients“; „ohne Client“ nur als Hinweis.
+      const fr=cl?h("div",{class:"fl-gruppe client"+(echt?"":" ohne")},h("span",{class:"fl-gruppe-t",title:echt?"Client "+g.name+" — Klick: im Modal öffnen":"Akteure, die noch kein Client verkörpert",
+          onclick:e=>{e.stopPropagation();if(echt)aktOeffne(karte);}},echt?"🔌 "+g.name:"ohne Client"))
+        :h("div",{class:"fl-gruppe"},h("span",{class:"fl-gruppe-t",title:"Store "+g.name+" — Klick: von innen öffnen",onclick:e=>{e.stopPropagation();komOeffne(id);}},"⧉ Store "+g.name));
       Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});ebene.append(fr);});
     return aus;}
   // Der Fokus auf der Fläche: bei gewählter Karte sie und ihre Nachbarn über die Kanten (bei einem gewählten Typ nur dessen Kanten); sonst
@@ -2273,7 +2160,11 @@
     const band=id=>{const k=FLKARTE.get(id);return k&&k.band!==undefined?FLGEO.baender.find(b=>b.id===(k.band||null)):null;};
     const ix=id=>{const k=FLKARTE.get(id);return k?SP.indexOf(k.spalte):-1;};
     FL().kanten.forEach((k,i)=>{const st=FL_KANTE[k.art]||FL_KANTE.schreiben;let d;
-      if(k.art==="liest"){const e=ELS.get(k.von),r=FLGEO.gruppen.get(k.nach);if(!e||!r)return;
+      // Reaktion: von der Gruppe des Clients rechts im Bogen zurück zu seiner Gruppe links.
+      if(k.art==="reaktion"){const a=FLGEO.gruppen.get(k.von),b=FLGEO.gruppen.get(k.nach);if(!a||!b)return;
+        const A={x:a.x1+40,y:a.y1},B={x:b.x2-40,y:b.y1},top=Math.min(A.y,B.y)-40;
+        d="M"+A.x+","+A.y+" C"+A.x+","+top+" "+B.x+","+top+" "+B.x+","+B.y;}
+      else if(k.art==="liest"){const e=ELS.get(k.von),r=FLGEO.gruppen.get(k.nach);if(!e||!r)return;
         const A={x:e.offsetLeft+e.offsetWidth/2,y:e.offsetTop+e.offsetHeight},B={x:(r.x1+r.x2)/2,y:r.y1};
         d="M"+A.x+","+A.y+" C"+A.x+","+(A.y+120)+" "+B.x+","+(B.y-120)+" "+B.x+","+B.y;}
       else{const A=punkt(k.von,"aus",k.typ),B=punkt(k.nach,"ein",k.typ);if(!A||!B)return;
@@ -2309,12 +2200,179 @@
   let ZEIGER={x:240,y:160};document.addEventListener("pointerdown",e=>{ZEIGER={x:e.clientX,y:e.clientY};},true);
   // Ein Graph, der gerade angelegt wurde und sich öffnen soll, sobald der Server seine Komposition liefert.
   let KOM_NACH=null;
-  // Öffnen: der Pfad von der obersten Graph-Karte hinab (über die Eltern), optional ein Knoten gewählt.
-  function komOeffne(grId,knoten){const pfad=[grId];
-    for(let i=0;i<8;i++){const d=komDaten(pfad[0]);if(!d||!d.eltern.length||FLKARTE.has(pfad[0]))break;pfad.unshift(d.eltern[0]);}
-    KOM={pfad,reiter:"komposition",wahl:knoten?{art:"knoten",name:knoten}:null};komZeige();}
+  // Öffnen: ein Graph im Katalog-Modal (in der Mitte, optional ein Knoten gewählt), alles andere (ein Store) für sich.
+  function komOeffne(id,knoten){KOM=null;
+    if(id.startsWith("gr:")){if(!katGraphWaehlen(id))return;KOM.wahl=knoten?{art:"knoten",name:knoten}:null;komZeige();return;}
+    KOM={pfad:[id],reiter:"komposition",wahl:null};komZeige();}
   // Von innen öffnen: ein Graph seine Komposition, ein Aggregat sich selbst, Projektion und Reader ihren Store (mit ihnen gewählt).
   function flInnen(fk){if(fk.art==="graph"){komOeffne(fk.id);return;}if(fk.art==="uebersetzung"){ueOeffne(fk);return;}const pid=flPanelId(fk);if(pid)komKarte(pid);}
+  // ══ AKTEURE UND CLIENTS (docs/10 §10.9): ein Modal, links die Liste — nur hier entstehen Akteure und Clients (je Absicht eine Geste) —, in der
+  //   Mitte das Gewählte in Bändern (innenZeige). Ein Akteur: Herkunft · hört · darf · Ziel, ein Band je Gegenüber auf der Fläche (wohin seine
+  //   Nachrichten gehen, woher was er hört kommt); ＋ im Spaltenkopf „hört“ bzw. „darf“ zeigt gestrichelt, was passt. Ein Client: hört · Reaktion ·
+  //   sendet · Ziel, ein Band je verkörpertem Akteur; die Reaktion ist die Methode seiner Implementierung je gehörtem Fakt (✎ Code, 🤖 Prompt);
+  //   „＋ verkörpert“ lässt links die Akteure aufleuchten. Gegenüber, Kandidaten und Reaktionen rechnet der Server (board.sicht.akteure).
+  const AKT=()=>SICHT().akteure||{akteure:{},clients:{}};
+  // Das Gewählte steht im Pfad als „akteure:a:<Name>“ bzw. „akteure:c:<Name>“; KOM.aktId hält die Karten-Id, damit ein Umbenennen es nicht verliert.
+  function aktOeffne(id,push){const m=aktVonKarte(id),p="akteure:"+(m?(id.startsWith("akt:")?"a:":"c:")+m.name:"");
+    if(push&&KOM)KOM.pfad.push(p);else KOM={pfad:[p],reiter:"komposition",wahl:null};KOM.aktId=id;KOM.port=null;komZeige();}
+  const aktVonKarte=id=>id.startsWith("akt:")?MODEL.akteure.find(a=>"akt:"+a._id===id):id.startsWith("cl:")?MODEL.clients.find(c=>"cl:"+c._id===id):null;
+  function aktWaehle(art,name){KOM.pfad[KOM.pfad.length-1]="akteure:"+art+":"+name;KOM.aktId=null;KOM.port=null;KOM.wahl=null;komZeige();}
+  function aktZeige(de,sel){const art=sel.slice(0,1),name=sel.slice(2);
+    let m=KOM.aktId?aktVonKarte(KOM.aktId):null,ak=m?KOM.aktId.startsWith("akt:"):art!=="c";
+    if(!m)m=ak?MODEL.akteure.find(a=>a.name===name):MODEL.clients.find(c=>c.name===name);
+    if(!m){m=MODEL.akteure[0]||MODEL.clients[0]||null;ak=!!MODEL.akteure[0];}
+    if(m){KOM.aktId=(ak?"akt:":"cl:")+m._id;KOM.pfad[KOM.pfad.length-1]="akteure:"+(ak?"a:":"c:")+m.name;}
+    if(!m){const r=komRahmen("Links „＋ Akteur“ legt den ersten Akteur an");
+      r.append(h("div",{class:"kom-leib kat"},aktLinksEl(null),h("div",{class:"kat-mitte"},h("div",{class:"kat-leer"},"Noch kein Akteur und kein Client."))));de.append(r);return;}
+    if(ak)aktAkteurZeige(de,m);else aktClientZeige(de,m);}
+  // Links: Akteure und Clients, je „＋“. Steht „＋ verkörpert“ an, leuchten die Akteure, die der Client noch nicht verkörpert — ein Klick verbindet.
+  function aktLinksEl(m){const links=h("div",{class:"kom-bk"}),P=KOM.port&&KOM.port.art==="verkoerpert"?KOM.port:null,c=P?aktVonKarte(P.client):null;
+    const nachName=l=>[...l].sort((x,y)=>x.name.localeCompare(y.name,"de"));
+    links.append(h("div",{class:"kom-sec"},"👤 Akteure"));
+    if(!MODEL.akteure.length)links.append(h("div",{class:"kom-wo"},"Noch keine."));
+    nachName(MODEL.akteure).forEach(a=>{const kand=!!c&&!(c.verkoerpert||[]).includes(a.name);
+      links.append(h("button",{class:"kom-b"+(a===m?" on":"")+(kand?" kand":"")+(P&&!kand?" leise":""),
+        title:kand?"Klick: "+clientAnzeige(c)+" verkörpert "+a.name:"Den Akteur in der Mitte zeigen",
+        onclick:()=>{if(P){if(kand)aktVerkoerpert(c,a.name);else{KOM.port=null;komZeige();}return;}aktWaehle("a",a.name);}},(kand?"⊕ ":"")+"👤 "+a.name));});
+    links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Ein neuer Akteur (record X : IAkteur) — danach ＋ im Spaltenkopf „hört“ bzw. „darf“",
+      onclick:e=>aktNeu(true,e)},"＋ Akteur")));
+    links.append(h("div",{class:"kom-sec"},"🔌 Clients"));
+    if(!MODEL.clients.length)links.append(h("div",{class:"kom-wo"},"Noch keine."));
+    nachName(MODEL.clients).forEach(x=>links.append(h("button",{class:"kom-b"+(x===m?" on":"")+(P?" leise":""),title:"Den Client in der Mitte zeigen",
+      onclick:()=>{KOM.port=null;aktWaehle("c",x.name);}},"🔌 "+clientAnzeige(x))));
+    links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Ein neuer Client (record X : IClient) — danach „＋ verkörpert“",
+      onclick:e=>aktNeu(false,e)},"＋ Client")));
+    return links;}
+  // Anlegen — der einzige Weg zu einem neuen Akteur bzw. Client: Name abfragen, danach steht er in der Mitte.
+  function aktNeu(ak,e){const liste=ak?MODEL.akteure:MODEL.clients;
+    frageFix(e.clientX,e.clientY,ak?"👤 Neuer Akteur":"🔌 Neuer Client","",ak?"public sealed record X : IAkteur":"public sealed record X : IClient",n=>{
+      const fe=nameFehler(n);if(fe)return fe;if(liste.some(x=>x.name===n))return n+" gibt es schon";
+      const ns=haeufigsterNs(liste)||haeufigsterNs(MODEL.akteure)||defaultNs();
+      liste.push(ak?{_id:"ak"+(NID++),name:n,namespace:ns,darf:[],hoert:[]}:{_id:"cl"+(NID++),name:n,namespace:ns,verkoerpert:[],kenntnis:[],implementierungen:[]});
+      KOM.pfad[KOM.pfad.length-1]="akteure:"+(ak?"a:":"c:")+n;KOM.aktId=null;KOM.port=null;gTitel((ak?"👤 ":"🔌 ")+n);render();});}
+  function aktRecht(a,art,typ){a[art]=[...(a[art]||[]),typ];KOM.port=null;gTitel("👤 "+a.name+(art==="darf"?" darf ":" hört ")+typ);render();}
+  function aktRechtWeg(a,art,typ){a[art]=ohneX(a[art],typ);gTitel("👤 "+a.name+(art==="darf"?" darf ":" hört ")+typ+" nicht mehr");render();}
+  function aktVerkoerpert(c,name){c.verkoerpert=[...(c.verkoerpert||[]),name];KOM.port=null;gTitel("🔌 "+clientAnzeige(c)+" verkörpert "+name);render();}
+  const AKT_SYM={aggregate:"▣",graph:"⬡",uebersetzung:"↦",reader:"⌕",projektion:"⇶",quelle:"⚡",akteur:"👤"};
+  const aktGegenueberText=g=>(AKT_SYM[g.art]||"")+" "+g.name;
+  // Ein Gegenüber in einer Spalte am Rand (nur Anzeige): je Typ, der zu ihm geht bzw. von ihm kommt, ein Port.
+  function aktGegenueber(I,s,b,g,typ){const x="ag:"+s+":"+b+":"+g.id;
+    if(!I.glieder.has(x)){I.glieder.set(x,s);I.band.set(x,b);I.knoten.set(x,{id:x,kind:"gegenueber",name:g.name,g,typen:[]});}
+    const n=I.knoten.get(x);if(!n.typen.includes(typ))n.typen.push(typ);return x;}
+  function aktNachricht(I,x,s,b,typ,extra){const r=recByName(komBasis(typ));I.glieder.set(x,s);I.band.set(x,b);
+    I.knoten.set(x,{id:x,kind:r?r.kind:"command",name:typ,ref:r||{name:typ},rec:true,...extra});}
+  function aktLeer(){return {glieder:new Map(),kanten:[],band:new Map(),knoten:new Map(),baender:[],bandTitel:{}};}
+  // Die gemeinsame Mechanik beider Ansichten: ein Rec zeigt seinen Typ als Port, ein Gegenüber seine Typen; Kanten laufen über den Typ.
+  function aktPortsBasis(n,ein,aus){if(n.kind==="gegenueber")(n.seite==="ziel"?ein:aus).push(...n.typen.map(t=>({key:t,label:t,sorte:komSorte(t)})));}
+  const aktKantenPorts=(I,a,b)=>{const na=I.knoten.get(a),nb=I.knoten.get(b);if(!na||!nb)return null;
+    if(na.kind==="reaktion"||nb.kind==="reaktion"){const t=(na.rec?na:nb).name;return [t,t];}
+    const t=(na.rec?na:nb).name;return [t,t];};
+  const AKT_ANSICHT={fuehrt:()=>"links",sortierung:()=>"alphabet",B:"rechts",setze:()=>{}};
+
+  // ── Ein Akteur von innen ──
+  function aktAkteurZeige(de,a){const S=(AKT().akteure||{})["akt:"+a._id]||{},I=aktLeer();
+    const zielVon=new Map((S.darf||[]).map(d=>[d.typ,d.ziele||[]])),herVon=new Map((S.hoert||[]).map(d=>[d.typ,d.herkunft||[]]));
+    const bandVon=g=>{const b=g?"g:"+g.id:"g:";if(!I.baender.includes(b)){I.baender.push(b);I.bandTitel[b]=g?aktGegenueberText(g):"noch ohne Gegenüber";}return b;};
+    (a.hoert||[]).forEach(t=>{const hs=herVon.get(t)||[],b=bandVon(hs[0]||null),x="ah:"+t;aktNachricht(I,x,1,b,t,{seite:"hoert",wer:hs});
+      hs.forEach(g=>{const gx=aktGegenueber(I,0,b,g,t);I.knoten.get(gx).seite="herkunft";I.kanten.push([gx,x]);});});
+    (a.darf||[]).forEach(t=>{const zs=zielVon.get(t)||[],b=bandVon(zs[0]||null),x="ad:"+t;aktNachricht(I,x,2,b,t,{seite:"darf",wer:zs});
+      zs.forEach(g=>{const gx=aktGegenueber(I,3,b,g,t);I.knoten.get(gx).seite="ziel";I.kanten.push([x,gx]);});});
+    // Bänder nach Gegenüber (A–Z), „noch ohne Gegenüber“ zuletzt; ohne alles ein leeres Band für die gestrichelten Vorschläge.
+    I.baender.sort((x,y)=>(x==="g:")-(y==="g:")||String(I.bandTitel[x]).localeCompare(String(I.bandTitel[y]),"de"));
+    if(!I.baender.length){I.baender.push("g:");I.bandTitel["g:"]="noch nichts — ＋ im Spaltenkopf „hört“ bzw. „darf“";}
+    const kn=x=>I.knoten.get(x)||null,K=S.kandidaten||{darf:[],hoert:[]};
+    const wahl=art=>innenPortWahl({art,rec:"kopf:"+art},"kopf:"+art);
+    innenZeige(de,"akteure:a:"+a.name,{I,knoten:kn,
+      kopfExtra:()=>aktKopfAkteur(a,S),links:()=>aktLinksEl(a),band:x=>I.band.get(x)||"",
+      fest:()=>true,
+      ports:(n,x)=>{const ein=[],aus=[];aktPortsBasis(n,ein,aus);
+        if(n.seite==="hoert")ein.push({key:n.name,label:n.name,sorte:komSorte(n.name),loese:()=>aktRechtWeg(a,"hoert",n.name)});
+        if(n.seite==="darf")aus.push({key:n.name,label:n.name,sorte:komSorte(n.name),loese:()=>aktRechtWeg(a,"darf",n.name)});
+        return {ein,aus};},
+      kantenPorts:(x,y)=>aktKantenPorts(I,x,y),auswahl:()=>new Set(),anschliessen:()=>{},
+      geister:p=>{if(!p||(p.art!=="darf"&&p.art!=="hoert"))return [];const spalte=p.art==="darf"?2:1,b=I.baender[0],l=K[p.art]||[],g=[];
+        if(!l.length)g.push({spalte,band:b,t:"nichts mehr frei",u:"Neue Nachrichten entstehen im Aggregat bzw. im Katalog",fn:()=>{KOM.port=null;komZeige();}});
+        l.slice(0,24).forEach(t=>g.push({spalte,band:b,t:(FL_SORTE[komSorte(t)]||"")+t,u:"Klick: "+a.name+(p.art==="darf"?" darf es":" hört es"),fn:()=>aktRecht(a,p.art,t)}));
+        if(l.length>24)g.push({spalte,band:b,t:"… "+(l.length-24)+" weitere",u:"Klick: alle zeigen",
+          fn:e=>menueFix(e.clientX,e.clientY,a.name+(p.art==="darf"?" darf …":" hört …"),l.slice(24).map(t=>({t,fn:()=>aktRecht(a,p.art,t)})))});
+        return g;},
+      plus:(p,x)=>innenPortWahl(p,x),
+      kurz:n=>{const box=h("div",{class:"ag-kurz"});
+        if(n.seite==="hoert")box.append(n.wer.length?"von "+n.wer.map(aktGegenueberText).join(", "):"noch von niemandem erzeugt");
+        else if(n.seite==="darf")box.append(n.wer.length?"an "+n.wer.map(aktGegenueberText).join(", "):"noch kein Empfänger");
+        else if(n.kind==="gegenueber")box.append((NODELABEL[n.g.art==="aggregate"?"aggregate":n.g.art]||n.g.art||"")+(n.seite==="ziel"?" · nimmt es":" · erzeugt es"));
+        return box;},
+      bearbeiten:()=>h("div"),
+      zeit:()=>0,name:x=>(kn(x)||{}).name||"",ein:()=>0,
+      koepfe:()=>[["Herkunft",null,"woher es kommt"],["hört",()=>wahl("hoert"),"＋"],["darf",()=>wahl("darf"),"＋"],["Ziel",null,"wohin es geht"]],
+      legen:{spalten:[0,1,2,3],baender:I.baender,bandTitel:I.bandTitel,alleTitel:true,y0:104,frei:[],folgen:[]},
+      ansicht:AKT_ANSICHT});}
+  function aktKopfAkteur(a,S){const cs=MODEL.clients.filter(c=>(c.verkoerpert||[]).includes(a.name));
+    const plan={was:"Akteur "+a.name,folgen:cs.map(c=>"🔌 "+clientAnzeige(c)+" verkörpert ihn nicht mehr"),
+      tu:()=>{MODEL.akteure.splice(MODEL.akteure.indexOf(a),1);cs.forEach(c=>{c.verkoerpert=ohneX(c.verkoerpert,a.name);});KOM.aktId=null;}};
+    return h("span",{class:"kat-band"},h("b",{title:(a.namespace||"")+(a.doku?"\n"+a.doku:"")},"👤 "+a.name),
+      h("span",{class:"kat-band-wo"},cs.length?"verkörpert von ":"noch von keinem Client verkörpert",
+        ...cs.map(c=>h("button",{class:"kat-link",title:"Den Client zeigen",onclick:ev=>{ev.stopPropagation();aktWaehle("c",c.name);}},"🔌 "+clientAnzeige(c)))),
+      loeschKnopf(plan,"akteur:"+a._id));}
+
+  // ── Ein Client von innen ──
+  function aktClientZeige(de,c){const S=(AKT().clients||{})["cl:"+c._id]||{reaktionen:[],implementierungen:[]},I=aktLeer();
+    const teile=rumpfTeile({kind:"client",ref:c})||[];
+    (c.verkoerpert||[]).forEach(an=>{const b="a:"+an,A=MODEL.akteure.find(x=>x.name===an),SA=A?(AKT().akteure||{})["akt:"+A._id]||{}:{};I.baender.push(b);I.bandTitel[b]=aktBandKopfClient(c,an,A);
+      if(!A)return;
+      const zielVon=new Map((SA.darf||[]).map(d=>[d.typ,d.ziele||[]]));
+      (A.hoert||[]).forEach(t=>{const x="ch:"+an+":"+t;aktNachricht(I,x,0,b,t,{seite:"chort",akteur:an});
+        (S.reaktionen||[]).filter(r=>r.akteur===an&&r.event===t).forEach(r=>{const rx="cr:"+r.impl+":"+r.teil;I.glieder.set(rx,1);I.band.set(rx,b);
+          const ti=teile.findIndex(q=>q.python&&q.python.klasse===r.klasse&&q.event===r.event);
+          I.knoten.set(rx,{id:rx,kind:"reaktion",name:r.methode,r,teil:ti>=0?teile[ti]:null,ti,akteur:an});I.kanten.push([x,rx]);});});
+      (A.darf||[]).forEach(t=>{const zs=zielVon.get(t)||[],x="cs:"+an+":"+t;aktNachricht(I,x,2,b,t,{seite:"csend",wer:zs});
+        zs.forEach(g=>{const gx=aktGegenueber(I,3,b,g,t);I.knoten.get(gx).seite="ziel";I.kanten.push([x,gx]);});});});
+    if(!I.baender.length){I.baender.push("a:");I.bandTitel["a:"]="verkörpert noch niemanden — „＋ verkörpert“ oben";}
+    const kn=x=>I.knoten.get(x)||null,impls=S.implementierungen||[];
+    innenZeige(de,"akteure:c:"+c.name,{I,knoten:kn,
+      kopfExtra:()=>aktKopfClient(c,impls),links:()=>aktLinksEl(c),band:x=>I.band.get(x)||"",
+      fest:x=>(kn(x)||{}).kind!=="reaktion",
+      marke:x=>{const n=kn(x);return n&&n.kind==="reaktion"?h("span",{class:"kom-mark s-stand-"+n.r.stand,title:"Stand des Rumpfs"},n.r.stand):null;},
+      ports:(n,x)=>{const ein=[],aus=[];aktPortsBasis(n,ein,aus);
+        if(n.seite==="chort")ein.push({key:n.name,label:n.name,sorte:komSorte(n.name)});
+        if(n.seite==="csend")aus.push({key:n.name,label:n.name,sorte:komSorte(n.name)});
+        if(n.kind==="reaktion"){ein.push({key:n.r.event,label:n.r.event,sorte:komSorte(n.r.event)});
+          aus.push({key:"aus",label:"gibt aus, was "+n.akteur+" darf",sorte:"command"});}
+        return {ein,aus};},
+      kantenPorts:(x,y)=>aktKantenPorts(I,x,y),auswahl:()=>new Set(),anschliessen:()=>{},geister:()=>[],plus:(p,x)=>innenPortWahl(p,x),
+      kurz:n=>{const box=h("div",{class:"ag-kurz"});
+        if(n.kind==="reaktion")box.append(n.r.klasse+"."+n.r.methode);
+        else if(n.seite==="chort")box.append((S.reaktionen||[]).some(r=>r.event===n.name)?"hört "+n.akteur:"hört "+n.akteur+(impls.length?"":" · noch ohne Implementierung"));
+        else if(n.seite==="csend")box.append(n.wer.length?"an "+n.wer.map(aktGegenueberText).join(", "):"noch kein Empfänger");
+        else if(n.kind==="gegenueber")box.append(NODELABEL[n.g.art]||n.g.art||"");
+        return box;},
+      bearbeiten:n=>{const box=h("div",{class:"ag-edit"});["click","dblclick"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
+        if(n.teil){const rb=h("div",{class:"kat-rumpf rumpfport"});rumpfWerkzeug(rb,n.teil,"cl:"+c._id,n.ti,true);box.append(rb);}
+        else box.append(h("div",{class:"kom-wo"},"Der Rumpf steht nach dem nächsten ⟳ hier."));
+        return box;},
+      zeit:()=>0,name:x=>(kn(x)||{}).name||"",ein:()=>0,
+      koepfe:()=>[["hört",null,"was seine Akteure hören"],["Reaktion",null,"je Fakt eine Methode"],["sendet",null,"was sie dürfen"],["Ziel",null,"wohin es geht"]],
+      legen:{spalten:[0,1,2,3],baender:I.baender,bandTitel:I.bandTitel,alleTitel:true,y0:104,frei:[],folgen:[]},
+      ansicht:AKT_ANSICHT});}
+  // Kopf eines Bandes im Client: der Akteur (Klick zeigt ihn), ✕ = nicht mehr verkörpern.
+  function aktBandKopfClient(c,an,A){return h("span",{class:"kat-band"},
+    h("button",{class:"kat-link",title:A?"Den Akteur zeigen":"Kein Akteur dieses Namens",onclick:ev=>{ev.stopPropagation();if(A)aktWaehle("a",an);}},"👤 als "+an+(A?"":" · ⚠ kein Akteur")),
+    h("button",{class:"kat-chip-x",title:"Nicht mehr verkörpern (IVerkoerpert<"+an+"> entfällt)",onclick:ev=>{ev.stopPropagation();
+      c.verkoerpert=ohneX(c.verkoerpert,an);gTitel("🔌 "+clientAnzeige(c)+" verkörpert "+an+" nicht mehr");render();}},"✕"));}
+  // Kopf des Clients: Name, „＋ verkörpert“ (links leuchten die Akteure), die Implementierung (Python) bzw. ihr Anlegen, ✕ löscht ihn.
+  function aktKopfClient(c,impls){const id="cl:"+c._id,an=KOM.port&&KOM.port.art==="verkoerpert";
+    const plan={was:"Client "+clientAnzeige(c),folgen:[],tu:()=>{MODEL.clients.splice(MODEL.clients.indexOf(c),1);AUF=null;KOM.aktId=null;}};
+    const pk=(MODEL.rahmen||{}).pythonPaket,neu=(c.implementierungen||[]).filter(im=>im.neu);
+    return h("span",{class:"kat-band"},h("b",{title:(c.namespace||"")+(c.doku?"\n"+c.doku:"")},"🔌 "+clientAnzeige(c)),
+      h("button",{class:"kat-chip plus"+(an?" an":""),title:"Einen Akteur verkörpern (IVerkoerpert<A>): links leuchten die Akteure, die passen — ein Klick verbindet",
+        onclick:ev=>{ev.stopPropagation();KOM.port=an?null:{art:"verkoerpert",client:id,rec:"verkoerpert"};komZeige();}},an?"Akteur links wählen … (Esc)":"＋ verkörpert"),
+      ...impls.map(im=>h("span",{class:"kat-chip",title:im.datei},"🐍 "+im.klasse)),
+      ...neu.map(im=>h("span",{class:"kat-chip",title:im.datei+" — entsteht beim nächsten ⟳"},"🐍 "+im.klasse+" (neu)")),
+      !impls.length&&!neu.length&&pk?h("button",{class:"kat-chip plus",title:"Eine Python-Klasse in "+pk+", die die generierte Basis erbt — je gehörtem Fakt eine Methode (Reaktion), danach ✎/🤖",
+        onclick:ev=>{ev.stopPropagation();const kl=clientAnzeige(c)||"Client";(c.implementierungen=c.implementierungen||[]).push({sprache:"python",klasse:kl,
+          datei:pk+"/"+kl.replace(/(?<=[a-z0-9])([A-Z])|(?<=[A-Z])([A-Z][a-z])/g,"_$1$2").toLowerCase()+".py",rumpfe:[],neu:true});gTitel("🐍 "+kl);render();}},"＋ 🐍 Implementierung"):null,
+      loeschKnopf(plan,"client:"+c._id));}
+
   // ══ ÜBERSETZUNG (docs/04 §4.4): eine Karte in der Spalte Übersetzungen, eine Klasse der Anwendung (ITranslate<TSource, TTarget>); ihre
   //   Feldzuordnung öffnet ein Modal (Pfad = ihre Karten-Id „ue:uebersetzung:Name“), links die Felder von TEin, rechts die Parameter von TAus.
   function ueOeffne(fk){const id=fk.karte;if(KOM)KOM.pfad.push(id);else KOM={pfad:[id],reiter:"komposition",wahl:null};KOM.port=null;KOM.feld=null;komZeige();}
@@ -2326,30 +2384,22 @@
     de.append(m);}
   function ueEntfernen(karte){const u=ueVon(karte);if(!u)return;MODEL.uebersetzungen=(MODEL.uebersetzungen||[]).filter(x=>x!==u);gTitel("✕ ↦ "+u.name);render();}
   function komSchliesse(){KOM=null;const m=document.querySelector("#de .kom");if(m)m.remove();}
-  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&KOM){e.stopImmediatePropagation();if(KOM.port||KOM.feld){KOM.port=null;KOM.feld=null;komZeige();}else komSchliesse();}},true);
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&KOM){e.stopImmediatePropagation();if(KOM.port||KOM.feld||KOM.katWahl){KOM.port=null;KOM.feld=null;KOM.katWahl=null;komZeige();}else komSchliesse();}},true);
   // Woher ein Kopf kommt und wohin ein Ausgang geht: die Kanten der obersten Graph-Karte auf der Fläche.
   function komOben(grId){let id=grId;for(let i=0;i<8;i++){if(FLKARTE.has(id))return id;const d=komDaten(id);if(!d||!d.eltern.length)return null;id=d.eltern[0];}return null;}
   const komName=id=>(FLKARTE.get(id)||{name:id}).name;
   function komZiele(grId,typ){const o=komOben(grId);return o?[...new Set(FL().kanten.filter(k=>k.von===o&&k.typ===typ).map(k=>komName(k.nach)))]:[];}
   function komHerkunft(grId,typ){const o=komOben(grId);return o?[...new Set(FL().kanten.filter(k=>k.nach===o&&k.typ===typ).map(k=>komName(k.von)))]:[];}
-  const komInstanzen=name=>Object.keys(WB.instanzen||{}).filter(i=>((WB.instanzen[i]||{}).Graph||"")===name).sort();
   function komWaehle(w){KOM.wahl=w;komZeige();}
   // Einen Knoten öffnen: ein Graph eine Ebene tiefer, eine Funktion ihr Formular (Signatur, Konstruktor, Rümpfe).
   function komKnotenOeffnen(k){if(k.art==="uebersetzung"){deFlash("ℹ "+k.name+" übersetzt "+k.typ.replace(/^ITranslate</,"").replace(/>$/,"").replace(", "," ↦ ")+" — die Zuordnung steht auf der Karte",true);return;}
-    if(k.art==="graph"&&k.karte){KOM.pfad.push(k.karte);KOM.wahl=null;komZeige();}
+    if(k.art==="graph"&&k.karte){if(katGraphWaehlen(k.karte))komZeige();}
     else if(k.karte)komKarte(k.karte,true);else deFlash("ℹ "+k.typ+" ist eine Katalogfunktion des Frameworks — ihre Werte stehen in der Instanz",true);}
   function komKnotenMenue(id,k,e){menueFix(e.clientX,e.clientY,k.name+" : "+k.typ,[
     k.art==="graph"&&k.karte?{t:"⬡ eine Ebene tiefer",fn:()=>komKnotenOeffnen(k)}:k.karte?{t:"✎ bearbeiten",fn:()=>komKnotenOeffnen(k)}:null,
     {t:"✕ aus dem Graphen (die Funktion bleibt)",gefahr:1,fn:()=>komKnotenEntfernen(id,k.name)}]);}
-  // Ein Baustein öffnen: sein Formular bzw. ein Graph seine Komposition; der Katalog gehört dem Framework.
-  function komBausteinOeffnen(gr,x){
-    if(gr==="graphen"){komKarte(x.karte,true);return;}
-    if(gr==="funktionen"){komKarte(x.karte,true);return;}
-    if(gr==="technik"){komKarte(x.karte,true,true);return;}
-    if(gr==="konfig"||gr==="nachrichten"){komKarte("rec:"+(x.name||x.typ),true,true);return;}
-    deFlash("ℹ "+x.name+" (Katalog) meldet "+(x.meldet||[]).join(", ")+" — ziehen Sie sie auf die Leinwand",true);}
   // Brotkrumen über alle Ansichten des Pfads: Graph, Aggregat, Store, Formular einer Karte.
-  function komKrumenText(g){if(g.startsWith("ue:"))return "↦ "+((ueVon(g)||{}).name||g);if(g.startsWith("kat:"))return "📚 "+(g.slice(4).replace(/\.Katalog$/,"")||"Kataloge");if(g.startsWith("form:")){const n=NODEBY.get(g.slice(5));return "✎ "+(n?(NODELABEL[n.kind]||n.kind)+" "+(n.name||""):g.slice(5));}
+  function komKrumenText(g){if(g.startsWith("akteure:"))return "👤 Akteure und Clients";if(g.startsWith("ue:"))return "↦ "+((ueVon(g)||{}).name||g);if(g.startsWith("kat:"))return "📚 "+(g.slice(4).replace(/\.Katalog$/,"")||"Kataloge");if(g.startsWith("form:")){const n=NODEBY.get(g.slice(5));return "✎ "+(n?(NODELABEL[n.kind]||n.kind)+" "+(n.name||""):g.slice(5));}
     if(g.startsWith("gr:"))return "⬡ "+((komDaten(g)||{}).name||g);const n=NODEBY.get(g);
     if(g.startsWith("fb:"))return "ƒ "+(n?n.name:g);return (g.startsWith("agg:")?"▣ ":"🗄 ")+(n?n.name:g);}
   function komKrumen(){return h("div",{class:"kom-krumen"},...KOM.pfad.flatMap((g,i)=>{const b=h("button",{class:"kom-krume"+(i===KOM.pfad.length-1?" an":""),
@@ -2374,28 +2424,15 @@
     const scroll=m&&m.querySelector(".kom-panel")?m.querySelector(".kom-panel").scrollTop:0,alt=m&&m.querySelector(".kom-lw");
     const lauf=alt?{id:m.dataset.ansicht,x:alt.scrollLeft,y:alt.scrollTop}:null;if(m)m.remove();if(!KOM)return;
     let id=KOM.pfad[KOM.pfad.length-1];
-    if(id.startsWith("form:"))formZeige(de,id.slice(5));else if(id.startsWith("ue:"))ueZeige(de,id);else if(id.startsWith("kat:"))katZeige(de,id.slice(4));else if(id.startsWith("fb:"))funZeige(de,id);else if(!id.startsWith("gr:"))blockZeige(de,id);else grZeige(de,id);
+    if(id.startsWith("form:"))formZeige(de,id.slice(5));else if(id.startsWith("ue:"))ueZeige(de,id);else if(id.startsWith("kat:"))katZeige(de,id.slice(4));else if(id.startsWith("akteure:"))aktZeige(de,id.slice(8));else blockZeige(de,id);
     const neu=de.querySelector(".kom .kom-panel");if(neu&&scroll)neu.scrollTop=scroll;komZoomAnwenden();
-    const km=de.querySelector(".kom");if(km)km.dataset.ansicht=id;
-    const lw=km&&km.querySelector(".kom-lw");if(lw&&lauf&&lauf.id===id){lw.scrollLeft=lauf.x;lw.scrollTop=lauf.y;}}
+    // Der Bildlauf der Leinwand bleibt, solange es dieselbe Ansicht ist (im Katalog-Modal: derselbe Graph).
+    const km=de.querySelector(".kom"),schl=KOM&&KOM.pfad.length?KOM.pfad[KOM.pfad.length-1]+"|"+(KOM.katGr||""):"";if(km)km.dataset.ansicht=schl;
+    const lw=km&&km.querySelector(".kom-lw");if(lw&&lauf&&lauf.id===schl){lw.scrollLeft=lauf.x;lw.scrollTop=lauf.y;}}
   function komRahmen(unter){const m=h("div",{class:"kom"});
     ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     m.append(h("div",{class:"kom-kopf"},komKrumen(),h("div",{class:"kom-u"},unter),
       h("div",{class:"kom-reiter"},komZoomLeiste(),h("button",{class:"kom-x",title:"Schließen (Esc)",onclick:komSchliesse},"✕"))));return m;}
-  function grZeige(de,id){const d=komFlach(id);if(!d){KOM=null;return;}
-    const m=h("div",{class:"kom"});
-    ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
-    const krumen=komKrumen();
-    const inst=komInstanzen(d.name),katGraph=!!funKatalog(komModell(id)||{});if(katGraph&&KOM.reiter==="instanzen")KOM.reiter="komposition";
-    m.append(h("div",{class:"kom-kopf"},krumen,
-      h("div",{class:"kom-u"},"Kopf nimmt "+(d.koepfe.map(k=>k.typ).join(", ")||"nichts von außen (Quelle)")+" · verlässt ihn: "+(d.ausgaenge.map(a=>a.typ).join(", ")||"nichts")),
-      h("div",{class:"kom-reiter"},komZoomLeiste(),...[["komposition","Komposition"],...(katGraph?[]:[["instanzen","Instanzen ("+inst.length+")"]])].map(([k,t])=>
-        h("button",{class:KOM.reiter===k?"on":"",onclick:()=>{KOM.reiter=k;komZeige();}},t)),
-        h("button",{class:"kom-x",title:"Schließen (Esc)",onclick:komSchliesse},"✕"))));
-    if(KOM.reiter==="instanzen"){m.append(komInstanzenAnsicht(d,inst));de.append(m);return;}
-    const lw=komLeinwand(id,d);
-    m.append(h("div",{class:"kom-leib"},komBaukastenEl(id,d),lw));de.append(m);komLege(lw,id,d);}
-
   // ── Leinwand: Knoten wie auf der Fläche (Kopf + Ports), Technik und Konfig als Chips; Ränder für Köpfe und Ausgänge ──
   //   (docs/10 §10.9) Die Ports eines Funktionsknotens stehen je Auf: sein Eingang, darunter seine Ausgänge mit
   //   Vielfachheit (1 · 0..1 · 0..n). „＋“ an einem Eingang hebt die Knoten hervor, die den Typ ausgeben (dazu „von außen“ = [Kopf]), „＋“ an einem
@@ -2405,11 +2442,10 @@
       h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(FL_SORTE[sorte]||"")+(anzeige||typ)));r.dataset.port=ri+"|"+typ;return r;}
   const komTypKlick=t=>()=>{if(NODEBY.has("rec:"+komBasis(t)))komKarte("rec:"+komBasis(t),true,true);};
   // Kann Knoten m an den Eingang t von Ziel z anschließen ([Von])? Gleicher Typ, eine generische Ausgabe mit dem Typargument von m.
-  function komPasst(m,z,t){if(m.name===z.name||(m.graph||"")!==(z.graph||"")||(z.von||[]).some(v=>v.knoten===(m.lokal||m.name)))return null;
-    const args=x=>{const i=String(x).indexOf("<");return i>0&&String(x).endsWith(">")?String(x).slice(i+1,-1):"";};
-    return m.aus.find(a=>a===t||(komBasis(a)===komBasis(t)&&args(a)&&args(t)===args(m.typ)))||null;}
-  // Nimmt Knoten z, was Knoten q als t ausgibt? (der Eingang von z, an dem es ankäme)
-  const komNimmt=(q,z,t)=>z.ein.find(e=>komPasst(q,z,e)===t)||null;
+  // Was im Graphen aneinander passt, nennt der Server (sicht.komposition[…].flach.passt: von → nach, Eingang ein, Ausgang aus).
+  //   komPasst: der Ausgang von m, der den Eingang t von z speist; komNimmt: der Eingang von z, den der Ausgang t von q speist.
+  const komPasst=(d,m,z,t)=>((d.passt||[]).find(p=>p.von===m.name&&p.nach===z.name&&p.ein===t)||{}).aus||null;
+  const komNimmt=(d,q,z,t)=>((d.passt||[]).find(p=>p.von===q.name&&p.nach===z.name&&p.aus===t)||{}).ein||null;
   const komIstAntwort=t=>(recByName(komBasis(t))||{}).kind==="event";
   // Die Ports eines Knotens je Auf: [{ein, aus:[{typ, mult}]}] — bei einer Funktion aus ihrer Signatur (Typen wie im Knoten, auch generisch), sonst flach.
   function komGruppen(k){if(k.art==="uebersetzung")return [{ein:k.ein[0],aus:k.aus.map(t=>({typ:t,mult:"1"}))}];
@@ -2422,7 +2458,7 @@
   function komKnotenEl(id,k){
     const gewaehlt=KOM.wahl&&KOM.wahl.art==="knoten"&&KOM.wahl.name===k.name,P=KOM.port;
     const d=komFlach(id),bezug=P&&d?d.knoten.find(x=>x.name===P.knoten):null,O=komOrt(id,k),B=komOrt(id,bezug);
-    const passt=!bezug?null:P.art==="von"?komPasst(k,bezug,P.typ):komNimmt(bezug,k,P.typ);
+    const passt=!bezug?null:P.art==="von"?komPasst(d,k,bezug,P.typ):komNimmt(d,bezug,k,P.typ);
     const el=h("div",{class:"gnode2 fk kom-k n-"+(k.art==="graph"?"graph":k.art==="uebersetzung"?"uebersetzung":k.art==="katalog"||k.quelle?"funktion":"bausteinfunktion")+(gewaehlt?" sel":"")+(passt?" kand":"")+(P&&!passt&&k.name!==P.knoten?" leise":""),
       title:passt?(P.art==="von"?"Klick: "+P.knoten+" bekommt von "+k.name+" ("+passt+")":"Klick: "+k.name+" bekommt "+P.typ+" von "+P.knoten)
         :"Klick: Kanten hervorheben · Doppelklick: "+(k.art==="graph"?"eine Ebene tiefer":k.karte?"von innen":"—")+" · Rechtsklick: Menü",
@@ -2524,11 +2560,11 @@
     if(gk)return [{katalog:gk}];
     return (bk.kataloge||[]).filter(k=>!r||rk===k).map(k=>({katalog:k}));}
   function komFunktionNeu(id,art,q,typ,ev){const g=komModell(id);if(!g)return;KOM.port=null;
-    const anlegen=ort=>{const stamm=komBasis(typ).replace(/(Gefunden|Erstellt|Eingelesen|Verkleinert)$/,"");
-      const weiter=bereich=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion "+art+" "+q.name,art==="dahinter"?"Verarbeite"+komBasis(typ):komBasis(typ)+"Bildung",
+    const anlegen=ort=>{
+      const weiter=()=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion "+art+" "+q.name,art==="dahinter"?"Verarbeite"+komBasis(typ):komBasis(typ)+"Bildung",
         art==="dahinter"?"Nimmt "+typ+"; Ausgänge danach im Modal":"Gibt "+typ+" aus; nimmt eine neue Nachricht von außen",n=>{
         const fe=nameFehler(n);if(fe&&!/gibt es schon/.test(fe))return fe;if(MODEL.bausteinFunktionen.some(x=>x.name===n))return n+" gibt es schon";
-        const ns=ort.katalog+"."+bereich;
+        const ns=ort.katalog;
         const f={_id:"funktion:"+n,name:n,namespace:ns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
         if(art==="dahinter")f.eingaenge.push({eingang:typ,ausgaben:[]});
         else{const auftrag=uniq(n+"Auftrag");funRecordNeu(f,auftrag,"command");f.eingaenge.push({eingang:auftrag,ausgaben:[typ]});}
@@ -2540,9 +2576,7 @@
         gTitel(g.name+": ƒ "+n+" "+art+" "+q.name);render();
         if(ort.katalog&&ort.katalog===funKatalog(g))setTimeout(()=>katOeffne(ort.katalog,n),0);
         else if(art==="dahinter")setTimeout(()=>komKarte("fb:"+f._id,true),0);});
-      if(ort.katalog===funKatalog(g)&&katBereich(g,ort.katalog)){weiter(katBereich(g,ort.katalog));return;}
-      frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+ort.katalog+" — Bereich","Allgemein","Der Ordner im Katalog",b=>{
-        if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";setTimeout(()=>weiter(b),0);});};
+      weiter();};
     const orte=komOrte(g,typ);
     if(!orte.length){deFlash("ℹ "+komBasis(typ)+" gehört einer Domäne — eine Funktion liegt im Katalog und nimmt nur seine Nachrichten; erst übersetzen (↦)",true);return;}
     if(orte.length===1){anlegen(orte[0]);return;}
@@ -2608,7 +2642,7 @@
     // Je Teilgraph ein Rahmen um seine Knoten — alles liegt auf einer Ebene, der Rahmen zeigt, woher sie kommen (Doppelklick: der Teilgraph für sich).
     (d.rahmen||[]).forEach(r=>{const els=d.knoten.filter(k=>k.rahmen===r.pfad||String(k.rahmen||"").startsWith(r.pfad+".")).map(k=>el(k.name)).filter(Boolean);if(!els.length)return;
       const x1=Math.min(...els.map(e=>e.offsetLeft))-14,y1=Math.min(...els.map(e=>e.offsetTop))-30,x2=Math.max(...els.map(e=>e.offsetLeft+e.offsetWidth))+14,y2=Math.max(...els.map(e=>e.offsetTop+e.offsetHeight))+14;
-      const fr=h("div",{class:"kom-rahmen",title:"Teilgraph "+r.graph+" — Doppelklick: für sich öffnen",ondblclick:e=>{e.stopPropagation();KOM.pfad.push(r.karte);KOM.wahl=null;KOM.port=null;komZeige();}},
+      const fr=h("div",{class:"kom-rahmen",title:"Teilgraph "+r.graph+" — Doppelklick: für sich öffnen",ondblclick:e=>{e.stopPropagation();if(katGraphWaehlen(r.karte))komZeige();}},
         h("span",{class:"kom-rahmen-t"},"⬡ "+r.name+" : "+r.graph));
       Object.assign(fr.style,{left:x1+"px",top:y1+"px",width:(x2-x1)+"px",height:(y2-y1)+"px"});welt.prepend(fr);});
     d.ausgaenge.forEach(a=>a.knoten.forEach(n=>{const k=d.knoten.find(x=>x.name===n)||{aus:[]};
@@ -2644,52 +2678,10 @@
     else if(knoten.length>1)items.push({hinweis:b+" steht noch in "+(knoten.length-1)+" anderem Knoten — die Funktion bleibt."});
     menueFix(ev.clientX,ev.clientY,"✕ "+k.name,items);}
 
-  // ── Baukasten: woraus man komponiert — „hier“ markiert, was dieser Graph schon nutzt; „＋“ setzt einen Baustein als Knoten ein ──
-  function komBaukastenEl(id,d){const bk=komBaukasten(),box=h("div",{class:"kom-bk"},h("div",{class:"kom-t"},"Baukasten"),
-      h("div",{class:"kom-u"},"Klick: öffnen · ＋: als Knoten einsetzen"));
-    const hierFb=new Set(d.knoten.map(k=>k.karte).filter(Boolean)),hierTyp=new Set(d.kanten.map(k=>komBasis(k.typ)).concat(d.ausgaenge.map(a=>komBasis(a.typ))));
-    const g=komModell(id);
-    const einsetzen=(gr,x,e)=>{if(!g)return;const name=x.name||x.typ;
-      if((x.typargumente||[]).length){menueFix(e.clientX,e.clientY,name+"‹…› — mit welchem Typargument?",x.typargumente.map(t=>({t:name+"<"+t+">",fn:()=>neuerGraphKnoten(g,name+"<"+t+">")})));return;}
-      const fk=funKatalog(MODEL.bausteinFunktionen.find(f=>f.name===name)||(MODEL.graphen||[]).find(y=>y.name===name)||{}),gid=id;
-      if(funKatalog(g)&&fk&&fk!==funKatalog(g)){katMitReferenz(funKatalog(g),fk,()=>{const gg=komModell(gid);if(gg)neuerGraphKnoten(gg,name);});return;}
-      neuerGraphKnoten(g,name);};
-    const gruppe=(titel,liste,name,hier,sym,gr,einsetzbar)=>{box.append(h("div",{class:"kom-sec"},titel));
-      if(!liste.length){box.append(h("div",{class:"kom-wo"},"—"));return;}
-      liste.forEach(x=>{const w=KOM.wahl&&KOM.wahl.art==="baustein"&&KOM.wahl.gruppe===gr&&KOM.wahl.name===name(x);
-        const b=h("button",{class:"kom-b"+(w?" on":"")+(hier(x)?" hier":""),title:"Klick: öffnen",
-          onclick:()=>komBausteinOeffnen(gr,x)},sym+" "+name(x),hier(x)?h("span",{class:"kom-hier"}," · hier"):null);
-        box.append(einsetzbar&&g?h("div",{class:"kom-bz"},b,h("button",{class:"ag-plus",title:"Als Knoten in "+g.name+" einsetzen",onclick:e=>{e.stopPropagation();einsetzen(gr,x,e);}},"＋")):b);});};
-    box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Einen Funktionskatalog anlegen: ein eigenes Projekt <Name>.Katalog, domänenneutral",
-      onclick:e=>katalogNeu(e)},"＋ 📚 Katalog"),h("button",{class:"kom-akt",title:"Die Kataloge: Funktionen mit Input und Outputs, Command-Listen",onclick:()=>katOeffne(null,null)},"📚 Kataloge")));
-    const fname=x=>x.name+((x.typargumente||[]).length?"‹…›":"");
-    const gk=g&&funKatalog(g);
-    if(!gk)gruppe("Funktionen der Anwendung",bk.funktionen.filter(x=>!x.katalog),fname,x=>hierFb.has(x.karte),"ƒ","funktionen",true);
-    (bk.kataloge||[]).forEach(k=>{gruppe("📚 "+k,bk.funktionen.filter(x=>x.katalog===k),fname,x=>hierFb.has(x.karte),"ƒ","funktionen",true);
-      box.append(h("button",{class:"kom-b",title:"Eine neue Funktion in "+k+" (Bereich und Name)",onclick:e=>katalogFunktion(k,e,fb=>komKarte("fb:"+fb._id,true))},"＋ Funktion"));});
-    gruppe("Graphen (schachteln)",bk.graphen.filter(x=>x.karte!==id&&!(d.eltern||[]).includes(x.karte)&&(!gk||funKatalog((MODEL.graphen||[]).find(y=>"gr:"+y._id===x.karte)||{}))),
-      x=>x.name,x=>hierFb.has(x.karte),"⬡","graphen",true);
-    if(!gk)gruppe("Katalog (Quellen)",bk.katalog,x=>x.name,x=>d.knoten.some(k=>komBasis(k.typ)===x.name),"⚡","katalog",!d.koepfe.length&&!d.knoten.some(k=>k.quelle));
-    const imKatalog=o=>!gk||!!funKatalog(o||{});
-    gruppe("Technik",bk.technik.filter(x=>imKatalog(funModell(x.karte))),x=>x.name,x=>d.knoten.some(k=>(k.konstruktor||[]).some(c=>c.karte===x.karte)),"⚙","technik",false);
-    gruppe("Konfig",bk.konfig.filter(x=>imKatalog(recByName(x.name))),x=>x.name,x=>d.knoten.some(k=>(k.konstruktor||[]).some(c=>c.typ===x.name)),"▤","konfig",false);
-    gruppe("Nachrichten im Graphen",bk.nachrichten.filter(x=>imKatalog(recByName(x.typ))),x=>x.typ,x=>hierTyp.has(x.typ),"✦","nachrichten",false);
-    return box;}
-
-  // ── Reiter Instanzen: je graphen/<instanz>.json des Graphen eine Zeile; bearbeitet wird im Panel ──
-  function komInstanzenAnsicht(d,inst){const box=h("div",{class:"kom-inst"});
-    box.append(h("div",{class:"kom-u"},"Instanzen von ⬡ "+d.name+" in der Umgebung „"+(WB.umgName||"?")+"“ (graphen/<instanz>.json)."));
-    if(!inst.length)box.append(h("div",{class:"kom-wo"},d.eltern.length?"Läuft als Teil von "+d.eltern.map(g=>(komDaten(g)||{}).name||g).join(", ")+" — Instanzen dort.":"Noch keine Instanz."));
-    inst.forEach(i=>{const v=(WB.instanzen||{})[i]||{};
-      box.append(h("div",{class:"kom-inst-z"},h("b",{},"⬡ "+i),v.Akteur?" · 👤 "+v.Akteur:"",v.Rechner?" · auf "+v.Rechner:"",
-        h("button",{class:"kom-akt",onclick:()=>komKarte("host:inst:"+i,true,true)},"✎ bearbeiten")));});
-    if(!d.eltern.length)box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",onclick:()=>komKarte("host:inst-neu",true,true)},"＋ Instanz anlegen")));
-    return box;}
   // Eine Karte im Modal: Graph, Aggregat und Store von innen; ein Glied (Decide, Apply, Auf, Store-Funktion, Projektion, Reader, eine Nachricht
   //   des Aggregats) in seinem Block gewählt; alles andere (Akteur, Client, Instanz, Umgebung, Funktion …) als Formular. push: an den Pfad hängen.
   function komAnsicht(id,alsFormular){if(alsFormular)return {pfad:"form:"+id,wahl:null};
-    if(id.startsWith("gr:")||id.startsWith("agg:")||id.startsWith("sto:"))return {pfad:id,wahl:null};
-    if(id.startsWith("fb:")&&funModell(id)&&!istGerufen(funModell(id)))return {pfad:id,wahl:null};
+    if(id.startsWith("agg:")||id.startsWith("sto:"))return {pfad:id,wahl:null};
     const gruppe=x=>{const k=FL().karten.find(f=>f.karte===x&&f.gruppe);return k?k.gruppe:null;};
     if(gruppe(id))return {pfad:gruppe(id),wahl:{art:"glied",id}};
     const bes=SICHT().besitz||{};let o=id;
@@ -2697,7 +2689,12 @@
       if(o.startsWith("agg:")||o.startsWith("sto:"))return {pfad:o,wahl:{art:"glied",id}};
       if(gruppe(o))return {pfad:gruppe(o),wahl:{art:"glied",id}};}
     return {pfad:"form:"+id,wahl:null};}
-  function komKarte(id,push,alsFormular){if(!NODEBY.has(id)&&!komDaten(id))return;const a=komAnsicht(id,alsFormular);
+  function komKarte(id,push,alsFormular){if(!NODEBY.has(id)&&!komDaten(id))return;
+    // Akteure und Clients öffnen sich im Modal „Akteure und Clients“ (ein Ort für beide, kein Formular daneben).
+    if(id.startsWith("akt:")||id.startsWith("cl:")){aktOeffne(id,push&&!!KOM);return;}
+    // Funktionen und Graphen eines Katalogs öffnen sich im Katalog-Modal (ein Modal für alles im Katalog).
+    {const f=!alsFormular&&id.startsWith("fb:")&&funModell(id);if(f&&!istGerufen(f)&&funKatalog(f)){if(!push)KOM=null;katOeffne(funKatalog(f),f.name);return;}}
+    if(!alsFormular&&id.startsWith("gr:")){if(!push)KOM=null;if(katGraphWaehlen(id))komZeige();return;}const a=komAnsicht(id,alsFormular);
     if(push&&KOM)KOM.pfad.push(a.pfad);else KOM={pfad:[a.pfad],reiter:"komposition",wahl:null};KOM.wahl=a.wahl;komZeige();}
   // Das Formular einer Karte im Modal (dasselbe wie früher im Panel neben der Fläche), dazu woher und wohin.
   function formZeige(de,id){const n=NODEBY.get(id);if(!n){KOM.pfad.pop();if(KOM.pfad.length)komZeige();else KOM=null;return;}
@@ -2749,6 +2746,9 @@
       case "umsetzung":return ["Umsetzung",((n.st&&n.st.impl&&n.st.impl.name)||"neu")+"."+n.name];
       case "buendel":return ["⋈ Bündel",n.name];
       case "auf":return ["Auf",r.eingang||n.name];case "lausche":return ["Lausche","Quelle"];
+      case "schnittstelle":return ["⚙",n.name];case "tumsetzung":return ["Umsetzung",n.name];case "faehigkeit":return ["Liest",n.name];
+      case "leer":return ["ƒ "+n.name,"noch ohne Eingang"];
+      case "gegenueber":return [AKT_SYM[n.g.art]||"",n.name];case "reaktion":return ["Reaktion",n.name];
       case "zustand":return ["Zustand",n.name];case "logger":return ["Logger",n.name];case "param":return ["Konstruktor",n.name];
       case "bausteinfunktion":return [istGerufen(r)?"⚙ Technik":"ƒ Funktion",n.name];
       default:return [NODELABEL[n.kind]||n.kind,n.name];}}
@@ -2756,6 +2756,34 @@
     if(id.startsWith("sto:")){stoZeige(de,id,n0.ref);return;}
     const A=MODEL.aggregate.find(a=>"agg:"+a.name===id);if(!A){KOM=null;return;}
     aggZeige(de,id,blockInnen(id),A);}
+  // Eine senkrechte Kante: von unten aus der liefernden Karte (oben) in den Kopf der brauchenden (darunter).
+  function innenKanteV(svgK,A,B,dick,blass){const c=Math.max(24,Math.abs(B.y-A.y)*0.45),p=document.createElementNS(SVGNS,"path");
+    p.setAttribute("d","M"+A.x+","+A.y+" C"+A.x+","+(A.y+c)+" "+B.x+","+(B.y-c)+" "+B.x+","+B.y);
+    p.setAttribute("fill","none");p.setAttribute("stroke","#9a8fe0");p.setAttribute("stroke-width",dick?"3":"1.6");if(blass)p.setAttribute("opacity",".15");svgK.append(p);}
+  // ── STAPEL über den Spalten (Katalog: die Abhängigkeiten einer Funktion): je Wurzel ein Baum aus Ebenen — unten die Schnittstelle, darüber ihre
+  //   Umsetzungen, darüber, was eine Umsetzung selbst nimmt. S = {wurzeln, baum: Id → {kinder, ebene}, titel(wurzel), plus (Element)}; Karten mit
+  //   Spalte -1 legt nicht die Spalten-Lage, sondern stapelSetze: je Teilbaum so breit wie seine Kinder, je Ebene eine Reihe, die Ebene 1 zuunterst.
+  function stapelMasse(welt,S){const el=x=>welt.querySelector('.kom-k[data-glied="'+CSS.escape(x)+'"]'),G=24,VG=36,w=new Map(),lh=new Map();let maxE=0;
+    const breite=x=>{const k=S.baum.get(x),e=el(x),ki=(k.kinder||[]).map(breite),summe=ki.length?ki.reduce((a,b)=>a+b,0)+G*(ki.length-1):0,b=Math.max(e?e.offsetWidth:0,summe);
+      w.set(x,b);if(e){lh.set(k.ebene,Math.max(lh.get(k.ebene)||0,e.offsetHeight));maxE=Math.max(maxE,k.ebene);}return b;};
+    const ws=S.wurzeln.map(breite),SG=56,breiteAlle=ws.reduce((a,b)=>a+b,0)+SG*Math.max(0,ws.length-1);
+    let hoehe=0;for(let e=1;e<=maxE;e++)hoehe+=(lh.get(e)||0)+VG;
+    return {w,lh,maxE,breiteAlle,hoehe,el,G,VG,SG};}
+  function stapelSetze(welt,S,M,top,xs){const yE=new Map();let y=top;if(M)for(let e=M.maxE;e>=1;e--){yE.set(e,y);y+=(M.lh.get(e)||0)+M.VG;}
+    const unten=M?y-M.VG:top+40,auf=xs.get(1);let x=M?Math.max(40,auf?auf.x+auf.w/2-M.breiteAlle/2:40):Math.max(40,auf?auf.x:40);
+    const teil=new Map();
+    const setze=(id,x0,wurzel)=>{const k=S.baum.get(id),e=M.el(id),b=M.w.get(id);teil.get(wurzel).push(id);
+      if(e){e.style.left=(x0+(b-e.offsetWidth)/2)+"px";e.style.top=(yE.get(k.ebene)+(M.lh.get(k.ebene)-e.offsetHeight))+"px";}
+      const kb=(k.kinder||[]).map(c=>M.w.get(c)),summe=kb.reduce((a,c)=>a+c,0)+M.G*Math.max(0,kb.length-1);let xk=x0+(b-summe)/2;
+      (k.kinder||[]).forEach(c=>{setze(c,xk,wurzel);xk+=M.w.get(c)+M.G;});};
+    S.wurzeln.forEach(r=>{teil.set(r,[]);setze(r,x,r);
+      const els=teil.get(r).map(M.el).filter(Boolean),l=Math.min(...els.map(e=>e.offsetLeft)),o=Math.min(...els.map(e=>e.offsetTop)),
+        rr=Math.max(...els.map(e=>e.offsetLeft+e.offsetWidth)),u=Math.max(...els.map(e=>e.offsetTop+e.offsetHeight));
+      const rahmen=h("div",{class:"kat-stapel"},h("span",{class:"kat-stapel-t"},S.titel?S.titel(r):""));
+      rahmen.style.left=(l-12)+"px";rahmen.style.top=(o-12)+"px";rahmen.style.width=(rr-l+24)+"px";rahmen.style.height=(u-o+34)+"px";welt.prepend(rahmen);
+      x+=M.w.get(r)+M.SG;});
+    if(S.plus){S.plus.style.left=x+"px";S.plus.style.top=(unten-40)+"px";welt.append(S.plus);x+=200;}
+    const breite=Math.max(parseFloat(welt.style.width)||0,x+40),svg=welt.querySelector("svg");welt.style.width=breite+"px";svg.setAttribute("width",breite);}
   function innenKante(svgK,A,B,sorte,dick,blass){const zurueck=B.x<A.x,c=Math.max(40,Math.abs(B.x-A.x)*0.45),p=document.createElementNS(SVGNS,"path");
     p.setAttribute("d",zurueck?"M"+A.x+","+A.y+" C"+(A.x+80)+","+A.y+" "+(B.x-80)+","+B.y+" "+B.x+","+B.y:"M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y);
     p.setAttribute("fill","none");p.setAttribute("stroke",sorte==="event"?"#57b673":sorte==="hinweis"?"#cf6f68":sorte==="query"||sorte==="antwort"?"#9678d6":"#8fa6c8");
@@ -2778,9 +2806,8 @@
     else if(x.startsWith("rec:")){const r=n.ref||{},nm=n.name;
       if(r.kind==="command"&&r.aggregat===agg){aus.push(decs.some(d=>d.command===nm)?{key:"aus",label:"▶ Decide",sorte:"command"}
         :{key:"aus",label:"＋ Decide",plus:{art:"eigenesDecide",rec:nm}});
-        // Wer ihn schickt: die Graphen, die ihn ausgeben (über eine Übersetzung oder eine Funktion), und die Akteure, die ihn dürfen.
-        (MODEL.graphen||[]).filter(g=>(g.ausgaenge||[]).some(t=>komBasis(t)===nm)).forEach(g=>ein.push({key:"gr:"+g.name,label:"◀ ⬡ "+g.name,sorte:"command"}));
-        MODEL.akteure.filter(a=>(a.darf||[]).includes(nm)).forEach(a=>ein.push({key:"ak:"+a.name,label:"◀ 👤 "+a.name,sorte:"command"}));
+        // Wer ihn schickt: die Erzeuger, wie der Server sie liest (board.sicht.partner — Übersetzungen, Funktionen, Akteure; ohne die Außenwelt).
+        (((SICHT().partner||{})[nm]||{}).ein||[]).filter(q=>q.id).forEach(q=>ein.push({key:"von:"+q.id,label:"◀ "+q.text,sorte:"command"}));
         ein.push({key:"+graph",label:"＋ wer schickt ihn",plus:{art:"werSchickt",rec:nm},ein:true});}
       else if(r.kind==="query")aus.push({key:"aus",label:"▶ Frage",sorte:"query"});
       else if(r.kind==="queryresponse"){(A.fragen||[]).filter(f=>(f.antworten||[]).includes(nm)).forEach(f=>ein.push({key:"von:"+f.query,label:"◀ "+f.query,sorte:"antwort",
@@ -2801,13 +2828,15 @@
     if(nb.kind==="applier")return ["apply","evt"];
     if(na.kind==="applier")return ["st","in"];
     return null;}
-  // Wer an einen „＋“ angeschlossen werden kann (vorhandene Karten im Bild; Neues und Vorhandenes von außerhalb: aggGeister).
-  function aggAuswahl(A,I,p){const k=new Set();if(!p)return k;
+  // Wer an einen „＋“ angeschlossen werden kann: was der Server dort erlaubt (sicht.innen.aggregate — je Decide die möglichen Ergebnisse, je Frage
+  //   die möglichen Antworten; umgekehrt gelesen: wer ein Ergebnis bzw. eine Antwort nehmen kann), soweit es im Bild steht. Neues und Vorhandenes
+  //   von außerhalb: aggGeister.
+  function aggAuswahl(A,I,p){const k=new Set();if(!p)return k;const S_=(INNEN().aggregate||{})[A.name]||{},erg=S_.ergebnis||{},antw=S_.antwort||{};
     I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;
-      if(p.art==="ergebnis"&&x.startsWith("rec:")&&s===2&&["event","rejection"].includes(n.kind)&&!(p.dec.ergibt||[]).some(o=>o.event===n.name))k.add(x);
-      if(p.art==="decide"&&n.kind==="decider"&&!(n.ref.ergibt||[]).some(o=>o.event===p.rec))k.add(x);
-      if(p.art==="antwort"&&n.kind==="queryresponse"&&!(p.frage.antworten||[]).includes(n.name))k.add(x);
-      if(p.art==="frage"&&x.startsWith("rec:")&&n.kind==="query"&&(A.fragen||[]).some(f=>f.query===n.name&&!(f.antworten||[]).includes(p.rec)))k.add(x);});
+      if(p.art==="ergebnis"&&x.startsWith("rec:")&&s===2&&(erg["dec:"+p.dec._id]||[]).includes(n.name))k.add(x);
+      if(p.art==="decide"&&n.kind==="decider"&&(erg[x]||[]).includes(p.rec))k.add(x);
+      if(p.art==="antwort"&&x.startsWith("rec:")&&(antw[p.frage.query]||[]).includes(n.name))k.add(x);
+      if(p.art==="frage"&&x.startsWith("rec:")&&n.kind==="query"&&(antw[n.name]||[]).includes(p.rec))k.add(x);});
     return k;}
   function aggAnschliessen(A,p,x){const n=NODEBY.get(x);if(!n)return;
     if(p.art==="ergebnis"){p.dec.ergibt=[...(p.dec.ergibt||[]),{event:n.name}];aggApplySichern(A,n.name);gTitel("▣ "+A.name+": "+p.dec.command+" ergibt "+n.name);}
@@ -2818,10 +2847,9 @@
   // Ein Event, das ein Decide des Aggregats ergibt, braucht sein Apply (CQRS079) — es entsteht mit dem Anschließen (Platzhalter-Rumpf).
   function aggApplySichern(A,nm){const r=recNamens(nm);if(!r||r.kind!=="event"||MODEL.applier.some(a=>a.aggregat===A.name&&a.event===nm))return;
     MODEL.applier.push({_id:"a"+(NID++),aggregat:A.name,event:nm});}
-  // Hat eine Nachricht schon einen Erzeuger (Decide, Funktion, Frage, Reader)? Ohne ihn kann ein Decide bzw. eine Frage sie übernehmen.
-  const aggHatErzeuger=nm=>MODEL.decider.some(d=>(d.ergibt||[]).some(o=>o.event===nm))
-    ||MODEL.bausteinFunktionen.some(f=>(f.eingaenge||[]).some(e=>(e.ausgaben||[]).includes(nm)))
-    ||MODEL.aggregate.some(a=>(a.fragen||[]).some(f=>(f.antworten||[]).includes(nm)))||MODEL.reader.some(r=>(r.handles||[]).some(x=>(x.responses||[]).includes(nm)));
+  // Hat eine Nachricht schon einen Erzeuger (Decide, Funktion, Übersetzung, Frage, Reader — sicht.innen.verwendungen)? Ohne ihn kann ein Decide
+  //   bzw. eine Frage sie übernehmen.
+  const aggHatErzeuger=nm=>verwendungen(nm).some(u=>u.erzeugt);
   // Beim Anschließen steht, was es noch nicht gibt bzw. was nicht im Bild ist, als gestrichelte Karte in seiner Spalte: Neues anlegen (Name
   //   abfragen) oder ein Event bzw. einen Hinweis ohne Erzeuger von außerhalb übernehmen — die Auswahl bleibt nicht aufs Sichtbare beschränkt.
   //   (Eine fremde Antwort nicht: sie liegt bei der Leseseite, die Antwort einer Frage an ein Aggregat bei der Schreibseite.)
@@ -2831,16 +2859,15 @@
     const uebernimm=(spalte,nm,sorte,verbinde)=>g.push({spalte,t:(FL_SORTE[sorte]||"")+nm,u:"vorhanden, noch ohne Erzeuger — Klick übernimmt",fn:()=>{KOM.port=null;verbinde();render();}});
     const rec=(n,kind)=>aggRecordNeu(A,n,kind);
     if(p.art==="ergebnis"){const d=p.dec,ergibt=n=>{d.ergibt=[...(d.ergibt||[]),{event:n}];aggApplySichern(A,n);gTitel(t+": "+d.command+" ergibt "+n);};
-      neu(2,"＋ neues Event","Fakt im Log",A.name+"Geaendert",n=>{rec(n,"event");ergibt(n);});
-      neu(2,"＋ neuer Hinweis","flüchtig, an Akteure",d.command+"Abgelehnt",n=>{rec(n,"rejection");ergibt(n);});
-      MODEL.decider.filter(x=>x.aggregat===A.name&&x.command).map(x=>"Frist<"+x.command+">").filter(f=>!(d.ergibt||[]).some(o=>o.event===f))
-        .forEach(f=>g.push({spalte:2,t:"⏱ "+f,u:"Frist auf einen eigenen Command",fn:()=>{KOM.port=null;ergibt(f);render();}}));
-      MODEL.records.filter(r=>(r.kind==="event"||r.kind==="rejection")&&!drin(r.name)&&!aggHatErzeuger(r.name)).slice(0,12)
-        .forEach(r=>uebernimm(2,r.name,komSorte(r.name),()=>ergibt(r.name)));}
+      neu(2,"＋ neues Event","Fakt im Log","",n=>{rec(n,"event");ergibt(n);});
+      neu(2,"＋ neuer Hinweis","flüchtig, an Akteure","",n=>{rec(n,"rejection");ergibt(n);});
+      const S_=(INNEN().aggregate||{})[A.name]||{};
+      ((S_.fristen||{})["dec:"+d._id]||[]).forEach(f=>g.push({spalte:2,t:"⏱ "+f,u:"Frist auf einen eigenen Command",fn:()=>{KOM.port=null;ergibt(f);render();}}));
+      ((S_.ergebnis||{})["dec:"+d._id]||[]).filter(nm=>!drin(nm)&&!aggHatErzeuger(nm)).slice(0,12).forEach(nm=>uebernimm(2,nm,komSorte(nm),()=>ergibt(nm)));}
     else if(p.art==="decide")neu(1,"＋ neuer Command mit Decide","Command an "+A.name+" — sein Decide ergibt "+p.rec,"",n=>aggCommandAnlegen(A,n,[{event:p.rec}]));
     else if(p.art==="antwort"){const f=p.frage,antw=n=>{f.antworten=[...(f.antworten||[]),n];gTitel(t+": "+f.query+" antwortet "+n);};
-      neu(2,"＋ neue Antwort","Antwort auf "+f.query,f.query.replace(/^Hole/,"")+"Antwort",n=>{rec(n,"queryresponse");antw(n);});}
-    else if(p.art==="frage")neu(0,"＋ neue Query","Frage an "+A.name+" — antwortet "+p.rec,"Hole"+A.name+"Stand",n=>aggQueryAnlegen(A,n,[p.rec]));
+      neu(2,"＋ neue Antwort","Antwort auf "+f.query,"",n=>{rec(n,"queryresponse");antw(n);});}
+    else if(p.art==="frage")neu(0,"＋ neue Query","Frage an "+A.name+" — antwortet "+p.rec,"",n=>aggQueryAnlegen(A,n,[p.rec]));
     return g;}
   // „＋“ an einem Port: Apply bzw. Decide eines eigenen Commands legt direkt an; sonst heben sich die anschließbaren Karten hervor (dazu die
   //   gestrichelten für Neues), ein zweiter Klick auf denselben „＋“ bricht ab.
@@ -2853,24 +2880,9 @@
   const portZiel=p=>p&&(p.dec||p.frage||p.rec||p.hd||p.fn);
   // ══ LÖSCHEN im Modal (Aggregat und Store von innen): ✕ im Kopf jeder Karte, die man hier anlegen kann. Ein Löschplan sagt, was mitgeht
   //   (folgen) oder warum es nicht geht (grund: wo es außerhalb noch verwendet wird); nach dem Schreiben meldet der Editor neue Build-Befunde. ══
-  // Wo ein Typ verwendet wird — je Stelle Art, Text und Besitzer (Aggregat bzw. Projektion/Reader/Store), damit ein Plan entscheidet, was mitgeht.
-  function verwendungen(nm){const v=[],P=(art,wo,o)=>v.push({art,wo,...(o||{})});
-    MODEL.decider.forEach(d=>{if(d.command===nm)P("decide","Decide("+nm+") in ▣ "+d.aggregat,{agg:d.aggregat,ref:d});
-      if((d.ergibt||[]).some(o=>o.event===nm))P("ergebnis","Ergebnis von Decide("+d.command+") in ▣ "+d.aggregat,{agg:d.aggregat,ref:d});});
-    MODEL.applier.forEach(a=>{if(a.event===nm)P("apply","Apply("+nm+") in ▣ "+a.aggregat,{agg:a.aggregat,ref:a});});
-    MODEL.aggregate.forEach(A=>(A.fragen||[]).forEach(f=>{if(f.query===nm)P("frage","Frage("+nm+") in ▣ "+A.name,{agg:A.name});
-      if((f.antworten||[]).includes(nm))P("antwort","Antwort der Frage("+f.query+") in ▣ "+A.name,{agg:A.name});}));
-    MODEL.projektionen.forEach(o=>(o.handles||[]).forEach(hd=>{if(hdEvents(hd).includes(nm))P("auf",(istBuendel(hd)?"Bündel "+buendelName(hd):"Auf("+nm+")")+" in Projektion "+o.name,{own:o,ref:hd});}));
-    MODEL.reader.forEach(o=>(o.handles||[]).forEach(hd=>{if(hd.query===nm)P("rfrage","Frage("+nm+") in Reader "+o.name,{own:o,ref:hd});
-      if((hd.responses||[]).includes(nm))P("rantwort","Antwort der Frage("+hd.query+") in Reader "+o.name,{own:o,ref:hd});}));
-    MODEL.bausteinFunktionen.forEach(f=>{(f.eingaenge||[]).forEach(e=>{if(e.eingang===nm)P("funktion","Auf("+nm+") in Funktion "+f.name);
-        if((e.ausgaben||[]).includes(nm))P("funktion","Ausgabe von "+f.name+".Auf("+e.eingang+")");});
-      if((f.lauscht||[]).includes(nm))P("funktion","Quelle "+f.name);});
-    MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))P("darf","IDarf<"+nm+"> am Akteur "+a.name);if((a.hoert||[]).includes(nm))P("hoert","IHoert<"+nm+"> am Akteur "+a.name);});
-    const typNennt=t=>new RegExp("(^|[^A-Za-z0-9_])"+nm+"($|[^A-Za-z0-9_])").test(t||"");
-    MODEL.records.forEach(r=>{if(r.name!==nm&&(r.felder||[]).some(f=>typNennt(f.typ)))P("feld","Feld in "+r.name);});
-    MODEL.readModels.forEach(r=>{if((r.felder||[]).some(f=>typNennt(f.typ)))P("feld","Feld in Read-Model "+r.name);});
-    return v;}
+  // Wo ein Typ verwendet wird — je Stelle Art, Text, Aggregat bzw. Besitzer (own) und die Karte der Stelle (karte), erzeugt = gibt ihn aus; der Server
+  //   liest es aus dem Code (sicht.innen.verwendungen), damit ein Plan entscheidet, was mitgeht.
+  function verwendungen(nm){return (INNEN().verwendungen||{})[nm]||[];}
   // Ein Löschplan für einen Record: was davon mitgeht (mit), darf mitgehen; alles andere sperrt mit seinen Stellen als Grund. IDarf/IHoert gehen immer mit.
   function loeschPlanRecord(nm,was,mit,tu){const v=verwendungen(nm),geht=u=>u.art==="darf"||u.art==="hoert"||mit(u),fremd=v.filter(u=>!geht(u));
     return {was,folgen:v.filter(geht).map(u=>u.wo),grund:fremd.length?"noch verwendet: "+fremd.map(u=>u.wo).join(" · ")+" — dort zuerst lösen":null,tu};}
@@ -2913,6 +2925,7 @@
   function innenZeige(de,id,C){KOM.edit=KOM.edit||new Set();KOM.zu=KOM.zu||new Set();const I=C.I,kn=x=>C.knoten(x),unverbunden=C.unverbunden||new Set();
     const m=komRahmen(KOM.port?"Anschließen: eine hervorgehobene Karte anklicken — gestrichelt: neu anlegen bzw. übernehmen · Esc bricht ab"
         :"Klick: Kette hervorheben · Doppelklick: nur Kopf ⇄ Ports · ✎: bearbeiten · ＋ am Port: anschließen · ＋ im Spaltenkopf: neu anlegen");
+    if(C.kopfExtra){const k=m.querySelector(".kom-kopf");k.insertBefore(C.kopfExtra(),k.querySelector(".kom-u"));}
     const alleZu=I.glieder.size>0&&[...I.glieder.keys()].every(x=>KOM.zu.has(x)),fuehrt=C.ansicht.fuehrt(),sortierung=C.ansicht.sortierung();
     m.querySelector(".kom-reiter").prepend(
       h("button",{title:"Alle Karten nur mit Kopf bzw. mit Ports",
@@ -2924,7 +2937,7 @@
     C.geister(KOM.port).forEach((g,i)=>{const el=h("div",{class:"gnode2 fk kom-k ag-neu kand",title:g.u||"",onclick:e=>{e.stopPropagation();g.fn(e);}},
         h("div",{class:"ghead"},h("span",{class:"gtitle"},h("span",{class:"gk"},g.t))));
       if(g.u)el.append(h("div",{class:"ag-kurz"},g.u));el.dataset.glied="neu:"+i;el.dataset.spalte=g.spalte;el.dataset.band=g.band||"";welt.append(el);});
-    I.glieder.forEach((s,x)=>{const n=kn(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:"),fest=!!(C.fest&&C.fest(x)),
+    I.glieder.forEach((s,x)=>{const n=kn(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:")||!!n.rec,fest=!!(C.fest&&C.fest(x)),
         offen=!fest&&KOM.edit.has(x),zu=!offen&&KOM.zu.has(x),kand=auswahl.has(x);
       const leise=KOM.port?!kand&&x!==KOM.port.karte:!!kette&&!kette.has(x);
       const el=h("div",{class:"gnode2 fk kom-k n-"+n.kind+(wahl===x?" sel":"")+(offen?" offen":"")+(zu?" zu":"")+(kand?" kand":"")+(leise?" leise":"")+(C.fremd&&C.fremd(x)?" fremd":""),
@@ -2948,8 +2961,10 @@
       if(diagFuer(x).length)el.append(h("div",{class:"ag-diag",title:diagFuer(x).map(d=>d.text).join("\n")},zu?"⛔":"⛔ "+diagFuer(x).map(d=>d.text).join(" · ")));
       if(offen)el.append(C.bearbeiten(n,x));
       el.dataset.glied=x;el.dataset.spalte=s;el.dataset.band=C.band?C.band(x):"";el.dataset.zeit=C.zeit(x);el.dataset.name=C.name(x);el.dataset.ein=C.ein(x);welt.append(el);});
-    const lw=h("div",{class:"kom-lw"},welt);m.append(h("div",{class:"kom-leib innen"},lw));de.append(m);
-    const {xs,baender}=innenLegenPaare(welt,I.kanten,64,C.legen,fuehrt===C.ansicht.B,sortierung);
+    const lw=h("div",{class:"kom-lw"},welt);m.append(h("div",{class:"kom-leib innen"+(C.links?" mit-links":"")},C.links?C.links():null,lw));de.append(m);
+    const S=C.legen.stapel,oben=C.legen.y0||64,SM=S&&S.wurzeln.length?stapelMasse(welt,S):null;
+    const {xs,baender}=innenLegenPaare(welt,I.kanten,SM?oben+SM.hoehe+40:oben,C.legen,fuehrt===C.ansicht.B,sortierung);
+    if(S)stapelSetze(welt,S,SM,oben-24,xs);
     baender.forEach(b=>{const l=h("div",{class:"kom-band"},b.titel);l.style.top=b.y+"px";welt.append(l);});
     C.koepfe().forEach(([titel,fn,u,sortiert],s)=>{const p=xs.get(s);if(!p)return;
       const kopf=h("div",{class:"ag-spkopf"},h("b",{},titel),
@@ -2963,7 +2978,9 @@
     const el=x=>welt.querySelector('.kom-k[data-glied="'+CSS.escape(x)+'"]');
     const punkt=(e,ri,key)=>{const p=e.querySelector('[data-port="'+CSS.escape(ri+"|"+key)+'"]');return {x:e.offsetLeft+(ri==="aus"?e.offsetWidth:0),y:e.offsetTop+(p?p.offsetTop+p.offsetHeight/2:14)};};
     I.kanten.forEach(([a,b])=>{const ea=el(a),eb=el(b),pk=C.kantenPorts(a,b);if(!ea||!eb||!pk)return;const an=!!kette&&kette.has(a)&&kette.has(b);
-      innenKante(svgK,punkt(ea,"aus",pk[0]),punkt(eb,"ein",pk[1]),komSorte((kn(a.startsWith("rec:")?a:b)||{}).name),an,!!KOM.port||(!!kette&&!an));});}
+      if(pk==="v"){innenKanteV(svgK,{x:ea.offsetLeft+ea.offsetWidth/2,y:ea.offsetTop+ea.offsetHeight},{x:eb.offsetLeft+eb.offsetWidth/2,y:eb.offsetTop},an,!!KOM.port||(!!kette&&!an));return;}
+      const na=kn(a)||{},nb=kn(b)||{};
+      innenKante(svgK,punkt(ea,"aus",pk[0]),punkt(eb,"ein",pk[1]),komSorte((a.startsWith("rec:")||na.rec?na:nb).name),an,!!KOM.port||(!!kette&&!an));});}
   // Das Aggregat von innen: Commands und Queries · Decide und Fragen · Ergebnisse · Apply · Zustand; Command ↔ Decide und Event ↔ Apply als Paare.
   function aggZeige(de,id,I,A){const unverbunden=aggUnverbunden(A,I);unverbunden.forEach(x=>I.glieder.set(x,2));
     innenZeige(de,id,{I,knoten:x=>NODEBY.get(x),unverbunden,
@@ -2983,9 +3000,9 @@
       ["Commands",menue("Neu in "+A.name,[neuCmd,neuQuery]),"＋ ▾","command"],
       ["Decide",null,"je Command eines"],
       ["Ergebnisse",menue("Neu in "+A.name,[
-        {t:"＋ Event (Fakt im Log) …",fn:e=>aggFreiAnlegen(A,"event","＋ Event",A.name+"Geaendert",e)},
-        {t:"＋ Hinweis (flüchtig, an Akteure) …",fn:e=>aggFreiAnlegen(A,"rejection","＋ Hinweis",A.name+"Abgelehnt",e)},
-        {t:"＋ Antwort …",fn:e=>aggFreiAnlegen(A,"queryresponse","＋ Antwort",A.name+"Antwort",e)},
+        {t:"＋ Event (Fakt im Log) …",fn:e=>aggFreiAnlegen(A,"event","＋ Event","",e)},
+        {t:"＋ Hinweis (flüchtig, an Akteure) …",fn:e=>aggFreiAnlegen(A,"rejection","＋ Hinweis","",e)},
+        {t:"＋ Antwort …",fn:e=>aggFreiAnlegen(A,"queryresponse","＋ Antwort","",e)},
         {trenn:1},{hinweis:"Steht unverbunden in der Spalte (ein Event gleich mit seinem Apply) — anschließen später über ＋ am Port (＋ Decide bzw. ＋ Frage)."}]),"＋ ▾","event"],
       ["Apply",null,"je Event eines"],
       ["Zustand",()=>{A.state=A.state||[];A.state.push({_id:"f"+(NID++),name:uniqFeldName(A.state,"Feld"),typ:"string"});const st=[...I.glieder.keys()].find(x=>x.startsWith("st:"));
@@ -3008,7 +3025,7 @@
       return {was:"Apply("+a.event+")",folgen:["das Event bleibt — ohne Apply warnt der Build (CQRS079)"],grund:null,tu:()=>{MODEL.applier.splice(MODEL.applier.indexOf(a),1);}};}
     return null;}
   // ── Aggregat von innen: anlegen und verbinden (docs/10 §10.9) ──
-  const aggIdFeld=()=>ID_FELD()||"AggregateId";
+  const aggIdFeld=()=>ID_FELD();   // rahmen.aggregatIdFeld (DomainEditor.EditorModell)
   const recNamens=n=>MODEL.records.find(r=>r.name===n);
   // Name abfragen (über dem Modal): Eingabe, Enter legt an; ok liefert einen Fehlertext oder nichts.
   function frageFix(cx,cy,titel,vorschlag,hinweis,ok){document.querySelectorAll("#de .gmenue.fix").forEach(p=>p.remove());
@@ -3020,7 +3037,7 @@
     m.style.left=Math.max(4,Math.min(cx,innerWidth-300))+"px";m.style.top=Math.max(4,Math.min(cy,innerHeight-200))+"px";
     ["pointerdown","dblclick","wheel","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     document.getElementById("de").append(m);setTimeout(()=>{inp.focus();inp.select();},0);}
-  const nameFehler=n=>!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(n)?"Ein Typname: groß beginnen, nur Buchstaben und Ziffern":recNamens(n)?n+" gibt es schon":null;
+  const nameFehler=n=>!new RegExp(typnameMuster()).test(n)?"Ein Typname: groß beginnen, nur Buchstaben und Ziffern":recNamens(n)?n+" gibt es schon":null;
   // Ein Command an das Aggregat samt Decide (ergibt: die Glieder seines OneOf) bzw. eine Query samt Frage (antworten: ihre Antworten).
   function aggCommandAnlegen(A,n,ergibt){
     MODEL.records.push({name:n,kind:"command",namespace:A.namespace,felder:[{_id:"f"+(NID++),name:aggIdFeld(),typ:"Id<"+A.name+">"}],istErzeugung:false,aggregat:A.name});aggStempel(n);
@@ -3030,9 +3047,9 @@
     A.fragen=[...(A.fragen||[]),{query:n,antworten}];gTitel("▣ "+A.name+": Frage "+n);}
   function aggNeuerCommand(A,ev){frageFix(ev.clientX,ev.clientY,"＋ Command an "+A.name,"","Legt den Command und sein Decide an",n=>{const f=nameFehler(n);if(f)return f;
     aggCommandAnlegen(A,n,[]);render();});}
-  function aggNeueQuery(A,ev){frageFix(ev.clientX,ev.clientY,"＋ Query an "+A.name,"Hole"+A.name+"Stand","Legt Query, Frage und eine Antwort an",n=>{const f=nameFehler(n);if(f)return f;
-    const ant=n.replace(/^Hole/,"")+"Antwort";if(recNamens(ant))return ant+" gibt es schon";
-    MODEL.records.push({name:ant,kind:"queryresponse",namespace:A.namespace,felder:[],istErzeugung:false});aggStempel(ant);aggQueryAnlegen(A,n,[ant]);render();});}
+  function aggNeueQuery(A,ev){frageFix(ev.clientX,ev.clientY,"＋ Query an "+A.name,"","Legt Query, Frage und eine Antwort an — danach der Name der Antwort",n=>{const f=nameFehler(n);if(f)return f;
+    setTimeout(()=>frageFix(ev.clientX,ev.clientY,"↩ Antwort auf "+n,"","Was die Frage "+n+" zurückgibt",ant=>{const f2=nameFehler(ant);if(f2)return f2;if(ant===n)return "Query und Antwort brauchen verschiedene Namen";
+      MODEL.records.push({name:ant,kind:"queryresponse",namespace:A.namespace,felder:[],istErzeugung:false});aggStempel(ant);aggQueryAnlegen(A,n,[ant]);render();}),0);});}
   // Eine neue Nachricht im Aggregat: sie liegt bei seiner Schreibseite (amAggregat), auch solange noch kein Decide bzw. keine Frage sie nimmt.
   function aggRecordNeu(A,n,kind){MODEL.records.push({name:n,kind,namespace:A.namespace,felder:[],istErzeugung:false,amAggregat:A.name});aggStempel(n);}
   // Im Spaltenkopf „Ergebnisse“ angelegt: steht unverbunden in der Spalte, angeschlossen wird später über ＋ am Port.
@@ -3085,7 +3102,7 @@
     const rest=s=>geordnet(echt(s).filter(e=>!Y.has(id(e)))).forEach(e=>setze(e,c.get(s)));
     const baender=[];let start=y0;
     (L.baender||[""]).forEach((b,i)=>{B=b;gebunden.forEach(s=>c.set(s,start));
-      if(i>0)baender.push({y:start-30,titel:(L.bandTitel||{})[b]||b});
+      if(i>0||L.alleTitel)baender.push({y:start-30,titel:(L.bandTitel||{})[b]||b});
       els.filter(e=>neu(e)&&!frei.has(sp(e))&&band(e)===b).forEach(e=>setze(e,c.get(sp(e))));
       if(fuehrtB){paare(2,3,geordnet(echt(2)),e=>nach(e,3));rest(3);
         paare(1,0,folgt(1,e=>nach(e,2)),e=>juengste(von(e,0)),e=>oben(nach(e,2)));rest(0);}
@@ -3122,11 +3139,8 @@
         h("button",{class:"rm",title:"Feld entfernen",onclick:()=>{liste.splice(i,1);gTitel(titel+": Feld "+f.name+" entfernt");render();}},"✕")));});
     box.append(h("button",{class:"ag-plus",onclick:()=>{liste.push({_id:"f"+(NID++),name:uniqFeldName(liste,"Feld"),typ:"string"});gTitel(titel+": ＋ Feld");render();}},"＋ Feld"));
     return box;}
-  // Ein Record entfernen, wenn ihn niemand mehr nennt (Decide, Apply, Frage, Projektion, Akteur, Funktion).
-  function aggRecordAufraeumen(nm){const genutzt=MODEL.decider.some(d=>d.command===nm||(d.ergibt||[]).some(o=>o.event===nm))||MODEL.applier.some(a=>a.event===nm)
-      ||MODEL.aggregate.some(a=>(a.fragen||[]).some(f=>f.query===nm||(f.antworten||[]).includes(nm)))||MODEL.projektionen.some(p=>(p.handles||[]).some(x=>hdEvents(x).includes(nm)))
-      ||MODEL.reader.some(r=>(r.handles||[]).some(x=>x.query===nm||(x.responses||[]).includes(nm)))||MODEL.akteure.some(a=>(a.darf||[]).includes(nm)||(a.hoert||[]).includes(nm))
-      ||MODEL.bausteinFunktionen.some(f=>(f.eingaenge||[]).some(e=>e.eingang===nm||(e.ausgaben||[]).includes(nm))||(f.lauscht||[]).includes(nm));
+  // Ein Record entfernen, wenn ihn niemand mehr nennt (Verwendungen des Servers außer Feldern; ohne: die Stellen, die die Geste eben löst).
+  function aggRecordAufraeumen(nm,ohne){const genutzt=verwendungen(nm).some(u=>u.art!=="feld"&&!(ohne&&ohne(u)));
     if(!genutzt){const r=recNamens(nm);if(r)MODEL.records.splice(MODEL.records.indexOf(r),1);}}
   // Einen noch nicht geschriebenen Record umbenennen (ein geschriebener geht über den Renamer): alle Verweise im Modell ziehen mit.
   function recUmbenennenLokal(r,neu){const alt=r.name;r.name=neu;
@@ -3153,9 +3167,9 @@
             else aggApplySichern(A,r.name);
             gTitel(t+": "+r.name+(r.kind==="event"?" ist ein Event":" ist ein Hinweis"));render();}},r.kind==="event"?"⇄ zum Hinweis machen":"⇄ zum Event machen"));}
       if(I_ERGEBNIS(A,r.name))weg("✕ aus allen Decides nehmen",()=>{MODEL.decider.filter(d=>d.aggregat===A.name).forEach(d=>{d.ergibt=(d.ergibt||[]).filter(o=>o.event!==r.name);});
-        gTitel(t+": "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
+        gTitel(t+": "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name,u=>u.art==="ergebnis"&&u.agg===A.name);});
       if(r.kind==="queryresponse"&&(A.fragen||[]).some(f=>(f.antworten||[]).includes(r.name)))weg("✕ aus allen Fragen nehmen",()=>{(A.fragen||[]).forEach(f=>{f.antworten=ohneX(f.antworten,r.name);});
-        gTitel(t+": Antwort "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
+        gTitel(t+": Antwort "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name,u=>u.art==="antwort"&&u.agg===A.name);});
       return box;}
     if(n.kind==="decider"){ruempfe();return box;}
     if(n.kind==="applier"){ruempfe();return box;}
@@ -3168,7 +3182,7 @@
   //   Mitte beider Bänder, ihre Kanten nur aus der Signatur einer Fähigkeit. Events stammen aus dem Aggregat und sind hier fix.
   const stoFns=st=>[...(st.writeFns||[]).map(f=>[f,false]),...(st.readFns||[]).map(f=>[f,true])];
   // ── BÜNDEL (docs/04 §4.3.1): ein Auf über Buendel<A, B, …> — es heißt nach seinen Events, der Schlüssel folgt aus ihnen (Server, Buendelform). ──
-  const BUENDEL_HOECHSTENS=16;
+  const BUENDEL=()=>GRAM().buendel||{};
   const istBuendel=hd=>!!hd&&(!!hd.buendel||/^Buendel</.test(hd.event||""));
   const buendelEvents=hd=>hd.buendel&&hd.buendel.events?hd.buendel.events:((hd.event||"").match(/^Buendel<(.*)>$/)||[,""])[1].split(",").map(x=>x.trim()).filter(Boolean);
   const buendelName=hd=>buendelEvents(hd).join(" ⋈ ");
@@ -3179,9 +3193,11 @@
     hd.buendel={...(hd.buendel||{}),events:[...events],ueber:ueber===undefined?((hd.buendel||{}).ueber||null):ueber,glieder:null,schluessel:null,fehler:null,neu:true};
     hd.event="Buendel<"+events.join(", ")+">";}
   function buendelUmbenennen(hd,alt,neu){if(!istBuendel(hd))return;const ev=buendelEvents(hd);if(!ev.includes(alt))return;buendelSetze(hd,ev.map(e=>e===alt?neu:e));}
-  const stoTypen=f=>[...(f.params||[]).map(p=>p.typ),f.rueckgabe,(f.sig||{}).rueckgabe].filter(Boolean).join(" ");
-  const nennt=(text,name)=>new RegExp("(^|[^A-Za-z0-9_])"+name+"($|[^A-Za-z0-9_])").test(text||"");
-  const stoNenntIrgendwer=nm=>MODEL.stores.some(s=>stoFns(s).some(([f])=>nennt(stoTypen(f),nm)));
+  // Welche Read-Models eine Fähigkeit in ihrer Signatur nennt, liest der Server (sicht.innen.readModels: fn:<Id> → rm:<Id>).
+  const stoReadModelsVon=fx=>(INNEN().readModels||{})[fx]||[];
+  const stoNenntIrgendwer=rx=>Object.values(INNEN().readModels||{}).some(l=>l.includes(rx));
+  // Die Store-Klasse nach der Grammatik (rahmen.grammatik.storeklassen): Herkunft in Schreib-Fähigkeiten, [MindestensEinmal] an der Projektion.
+  const stoKlasse=st=>(GRAM().storeklassen||[]).find(k=>k.nummer===(st.klassen||[])[0])||{};
   const flGruppe=x=>{const k=FL().karten.find(f=>f.karte===x&&f.gruppe);return k?k.gruppe:null;};
   const stoEvent=x=>x.startsWith("rec:")&&(NODEBY.get(x)||{}).kind==="event";
   // Wer zum Store gehört: Projektionen und Reader seiner Gruppe (aus den Fähigkeiten), eben hier angelegte (amStore) und solche ohne jede
@@ -3211,9 +3227,9 @@
     stoFns(st).forEach(([f,lesen])=>{const fx="fn:"+f._id,ux="um:"+f._id,b=lesen?"l":nurBuendel(f._id)?"b":"s";setze(fx,2,b);setze(ux,3,b);kanten.push([fx,ux]);
       knoten.set(ux,{id:ux,kind:"umsetzung",name:f.name,ref:f,st,lesen,own:NODEBY.get(fx)});
       if(!kanten.some(([,z])=>z===fx))unverbunden.add(fx);
-      const typen=stoTypen(f);MODEL.readModels.forEach(rm=>{if(nennt(typen,rm.name)){const rx="rm:"+rm._id;setze(rx,4,"");kanten.push([ux,rx]);}});});
+      stoReadModelsVon(fx).forEach(rx=>{if(NODEBY.has(rx)){setze(rx,4,"");kanten.push([ux,rx]);}});});
     // Unverbunden, aber beim Store: ein Read-Model, das keine Fähigkeit nennt, eine Antwort ohne Frage — hier angelegt bzw. im Namespace des Stores.
-    MODEL.readModels.forEach(rm=>{const rx="rm:"+rm._id;if(!glieder.has(rx)&&(rm.amStore===st.name||(rm.namespace===st.namespace&&!stoNenntIrgendwer(rm.name)))){setze(rx,4,"");unverbunden.add(rx);}});
+    MODEL.readModels.forEach(rm=>{const rx="rm:"+rm._id;if(!glieder.has(rx)&&(rm.amStore===st.name||(rm.namespace===st.namespace&&!stoNenntIrgendwer(rx)))){setze(rx,4,"");unverbunden.add(rx);}});
     MODEL.records.forEach(r=>{const ax="rec:"+r.name;if(r.kind==="queryresponse"&&!glieder.has(ax)&&NODEBY.has(ax)&&(r.amStore===st.name||r.namespace===st.namespace)&&!aggHatErzeuger(r.name)){
       setze(ax,5,"l");unverbunden.add(ax);}});
     return {glieder,kanten,band,knoten,fremd,unverbunden,M};}
@@ -3240,18 +3256,18 @@
   function stoPorts(st,I,n,x){const ein=[],aus=[],t="🗄 "+st.name,s=nm=>komSorte(nm);
     const fnName=fid=>{const k=NODEBY.get("fn:"+fid);return k?k.name:fid.split(".").pop();};
     if(n.kind==="buendel"){const hd=n.ref,ev=buendelEvents(hd);
-      ev.forEach(e=>ein.push({key:"ev:"+e,label:e,sorte:"event",loese:ev.length>2?()=>{buendelSetze(hd,ev.filter(x=>x!==e));gTitel(t+": "+e+" nicht mehr im Bündel");render();}:null}));
-      if(ev.length<BUENDEL_HOECHSTENS)ein.push({key:"+e",label:"＋ Event",plus:{art:"buendelEvent",hd}});
+      ev.forEach(e=>ein.push({key:"ev:"+e,label:e,sorte:"event",loese:ev.length>(BUENDEL().mindestens||0)?()=>{buendelSetze(hd,ev.filter(x=>x!==e));gTitel(t+": "+e+" nicht mehr im Bündel");render();}:null}));
+      if(ev.length<(BUENDEL().hoechstens||0))ein.push({key:"+e",label:"＋ Event",plus:{art:"buendelEvent",hd}});
       aus.push({key:"aus",label:"▶ Auf",sorte:"event"});
       return {ein,aus};}
     if(n.kind==="handle"){const hd=n.ref,lesen=n.own.kind==="reader",typ=istBuendel(hd)?buendelName(hd):hd.event||hd.query,fr=I.fremd.has(x);
       ein.push({key:"in",label:typ,sorte:istBuendel(hd)?"event":s(typ)});
       (hd.fns||[]).filter(f=>I.M.fnIds.has(f)).forEach(f=>aus.push({key:"f:"+f,label:"▶ "+fnName(f),
         loese:fr?null:()=>{hd.fns=ohneX(hd.fns,f);gTitel(t+": "+typ+" nimmt "+fnName(f)+" nicht mehr");render();}}));
-      if(!fr)aus.push({key:"+f",label:"＋ "+(lesen?"Lese":"Schreib")+"-Fähigkeit",plus:{art:"fn",hd,lesen}});
+      if(!fr)aus.push({key:"+f",label:"＋ "+(lesen?"Lese":"Schreib")+"-Fähigkeit",plus:{art:"fn",hd,lesen,hdId:x}});
       if(lesen&&!fr){(hd.responses||[]).forEach(a=>aus.push({key:"r:"+a,label:a,sorte:"antwort",
           loese:()=>{hd.responses=ohneX(hd.responses,a);gTitel(t+": "+typ+" antwortet nicht mehr "+a);render();}}));
-        aus.push({key:"+r",label:"＋ Antwort",plus:{art:"antwort",hd}});}}
+        aus.push({key:"+r",label:"＋ Antwort",plus:{art:"antwort",hd,hdId:x}});}}
     else if(n.kind==="fn"){const f=n.ref,lesen=!!n.lesen;
       I.kanten.filter(([,b])=>b===x).forEach(([a])=>{const hn=NODEBY.get(a);if(!hn)return;const typ=hn.ref.event||hn.ref.query;
         ein.push({key:"von:"+a,label:"◀ "+typ,sorte:s(typ),loese:I.fremd.has(a)?null:()=>{hn.ref.fns=ohneX(hn.ref.fns,f._id);gTitel(t+": "+typ+" nimmt "+f.name+" nicht mehr");render();}});});
@@ -3273,13 +3289,14 @@
     if(na.kind==="fn")return ["um","in"];
     if(na.kind==="umsetzung")return ["rm:"+b,"in"];
     return null;}
-  // Wer an einen „＋“ angeschlossen werden kann: Fähigkeiten derselben Richtung, Antworten, Auf bzw. Frage (nie die Frage eines anderen Stores).
-  function stoAuswahl(I,kn,p){const k=new Set();if(!p)return k;
+  // Wer an einen „＋“ angeschlossen werden kann: was der Server je Auf bzw. Frage erlaubt (sicht.innen.handles — Fähigkeiten derselben Richtung, die
+  //   Antworten eines Readers; umgekehrt gelesen: wer eine Fähigkeit bzw. Antwort nehmen kann), soweit es im Store steht (nie die Frage eines anderen).
+  function stoAuswahl(I,kn,p){const k=new Set();if(!p)return k;const H=INNEN().handles||{};
     I.glieder.forEach((s,x)=>{const n=kn(x);if(!n||I.fremd.has(x))return;
-      if(p.art==="fn"&&n.kind==="fn"&&!!n.lesen===p.lesen&&!(p.hd.fns||[]).includes(n.ref._id))k.add(x);
-      if(p.art==="antwort"&&n.kind==="queryresponse"&&!(p.hd.responses||[]).includes(n.name))k.add(x);
-      if(p.art==="handhabung"&&n.kind==="handle"&&(n.own.kind==="reader")===p.lesen&&!(n.ref.fns||[]).includes(p.fn._id))k.add(x);
-      if(p.art==="frage"&&n.kind==="handle"&&n.own.kind==="reader"&&!(n.ref.responses||[]).includes(p.rec))k.add(x);});
+      if(p.art==="fn"&&n.kind==="fn"&&((H[p.hdId]||{}).fns||[]).includes(n.ref._id))k.add(x);
+      if(p.art==="antwort"&&n.kind==="queryresponse"&&((H[p.hdId]||{}).antworten||[]).includes(n.name))k.add(x);
+      if(p.art==="handhabung"&&n.kind==="handle"&&((H[x]||{}).fns||[]).includes(p.fn._id))k.add(x);
+      if(p.art==="frage"&&n.kind==="handle"&&((H[x]||{}).antworten||[]).includes(p.rec))k.add(x);});
     return k;}
   function stoAnschliessen(st,kn,p,x){const n=kn(x),t="🗄 "+st.name;if(!n)return;KOM.port=null;
     if(p.art==="fn"){p.hd.fns=[...(p.hd.fns||[]),n.ref._id];gTitel(t+": "+(p.hd.event||p.hd.query)+" nimmt "+n.name);}
@@ -3293,23 +3310,23 @@
     const neu=(spalte,band,titel,u,vorschlag,anlegen,vorher)=>g.push({spalte,band,t:titel,u,fn:e=>{const frag=o=>frageFix(e.clientX,e.clientY,titel,vorschlag,u,n=>{
       const f=anlegen(n,o);if(f)return f;KOM.port=null;render();});if(vorher)vorher(e,frag);else frag();}});
     if(p.art==="fn")neu(2,p.lesen?"l":"s","＋ neue "+(p.lesen?"Lese":"Schreib")+"-Fähigkeit","Methode — die Schnittstelle heißt I + Methode ohne Async; die Umsetzung entsteht mit",
-      stoMethodenVorschlag(p.hd,p.lesen),n=>stoFaehigkeitAnlegen(st,n,p.lesen,p.hd));
-    else if(p.art==="antwort")neu(5,"l","＋ neue Antwort","Antwort auf "+p.hd.query,p.hd.query.replace(/^(Hole|Get)/,"")+"Antwort",n=>{const f=nameFehler(n);if(f)return f;
+      "",n=>stoFaehigkeitAnlegen(st,n,p.lesen,p.hd));
+    else if(p.art==="antwort")neu(5,"l","＋ neue Antwort","Antwort auf "+p.hd.query,"",n=>{const f=nameFehler(n);if(f)return f;
       stoRecordNeu(st,n,"queryresponse");p.hd.responses=[...(p.hd.responses||[]),n];gTitel(t+": "+p.hd.query+" antwortet "+n);});
-    else if(p.art==="frage")neu(0,"l","＋ neue Query mit Frage","Frage an "+st.name+" — antwortet "+p.rec,"Hole"+p.rec.replace(/Antwort$/,""),
+    else if(p.art==="frage")neu(0,"l","＋ neue Query mit Frage","Frage an "+st.name+" — antwortet "+p.rec,"",
       (n,o)=>stoQueryAnlegen(st,n,[p.rec],o),(e,frag)=>stoWaehleBesitzer(st,"reader",e,frag));
     return g;}
-  const stoMethodenVorschlag=(hd,lesen)=>!hd?"":lesen?"Finde"+(hd.query||"").replace(/^(Hole|Get)/,"")+"Async":"Vermerke"+(istBuendel(hd)?buendelEvents(hd).join("Und"):hd.event||"")+"Async";
-  // Default-Parameter einer neuen Fähigkeit (danach im ✎): zum Auf die Id des Aggregats, aus dem das Event stammt (bei Klasse 2 dazu die
-  //   Herkunft, CQRS109); zur Frage die Id-Felder der Query.
+
+  // Default-Parameter einer neuen Fähigkeit (danach im ✎): zum Auf die Id des Aggregats, aus dem das Event stammt (dazu die Herkunft, wenn die
+  //   Store-Klasse bzw. ein Bündel sie verlangt — Grammatik); zur Frage die Id-Felder der Query.
   function stoParameterVorschlag(st,hd,lesen){const p=[];if(!hd)return p;
     if(!lesen){const b=istBuendel(hd)?hd.buendel||{}:null,ag=b?(b.ueber||b.schluessel):(SICHT().karten["rec:"+hd.event]||{}).aggregat,A=MODEL.aggregate.find(a=>a.name===ag);
       if(A)p.push({_id:"f"+(NID++),name:"id",typ:"Id<"+A.namespace+"."+A.name+">"});
       // Ein Bündel löst aus verschiedenen Streams aus: der Store braucht die Herkunft, um den jüngsten Stand zu halten (Herkunft.Stand).
-      if((st.klassen||[])[0]===2||b)p.push({_id:"f"+(NID++),name:"h",typ:"Herkunft"});}
+      if(stoKlasse(st).herkunft||(b&&BUENDEL().herkunft))p.push({_id:"f"+(NID++),name:"h",typ:"Herkunft"});}
     else((recNamens(hd.query)||{}).felder||[]).filter(f=>/^Id</.test(f.typ||"")).forEach(f=>p.push({_id:"f"+(NID++),name:f.name.charAt(0).toLowerCase()+f.name.slice(1),typ:f.typ}));
     return p;}
-  function stoFaehigkeitAnlegen(st,m,lesen,hd){if(!/^[A-Z][A-Za-z0-9_]*$/.test(m||""))return "Ein Methodenname: groß beginnen, nur Buchstaben und Ziffern";
+  function stoFaehigkeitAnlegen(st,m,lesen,hd){if(!new RegExp(typnameMuster()).test(m||""))return "Ein Methodenname: groß beginnen, nur Buchstaben und Ziffern";
     if(stoFns(st).some(([f])=>f.name===m))return m+" gibt es in "+st.name+" schon";
     const fa="I"+m.replace(/Async$/,"");if(MODEL.stores.some(s=>stoFns(s).some(([f])=>f.faehigkeit===fa)))return fa+" gibt es schon";
     const f={_id:(lesen?"rf:":"wf:")+st.name+"."+m,name:m,faehigkeit:fa,params:stoParameterVorschlag(st,hd,lesen),rueckgabe:""};
@@ -3325,7 +3342,7 @@
   function stoBesitzerName(st,art){const kern=st.name.replace(/^I(?=[A-Z])/,"").replace(/Store$/,"")||st.name,basis=kern+(art==="reader"?"Reader":"Projektion");
     let n=basis,i=2;while(MODEL.projektionen.some(p=>p.name===n)||MODEL.reader.some(r=>r.name===n)||recNamens(n))n=basis+(i++);return n;}
   function stoBesitzer(st,o){if(!o||!o.neu)return o;const n=stoBesitzerName(st,o.neu),neu={_id:(o.neu==="reader"?"reader:":"projektion:")+n,name:n,namespace:st.namespace,handles:[],amStore:st.name};
-    if(o.neu!=="reader"&&(st.klassen||[])[0]===3)neu.mindestensEinmal=true;
+    if(o.neu!=="reader"&&stoKlasse(st).mindestensEinmal)neu.mindestensEinmal=true;
     (o.neu==="reader"?MODEL.reader:MODEL.projektionen).push(neu);return neu;}
   function stoQueryAnlegen(st,n,antworten,o){const f=nameFehler(n);if(f)return f;
     MODEL.records.push({name:n,kind:"query",namespace:st.namespace,felder:[],istErzeugung:false,amStore:st.name});aggStempel(n);
@@ -3337,29 +3354,30 @@
     const gruppen=[...new Set(evs.map(r=>ag(r.name)))].sort((a,b)=>a.localeCompare(b,"de"));
     menueFix(ev.clientX,ev.clientY,"Auf in "+(o.neu?stoBesitzerName(st,"projektion")+" (neu)":o.name)+" für …",evs.length?gruppen.flatMap(g=>[{kopf:"▣ "+g},
       ...evs.filter(r=>ag(r.name)===g).sort((a,b)=>a.name.localeCompare(b.name,"de")).map(r=>({t:r.name,fn:()=>{const p=stoBesitzer(st,o);
-        if((st.klassen||[])[0]===3)p.mindestensEinmal=true;p.handles=[...(p.handles||[]),{event:r.name,fns:[]}];aggStempel("hd:"+p.name+"."+r.name);gTitel("🗄 "+st.name+": Auf "+r.name+" in "+p.name);render();}}))])
+        if(stoKlasse(st).mindestensEinmal)p.mindestensEinmal=true;p.handles=[...(p.handles||[]),{event:r.name,fns:[]}];aggStempel("hd:"+p.name+"."+r.name);gTitel("🗄 "+st.name+": Auf "+r.name+" in "+p.name);render();}}))])
       :[{hinweis:"Die Projektion hört schon jedes Event — ein neues Event entsteht im Aggregat."}]);});}
   // Ein Event aus dem Log wählen (nach Aggregat gruppiert), ohne die schon gewählten.
   function stoEventWahl(ev,titel,ohne,cb,vorne){const ag=nm=>(SICHT().karten["rec:"+nm]||{}).aggregat||"ohne Aggregat",evs=MODEL.records.filter(r=>r.kind==="event"&&!ohne.includes(r.name));
     const gruppen=[...new Set(evs.map(r=>ag(r.name)))].sort((a,b)=>a.localeCompare(b,"de"));
     menueFix(ev.clientX,ev.clientY,titel,[...(vorne||[]),...(evs.length?gruppen.flatMap(g=>[{kopf:"▣ "+g},
       ...evs.filter(r=>ag(r.name)===g).sort((a,b)=>a.name.localeCompare(b.name,"de")).map(r=>({t:r.name,fn:()=>cb(r.name)}))]):[{hinweis:"Kein weiteres Event — ein neues entsteht im Aggregat."}])]);}
-  // Ein neues Bündel: Projektion wählen, dann Event um Event (bis BUENDEL_HOECHSTENS) — ab zwei steht oben „✓ anlegen“. Weitere kommen später über
+  // Ein neues Bündel: Projektion wählen, dann Event um Event (bis BUENDEL().hoechstens, Grammatik) — ab zwei steht oben „✓ anlegen“. Weitere kommen später über
   //   „＋ Event“ an der Bündel-Karte.
   function stoNeuesBuendel(st,ev){stoWaehleBesitzer(st,"projektion",ev,o=>{
-    const anlegen=evs=>{const p=stoBesitzer(st,o);if((st.klassen||[])[0]===3)p.mindestensEinmal=true;const hd={fns:[]};buendelSetze(hd,evs,null);
+    const anlegen=evs=>{const p=stoBesitzer(st,o);if(stoKlasse(st).mindestensEinmal)p.mindestensEinmal=true;const hd={fns:[]};buendelSetze(hd,evs,null);
       if((p.handles||[]).some(x=>x.event===hd.event)){deFlash("ℹ "+p.name+" hört "+buendelName(hd)+" schon",true);return;}
       p.handles=[...(p.handles||[]),hd];aggStempel("hd:"+p.name+"."+hd.event);gTitel("🗄 "+st.name+": Bündel "+buendelName(hd)+" in "+p.name);render();};
-    const weiter=evs=>{if(evs.length>=BUENDEL_HOECHSTENS){anlegen(evs);return;}
+    const B=BUENDEL(),weiter=evs=>{if(evs.length>=(B.hoechstens||0)){anlegen(evs);return;}
       stoEventWahl(ev,evs.length?"Bündel: "+evs.join(" ⋈ ")+" ⋈ …":"Bündel: erstes Event",evs,e=>weiter([...evs,e]),
-        evs.length>=2?[{t:"✓ Bündel anlegen ("+evs.length+" Events)",title:evs.join(" ⋈ "),fn:()=>anlegen(evs)},{trenn:1},{kopf:"oder ein weiteres Event:"}]
-        :evs.length===1?[{hinweis:"Mindestens zwei Events, höchstens "+BUENDEL_HOECHSTENS+"."}]:[]);};
+        evs.length>=(B.mindestens||0)?[{t:"✓ Bündel anlegen ("+evs.length+" Events)",title:evs.join(" ⋈ "),fn:()=>anlegen(evs)},{trenn:1},{kopf:"oder ein weiteres Event:"}]
+        :evs.length>0?[{hinweis:"Mindestens "+B.mindestens+" Events, höchstens "+B.hoechstens+"."}]:[]);};
     weiter([]);});}
   function stoBuendelEvent(st,hd,ev){const alt=buendelEvents(hd);
     stoEventWahl(ev||{clientX:200,clientY:200},"＋ Event im Bündel "+buendelName(hd),alt,e=>{buendelSetze(hd,[...alt,e]);gTitel("🗄 "+st.name+": "+e+" ins Bündel "+buendelName(hd));render();});}
-  function stoNeueQuery(st,ev){stoWaehleBesitzer(st,"reader",ev,o=>frageFix(ev.clientX,ev.clientY,"＋ Query an "+st.name,"Hole"+st.name.replace(/^I(?=[A-Z])/,"").replace(/Store$/,""),
-    "Legt Query, Frage und eine Antwort an — die Lese-Fähigkeit wählt man danach am Port der Frage",n=>{const ant=n.replace(/^(Hole|Get)/,"")+"Antwort";
-      if(recNamens(ant))return ant+" gibt es schon";const f=nameFehler(n);if(f)return f;stoRecordNeu(st,ant,"queryresponse");return stoQueryAnlegen(st,n,[ant],o)||(render(),null);}));}
+  function stoNeueQuery(st,ev){stoWaehleBesitzer(st,"reader",ev,o=>frageFix(ev.clientX,ev.clientY,"＋ Query an "+st.name,"",
+    "Legt Query, Frage und eine Antwort an — danach der Name der Antwort; die Lese-Fähigkeit wählt man am Port der Frage",n=>{const f=nameFehler(n);if(f)return f;
+      setTimeout(()=>frageFix(ev.clientX,ev.clientY,"↩ Antwort auf "+n,"","Was die Frage "+n+" zurückgibt",ant=>{const f2=nameFehler(ant);if(f2)return f2;
+        if(ant===n)return "Query und Antwort brauchen verschiedene Namen";stoRecordNeu(st,ant,"queryresponse");return stoQueryAnlegen(st,n,[ant],o)||(render(),null);}),0);}));}
   // Ein Read-Model im Store: die Art entscheidet die Schreib-Regel je Dokument (docs/04 §4.3) — eigenes Dokument eines Aggregats (Id<T> Id,
   //   partial), Zeile eines Streams (Id mit dem Besitzer) oder geteilt (IGeteiltesReadModel). Es gehört zu den Dokument-Typen des Stores (amStore).
   function stoReadModelAnlegen(st,n,art){const f=nameFehler(n)||(MODEL.readModels.some(r=>r.name===n)?n+" gibt es schon":null);if(f)return f;
@@ -3368,22 +3386,21 @@
     gTitel("🗄 "+st.name+": Read-Model "+n);render();}
   function stoKoepfe(st){const t="🗄 "+st.name,menue=(titel,items)=>ev=>menueFix(ev.clientX,ev.clientY,titel,items),klasse=(st.klassen||[])[0];
     const rm=(titel,vorschlag,art)=>e=>frageFix(e.clientX,e.clientY,titel,vorschlag,"Read-Model in "+st.name,n=>stoReadModelAnlegen(st,n,art));
-    const kern=st.name.replace(/^I(?=[A-Z])/,"").replace(/Store$/,"");
     return [
       ["Eingänge",menue("Neu in "+st.name,[{t:"＋ Auf für ein Event …",title:"Events stammen aus dem Aggregat — hier wählt man, worauf die Projektion reagiert",fn:e=>stoNeuesAuf(st,e)},
         {t:"＋ Bündel aus Events …",title:"Ein Auf, das gerufen wird, sobald zum selben Schlüssel von jedem Event eines im Log steht (docs/04 §4.3.1)",fn:e=>stoNeuesBuendel(st,e)},
         {t:"＋ Query mit Frage und Antwort …",fn:e=>stoNeueQuery(st,e)}]),"＋ ▾","eingang"],
       ["Auf · Frage",null,"je Eingang eines"],
       ["Fähigkeiten",menue("Neu in "+st.name,[
-        {t:"＋ Schreib-Fähigkeit …",fn:e=>frageFix(e.clientX,e.clientY,"＋ Schreib-Fähigkeit in "+st.name,"Schreibe"+kern+"Async","Methode — die Umsetzung entsteht mit",n=>stoFaehigkeitAnlegen(st,n,false,null)||(render(),null))},
-        {t:"＋ Lese-Fähigkeit …",fn:e=>frageFix(e.clientX,e.clientY,"＋ Lese-Fähigkeit in "+st.name,"Finde"+kern+"Async","Methode — die Umsetzung entsteht mit",n=>stoFaehigkeitAnlegen(st,n,true,null)||(render(),null))},
+        {t:"＋ Schreib-Fähigkeit …",fn:e=>frageFix(e.clientX,e.clientY,"＋ Schreib-Fähigkeit in "+st.name,"","Methode — die Umsetzung entsteht mit",n=>stoFaehigkeitAnlegen(st,n,false,null)||(render(),null))},
+        {t:"＋ Lese-Fähigkeit …",fn:e=>frageFix(e.clientX,e.clientY,"＋ Lese-Fähigkeit in "+st.name,"","Methode — die Umsetzung entsteht mit",n=>stoFaehigkeitAnlegen(st,n,true,null)||(render(),null))},
         {trenn:1},{hinweis:"Steht unverbunden in der Spalte — anschließen über ＋ am Port (＋ Auf bzw. ＋ Frage)."}]),"＋ ▾","faehigkeit"],
       ["Umsetzung",null,"je Fähigkeit eine"+(klasse?" · Klasse "+klasse:"")],
       ["Read-Models",menue("Read-Model in "+st.name,[{kopf:"Eigenes Dokument eines Aggregats"},
-        ...MODEL.aggregate.map(A=>({t:"＋ zu ▣ "+A.name+" …",fn:rm("＋ Read-Model zu "+A.name,A.name+"ReadModel",{agg:A})})),
-        {trenn:1},{t:"＋ Zeile eines Streams …",title:"Die Id enthält den Besitzer, z. B. {DatensatzId}:{ImagePairId}",fn:rm("＋ Zeile",kern+"Zeile",{})},
-        {t:"＋ geteiltes Read-Model …",title:"Mehrere Streams schreiben hinein (IGeteiltesReadModel, Versionsprüfung)",fn:rm("＋ geteiltes Read-Model",kern+"Uebersicht",{geteilt:true})}]),"＋ ▾"],
-      ["Antworten",e=>frageFix(e.clientX,e.clientY,"＋ Antwort in "+st.name,kern+"Antwort","Steht unverbunden in der Spalte — anschließen über ＋ am Port (＋ Frage)",
+        ...MODEL.aggregate.map(A=>({t:"＋ zu ▣ "+A.name+" …",fn:rm("＋ Read-Model zu "+A.name,"",{agg:A})})),
+        {trenn:1},{t:"＋ Zeile eines Streams …",title:"Die Id enthält den Besitzer, z. B. {DatensatzId}:{ImagePairId}",fn:rm("＋ Zeile","",{})},
+        {t:"＋ geteiltes Read-Model …",title:"Mehrere Streams schreiben hinein (IGeteiltesReadModel, Versionsprüfung)",fn:rm("＋ geteiltes Read-Model","",{geteilt:true})}]),"＋ ▾"],
+      ["Antworten",e=>frageFix(e.clientX,e.clientY,"＋ Antwort in "+st.name,"","Steht unverbunden in der Spalte — anschließen über ＋ am Port (＋ Frage)",
         n=>{const f=nameFehler(n);if(f)return f;stoRecordNeu(st,n,"queryresponse");gTitel(t+": Antwort "+n);render();}),"＋"]];}
   function stoKurz(st,n,x){const box=h("div",{class:"ag-kurz"});
     if(n.kind==="buendel"){const b=n.ref.buendel||{};
@@ -3409,24 +3426,24 @@
   //   Umsetzung (die Auf und Fragen, die sie nehmen, lassen sie los), ein Read-Model, eine Antwort (fällt aus allen Fragen). Events sind hier fix.
   function stoLoeschPlan(st,I,n,x){const ownerWeg=(o,kind)=>{if(!(o.handles||[]).length){const on=NODEBY.get((kind==="reader"?"rdr:":"prj:")+o._id);if(on)delNode(on);}};
     const handleName=hd=>istBuendel(hd)?"Bündel "+buendelName(hd):hd.event||hd.query;
-    const handlePlan=(hd,o,lesen)=>{const letzte=(o.handles||[]).length===1;
+    const handlePlan=(hd,o,lesen,hx)=>{const letzte=(o.handles||[]).length===1;
       if(!lesen)return {was:"Auf("+handleName(hd)+") in "+o.name,folgen:letzte?["die Projektion "+o.name+" (ihr letztes Auf)"]:[],grund:null,
         tu:()=>{o.handles=(o.handles||[]).filter(z=>z!==hd);ownerWeg(o,"projektion");}};
-      const q=hd.query,p=loeschPlanRecord(q,"Query "+q+" samt Frage in "+o.name,u=>u.art==="rfrage"&&u.ref===hd,()=>{
-        o.handles=(o.handles||[]).filter(z=>z!==hd);recordWeg(q);(hd.responses||[]).forEach(aggRecordAufraeumen);ownerWeg(o,"reader");});
+      const q=hd.query,p=loeschPlanRecord(q,"Query "+q+" samt Frage in "+o.name,u=>u.art==="rfrage"&&u.karte===hx,()=>{
+        o.handles=(o.handles||[]).filter(z=>z!==hd);recordWeg(q);(hd.responses||[]).forEach(nm=>aggRecordAufraeumen(nm,u=>u.karte===hx));ownerWeg(o,"reader");});
       if(letzte)p.folgen.push("der Reader "+o.name+" (seine letzte Frage)");return p;};
     if(I.fremd.has(x))return null;
-    if(n.kind==="handle")return handlePlan(n.ref,n.own.ref,n.own.kind==="reader");
-    if(n.kind==="buendel")return handlePlan(n.ref,n.prj,false);
+    if(n.kind==="handle")return handlePlan(n.ref,n.own.ref,n.own.kind==="reader",x);
+    if(n.kind==="buendel")return handlePlan(n.ref,n.prj,false,(n.own||{}).id);
     if(n.kind==="fn"||n.kind==="umsetzung"){const f=n.ref,fid=f._id,fn=NODEBY.get("fn:"+fid);
       const nutzer=[...MODEL.projektionen,...MODEL.reader].flatMap(o=>(o.handles||[]).filter(hd=>(hd.fns||[]).includes(fid)).map(hd=>handleName(hd)+" in "+o.name+" lässt sie los"));
       return {was:"Fähigkeit "+(f.faehigkeit||f.name)+" samt Umsetzung",folgen:nutzer,grund:fn?null:"die Fähigkeit ist im Modell nicht zu finden",tu:()=>{if(fn)delNode(fn);}};}
-    if(n.kind==="readmodel"){const r=n.ref,fns=MODEL.stores.flatMap(s=>stoFns(s).filter(([f])=>nennt(stoTypen(f),r.name)).map(([f])=>s.name+"."+f.name));
+    if(n.kind==="readmodel"){const r=n.ref,fns=Object.entries(INNEN().readModels||{}).filter(([,l])=>l.includes(x)).map(([fx])=>(NODEBY.get(fx)||{name:fx}).name);
       return {was:"Read-Model "+r.name,folgen:[],grund:fns.length?"eine Fähigkeit nennt es in ihrer Signatur: "+fns.join(" · ")+" — dort zuerst ändern":null,
         tu:()=>{const nn=NODEBY.get(x);if(nn)delNode(nn);}};}
     if(x.startsWith("rec:")){const r=n.ref||{};
-      if(r.kind==="query"){const hds=MODEL.reader.flatMap(o=>(o.handles||[]).filter(hd=>hd.query===r.name).map(hd=>({hd,o})));
-        return hds.length===1?handlePlan(hds[0].hd,hds[0].o,true):loeschPlanRecord(r.name,"Query "+r.name,()=>false,()=>recordWeg(r.name));}
+      if(r.kind==="query"){const hds=MODEL.reader.flatMap(o=>{const ids=handleIds(o,"rdr:"+o._id);return (o.handles||[]).map((hd,i)=>({hd,o,hx:ids[i]})).filter(z=>z.hd.query===r.name);});
+        return hds.length===1?handlePlan(hds[0].hd,hds[0].o,true,hds[0].hx):loeschPlanRecord(r.name,"Query "+r.name,()=>false,()=>recordWeg(r.name));}
       if(r.kind==="queryresponse")return loeschPlanRecord(r.name,"Antwort "+r.name,u=>u.art==="rantwort",()=>{
         MODEL.reader.forEach(o=>(o.handles||[]).forEach(hd=>{hd.responses=ohneX(hd.responses,r.name);}));recordWeg(r.name);});}
     return null;}
@@ -3475,14 +3492,13 @@
     return box;}
   // Ein neuer Store (Fläche, Kopf der Spalte Projektionen): erst die Store-Klasse (sie wählt die Basis der Umsetzung, Storeklassen), dann der
   //   Bereich und der Name; danach öffnet er sich von innen — Projektion und Reader entstehen dort mit dem ersten Auf bzw. der ersten Query.
-  const STORE_KLASSE={1:["atomar","Wirkung und Fortschritt in einer Transaktion (Marten)"],2:["wiederholungsfest","jede Wirkung ergibt wiederholt dasselbe (Datei-Ziel)"],
-    3:["mindestens einmal","ohne Zusage (Datei-Senke) — die Projektion trägt [MindestensEinmal]"]};
+
   function stoNeuAnlegen(ev){const x=ev.clientX,y=ev.clientY;
-    menueFix(x,y,"Neuer Store — Klasse",Object.entries(STORE_KLASSE).map(([k,[t,u]])=>({t:k+" · "+t,title:u,fn:()=>{
+    menueFix(x,y,"Neuer Store — Klasse",(GRAM().storeklassen||[]).map(kl=>({t:kl.nummer+" · "+kl.name,
+      title:kl.marker+(kl.herkunft?" — jede Schreib-Fähigkeit nimmt die Herkunft":"")+(kl.mindestensEinmal?" — nur für eine Projektion mit [MindestensEinmal]":""),fn:()=>{const k=kl.nummer;
       const nss=[...new Set(MODEL.aggregate.map(a=>a.namespace))].sort();
-      const frei=ns=>{const b="I"+ns.split(".").pop();let n=b+"Store",i=2;while(MODEL.stores.some(s=>s.name===n))n=b+(i++)+"Store";return n;};
-      const weiter=ns=>frageFix(x,y,"＋ Store (Klasse "+k+")",frei(ns),"Bündel der Fähigkeiten; die Umsetzung entsteht mit",n=>{
-        if(!/^I[A-Z][A-Za-z0-9_]*$/.test(n))return "Ein Schnittstellenname: I und groß weiter";if(MODEL.stores.some(s=>s.name===n)||recNamens(n))return n+" gibt es schon";
+      const weiter=ns=>frageFix(x,y,"＋ Store (Klasse "+k+")","","Bündel der Fähigkeiten; die Umsetzung entsteht mit",n=>{
+        if(!new RegExp("^I"+typnameMuster().slice(1)).test(n))return "Ein Schnittstellenname: I und groß weiter";if(MODEL.stores.some(s=>s.name===n)||recNamens(n))return n+" gibt es schon";
         MODEL.stores.push({_id:"store:"+n,name:n,namespace:ns,writeFns:[],readFns:[],klassen:[+k]});gTitel("🗄 Store "+n+" (Klasse "+k+")");render();komKarte("sto:store:"+n,true);});
       if(nss.length<=1)weiter(nss[0]||defaultNsGlobal());else menueFix(x,y,"Bereich",nss.map(ns=>({t:ns,fn:()=>weiter(ns)})));}})));}
   const I_ERGEBNIS=(A,nm)=>MODEL.decider.some(d=>d.aggregat===A.name&&(d.ergibt||[]).some(o=>o.event===nm));
@@ -3505,229 +3521,375 @@
     ["pointerdown","dblclick","wheel","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     document.getElementById("de").append(m);
     setTimeout(()=>{const off=ev=>{if(!m.contains(ev.target)){m.remove();document.removeEventListener("pointerdown",off,true);}};document.addEventListener("pointerdown",off,true);},0);}
-  const akteurVonKarte=fk=>MODEL.akteure.find(a=>"akt:"+a._id===fk.karte);
   const projektionVonKarte=fk=>MODEL.projektionen.find(p=>"prj:"+p._id===fk.karte);
 
   // Klick auf eine Kante: lösen, was der Code als Liste trägt (darf, hört, Auf einer Projektion); den Typ öffnen.
-  function flKanteMenue(k,ev){const V=FLKARTE.get(k.von),N=FLKARTE.get(k.nach);if(!V||!N)return;const items=[];
-    if(V.art==="akteur"&&V.spalte==="ausgang"){const a=akteurVonKarte(V);
-      if(a&&(a.darf||[]).includes(k.typ))items.push({t:"✕ "+a.name+" darf "+k.typ+" nicht mehr",gefahr:1,fn:()=>{a.darf=ohneX(a.darf,k.typ);gTitel("👤 "+a.name+" darf "+k.typ+" nicht mehr");render();}});}
-    if(N.art==="akteur"&&N.spalte==="eingang"&&k.art==="kenntnis"){const a=akteurVonKarte(N);
-      if(a&&(a.hoert||[]).includes(k.typ))items.push({t:"✕ "+a.name+" hört "+k.typ+" nicht mehr",gefahr:1,fn:()=>{a.hoert=ohneX(a.hoert,k.typ);gTitel("👤 "+a.name+" hört "+k.typ+" nicht mehr");render();}});}
+  function flKanteMenue(k,ev){if(k.art==="reaktion"){aktOeffne(k.von.replace(/\|ein$/,""));return;}const V=FLKARTE.get(k.von),N=FLKARTE.get(k.nach);if(!V||!N)return;const items=[];
+    // Was ein Akteur darf und hört, ändert man im Modal „Akteure und Clients“ (je Absicht eine Geste).
+    [V,N].filter(x=>x.art==="akteur").forEach(x=>items.push({t:"👤 "+x.name+" öffnen (darf · hört)",fn:()=>aktOeffne(x.karte)}));
     if(N.art==="projektion"&&k.art==="schreiben"){const p=projektionVonKarte(N);
       if(p&&(p.handles||[]).some(x=>x.event===k.typ))items.push({t:"✕ "+p.name+" hört "+k.typ+" nicht mehr (Auf entfernen)",gefahr:1,fn:()=>{p.handles=p.handles.filter(x=>x.event!==k.typ);gTitel(p.name+": Auf("+k.typ+") entfernt");render();}});}
     if(!items.length)items.push({hinweis:"Folgt aus den Signaturen — ändern im Panel bzw. in der Komposition (⧉)."});
     items.push({trenn:1},NODEBY.has("rec:"+komBasis(k.typ))?{t:"◎ "+k.typ+" im Panel",fn:()=>waehle("rec:"+komBasis(k.typ))}:null);
     menueFix(ev.clientX,ev.clientY,k.typ+" · "+k.art+" · "+V.name+" → "+N.name,items);}
 
-  // ══ KATALOG-MODAL (docs/10 §10.9): die Funktionswelt ohne Domäne. Links die Kataloge mit ihren Funktionen und
-  //   Graphen, in der Mitte die gewählte Funktion als Reihe — Input-Command ─▶ ƒ ─▶ Output-Commands (mehrere = ein OneOf, je Fall ein Port), je
-  //   Input ein Auf —, rechts die Command-Liste des Katalogs und die des allgemeinen Katalogs (Commands, die alle Kataloge teilen). Input und Output
-  //   sind ein neuer Command oder einer aus diesen Listen; was neu entsteht, landet in der Liste. Ein Command aus dem allgemeinen Katalog setzt die
-  //   Projektreferenz (der Katalog entsteht beim ersten Gebrauch). Pfad-Element „kat:<Katalog>“, die gewählte Funktion in KOM.katFn (Name).
-  const katAllg=()=>(MODEL.rahmen||{}).allgemeinerKatalog||null;
-  const katListe=()=>[...new Set([...(komBaukasten().kataloge||[]),...MODEL.bausteinFunktionen.map(funKatalog).filter(Boolean)])].sort();
-  const katFunktionen=kat=>MODEL.bausteinFunktionen.filter(f=>!istGerufen(f)&&funKatalog(f)===kat).sort((a,b)=>a.name.localeCompare(b.name));
-  const katCommands=kat=>MODEL.records.filter(r=>["command","rejection"].includes(r.kind)&&funKatalog(r)===kat).sort((a,b)=>a.name.localeCompare(b.name));
-  // Die Commands, die die Quellen des Framework-Katalogs melden (DateiGefunden, Takt, Aufruf) — nur lesend, als Input wählbar.
-  const katFramework=()=>[...new Set(komBaukasten().katalog.flatMap(k=>k.meldet||[]))].sort();
-  const katBereich=(f,kat)=>{const ns=String(f&&f.namespace||"");return ns.startsWith(kat+".")?ns.slice(kat.length+1).split(".")[0]:null;};
+  // Die Katalog-Sicht des Servers (board.sicht.kataloge, GraphExtractor.Kern/Sicht/Sicht.Kataloge.cs): je Katalog seine Nachrichten mit wer gibt
+  //   und wer nimmt, was die Quellen melden, seine Funktionen (Konstruktor, Graphen, passende Ein- und Ausgänge) und Graphen; dazu die Arten von
+  //   Nachrichten, die ein Katalog hält (Projektstruktur × Grammatik). Der Editor rechnet nichts davon nach (W3).
+  const KATS=()=>SICHT().kataloge||{arten:[],je:{}};
+  const katSicht=kat=>(KATS().je||{})[kat]||{nachrichten:[],quellen:[],funktionen:[],graphen:[]};
+  const katListe=()=>Object.keys(KATS().je||{}).sort();
+  const katFnSicht=(kat,name)=>katSicht(kat).funktionen.find(x=>x.name===name)||null;
+  const katNachricht=(kat,nm)=>katSicht(kat).nachrichten.find(x=>x.typ===nm)||katSicht(kat).quellen.find(x=>x.typ===nm)||null;
+  // Die Funktionen eines Katalogs, wie der Server sie liest — dazu eine eben angelegte, die noch nicht geschrieben ist (sie hat noch keine Datei).
+  const katFunktionen=kat=>{const namen=new Set(katSicht(kat).funktionen.map(x=>x.name));
+    return MODEL.bausteinFunktionen.filter(f=>namen.has(f.name)||(!f.datei&&f.namespace===kat&&!f._neuTechnik)).sort((a,b)=>a.name.localeCompare(b.name));};
+  // ══ KATALOG-MODAL (docs/10 §10.9): ein Modal je Katalog, der Katalog eine geschlossene Einheit. Oben die Wahl des Katalogs (Dropdown, darin
+  //   „＋ neuer Katalog“), links seine Funktionen und Graphen, in der Mitte die gewählte Funktion — was sie braucht (Konstruktor), je Auf eine Zeile
+  //   Eingang ─▶ Ausgänge, darunter wie viele herauskommen, was sie liest und ihr Rumpf —, rechts alle Nachrichten des Katalogs (Commands, Hinweise)
+  //   und die der Quellen des Frameworks. Verbunden wird über die Liste rechts: „＋ Eingang“ bzw. „＋ Ausgang“ hebt dort hervor, was passt, ein Klick
+  //   verbindet; „＋ Command“/„＋ Hinweis“ legt eine Nachricht frei an (während einer Wahl gleich verbunden). Ein Katalog ist flach: alles liegt
+  //   direkt in <Name>.Katalog. Ein gewählter Graph steht an derselben Stelle wie die Funktion — seine Leinwand in der Mitte, links „＋“ setzt ein.
+  //   Pfad „kat:<Katalog>“, die Funktion in KOM.katFn, der Graph in KOM.katGr; eine laufende Wahl (＋) in KOM.port wie in jeder Innenansicht.
   function katOeffne(kat,fn){const id="kat:"+(kat||katListe()[0]||"");
     if(KOM){if(KOM.pfad[KOM.pfad.length-1]!==id)KOM.pfad.push(id);}else KOM={pfad:[id],reiter:"katalog",wahl:null};
-    KOM.katFn=fn||null;KOM.port=null;komZeige();}
+    KOM.katFn=fn||null;KOM.katGr=null;KOM.katWahl=null;KOM.port=null;komZeige();}
+  // Einen Graphen im Katalog-Modal zeigen: das Modal steht auf seinem Katalog, die Mitte zeigt den Graphen (KOM.katGr = seine Karte). Ohne
+  //   Katalog (es gibt nur Graphen in Katalogen) false.
+  function katGraphWaehlen(grId){const g=komModell(grId),kat=g&&funKatalog(g);if(!kat)return false;const id="kat:"+kat;
+    if(!KOM)KOM={pfad:[id],reiter:"katalog",wahl:null};
+    else if(KOM.pfad.length&&KOM.pfad[KOM.pfad.length-1].startsWith("kat:"))KOM.pfad[KOM.pfad.length-1]=id;else KOM.pfad.push(id);
+    KOM.katGr=grId;KOM.katWahl=null;KOM.port=null;KOM.wahl=null;return true;}
+  // Eine Funktion in der Mitte zeigen (statt eines Graphen).
+  function katWaehleFn(name){KOM.katFn=name;KOM.katGr=null;KOM.katWahl=null;KOM.port=null;KOM.wahl=null;}
   window.deKataloge=()=>katOeffne(null,null);
-  // Wer einen Command nimmt bzw. gibt (über alle Funktionen) — für die Liste.
-  function katNutzung(nm){let nimmt=0,gibt=0;MODEL.bausteinFunktionen.forEach(f=>{(f.eingaenge||[]).forEach(e=>{if(e.eingang===nm)nimmt++;if((e.ausgaben||[]).includes(nm))gibt++;});
-    if((f.lauscht||[]).includes(nm))gibt++;});return {nimmt,gibt};}
-  // Erst die Referenz auf den allgemeinen Katalog (Geste am Server, lädt kalt neu), dann die Änderung am frischen Modell: dran(f) bekommt die
-  //   Funktion aus dem neuen Board. Liegt die Funktion im allgemeinen Katalog oder nutzt ihr Katalog ihn schon, sofort.
-  async function katMitAllgemein(fname,kat,dran){const allg=katAllg();if(!allg)return;
-    await katMitReferenz(kat,allg,()=>dran(MODEL.bausteinFunktionen.find(x=>x.name===fname)||null));}
+  // ══ KATALOG VON INNEN (docs/10 §10.9): dieselbe Innenansicht wie Aggregat und Store — Spalten Eingänge · Auf · Lausche · Ausgänge · Liest · Technik ·
+  //   Umsetzung, je Funktion ein Band (im Kopf: was ihr Konstruktor nimmt, in welchen Graphen sie steht, ＋ Eingang, ✕). Eine Nachricht, die zwischen
+  //   zwei Funktionen läuft, steht an beiden Enden (je Band eine Karte, „← ƒ …“ bzw. „→ ƒ …“). Was passt, sagt der Server (sicht.kataloge: je Funktion
+  //   die passenden Eingänge, je Auf die passenden Ausgänge); ＋ am Port hebt es hervor, gestrichelt steht, was nicht im Bild ist oder neu entsteht.
+  //   Ids: ka:<fn>:<i> (Auf), kl:<fn> (Lausche), ke:<fn>:<Typ> (Eingang), ko:<fn>:<Typ> (Ausgang), kt:<fn>:<Typ> (Fähigkeit bzw. Technik),
+  //   ku:<fn>:<Technik>:<i> (Methode einer Umsetzung), kf:<Typ> (frei), kn:<fn> (noch ohne Eingang).
+  const katFnVon=id=>MODEL.bausteinFunktionen.find(f=>f._id===id)||null;
+  const katNimmtTechnik=(kat,T)=>katFunktionen(kat).some(f=>!istGerufen(f)&&katTechnikVon(kat,f).includes(T));
+  const katTechnikVon=(kat,f)=>((katFnSicht(kat,f.name)||{}).konstruktor||[]).filter(c=>c.art==="technik").map(c=>c.typ);
+  // Was die Sicht über eine Technik weiß (Methoden, Umsetzungen mit Stand und Konstruktor); eine eben angelegte steht noch nicht darin — dann aus dem Modell.
+  function katTechnik(T){const t=(SICHT().technik||{})[T];if(t)return t;const g=gerufenByName(T);if(!g)return {methoden:[],umsetzungen:[]};
+    return {methoden:(g.methoden||[]).map(m=>({name:m.name,sig:(m.rueckgabe||"void")+" "+m.name+"("+(m.parameter||[]).map(p=>p.typ+" "+p.name).join(", ")+")"})),
+      umsetzungen:(g.umsetzungen||[]).map(u=>({name:u.name,methoden:(g.methoden||[]).map(m=>({name:m.name,stand:"neu"})),
+        braucht:(u.konstruktor||[]).map(p=>({typ:String(p.typ).replace(/\?$/,""),art:gerufenByName(p.typ)?"technik":/^ILogger</.test(p.typ)?"logger":"konfig"}))}))};}
+  function katInnen(kat,nur){const glieder=new Map(),kanten=[],band=new Map(),knoten=new Map(),unverbunden=new Set(),baender=[],baum=new Map(),wurzeln=[];
+    const setze=(x,s,b)=>{glieder.set(x,s);band.set(x,b);};
+    const nachricht=(x,s,b,nm,f,seite)=>{if(glieder.has(x))return;const r=recByName(nm);setze(x,s,b);
+      knoten.set(x,{id:x,kind:r?r.kind:"command",name:nm,ref:r||{name:nm},rec:true,fw:!r,f,seite});};
+    const fns=katFunktionen(kat).filter(f=>f===nur),genommen=new Set();
+    fns.filter(f=>!istGerufen(f)).forEach(f=>{const b="f:"+f._id,aufs=[];baender.push(b);
+      (f.eingaenge||[]).forEach((e,ei)=>{const ax="ka:"+f._id+":"+ei,ex="ke:"+f._id+":"+e.eingang;aufs.push(ax);
+        setze(ax,1,b);knoten.set(ax,{id:ax,kind:"auf",name:"Auf("+e.eingang+")",ref:e,f,ei});
+        nachricht(ex,0,b,e.eingang,f,"ein");kanten.push([ex,ax]);
+        (e.ausgaben||[]).forEach(o=>{const ox="ko:"+f._id+":"+o;nachricht(ox,2,b,o,f,"aus");kanten.push([ax,ox]);});
+        (e.faehigkeiten||[]).forEach(p=>{const tx="kt:"+f._id+":"+p.typ;if(!glieder.has(tx)){setze(tx,3,b);knoten.set(tx,{id:tx,kind:"faehigkeit",name:p.typ,ref:p,f});}
+          kanten.push([ax,tx]);});});
+      if((f.lauscht||[]).length){const lx="kl:"+f._id;aufs.push(lx);setze(lx,1,b);knoten.set(lx,{id:lx,kind:"lausche",name:"Lausche",ref:f,f});
+        f.lauscht.forEach(o=>{const ox="ko:"+f._id+":"+o;nachricht(ox,2,b,o,f,"aus");kanten.push([lx,ox]);});}
+      if(!aufs.length){const nx="kn:"+f._id;aufs.push(nx);setze(nx,1,b);knoten.set(nx,{id:nx,kind:"leer",name:f.name,ref:f,f});}
+      // Die Abhängigkeiten (Technik im Konstruktor): je eine ein Stapel über dem Band — unten die Schnittstelle (geht in jedes Auf), darüber ihre
+      //   Umsetzungen, darüber, was eine Umsetzung selbst nimmt (ab Ebene 3 zu, bis man es an der Umsetzung aufklappt).
+      const baue=(T,pfad,ebene,weg,braucher)=>{const sx="ks:"+f._id+":"+pfad,g=gerufenByName(T),t=katTechnik(T);genommen.add(T);setze(sx,-1,b);
+        knoten.set(sx,{id:sx,kind:"schnittstelle",name:T,ref:g||{name:T},g,t,f,ebene,braucher});baum.set(sx,{kinder:[],ebene});
+        (t.umsetzungen||[]).forEach((u,ui)=>{const ux=sx+"/"+u.name;setze(ux,-1,b);
+          knoten.set(ux,{id:ux,kind:"tumsetzung",name:u.name,ref:u,g,ui,t,f,ebene:ebene+1});baum.set(ux,{kinder:[],ebene:ebene+1});baum.get(sx).kinder.push(ux);kanten.push([ux,sx]);
+          (u.braucht||[]).filter(c=>c.art==="technik"&&!weg.includes(c.typ)&&KOM.auf&&KOM.auf.has(ux+">"+c.typ)).forEach(c=>{
+            const cx=baue(c.typ,pfad+"/"+u.name+"/"+c.typ,ebene+2,[...weg,c.typ],{g,ui});baum.get(ux).kinder.push(cx);kanten.push([cx,ux]);});});
+        return sx;};
+      katTechnikVon(kat,f).forEach(T=>{const sx=baue(T,T,1,[T],null);wurzeln.push(sx);aufs.forEach(a=>kanten.push([sx,a]));});});
+    return {glieder,kanten,band,knoten,unverbunden,baender,stapel:{wurzeln,baum}};}
+  // Was an einem ＋ passt (vom Server): ein neuer Eingang der Funktion bzw. ein Ausgang des Auf. Ohne Eintrag (die Funktion ist noch nicht
+  //   geschrieben) alle Nachrichten des Katalogs, die diese Rolle haben können.
+  function katPassend(kat,p){const f=katFnVon(p.fid);if(!f)return [];const x=katFnSicht(kat,f.name),S=katSicht(kat);
+    const eingangsArt=new Set((KATS().arten||[]).filter(a=>a.eingang).map(a=>a.art));
+    if(p.art==="eingang")return x?(x.eingang||[]):[...S.nachrichten.filter(n=>eingangsArt.has(n.art)).map(n=>n.typ),...S.quellen.map(n=>n.typ)];
+    if(p.art==="ausgang"){const e=(f.eingaenge||[])[p.ei];if(!e)return [];const hat=new Set(e.ausgaben||[]);
+      return (x&&(x.ausgang||{})[e.eingang]?x.ausgang[e.eingang]:S.nachrichten.map(n=>n.typ).filter(n=>n!==e.eingang)).filter(n=>!hat.has(n));}
+    return [];}
+  function katInnenZeige(de,kat,f){const I=katInnen(kat,f),kn=x=>I.knoten.get(x)||null;
+    const bandTitel={};I.baender.forEach(b=>{bandTitel[b]=katBandKopf(kat,katFnVon(b.slice(2)));});
+    const plus=f&&!istGerufen(f)?h("button",{class:"kat-stapel-plus",title:"Eine Technik in den Konstruktor von "+f.name+" — vorhanden oder neu",
+      onclick:ev=>{ev.stopPropagation();menueFix(ev.clientX,ev.clientY,f.name+" braucht …",funRahmenItems(f,{nur:"technik"}));}},"＋ Abhängigkeit"):null;
+    innenZeige(de,"kat:"+kat,{I,knoten:kn,unverbunden:I.unverbunden,
+      unverbundenText:"Liegt im Katalog, noch von keiner Funktion genommen bzw. ausgegeben — anschließen über ＋ am Port",
+      kopfExtra:()=>katWahlEl(kat),links:()=>katLinksEl(kat,f,null),band:x=>I.band.get(x)||"",
+      fest:x=>{const n=kn(x)||{};return !!n.fw||n.kind==="faehigkeit"||n.kind==="leer";},
+      marke:x=>katMarke(kat,kn(x)),
+      ports:(n,x)=>katPorts(kat,n,x),kantenPorts:(a,b)=>katKantenPorts(kn(a),kn(b)),
+      auswahl:p=>{const k=new Set();if(!p)return k;const ok=new Set(katPassend(kat,p));I.knoten.forEach((n,x)=>{if(n.rec&&ok.has(n.name))k.add(x);});return k;},
+      anschliessen:(p,x)=>katAnschliessen(kat,p,kn(x).name),geister:p=>katGeister(kat,I,p),
+      plus:(p,x,e)=>{const f=katFnVon(p.fid);if(!f)return;
+        if(p.art==="liest"){katLiestWahl(f,kat,(f.eingaenge||[])[p.ei],e);return;}
+        if(p.art==="braucht"){menueFix(e.clientX,e.clientY,f.name+" braucht …",funRahmenItems(f));return;}
+        if(p.art==="aufklappen"){KOM.auf=KOM.auf||new Set();if(KOM.auf.has(p.key))KOM.auf.delete(p.key);else KOM.auf.add(p.key);KOM.port=null;komZeige();return;}
+        if(p.art==="methode"){katMethodeNeu(p.T,e);return;}
+        if(p.art==="umsetzung"){katUmsetzungNeu(p.T,e);return;}
+        if(p.art==="ubraucht"){const g=gerufenByName(p.T),u=g&&(g.umsetzungen||[])[p.ui];if(!u)return;u.konstruktor=u.konstruktor||[];
+          menueFix(e.clientX,e.clientY,u.name+" braucht …",funRahmenItems(g,{ctor:u.konstruktor,name:u.name}));return;}
+        innenPortWahl(p,x);},
+      kurz:(n,x)=>katKurz(kat,n),bearbeiten:(n,x)=>katBearbeiten(kat,n,x),loeschen:(n,x)=>katLoeschPlan(kat,n),
+      zeit:x=>{const n=kn(x)||{},z=(ANSICHT.angelegt||{});return z[n.rec?n.name:(n.f||{}).name]||0;},
+      name:x=>(kn(x)||{}).name||"",ein:x=>I.kanten.filter(([,b])=>b===x).length,koepfe:()=>katKoepfe(kat,f),
+      legen:{spalten:[0,1,2,3],baender:I.baender,bandTitel,alleTitel:true,y0:104,frei:[],folgen:[[3,1]],
+        stapel:{...I.stapel,plus,titel:r=>{const n=kn(r);return "Abhängigkeit · "+(n?n.name:"");}}},
+      ansicht:{fuehrt:()=>"eingang",sortierung:()=>AGG_SORTIERUNG[ANSICHT.katSortierung]?ANSICHT.katSortierung:"neu",B:"ausgang",
+        setze:(f,s)=>{ANSICHT.katSortierung=s;ansichtSpeichern();}}});}
+  // Kopf eines Bandes: die Funktion, was ihr Konstruktor nimmt (✕ nimmt es heraus, ＋ braucht), wo sie steht, ＋ Eingang, ✕ löscht sie.
+  function katBandKopf(kat,f){if(!f)return "";const t="ƒ "+f.name,x=katFnSicht(kat,f.name)||{konstruktor:[],verwendet:[]},ART={technik:"Technik",konfig:"Konfig",zustand:"Zustand",logger:"Logger"};
+    const aktiv=KOM.port&&KOM.port.art==="eingang"&&KOM.port.fid===f._id;
+    const plan={was:"Funktion "+f.name,folgen:[],grund:x.verwendet.length?"steht in "+x.verwendet.map(id=>"⬡ "+((komDaten(id)||{}).name||id)).join(", ")+" — dort zuerst entfernen":null,
+      tu:()=>{const n=NODEBY.get("fb:"+f._id);if(n)delNode(n);else MODEL.bausteinFunktionen.splice(MODEL.bausteinFunktionen.indexOf(f),1);}};
+    return h("span",{class:"kat-band"},h("b",{title:f.namespace+(f.doku?"\n"+f.doku:"")},t),
+      ...x.konstruktor.filter(c=>c.art!=="technik").map(c=>h("span",{class:"kat-chip",title:"Im Konstruktor: "+c.typ+" "+(c.name||"")},(ART[c.art]?ART[c.art]+" · ":"")+c.typ,
+        h("button",{class:"kat-chip-x",title:"Aus dem Konstruktor nehmen (der Typ bleibt)",onclick:ev=>{ev.stopPropagation();
+          f.konstruktor=ctorVon(f,null).filter(q=>String(q.typ||"").trim().replace(/\?$/,"")!==c.typ);gTitel(t+" nimmt "+c.typ+" nicht mehr");render();}},"✕"))),
+      h("button",{class:"kat-chip plus",title:"Konfig oder Logger in den Konstruktor (Technik: ＋ Abhängigkeit über dem Band)",onclick:ev=>{ev.stopPropagation();menueFix(ev.clientX,ev.clientY,f.name+" braucht …",funRahmenItems(f));}},"＋ braucht"),
+      h("button",{class:"kat-chip plus"+(aktiv?" an":""),title:"Ein neuer Eingang (ein weiteres Auf): es leuchtet, was passt — ein Klick verbindet",
+        onclick:ev=>{ev.stopPropagation();innenPortWahl({art:"eingang",fid:f._id,rec:"band:"+f._id},"kn:"+f._id);}},aktiv?"Eingang wählen … (Esc)":"＋ Eingang"),
+      h("span",{class:"kat-band-wo"},x.verwendet.length?"in ":"in keinem Graphen",...x.verwendet.map(id=>h("button",{class:"kat-link",title:"Den Graphen zeigen",
+        onclick:ev=>{ev.stopPropagation();if(katGraphWaehlen(id))komZeige();}},"⬡ "+((komDaten(id)||{}).name||id)))),
+      loeschKnopf(plan,"band:"+f._id));}
+  // Wer eine Nachricht im Katalog gibt bzw. nimmt — an ihrem Eingangs- bzw. Ausgangsende.
+  function katMarke(kat,n){if(!n||!n.rec||!n.f)return null;const w=katNachricht(kat,n.name)||{gibt:[],nimmt:[]},andere=l=>l.filter(x=>x!==n.f.name);
+    const t=n.seite==="ein"?(andere(w.gibt).length?"← "+andere(w.gibt).map(x=>"ƒ "+x).join(", "):n.fw?"vom Framework":"von außen")
+      :(andere(w.nimmt).length?"→ "+andere(w.nimmt).map(x=>"ƒ "+x).join(", "):"verlässt den Katalog");
+    return h("span",{class:"kat-wer",title:n.seite==="ein"?"Wer sie im Katalog ausgibt":"Wer sie im Katalog nimmt"},t);}
+  function katPorts(kat,n,x){const ein=[],aus=[],f=n.f,t=f?"ƒ "+f.name:"",s=nm=>komSorte(nm);
+    if(n.rec)(n.seite==="ein"?aus:ein).push({key:n.name,label:n.name,sorte:s(n.name)});
+    else if(n.kind==="auf"){const e=n.ref;ein.push({key:e.eingang,label:e.eingang,sorte:s(e.eingang)});
+      (e.ausgaben||[]).forEach(o=>aus.push({key:o,label:o,sorte:s(o),loese:()=>{e.ausgaben=ohneX(e.ausgaben,o);gTitel(t+": Auf("+e.eingang+") gibt "+o+" nicht mehr aus");render();}}));
+      aus.push({key:"+aus",label:"Ausgang",plus:{art:"ausgang",fid:f._id,ei:n.ei,rec:x}});
+      (e.faehigkeiten||[]).forEach(p=>aus.push({key:"t:"+p.typ,label:"liest "+p.typ,sorte:"faehigkeit",
+        loese:()=>{e.faehigkeiten=(e.faehigkeiten||[]).filter(q=>q!==p);gTitel(t+": Auf("+e.eingang+") liest "+p.typ+" nicht mehr");render();}}));
+      aus.push({key:"+liest",label:"liest",plus:{art:"liest",fid:f._id,ei:n.ei,rec:x+"#liest"}});}
+    else if(n.kind==="lausche")(f.lauscht||[]).forEach(o=>aus.push({key:o,label:o,sorte:s(o)}));
+    else if(n.kind==="leer")ein.push({key:"+ein",label:"Eingang",plus:{art:"eingang",fid:f._id,rec:"band:"+f._id}});
+    else if(n.kind==="faehigkeit")ein.push({key:n.name,label:n.name,sorte:n.kind});
+    // Schnittstelle: ihre Methoden (✕ nimmt eine heraus — die Umsetzungen behalten ihren Code, der Build meldet ihn), ＋ Methode, ＋ Umsetzung.
+    else if(n.kind==="schnittstelle"){const g=n.g;
+      (n.t.methoden||[]).forEach(m=>ein.push({key:"m:"+m.name,label:m.sig,sorte:"technik",loese:g?()=>{g.methoden=(g.methoden||[]).filter(y=>y.name!==m.name);
+        gTitel("⚙ "+n.name+": ohne "+m.name);render();}:null}));
+      if(g){ein.push({key:"+m",label:"Methode",plus:{art:"methode",fid:f._id,T:n.name,rec:x+"#m"}});
+        ein.push({key:"+u",label:"Umsetzung ▲",plus:{art:"umsetzung",fid:f._id,T:n.name,rec:x+"#u"}});}}
+    // Umsetzung: je Methode ihr Stand (✎ öffnet die Rümpfe), was ihr Konstruktor an Technik nimmt (▲ klappt die Ebene darüber auf), ＋ braucht.
+    else if(n.kind==="tumsetzung"){(n.ref.methoden||[]).forEach(m=>ein.push({key:"m:"+m.name,label:m.name+" · "+m.stand,sorte:"stand-"+m.stand}));
+      (n.ref.braucht||[]).filter(c=>c.art==="technik").forEach(c=>{const key=x+">"+c.typ,auf=!!KOM.auf&&KOM.auf.has(key);
+        ein.push({key:"b:"+c.typ,label:(auf?"▼ ":"▲ ")+"braucht "+c.typ,plus:{art:"aufklappen",fid:f._id,key,rec:key}});});
+      if(n.g)ein.push({key:"+b",label:"braucht",plus:{art:"ubraucht",fid:f._id,T:n.g.name,ui:n.ui,rec:x+"#b"}});}
+    return {ein,aus};}
+  function katKantenPorts(na,nb){if(!na||!nb)return null;if(nb.rec)return [nb.name,nb.name];if(na.rec)return [na.name,na.name];
+    if(nb.kind==="faehigkeit")return ["t:"+nb.name,nb.name];if(na.kind==="schnittstelle"||na.kind==="tumsetzung")return "v";return null;}
+  // Anschließen: ein Eingang wird ein neues Auf (danach gleich dessen Ausgang wählen), ein Ausgang geht an das Auf.
+  function katAnschliessen(kat,p,nm){const f=katFnVon(p.fid);if(!f)return;const t="ƒ "+f.name;
+    if(p.art==="eingang"){(f.eingaenge=f.eingaenge||[]).push({eingang:nm,ausgaben:[]});const ei=f.eingaenge.length-1;
+      KOM.port={art:"ausgang",fid:f._id,ei,rec:"ka:"+f._id+":"+ei,karte:"ka:"+f._id+":"+ei};gTitel(t+": Auf("+nm+")");render();return;}
+    const e=(f.eingaenge||[])[p.ei];if(!e)return;e.ausgaben=[...(e.ausgaben||[]),nm];KOM.port=null;gTitel(t+": Auf("+e.eingang+") gibt "+nm+" aus");render();}
+  // Gestrichelt: was passt, aber nicht im Bild ist (übernehmen), und je Art eine neue Nachricht (Name abfragen) — im Band der Funktion.
+  function katGeister(kat,I,p){if(!p||(p.art!=="eingang"&&p.art!=="ausgang"))return [];const f=katFnVon(p.fid);if(!f)return [];
+    const spalte=p.art==="eingang"?0:2,b="f:"+f._id,da=new Set([...I.knoten.values()].filter(n=>n.rec).map(n=>n.name)),g=[];
+    (KATS().arten||[]).filter(a=>p.art==="ausgang"||a.eingang).forEach(a=>g.push({spalte,band:b,t:"＋ neuer "+a.name,u:"Name abfragen — steht danach "+(p.art==="eingang"?"als Eingang":"als Ausgang")+" da",
+      fn:e=>frageFix(e.clientX,e.clientY,"＋ "+a.name+" in "+kat.replace(/\.Katalog$/,""),"","Felder danach mit ✎",n=>{const fe=nameFehler(n);if(fe)return fe;
+        katRecordNeu(kat,n,a.art,f.name);katAnschliessen(kat,p,n);})}));
+    katPassend(kat,p).filter(nm=>!da.has(nm)).slice(0,12).forEach(nm=>g.push({spalte,band:b,t:(FL_SORTE[komSorte(nm)]||"")+nm,u:"passt — Klick verbindet",
+      fn:()=>katAnschliessen(kat,p,nm)}));
+    return g;}
+  function katKurz(kat,n){const box=h("div",{class:"ag-kurz"});
+    if(n.kind==="auf"){const e=n.ref,z=(e.ausgaben||[]).length;
+      box.append([!z?"noch kein Ausgang":e.strom?"keiner bis viele":z>1?"einer davon":"genau eins",e.asynchron?"asynchron":"",e.herkunft?"Herkunft":""].filter(Boolean).join(" · "));}
+    else if(n.kind==="lausche")box.append("Quelle — je Element eine Kette");
+    else if(n.kind==="leer")box.append("noch kein Eingang — ＋ am Port");
+    else if(n.kind==="schnittstelle")box.append("Technik · im Konstruktor von "+(n.braucher?(n.braucher.g.umsetzungen[n.braucher.ui]||{}).name:n.f.name)
+      +((n.t.methoden||[]).length?"":" · noch ohne Methode"));
+    else if(n.kind==="tumsetzung"){const rest=(n.ref.braucht||[]).filter(c=>c.art!=="technik").map(c=>({konfig:"Konfig",logger:"Logger",zustand:"Zustand"}[c.art]||c.art)+" "+c.typ);
+      const wo=katUmsetzungGewaehlt(n.g,n.ref.name);box.append([wo,rest.length?"braucht "+rest.join(", "):""].filter(Boolean).join(" · ")||"Umsetzung");}
+    else if(n.kind==="faehigkeit")box.append("Lese-Fähigkeit — ein Store der Anwendung setzt sie um");
+    else if(n.rec&&!n.fw)box.append((n.ref.felder||[]).map(x=>x.name).join(", ")||"noch ohne Felder — ✎");
+    return box;}
+  // Bearbeiten (✎): ein Auf — wie viele herauskommen, asynchron, Herkunft und sein Rumpf (✎ Code oder 🤖 Auftrag); Lausche und die Methode einer
+  //   Umsetzung — ihr Rumpf; eine Nachricht — Name, Felder, Art; Technik — aus dem Konstruktor nehmen.
+  function katBearbeiten(kat,n,x){const box=h("div",{class:"ag-edit"}),f=n.f,t=f?"ƒ "+f.name:"";
+    ["click","dblclick"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
+    const schalter=(text,an,titel,setze)=>{const c=h("input",{type:"checkbox",onchange:ev=>{setze(ev.target.checked);render();}});c.checked=!!an;
+      return h("label",{class:"kat-schalter",title:titel},c," "+text);};
+    if(n.kind==="auf"){const e=n.ref,ta=t+": Auf("+e.eingang+")",z=(e.ausgaben||[]).length;
+      box.append(h("div",{class:"kat-fuss"},
+        h("button",{class:"kat-link",title:"Umschalten: keiner bis viele (Strom) — sonst genau eins bzw. bei mehreren Ausgängen einer davon",
+          onclick:()=>{e.strom=!e.strom;gTitel(ta+(e.strom?" als Strom":" ohne Strom"));render();}},!z?"noch kein Ausgang":e.strom?"keiner bis viele":z>1?"einer davon":"genau eins"),
+        schalter("asynchron",e.asynchron,"Task bzw. IAsyncEnumerable — nötig, wenn der Rumpf await nutzt",v=>{e.asynchron=v;gTitel(ta+(v?" asynchron":" synchron"));}),
+        schalter("Herkunft",e.herkunft,"Parameter Herkunft h: Stream, Zeit, Akteur, NeueId — für neue Ids",v=>{e.herkunft=v;gTitel(ta+(v?" mit":" ohne")+" Herkunft");})));
+      box.append(katRumpfEl(f,n.ei));}
+    else if(n.kind==="lausche")box.append(katRumpfEl(f,(f.eingaenge||[]).length));
+    else if(n.kind==="tumsetzung"&&n.g){const teile=rumpfTeile({kind:"bausteinfunktion",ref:n.g})||[],ctor=ctorVon(n.g,n.ui)||[];
+      (n.ref.methoden||[]).forEach(m=>{const i=teile.findIndex(t=>t.impl===n.ui&&t.methode===m.name);
+        box.append(i<0?h("div",{class:"kom-wo"},m.name+": wird geschrieben — danach steht hier der Rumpf"):katRumpfEl(n.g,i));});
+      if(ctor.length)box.append(h("div",{class:"kat-fuss"},"Konstruktor:",...ctor.map(c=>h("span",{class:"kat-chip"},String(c.typ),
+        h("button",{class:"kat-chip-x",title:"Aus dem Konstruktor nehmen",onclick:()=>{ctor.splice(ctor.indexOf(c),1);gTitel(n.name+" nimmt "+c.typ+" nicht mehr");render();}},"✕")))));}
+    else if(n.kind==="schnittstelle"&&n.g){const g=n.g;
+      box.append(h("div",{class:"ag-feld"},h("input",{value:g.name,spellcheck:"false",title:"Name der Schnittstelle",onchange:e=>{const neu=e.target.value.trim();
+        if(!neu||neu===g.name)return;if(!/^I[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(neu)){deFlash("⚠ Eine Schnittstelle: I + Name",false);render();return;}
+        if(g._ort)gUmbenennen(g,neu,g.name);else{g.name=neu;render();}}})));}
+    else if(n.rec){const r=n.ref;
+      box.append(h("div",{class:"ag-feld"},h("input",{value:r.name,spellcheck:"false",title:"Name",onchange:e=>katUmbenennen(r,e.target.value.trim())})));
+      box.append(aggFelder(r.felder=r.felder||[],null,"📚 "+r.name));
+      (KATS().arten||[]).filter(a=>a.art!==r.kind).forEach(a=>box.append(h("button",{class:"ag-plus",title:"Die Art der Nachricht ändern",
+        onclick:()=>{r.kind=a.art;gTitel("📚 "+r.name+" ist ein "+a.name);render();}},"⇄ zu "+a.name+" machen")));}
+
+    return box;}
+  // ＋ Methode an einer Schnittstelle: eine Zeile C# („Mat Schaerfe(Mat bild, int stufe)“); jede Umsetzung bekommt ihren Platzhalter (der Build zeigt sie).
+  function katMethodeNeu(T,ev){const g=gerufenByName(T);if(!g)return;
+    frageFix(ev.clientX,ev.clientY,"＋ Methode an "+T,"","Eine Zeile C#, z. B. Mat Schaerfe(Mat bild, int stufe)",z=>{
+      const m=/^\s*(.+?)\s+([A-ZÄÖÜa-z_][A-Za-zÄÖÜäöüß0-9_]*)\s*\((.*)\)\s*;?\s*$/.exec(z||"");if(!m)return "Rückgabe Name(Typ name, …)";
+      if((g.methoden||[]).some(x=>x.name===m[2]))return m[2]+" gibt es schon";
+      (g.methoden=g.methoden||[]).push({name:m[2],rueckgabe:m[1].trim(),parameter:parseParams(m[3])});gTitel("⚙ "+T+": ＋ "+m[2]);render();});}
+  // ＋ Umsetzung an einer Schnittstelle: eine weitere Klasse (mit Platzhaltern je Methode) — welche läuft, wählt die Umgebung.
+  function katUmsetzungNeu(T,ev){const g=gerufenByName(T);if(!g)return;
+    frageFix(ev.clientX,ev.clientY,"＋ Umsetzung von "+T,"","Eine Klasse : "+T+" — welche läuft, wählt die Umgebung",n=>{const fe=nameFehler(n);if(fe)return fe;
+      if(uniq(n)!==n)return n+" gibt es schon";(g.umsetzungen=g.umsetzungen||[]).push({name:n,konstruktor:[]});gTitel("⚙ "+T+": Umsetzung "+n);render();});}
+  // Wo eine Umsetzung läuft: je Umgebung die gewählte (Funktionen:<Technik>:Implementierung), bei nur einer Umsetzung überall.
+  function katUmsetzungGewaehlt(g,name){if(!g)return "";const lo=Object.entries((MODEL.rahmen||{}).umgebungen||{}).map(([n,u])=>[n,((u||{}).Funktionen||{})[g.name]]);
+    if((g.umsetzungen||[]).length===1)return "läuft überall";const da=lo.filter(([,k])=>k&&k.Implementierung===name).map(([n])=>n);
+    return da.length?"gewählt in "+da.join(", "):"in keiner Umgebung gewählt";}
+  // Löschen (✕): ein Auf aus seiner Funktion; eine Nachricht nur, wenn sie nirgends mehr verwendet wird (Verwendungen vom Server).
+  function katLoeschPlan(kat,n){if(n.kind==="schnittstelle"){const bu=n.braucher,u=bu&&(bu.g.umsetzungen||[])[bu.ui],ctor=u?(u.konstruktor||[]):ctorVon(n.f,null),wer=u?u.name:"ƒ "+n.f.name;
+      return {was:n.name+" aus dem Konstruktor von "+wer,folgen:["die Technik selbst bleibt im Katalog"],grund:null,
+        tu:()=>{const weg=ctor.filter(q=>String(q.typ||"").trim().replace(/\?$/,"")===n.name);weg.forEach(q=>ctor.splice(ctor.indexOf(q),1));}};}
+    if(n.kind==="auf"){const f=n.f,e=n.ref;
+      return {was:"Auf("+e.eingang+") aus ƒ "+f.name,folgen:[],grund:null,tu:()=>{f.eingaenge=(f.eingaenge||[]).filter(y=>y!==e);}};}
+    if(n.rec&&!n.fw){const r=n.ref;return loeschPlanRecord(r.name,(r.kind==="rejection"?"Hinweis ":"Command ")+r.name,()=>false,()=>recordWeg(r.name));}
+    return null;}
+  function katKoepfe(kat,f){const aufs=f&&!istGerufen(f)?(f.eingaenge||[]):[],wahl=p=>innenPortWahl(p,p.rec);
+    const aus=ev=>{if(aufs.length===1){wahl({art:"ausgang",fid:f._id,ei:0,rec:"ka:"+f._id+":0"});return;}
+      menueFix(ev.clientX,ev.clientY,"Ausgang für …",aufs.map((e,ei)=>({t:"Auf("+e.eingang+")",fn:()=>wahl({art:"ausgang",fid:f._id,ei,rec:"ka:"+f._id+":"+ei})})));};
+    return [
+      ["Eingänge",f&&!istGerufen(f)?()=>wahl({art:"eingang",fid:f._id,rec:"band:"+f._id}):null,f&&!istGerufen(f)?"＋":"","eingang"],
+      ["Auf · Lausche",null,"je Eingang eins"],
+      ["Ausgänge",aufs.length?aus:null,aufs.length?"＋":"","ausgang"],
+      ["Liest",null,"＋ liest am Auf"]];}
+  // Kopf des Modals: der Katalog (Dropdown, darin „＋ neuer Katalog“); Funktionen und Graphen wählt man links.
+  function katWahlEl(kat){const alle=katListe();
+    const wahl=h("select",{class:"kat-dd",title:"Der Katalog — eine geschlossene Einheit",onchange:ev=>{const v=ev.target.value;
+        if(v==="＋neu"){const r=ev.target.getBoundingClientRect();ev.target.value=kat;katNeuHier(r.left,r.bottom+4);return;}
+        KOM.pfad[KOM.pfad.length-1]="kat:"+v;KOM.katFn=null;KOM.katGr=null;KOM.katWahl=null;KOM.port=null;KOM.wahl=null;komZeige();}},
+      ...(kat?[]:[h("option",{value:""},"— noch kein Katalog —")]),
+      ...alle.map(k=>h("option",{value:k},"📚 "+k.replace(/\.Katalog$/,""))),h("option",{value:"＋neu"},"＋ neuer Katalog …"));
+    wahl.value=kat||"";
+    return h("span",{class:"kat-wahl-kopf"},wahl);}
+  // Ein Rumpf der Funktion (Teil i ihrer Code-Teile: je Auf, Lausche, je Methode einer Umsetzung) — über dasselbe Werkzeug wie Decide, Apply,
+  //   Handhabung und Store-Fn: Ausschnitt aus der Datei, ✎ Code (eine Geste ersetzt genau diesen Bereich) oder 🤖 Auftrag (claude -p → Prüfung im
+  //   warmen Workspace → Datei), Vorschlag ✓/✗, ↶. Ein Teil ohne Ort wird gerade geschrieben — danach steht er hier.
+  function katRumpfEl(f,i){const box=h("div",{class:"kat-rumpf rumpfport"}),teil=(rumpfTeile({kind:"bausteinfunktion",ref:f})||[])[i];
+    if(!teil||!teil.ort){box.append(h("div",{class:"kom-wo"},"Wird geschrieben — danach steht hier der Rumpf: ✎ Code oder 🤖 Auftrag."));return box;}
+    rumpfWerkzeug(box,teil,"fb:"+f._id,i,true);return box;}
+  // Links: die Funktionen und Graphen des Katalogs. Steht in der Mitte ein Graph, setzt „＋“ neben einer Funktion bzw. einem Graphen sie als Knoten ein.
+  function katLinksEl(kat,f,G){const links=h("div",{class:"kom-bk"}),fns=katFunktionen(kat),bk=komBaukasten();
+    const plus=(name,titel)=>G?h("button",{class:"ag-plus",title:titel,onclick:e=>{e.stopPropagation();katEinsetzenInGraph(G.id,name,e);}},"＋"):null;
+    const zeile=(b,p)=>p?h("div",{class:"kom-bz"},b,p):b;
+    const imGraph=new Set(G?G.d.knoten.map(k=>k.karte).filter(Boolean):[]);
+    links.append(h("div",{class:"kom-sec"},"Funktionen"));
+    if(!fns.length)links.append(h("div",{class:"kom-wo"},"Noch keine."));
+    fns.forEach(x=>{const ein=(x.eingaenge||[]).map(e=>e.eingang),aus=[...new Set((x.eingaenge||[]).flatMap(e=>e.ausgaben||[]))];
+      const b=h("button",{class:"kom-b"+(x===f?" on":"")+(imGraph.has("fb:"+x._id)?" hier":""),title:(ein.join(", ")||"noch kein Eingang")+" → "+(aus.join(" | ")||"noch kein Ausgang"),
+        onclick:()=>{katWaehleFn(x.name);komZeige();}},"ƒ "+x.name);
+      links.append(zeile(b,plus(x.name,"Als Knoten in "+(G?G.d.name:"")+" einsetzen")));});
+    links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Eine neue Funktion in "+kat+" — nur der Name, danach ihren Eingang rechts wählen",
+      onclick:e=>katalogFunktion(kat,e,fb=>{katWaehleFn(fb.name);KOM.port={art:"eingang",fid:fb._id,rec:"band:"+fb._id,karte:"kn:"+fb._id};komZeige();})},"＋ Funktion")));
+    const grs=katSicht(kat).graphen.map(id=>({karte:id,name:(komDaten(id)||{}).name||id}));
+    links.append(h("div",{class:"kom-sec"},"Graphen"));
+    if(!grs.length)links.append(h("div",{class:"kom-wo"},"Noch keine."));
+    grs.forEach(x=>{const an=G&&G.id===x.karte,schachtelbar=G&&!an&&!(G.d.eltern||[]).includes(x.karte);
+      const b=h("button",{class:"kom-b"+(an?" on":"")+(imGraph.has(x.karte)?" hier":""),title:"Den Graphen in der Mitte zeigen",
+        onclick:()=>{if(katGraphWaehlen(x.karte))komZeige();}},"⬡ "+x.name);
+      links.append(zeile(b,schachtelbar?plus(x.name,"Als Schachtel in "+G.d.name+" einsetzen"):null));});
+    links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Ein neuer Graph in "+kat+": Name und erste Funktion — er steht danach in der Mitte",
+      onclick:e=>katGraphNeu(kat,e)},"＋ Graph")));
+    return links;}
+  // Eine Funktion bzw. einen Graphen als Knoten in den gezeigten Graphen setzen (eine generische fragt ihr Typargument).
+  function katEinsetzenInGraph(grId,name,e){const g=komModell(grId);if(!g)return;
+    const x=(komBaukasten().funktionen||[]).find(y=>y.name===name)||{};
+    if((x.typargumente||[]).length){menueFix(e.clientX,e.clientY,name+"‹…› — mit welchem Typargument?",x.typargumente.map(t=>({t:name+"<"+t+">",fn:()=>neuerGraphKnoten(g,name+"<"+t+">")})));return;}
+    const fk=funKatalog(MODEL.bausteinFunktionen.find(f=>f.name===name)||(MODEL.graphen||[]).find(y=>y.name===name)||{});
+    if(funKatalog(g)&&fk&&fk!==funKatalog(g)){katMitReferenz(funKatalog(g),fk,()=>{const gg=komModell(grId);if(gg)neuerGraphKnoten(gg,name);});return;}
+    neuerGraphKnoten(g,name);}
+  // Der gezeigte Graph in der Mitte: Kopfzeile (Köpfe und Ausgänge), darunter die Leinwand.
+  function katGraphEl(G){const d=G.d,lw=komLeinwand(G.id,d);
+    return h("div",{class:"kat-graph"},
+      h("div",{class:"kat-fn-kopf kat-gr-kopf"},h("span",{class:"kat-fn-n"},"⬡ "+d.name),
+        h("span",{class:"kat-fn-u"},"Kopf nimmt "+(d.koepfe.map(k=>k.typ).join(", ")||"nichts von außen (Quelle)")+" · verlässt ihn: "+(d.ausgaenge.map(a=>a.typ).join(", ")||"nichts"))),
+      lw);}
+  // ＋ neuer Katalog aus dem Dropdown: ein eigenes Projekt <Name>.Katalog; danach steht das Modal auf ihm.
+  function katNeuHier(x,y){frageFix(x,y,"📚 Neuer Katalog","","Ein eigenes Projekt <Name>.Katalog — Funktionen, Graphen und ihre Nachrichten, ohne Domäne",n=>{
+    const name=n.replace(/\.Katalog$/,"");
+    if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*(\.[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*)*$/.test(name))return "Ein Namespace: groß beginnen, nur Buchstaben und Ziffern, Teile durch Punkte";
+    if(katListe().includes(name+".Katalog"))return name+".Katalog gibt es schon";
+    setTimeout(async()=>{if(await gKatalog({name},"Katalog "+name)&&KOM){KOM.pfad[KOM.pfad.length-1]="kat:"+name+".Katalog";KOM.katFn=null;KOM.katGr=null;KOM.katWahl=null;komZeige();}},0);});}
+  // Das Katalog-Modal: ohne gewählten Graphen die Innenansicht (katInnenZeige); mit Graph links die Funktionen und Graphen (＋ setzt als Knoten
+  //   ein), in der Mitte seine Leinwand, rechts die Nachrichten des Katalogs.
+  function katZeige(de,kat){KOM.edit=KOM.edit||new Set();KOM.zu=KOM.zu||new Set();const alle=katListe();
+    if(kat&&!alle.includes(kat))kat=alle[0]||"";
+    const gr=KOM.katGr&&komModell(KOM.katGr),d=gr&&funKatalog(gr)===kat?komFlach(KOM.katGr):null,G=d?{id:KOM.katGr,d}:null;if(!G)KOM.katGr=null;KOM.katWahl=null;
+    const fns=kat?katFunktionen(kat):[],f=G?null:fns.find(x=>x.name===KOM.katFn)||fns.find(x=>!istGerufen(x))||fns[0]||null;
+    if(f){KOM.katFn=f.name;katInnenZeige(de,kat,f);return;}
+    const m=h("div",{class:"kom"});["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
+    m.append(h("div",{class:"kom-kopf"},KOM.pfad.length>1?komKrumen():null,katWahlEl(kat),
+      h("div",{class:"kom-u"},!kat?"Noch kein Katalog — im Dropdown „＋ neuer Katalog“"
+        :G?"Links ＋ setzt eine Funktion oder einen Graphen als Knoten ein · ＋ an einem Port verbindet · Doppelklick auf einen Knoten zeigt ihn hier"
+        :"Links „＋ Funktion“ legt die erste Funktion an"),
+      h("div",{class:"kom-reiter"},komZoomLeiste(),h("button",{class:"kom-x",title:"Schließen (Esc)",onclick:komSchliesse},"✕"))));
+    const mitte=h("div",{class:"kat-mitte"+(G?" graph":"")});
+    if(G)mitte.append(katGraphEl(G));
+    else mitte.append(h("div",{class:"kat-leer"},kat?"Dieser Katalog hat noch keine Funktion.":"Dieser Arbeitsbereich hat noch keinen Katalog."));
+    m.append(h("div",{class:"kom-leib kat"},kat?katLinksEl(kat,null,G):h("div",{class:"kom-bk"}),mitte));
+    de.append(m);
+    if(G){const lw=mitte.querySelector(".kom-lw");if(lw)komLege(lw,G.id,G.d);}}
   // Der Katalog kat nutzt den Katalog ziel (Projektreferenz) — erst die Geste, dann dran() am frischen Modell; ohne Not sofort.
   async function katMitReferenz(kat,ziel,dran){const nutzt=((MODEL.rahmen||{}).katalogNutzt||{})[kat]||[];
     if(!kat||!ziel||kat===ziel||(katListe().includes(ziel)&&nutzt.includes(ziel))){dran();return;}
     if(await gKatalog({name:ziel,nutzer:kat},kat+" nutzt "+ziel))dran();}
-  // Der allgemeine Katalog für sich (ohne Nutzer): anlegen, wenn es ihn noch nicht gibt.
-  async function katAllgemeinDa(){const allg=katAllg();if(!allg)return false;if(katListe().includes(allg))return true;return await gKatalog({name:allg},"Katalog "+allg);}
   function katRecordNeu(ns,n,kind,amFunktion){MODEL.records.push({name:n,kind,namespace:ns,felder:[],istErzeugung:false,...(amFunktion?{amFunktion}:{})});aggStempel(n);}
-  // ＋ Input bzw. ＋ Output: ein neuer Command (hier oder im allgemeinen Katalog) oder einer aus den Listen; ein Output auch ein Hinweis.
-  function katWahl(f,kat,ev,art,e){const t="ƒ "+f.name,allg=katAllg(),stamm=f.name.replace(/^I(?=[A-ZÄÖÜ])/,""),fname=f.name;
-    const schon=nm=>art==="input"?(f.eingaenge||[]).some(x=>x.eingang===nm):(e.ausgaben||[]).includes(nm);
-    const setze=(fx,nm)=>{if(!fx)return;if(art==="input"){(fx.eingaenge=fx.eingaenge||[]).push({eingang:nm,ausgaben:[]});gTitel(t+": Auf("+nm+")");}
-      else{const ex=(fx.eingaenge||[]).find(x=>x.eingang===e.eingang);if(!ex)return;ex.ausgaben=[...(ex.ausgaben||[]),nm];gTitel(t+": Auf("+e.eingang+") gibt "+nm+" aus");}
-      render();};
-    const neu=(titel,vorschlag,kind,allgemein)=>({t:titel,fn:()=>setTimeout(()=>frageFix(ev.clientX,ev.clientY,titel.replace(/ …$/,""),vorschlag,
-      allgemein?"Landet in "+allg+" — jeder Katalog darf ihn nutzen":"Landet in der Command-Liste von "+kat,n=>{const fe=nameFehler(n);if(fe)return fe;
-        if(!allgemein){katRecordNeu(f.namespace,n,kind,f.name);setze(f,n);return;}
-        const bereich=katBereich(f,kat)||"Gemeinsam";
-        setTimeout(()=>katMitAllgemein(fname,kat,fx=>{katRecordNeu(allg+"."+bereich,n,kind);setze(fx,n);}),0);}),0)});
-    const vorhanden=(liste,allgemein)=>liste.filter(r=>!schon(r.name)&&(art==="output"||r.kind==="command")).map(r=>({t:(r.kind==="rejection"?"✉ ":"▶ ")+r.name,
-      fn:()=>allgemein?katMitAllgemein(fname,kat,fx=>setze(fx,r.name)):setze(f,r.name)}));
-    const hier=vorhanden(katCommands(kat),false),dort=allg&&allg!==kat?vorhanden(katCommands(allg),true):[];
-    const fw=art==="input"?katFramework().filter(nm=>!schon(nm)).map(nm=>({t:"⚡ "+nm,fn:()=>setze(f,nm)})):[];
-    menueFix(ev.clientX,ev.clientY,(art==="input"?"Input von ":"Output von ")+f.name+(art==="output"?".Auf("+e.eingang+")":""),[
-      neu("＋ neuer Command …",stamm+(art==="input"?"Auftrag":"Ergebnis"),"command",false),
-      ...(art==="output"?[neu("＋ neuer Hinweis …",stamm+"Unmoeglich","rejection",false)]:[]),
-      ...(allg&&allg!==kat?[neu("＋ neuer Command im allgemeinen Katalog …",stamm+(art==="input"?"Auftrag":"Ergebnis"),"command",true)]:[]),
-      ...(hier.length?[{trenn:1},{kopf:"aus "+kat},...hier.slice(0,40)]:[]),
-      ...(dort.length?[{trenn:1},{kopf:"aus dem allgemeinen Katalog"},...dort.slice(0,40)]:[]),
-      ...(fw.length?[{trenn:1},{kopf:"vom Framework (Quellen)"},...fw]:[])]);}
   // Umbenennen: ein geschriebener Command über den Renamer (alle Verweise im Code), ein neuer im Modell.
   function katUmbenennen(r,neu){const fe=nameFehler(neu);if(neu===r.name)return;if(fe){deFlash("⚠ "+fe,false);render();return;}
     aggStempelUmbenennen(r.name,neu);if(r._ort)gUmbenennen(r,neu,r.name);else funRecUmbenennen(r,neu);}
-  // Eine Command-Karte: Name, Felder; ✎ öffnet Name, Felder und Command ⇄ Hinweis; ✕ (loese) nimmt sie aus der Funktion bzw. löscht sie.
-  function katCmdKarte(nm,kat,opt){const r=recByName(nm),key="kc:"+(opt.ort||"")+nm,offen=!!r&&KOM.edit.has(key),allg=katAllg(),rk=r?funKatalog(r):null;
-    const herkunft=!r?"Framework":rk&&rk!==kat?(rk===allg?"allgemein":rk):"";
-    const el=h("div",{class:"kat-cmd"+(r&&r.kind==="rejection"?" hinweis":"")+(offen?" offen":"")+(opt.leise?" leise":"")},
-      h("div",{class:"kat-cmd-k"},h("span",{class:"kat-cmd-n",title:r?(r.kind==="rejection"?"Hinweis (flüchtig, an Akteure)":"Command ohne Ziel")+" · "+r.namespace:"vom Framework"},
-          (r&&r.kind==="rejection"?"✉ ":"")+nm),
-        herkunft?h("span",{class:"kat-herk"},herkunft):null,opt.mult?h("span",{class:"kat-mult",title:"Vielfachheit: 1 genau eins · 0..1 einer der Fälle · 0..n Strom"},opt.mult):null,
-        opt.zusatz||null,
-        r?h("button",{class:"ag-stift"+(offen?" an":""),title:offen?"Bearbeiten schließen":"Name und Felder bearbeiten",
-          onclick:ev=>{ev.stopPropagation();if(offen)KOM.edit.delete(key);else KOM.edit.add(key);komZeige();}},offen?"▾":"✎"):null,
-        opt.loese?h("button",{class:"ag-loesch",title:opt.loeseText||"Lösen",onclick:ev=>{ev.stopPropagation();opt.loese(ev);}},"✕"):null));
-    if(r&&!offen&&(r.felder||[]).length)el.append(h("div",{class:"kat-felder"},r.felder.map(fe=>fe.name+" : "+fe.typ).join(" · ")));
-    if(offen){const box=h("div",{class:"ag-edit"});["click","dblclick"].forEach(x=>box.addEventListener(x,e=>e.stopPropagation()));
-      box.append(h("div",{class:"ag-feld"},h("input",{value:r.name,spellcheck:"false",title:"Name",onchange:e=>katUmbenennen(r,e.target.value.trim())})));
-      box.append(aggFelder(r.felder=r.felder||[],null,"📚 "+r.name));
-      box.append(h("button",{class:"ag-plus",title:"Command ohne Ziel (ein Knoten nimmt ihn) oder Hinweis (flüchtig, an Akteure)",
-        onclick:()=>{r.kind=r.kind==="command"?"rejection":"command";gTitel("📚 "+r.name+(r.kind==="command"?" ist ein Command":" ist ein Hinweis"));render();}},
-        r.kind==="command"?"⇄ zum Hinweis machen":"⇄ zum Command machen"));
-      el.append(box);}
-    return el;}
-  // Die gewählte Funktion als Reihe: je Auf eine Zeile Input ─▶ │ƒ│ ─▶ Outputs; die Funktionskarte steht einmal über alle Zeilen.
-  function katFunktionEl(f,kat){const t="ƒ "+f.name,aufs=f.eingaenge||[],zeilen=Math.max(1,aufs.length)+((f.lauscht||[]).length?1:0);
-    const g=h("div",{class:"kat-reihe"});g.style.gridTemplateRows="repeat("+(zeilen+1)+",auto)";
-    const ctor=ctorVon(f,null)||[],chip=p=>{const typ=String(p.typ||"").trim(),sym=gerufenByName(typ)?"⚙ ":/^IZustand</.test(typ)?"◫ ":/^ILogger</.test(typ)?"✎ ":recByName(komBasis(typ))?"▤ ":"";
-      return h("span",{class:"kat-chip",title:"Konstruktor: "+typ},sym+typ);};
-    const verwendet=(MODEL.graphen||[]).filter(x=>(x.knoten||[]).some(k=>komBasis(k.typ)===f.name));
-    const fk=h("div",{class:"kat-fn"},h("div",{class:"kat-fn-n"},"ƒ "+f.name),h("div",{class:"kat-fn-u"},f.namespace),
-      h("div",{class:"kat-chips"},...ctor.map(chip)),
-      h("div",{class:"kat-fn-u"},verwendet.length?"in "+verwendet.map(x=>"⬡ "+x.name).join(", "):"in keinem Graphen"),
-      h("div",{class:"kat-akte"},h("button",{class:"ag-plus",title:"Konfig, Technik, Logger im Konstruktor",onclick:ev=>menueFix(ev.clientX,ev.clientY,"Rahmen von "+f.name,funRahmenItems(f))},"＋ Rahmen ▾"),
-        h("button",{class:"ag-plus",title:"Das ausführliche Funktions-Modal: Strom, asynchron, Herkunft, Rümpfe, Rahmen",onclick:()=>komKarte("fb:"+f._id,true)},"⤢ ausführlich")));
-    fk.style.gridRow="1 / span "+zeilen;fk.style.gridColumn="3";g.append(fk);
-    const zelle=(el,zeile,spalte)=>{el.style.gridRow=String(zeile);el.style.gridColumn=String(spalte);g.append(el);};
-    aufs.forEach((e,i)=>{const z=i+1;
-      zelle(katCmdKarte(e.eingang,kat,{ort:"i:",loeseText:"Diesen Input (sein Auf) aus "+f.name+" nehmen — der Command bleibt in der Liste",
-        loese:()=>{f.eingaenge=(f.eingaenge||[]).filter(x=>x!==e);gTitel(t+": ohne Auf("+e.eingang+")");render();}}),z,1);
-      zelle(h("div",{class:"kat-pfeil"},"─▶"),z,2);zelle(h("div",{class:"kat-pfeil"},"─▶"),z,4);
-      const aus=h("div",{class:"kat-aus"}),m=funMult(e);
-      (e.ausgaben||[]).forEach(o=>aus.append(katCmdKarte(o,kat,{ort:"o:"+e.eingang+":",mult:m,loeseText:"Diesen Output aus Auf("+e.eingang+") nehmen — der Command bleibt in der Liste",
-        loese:()=>{e.ausgaben=ohneX(e.ausgaben,o);gTitel(t+": Auf("+e.eingang+") gibt "+o+" nicht mehr aus");render();}})));
-      aus.append(h("button",{class:"kat-neu",title:"Ein Output: neuer Command oder Hinweis, oder einer aus den Listen — mehrere sind ein OneOf",
-        onclick:ev=>katWahl(f,kat,ev,"output",e)},"＋ Output"));
-      const schalter=(text,an,titel,setze)=>{const c=h("input",{type:"checkbox",onchange:ev=>{setze(ev.target.checked);render();}});c.checked=!!an;return h("label",{class:"ag-flag",title:titel},c," "+text);};
-      aus.append(h("div",{class:"kat-form"},schalter("Strom (0..n)",e.strom,"Keine bis viele je Aufruf (IEnumerable) — sonst genau einer bzw. bei mehreren einer der Fälle (OneOf)",
-          v=>{e.strom=v;gTitel(t+": Auf("+e.eingang+")"+(v?" als Strom":" ohne Strom"));}),
-        schalter("asynchron",e.asynchron,"Task bzw. IAsyncEnumerable",v=>{e.asynchron=v;gTitel(t+": Auf("+e.eingang+")"+(v?" asynchron":" synchron"));}),
-        h("button",{class:"ag-plus",title:"Lese-Fähigkeiten des Katalogs, die dieses Auf nimmt — ein Store der Anwendung setzt sie um (CQRS124)",
-          onclick:ev=>katLiestWahl(f,kat,e,ev)},"⌕ liest"+((e.faehigkeiten||[]).length?" "+e.faehigkeiten.map(p=>p.typ).join(", "):"")+" ▾")));
-      zelle(aus,z,5);});
-    if(!aufs.length){zelle(h("button",{class:"kat-neu gross",title:"Der Input der Funktion: ein neuer Command oder einer aus den Listen",onclick:ev=>katWahl(f,kat,ev,"input")},"＋ Input"),1,1);
-      zelle(h("div",{class:"kat-pfeil"},"─▶"),1,2);zelle(h("div",{class:"kat-pfeil leise"},"─▶"),1,4);
-      zelle(h("div",{class:"kat-aus"},h("div",{class:"kom-wo"},"Outputs folgen, sobald es einen Input gibt.")),1,5);}
-    if((f.lauscht||[]).length){const z=Math.max(1,aufs.length)+1;zelle(h("div",{class:"kat-cmd leise"},h("div",{class:"kat-cmd-k"},"lauscht (Quelle)")),z,1);
-      zelle(h("div",{class:"kat-pfeil"},"─▶"),z,4);zelle(h("div",{class:"kat-aus"},...f.lauscht.map(o=>katCmdKarte(o,kat,{ort:"l:",mult:"0..n"}))),z,5);}
-    if(aufs.length)zelle(h("button",{class:"kat-neu",title:"Ein weiterer Input — ein eigenes Auf mit eigenen Outputs",onclick:ev=>katWahl(f,kat,ev,"input")},"＋ Input"),zeilen+1,1);
-    return g;}
-  // Die Command-Liste eines Katalogs: Nutzung je Command, ✎ zum Bearbeiten, ✕ mit Löschplan, ＋ Command.
-  function katListeEl(titel,kat,f,allgemein){const box=h("div",{});box.append(h("div",{class:"kom-sec"},titel));const liste=kat?katCommands(kat):[];
-    if(!liste.length)box.append(h("div",{class:"kom-wo"},allgemein&&!katListe().includes(kat)?"Entsteht beim ersten Gebrauch.":"Noch keine Commands."));
-    liste.forEach(r=>{const n=katNutzung(r.name);
-      box.append(katCmdKarte(r.name,kat,{ort:"l:",zusatz:h("span",{class:"kat-nutz",title:"nimmt: so viele Auf nehmen ihn · gibt: so viele geben ihn aus"},
-          (n.nimmt?"nimmt "+n.nimmt:"")+(n.nimmt&&n.gibt?" · ":"")+(n.gibt?"gibt "+n.gibt:"")+(!n.nimmt&&!n.gibt?"unverbunden":"")),
-        loeseText:"Den Command löschen (nur, wenn ihn keine Funktion mehr nimmt oder gibt)",
-        loese:ev=>{const plan=loeschPlanRecord(r.name,(r.kind==="rejection"?"Hinweis ":"Command ")+r.name,()=>false,()=>recordWeg(r.name));
-          if(plan.grund){menueFix(ev.clientX,ev.clientY,"✕ "+plan.was,[{hinweis:"Nicht löschbar — "+plan.grund}]);return;}
-          menueFix(ev.clientX,ev.clientY,"✕ "+plan.was+" löschen?",[...plan.folgen.map(x=>({hinweis:"dazu: "+x})),{t:"✕ löschen",gefahr:1,fn:()=>{gTitel("✕ "+plan.was);plan.tu();render();}}]);}}));});
-    // ＋ Command: in den Bereich der gewählten Funktion; ohne sie fragt der Bereich zuerst.
-    box.append(h("button",{class:"kat-neu",title:"Ein neuer Command in "+kat+" — er landet in dieser Liste",onclick:ev=>{
-      const anlegen=bereich=>setTimeout(()=>frageFix(ev.clientX,ev.clientY,"＋ Command in "+kat+"."+bereich,"","Ein Command ohne Ziel (Felder danach mit ✎)",n=>{
-        const fe=nameFehler(n);if(fe)return fe;const tu=()=>{katRecordNeu(kat+"."+bereich,n,"command");gTitel("📚 ＋ "+n+" in "+kat);render();};
-        if(allgemein)setTimeout(async()=>{if(await katAllgemeinDa())tu();},0);else tu();}),0);
-      const b=katBereich(f,funKatalog(f||{})||"")||(liste[0]&&katBereich(liste[0],kat));
-      if(b){anlegen(b);return;}
-      frageFix(ev.clientX,ev.clientY,"＋ Command in "+kat+" — Bereich","Gemeinsam","Der Ordner im Katalog ("+kat+".<Bereich>)",x=>{
-        if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(x))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";anlegen(x);});}},"＋ Command"));
-    return box;}
-  // ══ STUFE 2 (docs/10 §10.9): ein Graph im Katalog entsteht mit seiner ersten Funktion (er baut sofort) und wird im
-  //   Graph-Modal verkettet; „＋“ an einem Port bietet die Funktionen aller Kataloge, deren Input bzw. Output genau dieser Command ist. Eine Funktion
+  // ══ GRAPHEN IM KATALOG (docs/10 §10.9): ein Graph entsteht mit seiner ersten Funktion und wird in der Mitte des Katalog-Modals
+  //   verkettet; „＋“ an einem Port bietet die Funktionen aller Kataloge, deren Input bzw. Output genau dieser Command ist. Eine Funktion
   //   aus einem anderen Katalog setzt die Projektreferenz mit.
-  const katAlleFunktionen=()=>MODEL.bausteinFunktionen.filter(f=>!istGerufen(f)&&funKatalog(f)&&!(f.lauscht||[]).length);
-  function katGraphNeu(kat,ev){const bereiche=[...new Set(katFunktionen(kat).map(f=>katBereich(f,kat)).filter(Boolean))];
-    frageFix(ev.clientX,ev.clientY,"⬡ Neuer Graph in "+kat,uniq(kat.replace(/\.Katalog$/,"").split(".").pop()+"Kette"),"Danach: seine erste Funktion",n=>{const fe=nameFehler(n);if(fe)return fe;
+  const katAlleFunktionen=()=>katListe().flatMap(k=>katSicht(k).funktionen.map(x=>funModell(x.karte)).filter(Boolean));
+  function katGraphNeu(kat,ev){
+    frageFix(ev.clientX,ev.clientY,"⬡ Neuer Graph in "+kat.replace(/\.Katalog$/,""),uniq(kat.replace(/\.Katalog$/,"").split(".").pop()+"Kette"),"Danach: seine erste Funktion",n=>{const fe=nameFehler(n);if(fe)return fe;
       if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
-      // Der Graph liegt im Bereich seiner ersten Funktion (liegt sie hier), sonst im ersten Bereich des Katalogs bzw. einem neuen.
-      const mit=(fname,bereich)=>{(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:kat+"."+bereich,
-        knoten:[{typ:fname,name:fname,kopf:true,von:[],verlierbar:[]}]});KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+" in "+kat+" mit "+fname);render();};
-      const bereichDann=(vorschlag,weiter)=>vorschlag?weiter(vorschlag):setTimeout(()=>frageFix(ev.clientX,ev.clientY,"⬡ "+n+" — Bereich in "+kat,"Ablauf",
-        "Der Ordner im Katalog ("+kat+".<Bereich>)",b=>{if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";weiter(b);}),0);
-      const vorhanden=f=>{const fk=funKatalog(f),b=fk===kat?katBereich(f,kat):bereiche[0];
-        bereichDann(b,bb=>katMitReferenz(kat,fk,()=>mit(f.name,bb)));};
-      const neueFn=()=>bereichDann(bereiche[0],bb=>setTimeout(()=>frageFix(ev.clientX,ev.clientY,"ƒ Erste Funktion von "+n,n.replace(/(Kette|Graph)$/,"")+"Schritt",
-        "In "+kat+"."+bb+" — nimmt einen neuen Auftrag, gibt ein Ergebnis (beides danach im Katalog-Modal)",fn=>{
+      const mit=(fname,neu)=>{(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:kat,
+        knoten:[{typ:fname,name:fname,kopf:true,von:[],verlierbar:[]}]});gTitel("⬡ "+n+" in "+kat+" mit "+fname);
+        if(neu){const fb=MODEL.bausteinFunktionen.find(x=>x.name===fname);katWaehleFn(fname);if(fb)KOM.port={art:"eingang",fid:fb._id,rec:"band:"+fb._id,karte:"kn:"+fb._id};}
+        else KOM_NACH="gr:graph:"+n;render();};
+      const vorhanden=f=>katMitReferenz(kat,funKatalog(f),()=>mit(f.name,false));
+      // Eine neue erste Funktion steht danach in der Mitte: zuerst ihr Eingang (rechts wählen), dann ihre Ausgänge.
+      const neueFn=()=>setTimeout(()=>frageFix(ev.clientX,ev.clientY,"ƒ Erste Funktion von "+n,n.replace(/(Kette|Graph)$/,"")+"Schritt",
+        "Eine Klasse : IFunktion in "+kat+" — danach ihren Eingang rechts wählen",fn=>{
         const fe2=nameFehler(fn);if(fe2&&!/gibt es schon/.test(fe2))return fe2;if(MODEL.bausteinFunktionen.some(x=>x.name===fn))return fn+" gibt es schon";
-        const f={_id:"funktion:"+fn,name:fn,namespace:kat+"."+bb,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
-        const auftrag=uniq(fn+"Auftrag"),ergebnis=uniq(fn+"Ergebnis");funRecordNeu(f,auftrag,"command");funRecordNeu(f,ergebnis,"command");
-        f.eingaenge.push({eingang:auftrag,ausgaben:[ergebnis]});MODEL.bausteinFunktionen.push(f);mit(fn,bb);}),0));
+        MODEL.bausteinFunktionen.push({_id:"funktion:"+fn,name:fn,namespace:kat,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]});mit(fn,true);}),0);
       const andere=katAlleFunktionen().filter(f=>funKatalog(f)!==kat),hier=katFunktionen(kat).filter(f=>!(f.lauscht||[]).length);
       const graphen=(MODEL.graphen||[]).filter(g=>funKatalog(g));
       setTimeout(()=>menueFix(ev.clientX,ev.clientY,"Erste Funktion von "+n,[{t:"＋ ƒ neue Funktion …",fn:neueFn},
         ...(hier.length?[{trenn:1},{kopf:"aus "+kat},...hier.map(f=>({t:"ƒ "+f.name,fn:()=>vorhanden(f)}))]:[]),
         ...(andere.length?[{trenn:1},{kopf:"aus anderen Katalogen (setzt die Referenz)"},...andere.map(f=>({t:"📚 "+funKatalog(f).replace(/\.Katalog$/,"")+" · ƒ "+f.name,fn:()=>vorhanden(f)}))]:[]),
         ...(graphen.length?[{trenn:1},{kopf:"ein Graph als Schachtel"},...graphen.map(g=>({t:"⬡ "+g.name,fn:()=>vorhanden(g)}))]:[])]),0);});}
-  // Eine vorhandene Funktion (oder einen Graphen) in einen Katalog-Graphen einsetzen: dahinter (nimmt, was bezug ausgibt: [Von(bezug)]) bzw. davor
-  //   (gibt, was bezug nimmt: bezug bekommt [Von(neu)], der neue Knoten nimmt von außen: [Kopf]).
   function katEinsetzen(id,fname,bezug,art){const g0=komModell(id),f0=MODEL.bausteinFunktionen.find(x=>x.name===fname)||(MODEL.graphen||[]).find(x=>x.name===fname);
     if(!g0||!f0)return;KOM.port=null;
     katMitReferenz(funKatalog(g0),funKatalog(f0),()=>{const g=komModell(id);if(!g)return;const kn=komKnotenName(g,fname);
       (g.knoten=g.knoten||[]).push({typ:fname,name:kn,kopf:art==="davor",von:art==="dahinter"?[bezug]:[],verlierbar:[]});
       if(art==="davor"){const z=g.knoten.find(x=>x.name===bezug);if(z)z.von=[...(z.von||[]),kn];}
       gTitel(g.name+": ƒ "+fname+" "+art+" "+bezug);render();});}
-  // Die Kandidaten am Port eines Katalog-Graphen: Funktionen (und Graphen) aller Kataloge, deren Input (dahinter) bzw. Output (davor) der Typ ist.
+  // Die Kandidaten am Port eines Katalog-Graphen: Funktionen aller Kataloge, die den Typ nehmen (dahinter) bzw. ausgeben (davor) — „wer nimmt“
+  //   und „wer gibt“ der Nachricht nennt der Server (sicht.kataloge).
   function katKandidaten(g,P){const t=komBasis(P.typ),hier=new Set((g.knoten||[]).map(k=>komBasis(k.typ)));
-    const fns=katAlleFunktionen().filter(f=>f.name!==g.name&&(f.eingaenge||[]).some(e=>P.art==="nach"?komBasis(e.eingang)===t:(e.ausgaben||[]).some(o=>komBasis(o)===t)));
+    const namen=new Set(katListe().flatMap(k=>{const n=katNachricht(k,t);return n?(P.art==="nach"?n.nimmt:n.gibt):[];}));
+    const fns=katAlleFunktionen().filter(f=>f.name!==g.name&&namen.has(f.name));
     return fns.filter(f=>!hier.has(f.name)).sort((a,b)=>(funKatalog(a)===funKatalog(g)?0:1)-(funKatalog(b)===funKatalog(g)?0:1)||a.name.localeCompare(b.name));}
-  function katZeige(de,kat){KOM.edit=KOM.edit||new Set();KOM.zu=KOM.zu||new Set();const alle=katListe(),allg=katAllg();
-    if(kat&&!alle.includes(kat)&&kat!==allg)kat=alle[0]||"";
-    const fns=kat?katFunktionen(kat):[],f=fns.find(x=>x.name===KOM.katFn)||null;
-    const m=komRahmen(kat?"Funktionen anlegen: Input ─▶ ƒ ─▶ Outputs · jeder neue Command landet rechts in der Liste · ✎ bearbeiten · ✕ lösen bzw. löschen"
-      :"Noch kein Katalog — ＋ 📚 Katalog legt einen an (ein eigenes Projekt, ohne Domäne)");
-    // Links: Kataloge, Funktionen und Graphen des gewählten.
-    const links=h("div",{class:"kom-bk"},h("div",{class:"kom-sec"},"Kataloge"));
-    alle.forEach(k=>links.append(h("button",{class:"kom-b"+(k===kat?" on":""),title:k===allg?"Der allgemeine Katalog: Commands, die alle Kataloge teilen":k,
-      onclick:()=>{KOM.pfad[KOM.pfad.length-1]="kat:"+k;KOM.katFn=null;komZeige();}},"📚 "+k.replace(/\.Katalog$/,"")+(k===allg?" · allgemein":""))));
-    links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Ein neuer Katalog: ein eigenes Projekt <Name>.Katalog, ohne Domäne",onclick:e=>katalogNeu(e)},"＋ 📚 Katalog")));
-    if(kat){links.append(h("div",{class:"kom-sec"},"Funktionen"));
-      if(!fns.length)links.append(h("div",{class:"kom-wo"},"Noch keine."));
-      fns.forEach(x=>{const ein=(x.eingaenge||[]).map(e=>e.eingang),aus=[...new Set((x.eingaenge||[]).flatMap(e=>e.ausgaben||[]))];
-        links.append(h("button",{class:"kom-b"+(x===f?" on":""),title:(ein.join(", ")||"kein Input")+" → "+(aus.join(" | ")||"kein Output"),
-          onclick:()=>{KOM.katFn=x.name;komZeige();}},"ƒ "+x.name));});
-      links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Eine neue Funktion in "+kat+" (Bereich und Name)",
-        onclick:e=>katalogFunktion(kat,e,fb=>{KOM.katFn=fb.name;komZeige();})},"＋ ƒ Funktion")));
-      const grs=(komBaukasten().graphen||[]).filter(x=>{const g=(MODEL.graphen||[]).find(y=>"gr:"+y._id===x.karte);return g&&funKatalog(g)===kat;});
-      links.append(h("div",{class:"kom-sec"},"Graphen"));
-      if(!grs.length)links.append(h("div",{class:"kom-wo"},"Noch keine."));
-      grs.forEach(x=>links.append(h("button",{class:"kom-b",title:"Den Graphen öffnen",onclick:()=>{KOM.pfad.push(x.karte);KOM.wahl=null;komZeige();}},"⬡ "+x.name)));
-      links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Ein neuer Graph in "+kat+": Name und erste Funktion — danach verketten im Graph-Modal",
-        onclick:e=>katGraphNeu(kat,e)},"＋ ⬡ Graph")));}
-    // Mitte: die gewählte Funktion.
-    const mitte=h("div",{class:"kat-mitte"});
-    if(f)mitte.append(katFunktionEl(f,kat));
-    else if(kat)mitte.append(h("div",{class:"kat-leer"},fns.length?"Links eine Funktion wählen — oder eine neue anlegen.":"Dieser Katalog hat noch keine Funktion.",
-      h("div",{class:"kom-akte"},h("button",{class:"ag-plus",onclick:e=>katalogFunktion(kat,e,fb=>{KOM.katFn=fb.name;komZeige();})},"＋ ƒ Funktion"))));
-    // Rechts: die Command-Liste des Katalogs und die des allgemeinen.
-    const rechts=h("div",{class:"kom-bk kat-rechts"});
-    if(kat){rechts.append(katListeEl("Commands · "+kat.replace(/\.Katalog$/,""),kat,f,kat===allg));
-      if(allg&&allg!==kat)rechts.append(katListeEl("Allgemein · geteilt",allg,null,true));
-      const fw=katFramework();if(fw.length){rechts.append(h("div",{class:"kom-sec"},"Framework · Quellen"));fw.forEach(nm=>rechts.append(katCmdKarte(nm,kat,{ort:"fw:"})));}}
-    m.append(h("div",{class:"kom-leib kat"},links,mitte,rechts));de.append(m);}
-  // ══ FUNKTION VON INNEN (docs/10 §10.9): der Vertrag einer Funktion — Eingänge · Auf · Ausgänge · Rahmen — mit
-  //   derselben Mechanik wie Aggregat und Store (innenZeige: Detailstufen, ✎, ＋ am Port, gestrichelte Karten, ✕ mit Löschplan). Eingang ↔ Auf ist 1:1
-  //   (je Eingangstyp ein Auf, R2), Auf → Ausgänge frei; der Rahmen ist der Konstruktor (Konfig, Technik, Zustand, Logger). Die Form der Ausgabe folgt
-  //   aus Strom und Zahl der Ausgänge (1 · 0..1 · 0..n), dazu „asynchron“. Was im Katalog liegt, kennt keine Domäne: dort gibt es keinen Command an
-  //   ein Aggregat und keine Antwort; eine Lese-Fähigkeit deklariert der Katalog selbst, ein Store der Anwendung setzt sie um (CQRS124).
+  // Hilfen der Funktionen im Katalog-Modal: Lese-Fähigkeiten, Rahmen (Konstruktor), neue Nachrichten, Umbenennen.
   const funModell=id=>MODEL.bausteinFunktionen.find(f=>"fb:"+f._id===id);
   // Die Lese-Fähigkeiten eines Katalogs (docs/04 §4.4, CQRS124): je Store ohne Bündel im Katalog seine Lese-Fns, dazu der Store der Anwendung, der sie umsetzt.
   const katFaehigkeiten=kat=>MODEL.stores.filter(st=>funKatalog(st)===kat).flatMap(st=>(st.readFns||[]).map(fn=>({name:fn.faehigkeit||st.name,
@@ -3744,10 +3906,10 @@
   // ＋ neue Lese-Fähigkeit: das Interface im Bereich der Funktion (: IReadStore, eine Methode), dazu ein neuer Store der Anwendung im Bereich einer Domäne
   //   (der Server legt ihn in den Speicher und gibt dem Speicher die Referenz auf den Katalog).
   function katFaehigkeitNeu(f,kat,ev,fertig){const x=ev.clientX,y=ev.clientY,doms=[...new Set(MODEL.aggregate.map(A=>A.namespace))].sort();
-    frageFix(x,y,"⌕ Neue Lese-Fähigkeit in "+kat.replace(/\.Katalog$/,""),uniq("IHole"+f.name.replace(/^I(?=[A-ZÄÖÜ])/,"")+"Daten"),
+    frageFix(x,y,"⌕ Neue Lese-Fähigkeit in "+kat.replace(/\.Katalog$/,""),"",
       "Ein Interface : IReadStore mit genau einer Methode — was die Funktion lesen will, ohne Domäne",n=>{const fe=nameFehler(n);if(fe)return fe;
         if(!/^I[A-ZÄÖÜ]/.test(n))return "Ein Interface beginnt mit I";
-        setTimeout(()=>frageFix(x,y,"⌕ "+n+" — Methode","Task<int> HoleAsync(Guid id)","Rückgabe, Name und Parameter wie in C# (asynchron: Task<…>)",sig=>{
+        setTimeout(()=>frageFix(x,y,"⌕ "+n+" — Methode","","Rückgabe, Name und Parameter wie in C#: Task<Typ> NameAsync(Typ name, …)",sig=>{
           const m=/^\s*(Task(?:<(.+)>)?)\s+([A-ZÄÖÜ]\w*)\s*\((.*)\)\s*$/.exec(sig);if(!m)return "Form: Task<Typ> NameAsync(Typ name, …)";
           const params=m[4].trim()?m[4].split(",").map(p=>p.trim().split(/\s+/)).map(([typ,name])=>({typ,name})):[];
           if(params.some(p=>!p.typ||!p.name))return "Je Parameter: Typ und Name";
@@ -3758,200 +3920,38 @@
             gTitel("⌕ "+n+" (Katalog) und 🗄 "+s+" (Speicher)");fertig(n);});
           if(doms.length===1){setTimeout(()=>anlegen(doms[0]),0);return;}
           setTimeout(()=>menueFix(x,y,"In welcher Domäne liegt der Store, der "+n+" umsetzt?",doms.map(d=>({t:"▣ "+d,fn:()=>anlegen(d)}))),0);}),0);});}
-  const funKatalog=f=>{const ns=String(f.namespace||""),i=ns.indexOf(".Katalog");return i>0&&(ns.length===i+8||ns[i+8]===".")?ns.slice(0,i+8):null;};
+  // Zu welchem Katalog etwas gehört: ein Katalog ist flach, dazu gehört genau, was in seinem Namespace liegt (die Kataloge nennt der Server).
+  const funKatalog=f=>{const ns=String(f&&f.namespace||"");return katListe().includes(ns)?ns:null;};
   const funMult=e=>e.strom?"0..n":(e.ausgaben||[]).length>1?"0..1":"1";
-  const funAufId=(f,e)=>"fa:"+f._id+":"+e.eingang;
-  // Wer erzeugt eine Nachricht bzw. nimmt sie (über alle Funktionen, Decides, Fragen, Akteure)? — für „unverbunden“ und die Auswahl.
-  const funGenommen=nm=>MODEL.bausteinFunktionen.some(f=>(f.eingaenge||[]).some(e=>e.eingang===nm))||MODEL.decider.some(d=>d.command===nm)
-    ||MODEL.akteure.some(a=>(a.hoert||[]).includes(nm))||(MODEL.graphen||[]).some(g=>(g.koepfe||[]).includes(nm));
-  function funInnen(id,f){const glieder=new Map(),knoten=new Map(),kanten=[],unverbunden=new Set(),rec=nm=>"rec:"+nm;
-    (f.eingaenge||[]).forEach(e=>{const a=funAufId(f,e);knoten.set(a,{id:a,kind:"auf",name:e.eingang,ref:e,f});glieder.set(a,1);
-      if(NODEBY.has(rec(e.eingang))){glieder.set(rec(e.eingang),0);kanten.push([rec(e.eingang),a]);}
-      (e.ausgaben||[]).forEach(o=>{if(!NODEBY.has(rec(o)))return;if(!glieder.has(rec(o)))glieder.set(rec(o),2);kanten.push([a,rec(o)]);});});
-    if((f.lauscht||[]).length){const a="fl:"+f._id;knoten.set(a,{id:a,kind:"lausche",name:"Lausche",ref:f,f});glieder.set(a,1);
-      f.lauscht.forEach(o=>{if(NODEBY.has(rec(o))){glieder.set(rec(o),2);kanten.push([a,rec(o)]);}});}
-    (f.konstruktor||[]).forEach((p,i)=>{const t=String(p.typ||"").trim(),g=gerufenByName(t),r=!g&&recByName(komBasis(t));
-      const x=g?"fb:"+g._id:r?rec(r.name):"fk:"+f._id+":"+i;
-      if(!g&&!r)knoten.set(x,{id:x,kind:/^IZustand</.test(t)?"zustand":/^ILogger/.test(t)?"logger":"param",name:t,ref:p,f});glieder.set(x,3);});
-    // Unverbunden, aber bei der Funktion: eine Nachricht, die hier angelegt wurde (bzw. in ihrem Namespace liegt) und die niemand erzeugt oder nimmt.
-    MODEL.records.forEach(r=>{const x=rec(r.name);if(glieder.has(x)||!NODEBY.has(x)||!["command","rejection"].includes(r.kind)||r.aggregat)return;
-      if((r.amFunktion===f.name||r.namespace===f.namespace)&&!aggHatErzeuger(r.name)&&!funGenommen(r.name)){glieder.set(x,2);unverbunden.add(x);}});
-    return {glieder,kanten,knoten,unverbunden};}
-  function funZeige(de,id){const f=funModell(id);if(!f||istGerufen(f)){KOM.pfad[KOM.pfad.length-1]="form:"+id;komZeige();return;}
-    const I=funInnen(id,f),kn=x=>I.knoten.get(x)||NODEBY.get(x),kat=funKatalog(f);
-    innenZeige(de,id,{I,knoten:kn,unverbunden:I.unverbunden,
-      unverbundenText:"Liegt bei der Funktion, noch von keinem Auf ausgegeben bzw. genommen — anschließen über ＋ am Port",
-      // Fix: was dem Aggregat gehört (ein Command an es, eine Antwort) — bearbeitet wird es dort.
-      fest:x=>{const r=I.glieder.get(x)!==3&&x.startsWith("rec:")&&recByName(x.slice(4));return !!r&&(!!r.aggregat||r.kind==="event");},
-      festKnopf:(n,x)=>{const r=recByName(x.slice(4))||{},ag=r.aggregat||(SICHT().karten[x]||{}).aggregat;
-        return h("button",{class:"ag-stift",title:"Gehört dem Aggregat — Klick: dort öffnen",onclick:e=>{e.stopPropagation();if(ag)komKarte("agg:"+ag,true);}},"▣");},
-      ports:(n,x)=>funPorts(f,I,n,x),kantenPorts:(a,b)=>funKantenPorts(I,kn,a,b),auswahl:p=>funAuswahl(f,I,kn,p),anschliessen:(p,x)=>funAnschliessen(f,kn,p,x),
-      geister:p=>funGeister(f,kat,p),plus:(p,x)=>innenPortWahl(p,x),kurz:(n,x)=>funKurz(f,n,x),bearbeiten:(n,x)=>funBearbeiten(f,kat,n,x),
-      loeschen:(n,x)=>funLoeschPlan(f,I,n,x),
-      zeit:x=>{const n=kn(x)||{};return n.kind==="auf"?aggZeit(n.ref.eingang):x.startsWith("rec:")?aggZeit(n.name):0;},
-      name:x=>(kn(x)||{}).name||"",ein:x=>I.kanten.filter(([,b])=>b===x).length,koepfe:()=>funKoepfe(f,kat),
-      legen:{spalten:[0,1,2,3],baender:[""],frei:[3],folgen:[]},
-      ansicht:{fuehrt:()=>ANSICHT.funFuehrt==="ausgang"?"ausgang":"eingang",sortierung:()=>AGG_SORTIERUNG[ANSICHT.funSortierung]?ANSICHT.funSortierung:"neu",
-        B:"ausgang",setze:(fu,s)=>{ANSICHT.funFuehrt=fu;ANSICHT.funSortierung=s;ansichtSpeichern();}}});
-    // Im Kopf: wo die Funktion liegt und wo sie läuft (Graphen, in denen sie Knoten ist); das Formular für alles Übrige (Umsetzungen, Methoden).
-    const reiter=de.querySelector(".kom .kom-reiter"),verwendet=(MODEL.graphen||[]).filter(g=>(g.knoten||[]).some(k=>komBasis(k.typ)===f.name));
-    if(reiter)reiter.prepend(h("span",{class:"kom-u",title:f.namespace},(kat?"📚 "+kat:"Anwendung")+(verwendet.length?" · in "+verwendet.map(g=>"⬡ "+g.name).join(", "):" · in keinem Graphen")),
-      h("button",{title:"Das bisherige Formular der Funktion",onclick:()=>komKarte(id,true,true)},"✎ Formular"));}
-  // Die Ports: ein Auf nimmt links seinen Eingang und gibt rechts seine Ausgänge (mit Vielfachheit) aus; eine Nachricht hat ihren Auf-Anschluss.
-  function funPorts(f,I,n,x){const ein=[],aus=[],t="ƒ "+f.name,s=nm=>komSorte(nm);
-    if(n.kind==="auf"){const e=n.ref,m=funMult(e);ein.push({key:"in",label:e.eingang,sorte:s(e.eingang)});
-      (e.ausgaben||[]).forEach(o=>aus.push({key:"o:"+o,label:o+"  "+m,sorte:s(o),loese:()=>{e.ausgaben=ohneX(e.ausgaben,o);gTitel(t+": Auf("+e.eingang+") gibt "+o+" nicht mehr aus");render();}}));
-      aus.push({key:"+",label:"＋ Ausgang",plus:{art:"ausgang",e}});}
-    else if(n.kind==="lausche"){(f.lauscht||[]).forEach(o=>aus.push({key:"o:"+o,label:o+"  0..n",sorte:s(o),loese:()=>{f.lauscht=ohneX(f.lauscht,o);gTitel(t+": meldet "+o+" nicht mehr");render();}}));
-      aus.push({key:"+",label:"＋ meldet",plus:{art:"ausgang",lausche:true}});}
-    else if(x.startsWith("rec:")){const nm=n.name,sp=I.glieder.get(x);
-      if(sp===0)aus.push({key:"aus",label:"▶ Auf",sorte:s(nm)});
-      else if(sp===2){I.kanten.filter(([,b])=>b===x).forEach(([a])=>{const an=I.knoten.get(a);if(!an)return;
-          ein.push({key:"von:"+a,label:"◀ "+(an.kind==="lausche"?"Lausche":"Auf("+an.ref.eingang+")"),sorte:s(nm),loese:()=>{
-            if(an.kind==="lausche")f.lauscht=ohneX(f.lauscht,nm);else an.ref.ausgaben=ohneX(an.ref.ausgaben,nm);gTitel(t+": "+nm+" nicht mehr ausgegeben");render();}});});
-        ein.push({key:"+",label:"＋ Auf",plus:{art:"auf",rec:nm}});
-        const r=recByName(nm);if(r&&r.aggregat)aus.push({key:"agg",label:"▶ ▣ "+r.aggregat,sorte:"command"});}}
-    return {ein,aus};}
-  function funKantenPorts(I,kn,a,b){const na=kn(a),nb=kn(b);if(!na||!nb)return null;
-    if(nb.kind==="auf")return ["aus","in"];
-    if(na.kind==="auf"||na.kind==="lausche")return ["o:"+nb.name,"von:"+a];
-    return null;}
-  function funAuswahl(f,I,kn,p){const k=new Set();if(!p)return k;
-    I.glieder.forEach((s,x)=>{const n=kn(x);if(!n)return;
-      if(p.art==="ausgang"&&s===2&&x.startsWith("rec:")&&!(p.lausche?f.lauscht||[]:p.e.ausgaben||[]).includes(n.name))k.add(x);
-      if(p.art==="auf"&&n.kind==="auf"&&!(n.ref.ausgaben||[]).includes(p.rec))k.add(x);});
-    return k;}
-  function funGibAus(f,p,nm){const t="ƒ "+f.name;
-    if(p.lausche){f.lauscht=[...(f.lauscht||[]),nm];gTitel(t+": meldet "+nm);}
-    else{p.e.ausgaben=[...(p.e.ausgaben||[]),nm];gTitel(t+": Auf("+p.e.eingang+") gibt "+nm+" aus");}}
-  function funAnschliessen(f,kn,p,x){const n=kn(x);if(!n)return;KOM.port=null;
-    if(p.art==="ausgang")funGibAus(f,p,n.name);
-    else if(p.art==="auf"){n.ref.ausgaben=[...(n.ref.ausgaben||[]),p.rec];gTitel("ƒ "+f.name+": Auf("+n.ref.eingang+") gibt "+p.rec+" aus");}
-    render();}
   // Eine neue Nachricht der Funktion: in ihrem Namespace (im Katalog bleibt sie im Katalog), ohne Felder — die bekommt sie im ✎.
   function funRecordNeu(f,n,kind){MODEL.records.push({name:n,kind,namespace:f.namespace,felder:[],istErzeugung:false,amFunktion:f.name});aggStempel(n);}
-  // Gestrichelt beim Anschließen eines Ausgangs: eine neue Nachricht, ein neuer Hinweis, (in der Anwendung) ein Command an ein Aggregat; dazu
-  //   vorhandene Nachrichten ohne Erzeuger. Ein Katalog kennt keine Domäne — dort nur seine eigenen Nachrichten.
-  function funGeister(f,kat,p){if(!p||p.art!=="ausgang")return [];const g=[],stamm=f.name.replace(/^I(?=[A-ZÄÖÜ])/,"");
-    const neu=(titel,u,vorschlag,kind)=>g.push({spalte:2,t:titel,u,fn:e=>frageFix(e.clientX,e.clientY,titel,vorschlag,u,n=>{const fe=nameFehler(n);if(fe)return fe;
-      KOM.port=null;funRecordNeu(f,n,kind);funGibAus(f,p,n);render();})});
-    neu("＋ neue Nachricht","Command ohne Ziel — ein Knoten oder der Kopf eines Graphen nimmt sie",stamm+"Ergebnis","command");
-    if(!p.lausche)neu("＋ neuer Hinweis","flüchtig, an die Akteure, die ihn hören",stamm+"Unmoeglich","rejection");
-    if(!kat&&!p.lausche)g.push({spalte:2,t:"→ Command an ▣ …",u:"an ein Aggregat — vorhanden oder neu samt Decide",fn:e=>funCommandAnAggregat(f,p,e)});
-    const imScope=r=>kat?funKatalog(r)===kat:!funKatalog(r)||true;
-    MODEL.records.filter(r=>["command","rejection"].includes(r.kind)&&!r.aggregat&&imScope(r)&&!aggHatErzeuger(r.name)&&!(p.lausche?f.lauscht||[]:p.e.ausgaben||[]).includes(r.name))
-      .slice(0,12).forEach(r=>g.push({spalte:2,t:(FL_SORTE[komSorte(r.name)]||"")+r.name,u:"vorhanden, noch ohne Erzeuger — Klick übernimmt",fn:()=>{KOM.port=null;funGibAus(f,p,r.name);render();}}));
-    return g;}
-  // „→ Command an ▣ …“: je Aggregat seine Commands und „neuer Command“ (entsteht beim Aggregat samt Decide, wie im Aggregat-Modal).
-  function funCommandAnAggregat(f,p,ev){const items=[];
-    MODEL.aggregate.forEach(A=>{items.push({kopf:"▣ "+A.name});
-      MODEL.records.filter(r=>r.kind==="command"&&r.aggregat===A.name&&!(p.e.ausgaben||[]).includes(r.name))
-        .forEach(r=>items.push({t:"▶ "+r.name,fn:()=>{KOM.port=null;funGibAus(f,p,r.name);render();}}));
-      items.push({t:"＋ neuer Command an "+A.name+" …",fn:()=>frageFix(ev.clientX,ev.clientY,"＋ Command an "+A.name,"","Entsteht beim Aggregat samt Decide",n=>{
-        const fe=nameFehler(n);if(fe)return fe;KOM.port=null;aggCommandAnlegen(A,n,[]);funGibAus(f,p,n);render();})});});
-    menueFix(ev.clientX,ev.clientY,"Command an ein Aggregat",items);}
-  function funKoepfe(f,kat){const t="ƒ "+f.name,menue=(titel,items)=>ev=>menueFix(ev.clientX,ev.clientY,titel,items);
-    const neuerEingang=ev=>frageFix(ev.clientX,ev.clientY,"＋ Eingang von "+f.name,f.name.replace(/^I(?=[A-ZÄÖÜ])/,"")+"Auftrag","Eine neue Nachricht (Command ohne Ziel) samt Auf",n=>{
-      const fe=nameFehler(n);if(fe)return fe;funRecordNeu(f,n,"command");(f.eingaenge=f.eingaenge||[]).push({eingang:n,ausgaben:[]});gTitel(t+": Auf("+n+")");render();});
-    const hat=nm=>(f.eingaenge||[]).some(e=>e.eingang===nm);
-    const vorhanden=MODEL.records.filter(r=>r.kind==="command"&&!r.aggregat&&!hat(r.name)&&(kat?funKatalog(r)===kat:true))
-      .map(r=>({t:"▶ "+r.name,fn:()=>{(f.eingaenge=f.eingaenge||[]).push({eingang:r.name,ausgaben:[]});gTitel(t+": Auf("+r.name+")");render();}}));
-    // Antworten: die Events, die die Decides der Commands ergeben, die diese Funktion an Aggregate gibt (CQRS108) — nur in der Anwendung.
-    const antworten=kat?[]:[...new Set((f.eingaenge||[]).flatMap(e=>e.ausgaben||[]).filter(o=>(recByName(o)||{}).aggregat)
-      .flatMap(o=>MODEL.decider.filter(d=>d.command===o).flatMap(d=>(d.ergibt||[]).map(x=>x.event))).filter(ev=>(recByName(ev)||{}).kind==="event"&&!hat(ev)))]
-      .map(ev=>({t:"◀ "+ev,title:"Antwort auf einen eigenen Command an ein Aggregat",fn:()=>{f.eingaenge.push({eingang:ev,ausgaben:[]});gTitel(t+": Auf("+ev+") — Antwort");render();}}));
-    return [
-      ["Eingänge",menue("Eingang von "+f.name,[{t:"＋ neue Nachricht mit Auf …",fn:neuerEingang},
-        ...(vorhanden.length?[{trenn:1},{kopf:"vorhandene Nachricht"},...vorhanden.slice(0,30)]:[]),
-        ...(antworten.length?[{trenn:1},{kopf:"Antwort auf einen eigenen Command"},...antworten]:[])]),"＋ ▾","eingang"],
-      ["Auf",null,"je Eingang eines"],
-      ["Ausgänge",null,"＋ am Port eines Auf","ausgang"],
-      ["Rahmen",menue("Konstruktor von "+f.name,funRahmenItems(f)),"＋ ▾"]];}
   // Der Rahmen einer Funktion (Konstruktor): neue oder vorhandene Konfig, neue oder vorhandene Technik, der Logger — im Funktions- und im Katalog-Modal.
-  function funRahmenItems(f){const t="ƒ "+f.name;
-    const ctor=ctorVon(f,null),hatTyp=x=>ctor.some(p=>komBasis(String(p.typ).trim())===x);
+  // opt: {ctor (ein anderer Konstruktor, z. B. der einer Umsetzung), name (wessen Konstruktor), nur:"technik"}.
+  function funRahmenItems(f,opt){opt=opt||{};const nm=opt.name||f.name,t=(opt.name?"":"ƒ ")+nm;
+    const ctor=opt.ctor||ctorVon(f,null),hatTyp=x=>ctor.some(p=>komBasis(String(p.typ).trim())===x);
     const technik=MODEL.bausteinFunktionen.filter(g=>istGerufen(g)&&!hatTyp(g.name)).map(g=>({t:"⚙ "+g.name,fn:()=>{nimmGerufene(ctor,g,f);gTitel(t+" nimmt "+g.name);render();}}));
     const konfigs=MODEL.records.filter(r=>r.kind==="konfig"&&!hatTyp(r.name)).map(r=>({t:"▤ "+r.name,fn:()=>{ctor.push({typ:r.name,name:paramName(r.name,ctor.map(p=>p.name))});gTitel(t+" nimmt "+r.name);render();}}));
     const logger=ctor.some(p=>/^ILogger</.test(String(p.typ)));
+    const neueTechnik={t:"＋ neue Technik …",fn:ev=>frageFix(ev.clientX,ev.clientY,"＋ Technik für "+nm,"","Eine Schnittstelle mit einer Umsetzung — Methoden danach mit ＋ Methode",n=>{
+          if(!/^I[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(n))return "Eine Schnittstelle: I + Name";if(MODEL.bausteinFunktionen.some(x=>x.name===n))return n+" gibt es schon";
+          const g=neueGerufene(f.namespace);g.name=n;g.methoden=[];g.umsetzungen[0].name=uniq(n.slice(1));nimmGerufene(ctor,g,f);gTitel(t+" nimmt "+n);render();})};
+    if(opt.nur==="technik")return [neueTechnik,...(technik.length?[{trenn:1},{kopf:"vorhandene Technik"},...technik.slice(0,20)]:[])];
     return [
         {t:"＋ neue Konfig …",fn:ev=>frageFix(ev.clientX,ev.clientY,"＋ Konfig von "+f.name,f.name.replace(/^I(?=[A-ZÄÖÜ])/,"")+"Konfig","Ein Record — seine Werte stehen am Knoten der Instanz",n=>{
           const fe=nameFehler(n);if(fe)return fe;MODEL.records.push({name:n,kind:"konfig",namespace:f.namespace,felder:[{_id:"f"+(NID++),name:"Wert",typ:"string"}],istErzeugung:false});
           aggStempel(n);ctor.push({typ:n,name:paramName(n,ctor.map(p=>p.name))});gTitel(t+" nimmt "+n);render();})},
-        {t:"＋ neue Technik …",fn:ev=>frageFix(ev.clientX,ev.clientY,"＋ Technik für "+f.name,"I"+f.name.replace(/^I(?=[A-ZÄÖÜ])/,"")+"Technik","Eine Schnittstelle mit einer Umsetzung (Methoden im Formular)",n=>{
+        {t:"＋ neue Technik …",fn:ev=>frageFix(ev.clientX,ev.clientY,"＋ Technik für "+nm,"","Eine Schnittstelle mit einer Umsetzung — Methoden danach mit ＋ Methode",n=>{
           if(!/^I[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(n))return "Eine Schnittstelle: I + Name";if(MODEL.bausteinFunktionen.some(x=>x.name===n))return n+" gibt es schon";
           const g=neueGerufene(f.namespace);g.name=n;g.umsetzungen[0].name=uniq(n.slice(1));nimmGerufene(ctor,g,f);gTitel(t+" nimmt "+n);render();})},
         ...(konfigs.length?[{trenn:1},{kopf:"vorhandene Konfig"},...konfigs.slice(0,20)]:[]),
         ...(technik.length?[{trenn:1},{kopf:"vorhandene Technik"},...technik.slice(0,20)]:[]),
-        {trenn:1},{t:(logger?"✓ ":"   ")+"Logger (ILogger<"+f.name+">)",fn:()=>{if(logger)f.konstruktor=ctor.filter(p=>!/^ILogger</.test(String(p.typ)));
-          else ctor.push({typ:"ILogger<"+f.name+">",name:"logger"});gTitel(t+(logger?" ohne":" mit")+" Logger");render();}},
+        {trenn:1},{t:(logger?"✓ ":"   ")+"Logger (ILogger<"+nm+">)",fn:()=>{if(logger)ctor.splice(0,ctor.length,...ctor.filter(p=>!/^ILogger</.test(String(p.typ))));
+          else ctor.push({typ:"ILogger<"+nm+">",name:"logger"});gTitel(t+(logger?" ohne":" mit")+" Logger");render();}},
         {hinweis:"Zustand (IZustand<T>): im Formular — die Zustandsklasse legt das Modal noch nicht an."}];}
-  function funKurz(f,n,x){const box=h("div",{class:"ag-kurz"});
-    if(n.kind==="auf"){const e=n.ref,tags=[funMult(e)==="0..n"?"Strom":(e.ausgaben||[]).length>1?"Wahl":"Folge"];
-      if(e.asynchron)tags.push("asynchron");if(e.herkunft)tags.push("Herkunft");(e.faehigkeiten||[]).forEach(p=>tags.push("⌕ "+p.typ));
-      if((recByName(e.eingang)||{}).kind==="event")tags.push("Antwort");
-      tags.forEach(tg=>box.append(h("span",{class:"ag-tag"},tg)));return box;}
-    if(n.kind==="lausche"){box.append(h("span",{class:"ag-tag"},"Quelle — je Element eine Kette"));return box;}
-    if(["zustand","logger","param"].includes(n.kind)){box.append(n.name);return box;}
-    if(n.kind==="bausteinfunktion"){box.append("Umsetzungen: "+((n.ref.umsetzungen||[]).map(u=>u.name).join(", ")||"—"));return box;}
-    const r=n.ref||{};if((r.felder||[]).length)box.append(h("div",{},r.felder.map(fe=>fe.name).join(", ")));
-    if(r.aggregat)box.append(h("div",{class:"ag-tag"},"→ ▣ "+r.aggregat));return box;}
   // Eine Nachricht (noch nicht geschrieben) umbenennen: alle Verweise der Funktionen ziehen mit (eine geschriebene geht über den Renamer).
   function funRecUmbenennen(r,neu){const alt=r.name;recUmbenennenLokal(r,neu);
     MODEL.bausteinFunktionen.forEach(g=>{(g.eingaenge||[]).forEach(e=>{if(e.eingang===alt)e.eingang=neu;e.ausgaben=(e.ausgaben||[]).map(v=>v===alt?neu:v);});
       g.lauscht=(g.lauscht||[]).map(v=>v===alt?neu:v);});render();}
-  function funBearbeiten(f,kat,n,x){const box=h("div",{class:"ag-edit"}),t="ƒ "+f.name;
-    ["click","dblclick"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
-    const schalter=(text,an,titel,setze)=>{const c=h("input",{type:"checkbox",onchange:e=>{setze(e.target.checked);render();}});c.checked=!!an;
-      return h("label",{class:"ag-flag",title:titel},c," "+text);};
-    const ruempfe=pred=>[...NODEBY.values()].filter(r=>r.kind==="rumpf"&&r.own&&r.own.id===("fb:"+f._id)&&pred(r)).forEach(r=>{const b=h("div",{class:"gbody"});
-      INSP=true;try{fuelleKoerper(b,r);}finally{INSP=false;}box.append(b);});
-    if(n.kind==="auf"){const e=n.ref;
-      box.append(schalter("Strom — keine bis viele je Aufruf (IEnumerable)",e.strom,"Sonst genau eine Ausgabe bzw. bei mehreren eine Wahl (OneOf: keine oder eine)",v=>{e.strom=v;gTitel(t+": Auf("+e.eingang+")"+(v?" als Strom":" ohne Strom"));}));
-      box.append(schalter("asynchron (Task bzw. IAsyncEnumerable)",e.asynchron,"",v=>{e.asynchron=v;gTitel(t+": Auf("+e.eingang+")"+(v?" asynchron":" synchron"));}));
-      box.append(schalter("Herkunft h (Stream, Zeit, Akteur, NeueId)",e.herkunft,"",v=>{e.herkunft=v;gTitel(t+": Auf("+e.eingang+")"+(v?" mit":" ohne")+" Herkunft");}));
-      if(!kat){const alle=MODEL.stores.flatMap(st=>(st.readFns||[]).map(fn=>fn.faehigkeit).filter(Boolean)),hat=new Set((e.faehigkeiten||[]).map(p=>p.typ));
-        if(alle.length)box.append(h("div",{class:"ag-sek"},"liest (Lese-Fähigkeiten)"),...[...new Set(alle)].map(fa=>schalter("⌕ "+fa,hat.has(fa),"Eine Lese-Fähigkeit als Parameter des Auf",v=>{
-          e.faehigkeiten=v?[...(e.faehigkeiten||[]),{typ:fa,name:paramName(fa,(e.faehigkeiten||[]).map(p=>p.name).concat(["e","h"]))}]:(e.faehigkeiten||[]).filter(p=>p.typ!==fa);
-          gTitel(t+": Auf("+e.eingang+")"+(v?" liest ":" liest nicht mehr ")+fa);})));}
-      else{const hat=new Set((e.faehigkeiten||[]).map(p=>p.typ));
-        const setze=(fa,v)=>{e.faehigkeiten=v?[...(e.faehigkeiten||[]),{typ:fa,name:paramName(fa,(e.faehigkeiten||[]).map(p=>p.name).concat(["e","h"]))}]
-          :(e.faehigkeiten||[]).filter(p=>p.typ!==fa);gTitel(t+": Auf("+e.eingang+")"+(v?" liest ":" liest nicht mehr ")+fa);};
-        box.append(h("div",{class:"ag-sek",title:"Der Katalog deklariert, was er lesen will (: IReadStore); ein Store im Speicher der Anwendung setzt es um (CQRS124)"},
-            "liest (Lese-Fähigkeiten des Katalogs)"),
-          ...katFaehigkeiten(kat).map(fa=>schalter("⌕ "+fa.name+(fa.store?"":" — ⚠ kein Store setzt sie um"),hat.has(fa.name),
-            fa.store?"umgesetzt von "+fa.store:"Noch kein Store der Anwendung setzt sie um (CQRS124)",v=>setze(fa.name,v))),
-          h("button",{class:"ag-plus",title:"Eine Lese-Fähigkeit im Katalog und der Store der Anwendung, der sie umsetzt",
-            onclick:ev=>katFaehigkeitNeu(f,kat,ev,n=>{setze(n,true);render();})},"＋ neue Lese-Fähigkeit …"));}
-      ruempfe(r=>String(r.name||"").includes("("+e.eingang+")"));return box;}
-    if(n.kind==="lausche"){ruempfe(r=>/Lausche/.test(String(r.name||"")));return box;}
-    if(x.startsWith("rec:")){const r=n.ref;
-      box.append(h("div",{class:"ag-feld"},h("input",{value:r.name,spellcheck:"false",title:"Name",onchange:e=>{const neu=e.target.value.trim(),fe=nameFehler(neu);if(neu===r.name)return;
-        if(fe){deFlash("⚠ "+fe,false);render();return;}aggStempelUmbenennen(r.name,neu);if(r._ort)gUmbenennen(r,neu,r.name);else funRecUmbenennen(r,neu);}})));
-      box.append(aggFelder(r.felder=r.felder||[],null,t+": "+r.name));
-      if(r.kind==="command"||r.kind==="rejection")box.append(h("button",{class:"ag-plus",title:"Command ohne Ziel (ein Knoten bzw. Kopf nimmt ihn) oder Hinweis (flüchtig, an Akteure)",
-        onclick:()=>{r.kind=r.kind==="command"?"rejection":"command";gTitel(t+": "+r.name+(r.kind==="command"?" ist eine Nachricht":" ist ein Hinweis"));render();}},
-        r.kind==="command"?"⇄ zum Hinweis machen":"⇄ zur Nachricht machen"));
-      return box;}
-    if(["zustand","logger","param"].includes(n.kind)){box.append(h("div",{class:"kom-wo"},n.name+" — im Konstruktor; ✕ im Kopf nimmt es heraus."));return box;}
-    if(n.kind==="bausteinfunktion")box.append(h("button",{class:"ag-plus",title:"Methoden und Umsetzungen der Technik",onclick:()=>komKarte(x,true,true)},"⚙ Methoden und Umsetzungen"));
-    return box;}
-  // Löschen in der Funktion: ein Auf (sein Eingang geht mit, wenn ihn sonst niemand nennt), eine Nachricht (aus allen Auf dieser Funktion), ein
-  //   Konstruktor-Parameter (nur aus dem Konstruktor; Konfig und Technik bleiben als Typen).
-  function funLoeschPlan(f,I,n,x){const t="ƒ "+f.name;
-    const hier=u=>u.art==="funktion"&&new RegExp("(^|[^A-Za-z0-9_])"+f.name+"([.(]|$)").test(u.wo);
-    if(n.kind==="auf"){const e=n.ref,nur=verwendungen(e.eingang).every(u=>hier(u)||u.art==="darf"||u.art==="hoert"),r=recByName(e.eingang),eigen=r&&!r.aggregat&&r.kind!=="event"&&nur;
-      return {was:"Auf("+e.eingang+")",folgen:eigen?["die Nachricht "+e.eingang+" (sonst nennt sie niemand)"]:[],grund:null,
-        tu:()=>{f.eingaenge=(f.eingaenge||[]).filter(z=>z!==e);if(eigen)recordWeg(e.eingang);}};}
-    if(n.kind==="lausche")return {was:"Lausche",folgen:["die Funktion ist danach keine Quelle mehr"],grund:null,tu:()=>{f.lauscht=[];}};
-    // Im Rahmen: nur aus dem Konstruktor — Konfig-Record und Technik bleiben als Typen.
-    if(I.glieder.get(x)===3){const p=n.kind==="bausteinfunktion"?ctorVon(f,null).find(q=>gerufenByName(q.typ)===n.ref)
-        :x.startsWith("rec:")?ctorVon(f,null).find(q=>komBasis(String(q.typ).trim())===n.name):n.ref;
-      return p?{was:String(p.typ)+" aus dem Konstruktor",folgen:[],grund:null,tu:()=>{f.konstruktor=ctorVon(f,null).filter(q=>q!==p);}}:null;}
-    if(x.startsWith("rec:")){const r=n.ref||{};if(r.aggregat||r.kind==="event")return null;
-      return loeschPlanRecord(r.name,(r.kind==="rejection"?"Hinweis ":"Nachricht ")+r.name,hier,()=>{
-        (f.eingaenge||[]).forEach(e=>{e.ausgaben=ohneX(e.ausgaben,r.name);});f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==r.name);
-        f.lauscht=ohneX(f.lauscht,r.name);recordWeg(r.name);});}
-    return null;}
   // ── Komposition: Knoten aus dem Baukasten, [Von] und [Kopf] durch Ziehen, Konstruktor durch Ablegen, Kanten lösen ──
   const komModell=id=>(MODEL.graphen||[]).find(g=>"gr:"+g._id===id);
   function komVerbinde(id,von,nach){const g=komModell(id);if(!g)return;const k=(g.knoten||[]).find(x=>x.name===nach);if(!k)return;
@@ -4000,20 +4000,12 @@
   // Eine Kopf-Übersetzung (docs/04 §4.4): eine Nachricht einer Domäne (neu, mit den Feldern des Eingangs, oder m) ↦ der Eingang t eines
   //   Graphen; danach, wer sie hineingibt.
   function komKopfUebersetzung(t,ev,m){const doms=[...new Set(MODEL.aggregate.map(A=>A.namespace))].sort();
-    const anlegen=(ns,n)=>{ueNeu(ns,n,komBasis(t),[]);setTimeout(()=>komAkteurWahl(n,ev),0);};
+    const anlegen=(ns,n)=>{ueNeu(ns,n,komBasis(t),[]);deFlash("ℹ Wer "+n+" hineingibt, legst du im Modal „Akteure und Clients“ fest (＋ darf)",true);};
     const neu=ns=>frageFix(ev.clientX,ev.clientY,"▶ Neue Nachricht eines Clients",uniq(komBasis(t).replace(/(Auftrag)?$/,"")+"Angefordert"),
       "Ein Command ohne Ziel in "+ns+" — ein Akteur gibt ihn hinein, eine Übersetzung macht daraus "+t,n=>{const f=nameFehler(n);if(f)return f;
         MODEL.records.push({name:n,kind:"command",namespace:ns,felder:komFelderVon(t,null,ns),istErzeugung:false});aggStempel(n);anlegen(ns,n);});
     if(m){const r=recNamens(m);anlegen((r&&r.namespace)||doms[0]||defaultNsGlobal(),m);return;}
     menueFix(ev.clientX,ev.clientY,"In welcher Domäne lebt die Nachricht?",doms.map(ns=>({t:"▣ "+ns,fn:()=>neu(ns)})));}
-  // Wer die Nachricht m hineingibt: ein Akteur bekommt IDarf<m> (vorhanden oder neu) — oder später.
-  function komAkteurWahl(m,ev){
-    menueFix(ev.clientX,ev.clientY,"Wer gibt "+m+" hinein? (IDarf)",[
-      ...MODEL.akteure.map(a=>({t:"👤 "+a.name+((a.darf||[]).includes(m)?" (darf schon)":""),fn:()=>{if((a.darf||[]).includes(m))return;
-        a.darf=[...(a.darf||[]),m];gTitel("👤 "+a.name+" darf "+m);render();}})),
-      {trenn:1},{t:"＋ neuer Akteur …",fn:()=>frageFix(ev.clientX,ev.clientY,"👤 Neuer Akteur","","Er gibt "+m+" hinein (IDarf)",n=>{const f=nameFehler(n);if(f)return f;
-        MODEL.akteure.push({_id:"ak"+(NID++),name:n,namespace:haeufigsterNs(MODEL.akteure)||defaultNsGlobal(),darf:[m],hoert:[]});gTitel("👤 "+n+" darf "+m);render();})},
-      {hinweis:"Ohne Akteur gibt niemand "+m+" hinein — der Rand zeigt es an."}]);}
   // „↦ ▣ Command an …“ an einer Nachricht eines Graphen: eine Übersetzung der Domäne (docs/04 §4.4) nimmt sie nach ihrem Typ und macht
   //   einen vorhandenen Command an ein Aggregat daraus oder einen neuen samt Decide. dom: nur die Aggregate dieser Domäne (etwa vom Band aus).
   function komCommandAn(typ,ev,dom){if(KOM)KOM.port=null;
@@ -4021,14 +4013,15 @@
     const cmds=MODEL.records.filter(r=>r.kind==="command"&&r.aggregat&&aggs.some(A=>A.name===r.aggregat)).sort((a,b)=>(a.aggregat+a.name).localeCompare(b.aggregat+b.name));
     menueFix(ev.clientX,ev.clientY,typ+" ↦ Command an …"+(dom&&eigene.length?" ("+dom.split(".").pop()+")":""),[
       {t:"＋ neuer Command an ein Aggregat …",fn:()=>menueFix(ev.clientX,ev.clientY,"An welches Aggregat?",aggs.map(A=>({t:"▣ "+A.name,
-        fn:()=>frageFix(ev.clientX,ev.clientY,"＋ Command an "+A.name,"Vermerke"+komBasis(typ),"Mit Decide und einem Event; Felder: die Id von "+A.name+" und die von "+komBasis(typ),n=>{
+        fn:()=>frageFix(ev.clientX,ev.clientY,"＋ Command an "+A.name,"","Mit Decide und einem Event (danach sein Name); Felder: die Id von "+A.name+" und die von "+komBasis(typ),n=>{
           const f=nameFehler(n);if(f)return f;
           // Ein Decide ergibt sein Event (ein leeres baute nicht): dieselben Felder ohne die Id, mit seinem Apply.
-          let e=komBasis(typ)+"Vermerkt",i=2;while(recNamens(e))e=komBasis(typ)+"Vermerkt"+(i++);
-          const ohne=x=>/^(System\.)?Guid$/.test(x.typ)||x.name===aggIdFeld();
-          aggRecordNeu(A,e,"event");recNamens(e).felder=komFelderVon(typ,ohne);aggCommandAnlegen(A,n,[{event:e}]);aggApplySichern(A,e);
-          const r=recNamens(n);r.felder=[...r.felder,...komFelderVon(typ,ohne)];
-          komUebersetzungAn(typ,n);})})))},
+          setTimeout(()=>frageFix(ev.clientX,ev.clientY,"◆ Event aus Decide("+n+")","","Das Fakt, das "+n+" in "+A.name+" ergibt",e=>{const f2=nameFehler(e);if(f2)return f2;
+            if(e===n)return "Command und Event brauchen verschiedene Namen";
+            const ohne=x=>/^(System\.)?Guid$/.test(x.typ)||x.name===aggIdFeld();
+            aggRecordNeu(A,e,"event");recNamens(e).felder=komFelderVon(typ,ohne);aggCommandAnlegen(A,n,[{event:e}]);aggApplySichern(A,e);
+            const r=recNamens(n);r.felder=[...r.felder,...komFelderVon(typ,ohne)];
+            komUebersetzungAn(typ,n);}),0);})})))},
       ...(cmds.length?[{kopf:"vorhanden"}]:[]),...cmds.map(r=>({t:"▣ "+r.aggregat+" · "+r.name,fn:()=>komUebersetzungAn(typ,r.name)}))]);}
   // Die Übersetzung typ ↦ cmd in der Domäne des Commands; die Id des Ziels nennt sie ausdrücklich, wenn genau ein Feld dafür in Frage kommt (eine Id
   //   dieses Aggregats, sonst ein Guid) — sonst bleibt sie offen, die ↦-Karte zeigt es.
@@ -4057,24 +4050,23 @@
       ...(offen.length?[]:[{hinweis:"Kein Graph auf der Fläche hat einen offenen Ausgang."}]),
       {trenn:1},{t:"＋ Graph an "+String(A.namespace).split(".").pop()+" binden …",fn:()=>flBandGraph(A.namespace,String(A.namespace).split(".").pop(),ev)}]);}
   // Ein Graph entsteht mit seinem ersten Knoten (ein leerer baut nicht, CQRS115): eine Funktion, eine Quelle oder ein Graph. Er liegt in einem Katalog
-  //   (docs/04 §4.4, eine Anwendung hat keine Graphen): in dem seines ersten Knotens, sonst im ersten genutzten bzw. dem allgemeinen.
+  //   (docs/04 §4.4, eine Anwendung hat keine Graphen): in dem seines ersten Knotens, sonst im ersten genutzten.
   function graphNeuMitKnoten(ev,pos){const bk=komBaukasten();
     frageFix(ev.clientX,ev.clientY,"⬡ Neuer Graph",uniq("NeuerGraph"),"Danach: sein erster Knoten",n=>{const f=nameFehler(n);if(f)return f;
       if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
       const katNs=typ=>{const b=komBasis(typ),x=MODEL.bausteinFunktionen.find(y=>y.name===b)||(MODEL.graphen||[]).find(y=>y.name===b);
         if(x&&funKatalog(x)&&(bk.kataloge||[]).includes(funKatalog(x)))return x.namespace;
-        return ((bk.kataloge||[])[0]||(MODEL.rahmen||{}).allgemeinerKatalog)+".Allgemein";};
-      const mit=(typ,quelle)=>{const ns=katNs(typ);(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,
+        return (bk.kataloge||[])[0]||null;};
+      const mit=(typ,quelle)=>{const ns=katNs(typ);if(!ns){deFlash("ℹ Erst einen Katalog anlegen — Graphen liegen nur in Katalogen",true);return;}(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,
         knoten:[{typ,name:typBasis(typ).replace(/^I(?=[A-ZÄÖÜ])/,""),kopf:!quelle,von:[],verlierbar:[]}],...pos});KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+" mit "+typ);render();};
-      // Eine neue Funktion als erster Knoten: in einem Katalog (dort in einem Bereich), mit Auftrag und Ergebnis.
+      // Eine neue Funktion als erster Knoten: in einem Katalog, mit Auftrag und Ergebnis.
       const neueFn=katalog=>{const weiter=fns=>frageFix(ev.clientX,ev.clientY,"ƒ Erste Funktion von "+n,n.replace(/(Graph|Ablauf)$/,"")+"Rechnung",
           "Nimmt einen neuen Auftrag und gibt ein Ergebnis — beides danach im Modal der Funktion",fn=>{
           const fe=nameFehler(fn);if(fe&&!/gibt es schon/.test(fe))return fe;if(MODEL.bausteinFunktionen.some(x=>x.name===fn))return fn+" gibt es schon";
           const f={_id:"funktion:"+fn,name:fn,namespace:fns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
           const auftrag=uniq(fn+"Auftrag"),ergebnis=uniq(fn+"Ergebnis");funRecordNeu(f,auftrag,"command");funRecordNeu(f,ergebnis,"command");
           f.eingaenge.push({eingang:auftrag,ausgaben:[ergebnis]});MODEL.bausteinFunktionen.push(f);mit(fn,false);});
-        setTimeout(()=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+katalog+" — Bereich","Allgemein","Der Ordner im Katalog",b=>{
-          if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";setTimeout(()=>weiter(katalog+"."+b),0);}),0);};
+        setTimeout(()=>weiter(katalog),0);};
       setTimeout(()=>menueFix(ev.clientX,ev.clientY,"Erster Knoten von "+n,[
         ...(bk.kataloge||[]).map(k=>({t:"＋ ƒ neue Funktion in 📚 "+k+" …",fn:()=>neueFn(k)})),
         ...(bk.funktionen.length?[{kopf:"vorhanden"}]:[]),
@@ -4141,13 +4133,13 @@
     zeigeInspector();
     zeigeStart();
     if(VB)vbZeige(false);
-    if(KOM_NACH&&komDaten(KOM_NACH)){if(KOM){KOM.pfad.push(KOM_NACH);KOM.wahl=null;KOM.port=null;}else KOM={pfad:[KOM_NACH],reiter:"komposition",wahl:null};KOM_NACH=null;}
+    if(KOM_NACH&&komDaten(KOM_NACH)){katGraphWaehlen(KOM_NACH);KOM_NACH=null;}
     if(KOM)komZeige();   // ein offenes Kompositions-Modal folgt dem neuen Board
   }
   // „＋ Graph“ am Band einer Domäne (docs/04 §4.4): ein Graph aus einem Katalog wird domänenspezifisch, indem eine Übersetzung dieser
   //   Domäne einen seiner Ausgänge nimmt — Graph wählen, Ausgang wählen, dann den Command an ein Aggregat dieser Domäne.
   function flBandGraph(dom,name,ev){const katGraphen=(MODEL.graphen||[]).filter(g=>funKatalog(g));
-    if(!katGraphen.length){menueFix(ev.clientX,ev.clientY,"＋ Graph an "+name,[{hinweis:"Noch kein Graph in einem Katalog — erst dort anlegen: Funktionen verketten im Graph-Modal."},
+    if(!katGraphen.length){menueFix(ev.clientX,ev.clientY,"＋ Graph an "+name,[{hinweis:"Noch kein Graph in einem Katalog — erst dort anlegen: im Katalog-Modal (📚 Kataloge)."},
       {t:"📚 Kataloge öffnen",fn:()=>katOeffne(null,null)}]);return;}
     const ausgang=g=>{const d=komDaten("gr:"+g._id),aus=((d&&d.ausgaenge)||[]).filter(a=>a.sorte==="command"&&!(recByName(komBasis(a.typ))||{}).aggregat);
       setTimeout(()=>menueFix(ev.clientX,ev.clientY,"⬡ "+g.name+" — welche Nachricht übersetzt "+name+"?",aus.length?aus.map(a=>({t:"↦ "+a.typ+(ueNehmen(a.typ).length?" (schon übersetzt)":""),
@@ -4161,7 +4153,7 @@
     const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,wx,wy);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
       opt("aggregate","Aggregat"),h("button",{onclick:e=>{pick.remove();graphNeuMitKnoten(e,{x:wx,y:wy});}},"⬡ Graph"),opt("funktion","ƒ Funktion"),opt("quelle","📥 Quelle"),opt("gerufen","⚙ Technik"),
-      opt("akteur","👤 Akteur"),opt("client","🔌 Client"),opt("projektion","Projektion"),
+      opt("projektion","Projektion"),
       h("button",{onclick:e=>{pick.remove();katalogNeu(e);}},"📚 Katalog"));
     canvas.append(pick);
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
@@ -4273,22 +4265,19 @@
       gMeldung(a);await wbLadeDiagnosen();G_BOARD=a.board;gBoardAnwenden();return true;}
     catch(e){badge(false);deFlash("⚠ Werkbank nicht erreichbar — "+titel+" nicht geschrieben",false);return false;}
     finally{G_LAEUFT=false;}}
-  function katalogNeu(ev){frageFix(ev.clientX,ev.clientY,"📚 Neuer Katalog","Bildverarbeitung",
+  function katalogNeu(ev){frageFix(ev.clientX,ev.clientY,"📚 Neuer Katalog","",
     "Ein eigenes Projekt <Name>.Katalog: Funktionen, Graphen und ihre Nachrichten, ohne Domäne — die Übersetzungen der Anwendung nutzen es.",n=>{
       if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*(\.[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*)*$/.test(n.replace(/\.Katalog$/,"")))
         return "Ein Namespace: groß beginnen, nur Buchstaben und Ziffern, Teile durch Punkte";
       gKatalog({name:n},"Katalog "+n);});}
   // (Die Id einer neuen Funktion ist die, die der Server ihr gibt — „funktion:<Name>“ —, so bleibt ein offenes Modal nach dem Schreiben offen.)
-  // Eine neue Funktion im Katalog: erst der Bereich (Ordner im Katalog), dann der Name — sie entsteht als Klasse ohne Auf (unfertig, baut nicht: W1);
-  //   die Eingänge und Ausgaben bekommt sie im Formular.
-  function katalogFunktion(katalog,ev,danach){const bereiche=[...new Set(MODEL.bausteinFunktionen.map(f=>f.namespace||"")
-      .filter(ns=>ns.startsWith(katalog+".")).map(ns=>ns.slice(katalog.length+1).split(".")[0]))];
-    frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+katalog+" — Bereich",bereiche[0]||"Allgemein","Der Ordner im Katalog (Namespace "+katalog+".<Bereich>).",b=>{
-      if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";
-      setTimeout(()=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+katalog+"."+b,"","Eine Klasse : IFunktion — Eingänge und Ausgaben danach im Formular.",n=>{
-        const f=nameFehler(n);if(f&&!/gibt es schon/.test(f))return f;if(MODEL.bausteinFunktionen.some(x=>x.name===n))return n+" gibt es schon";
-        const fb={_id:"funktion:"+n,name:n,namespace:katalog+"."+b,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
-        MODEL.bausteinFunktionen.push(fb);gTitel("ƒ "+n+" in "+katalog);render();if(danach)danach(fb);}),0);});}
+  // Eine neue Funktion im Katalog: nur der Name — sie entsteht als Klasse ohne Auf (unfertig, baut nicht: W1) flach im Katalog; Eingang und
+  //   Ausgänge bekommt sie im Katalog-Modal.
+  function katalogFunktion(katalog,ev,danach){
+    frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+katalog.replace(/\.Katalog$/,""),"","Eine Klasse : IFunktion — danach ihren Eingang rechts wählen",n=>{
+      const f=nameFehler(n);if(f&&!/gibt es schon/.test(f))return f;if(MODEL.bausteinFunktionen.some(x=>x.name===n))return n+" gibt es schon";
+      const fb={_id:"funktion:"+n,name:n,namespace:katalog,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
+      MODEL.bausteinFunktionen.push(fb);gTitel("ƒ "+n+" in "+katalog);render();if(danach)danach(fb);});}
   // Umbenennen: das Symbol am Ort der Karte samt aller Verweise (auch in Lambdas) — Roslyn-Renamer auf dem Server.
   async function gUmbenennen(o,neu,alt){await gesteFlush();G_LAEUFT=true;
     try{const r=await fetch("/api/werkbank/umbenennen",{method:"POST",headers:{"content-type":"application/json"},

@@ -1,5 +1,5 @@
 using Abstractions;
-using Pruefwerk.Katalog.Abrechnung;
+using Pruefwerk.Katalog;
 using Pruefdomaene.Abrechnung;
 
 namespace Pruefdomaene.Uebersetzungen.Abrechnung;

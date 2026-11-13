@@ -2,7 +2,7 @@ using Abstractions;
 using Leihwesen.Ausleihe;
 
 // SONDE — ZWEI Aggregate im SELBEN Namespace, Decider in eigener Datei (Mahnvorgang.Decider.cs.txt). Die Domäne ist rein: der Ablauf zwischen
-//         ihnen sind GRAPHEN des fremden Katalogs (Katalog.Gebuehren.*), die Übersetzungen (Uebersetzungen.Leihwesen.cs.txt) binden sie:
+//         ihnen sind GRAPHEN des fremden Katalogs (Katalog.*.cs.txt, Teil Gebuehren), die Übersetzungen (Uebersetzungen.Leihwesen.cs.txt) binden sie:
 //         · FOLGE mit leerem Strom: die Rückgabeprüfung ist ein Graph mit EINEM Knoten; sein Kopf nimmt die Prüfung eines Clients (PruefeRueckgabe,
 //           übersetzt) und gibt auf einem Teil der Fälle nichts aus (ein leerer Strom); die neue Id kommt aus der Herkunft (R13);
 //         · WAHL: die Schadensaufnahme gibt genau einen von drei Fällen aus — einen Command an den nächsten Knoten, die Begutachtung vor Ort (übersetzt

@@ -1,9 +1,0 @@
-using System.Threading.Tasks;
-
-namespace Sondenkatalog.Katalog.Peilung;
-
-/// <summary>Technik hinter der Peilung (ohne Marker, im Konstruktor der Funktion): der Empfänger, der eine Frequenz peilt.</summary>
-public interface IPeilempfaenger
-{
-    Task<double[]> PeileAsync(double frequenzMhz, int dauerMs);
-}

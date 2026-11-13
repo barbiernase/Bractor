@@ -1,5 +1,5 @@
 using Abstractions;
-using Sondenkatalog.Katalog.Peilung;
+using Sondenkatalog.Katalog;
 
 // SONDE — die Übersetzungen der Funkortung (docs/04 §4.4), im Projekt der Übersetzungen (die Domäne bleibt rein): am Kopf die Nachricht
 // des Funkers in den Eingang des Katalogs (Frequenz nach Namen, die Stelle als Auftrag, die Messdauer als DauerMs ausdrücklich). Das Ergebnis wird ein

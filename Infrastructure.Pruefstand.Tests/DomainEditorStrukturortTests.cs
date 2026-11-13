@@ -50,6 +50,21 @@ public class DomainEditorStrukturortTests
     }
 
     [Fact]
+    public void Neue_Karten_in_einem_Katalog_liegen_flach_im_Katalog()
+    {
+        var m = Modell("Bild.Katalog.Skalierung") with
+        {
+            Rahmen = new Rahmen { Verzeichnisse = new Dictionary<string, string> { ["Bild.Katalog"] = "Bild.Katalog" } },
+        };
+        var normal = Strukturort.Normalisiere(m);
+        normal.Records.Select(r => r.Namespace).Should().AllBe("Bild.Katalog", "ein Katalog hat keine Bereiche (docs/07 §7.3)");
+        normal.BausteinFunktionen.Single().Namespace.Should().Be("Bild.Katalog");
+        var pfade = Scaffolder.Generiere(m).Select(d => d.Pfad).ToList();
+        pfade.Should().Contain(["Bild.Katalog/Commands.cs", "Bild.Katalog/Konfigs.cs", "Bild.Katalog/Pruefung.cs"]);
+        pfade.Should().NotContain(p => p.StartsWith("Bild.Katalog/Skalierung/"));
+    }
+
+    [Fact]
     public void Der_Bereich_bleibt_auch_aus_einem_anderen_Rollen_Projekt()
     {
         Strukturort.Ziel("Domain.Akteure", Abstractions.Projektstruktur.Rolle.Schreibseite).Should().Be("Domain");

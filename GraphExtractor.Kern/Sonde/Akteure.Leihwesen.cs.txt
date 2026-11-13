@@ -3,7 +3,7 @@ using Leihwesen.Ausleihe;
 using Leihwesen.Ausleihe.Befehle;
 using Leihwesen.Pruefung;
 using Leihwesen.Lesen;
-using Sondenkatalog.Katalog.Gebuehren;
+using Sondenkatalog.Katalog;
 
 // SONDE — Akteure des Leihwesens, die Nachrichten des fremden Katalogs hören: darum bei den Akteuren (die Domäne bleibt rein). Der Lesesaal verkörpert
 // ZWEI Akteure — die Theke hier und das Archiv in der Domäne (die Akteure sehen die Schreibseite).

@@ -1,0 +1,75 @@
+using Abstractions;
+using Core.Katalog;
+
+namespace Sondenkatalog.Katalog;
+
+// ── Gebuehren ──
+
+// Die Graphen: Knoten als Parameter, jede Kante als Von am nehmenden Knoten (Aufnahme → Schätzung → Gutachten → Mahnung).
+public sealed record Rueckgabepruefung([Kopf] SchadenBeiRueckgabe Pruefung) : IGraph;
+public sealed record Schadensbewertung(
+    [Kopf] Schadensaufnahme Aufnahme,
+    [Von(nameof(Aufnahme))] Schadensschaetzer Schaetzung,
+    [Von(nameof(Schaetzung))] Gutachtenanfrage Gutachten,
+    [Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;
+
+// ── Import ──
+
+// Die Quelle am Kopf (Dateiwächter, Katalog des Frameworks) → der Eingang; was zurückkommt, nimmt der Zeilenimport am Kopf.
+public sealed record Dateiannahme(
+    Dateiwaechter Eingang,
+    [Von(nameof(Eingang))] Katalogeingang Annahme) : IGraph;
+
+public sealed record Zeilenimport(
+    [Kopf] Zeilenleser Lesen,
+    [Von(nameof(Lesen))] Artikelanlage Anlage) : IGraph;
+
+// ── Konten ──
+
+public sealed record Adresspruefung([Kopf] Registrierung Reservierung) : IGraph;
+
+// ── Messung ──
+
+// GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → Geprueft), die Messkette setzt die Quelle davor.
+public sealed record Messwertaufbereitung([Kopf] Plausibilisierung Plausi, [Von(nameof(Plausi))] Messwertpruefung Pruefung) : IGraph;
+public sealed record Messkette(Sensorabfrage Abfrage, [Von(nameof(Abfrage))] Messwertaufbereitung Aufbereitung) : IGraph;
+
+public sealed record Stoerungsoeffnung([Kopf] StoerungBeiAlarm Oeffnung) : IGraph;
+
+public sealed record Alarmierung(
+    [Kopf] Alarmverteilung Verteilung,
+    [Von(nameof(Verteilung))] Anrufkette Anruf,
+    [Von(nameof(Verteilung))] Funkruf Funk,
+    [Von(nameof(Anruf), nameof(Funk))] Alarmquittung Quittung) : IGraph;
+
+// ── Peilung ──
+
+/// <summary>Ein Graph im Katalog: peilen, dann melden — hinaus gehen nur Hinweise.</summary>
+public sealed record Peilkette([Kopf] Peilung Peilen, [Von(nameof(Peilen))] Peilmeldung Melden) : IGraph;
+
+// ── Pruefung ──
+
+public sealed record Seitenpruefungslauf([Kopf] Pruefungsstart Start, [Von(nameof(Start))] Seitenpruefer Pruefer) : IGraph;
+public sealed record Mahnbemessung([Kopf] Offenzaehlung Zaehlung) : IGraph;
+
+// ── Vorhersage ──
+
+public sealed record Prognose(
+    [Kopf] Tendenzbildung Tendenz,
+    [Von(nameof(Tendenz))] Glaettung<Kurzfenster> Kurz,
+    [Von(nameof(Tendenz))] Glaettung<Langfenster> Lang,
+    [Von(nameof(Kurz), nameof(Lang))] Prognosemodell Modell) : IGraph;
+
+// ── Kartenausgabe: jede Kante steht am nehmenden Knoten ──
+public sealed record Kartenfilter(
+    [Kopf] Kantenglaettung Glaetten,
+    [Von(nameof(Glaetten))] Kartenschaerfung Schaerfen,
+    [Von(nameof(Schaerfen))] Kantenglaettung Nachglaetten) : IGraph;
+
+public sealed record Kartenausgabe(
+    [Kopf] Kartenzeichnung Zeichnung,
+    [Von(nameof(Zeichnung))] Kartenfilter Filter,
+    [Von(nameof(Filter))] Kartenskalierung Vorschau,
+    [Von(nameof(Filter), Verlierbar = true)] Kartenskalierung Daumen,
+    [Kopf, Von(nameof(Vorschau))] Kartenablage Ablage,
+    [Von(nameof(Daumen))] Daumenmeldung Meldung) : IGraph;

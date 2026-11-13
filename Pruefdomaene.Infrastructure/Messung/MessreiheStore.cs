@@ -3,7 +3,7 @@ using Abstractions;
 using Core;
 using Pruefdomaene.Messung;
 using Pruefdomaene.Projections.Messung;
-using Pruefwerk.Katalog.Messung;
+using Pruefwerk.Katalog;
 
 namespace Pruefdomaene.Infrastructure.Messung;
 

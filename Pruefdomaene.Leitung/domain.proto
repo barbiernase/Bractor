@@ -68,33 +68,6 @@ message NeuerWertDto {
     double wert = 2;
 }
 
-message FreigegebenDto {
-    string vorgang = 1;
-}
-
-message GemahntDto {
-    string vorgang = 1;
-    string empfaenger = 2;
-    string versand = 3;
-    int32 stufe = 4;
-}
-
-message MahneDto {
-    string vorgang = 1;
-    string empfaenger = 2;
-    string betrag = 3;
-    int32 stufe = 4;
-}
-
-message PruefeDto {
-    string vorgang = 1;
-    string betrag = 2;
-}
-
-message ZurPruefungVorzulegenDto {
-    string vorgang = 1;
-}
-
 message AnfordernDto {
     int32 menge = 1;
 }
@@ -104,9 +77,31 @@ message AngenommenDto {
     int32 menge = 2;
 }
 
+message AusreisserDto {
+    string stelle = 1;
+    double wert = 2;
+}
+
+message FreigegebenDto {
+    string vorgang = 1;
+}
+
 message GelesenDto {
     string id = 1;
     int32 wert = 2;
+}
+
+message GemahntDto {
+    string vorgang = 1;
+    string empfaenger = 2;
+    string versand = 3;
+    int32 stufe = 4;
+}
+
+message GeschaetztDto {
+    string stelle = 1;
+    double erwartet = 2;
+    int32 anzahl = 3;
 }
 
 message LaufenDto {
@@ -114,20 +109,11 @@ message LaufenDto {
     int32 menge = 2;
 }
 
-message StandDto {
+message MahneDto {
     string vorgang = 1;
-    int32 gelesen = 2;
-}
-
-message AusreisserDto {
-    string stelle = 1;
-    double wert = 2;
-}
-
-message GeschaetztDto {
-    string stelle = 1;
-    double erwartet = 2;
-    int32 anzahl = 3;
+    string empfaenger = 2;
+    string betrag = 3;
+    int32 stufe = 4;
 }
 
 message MerkmalDto {
@@ -138,6 +124,20 @@ message MerkmalDto {
 message MesswertDto {
     string stelle = 1;
     double wert = 2;
+}
+
+message PruefeDto {
+    string vorgang = 1;
+    string betrag = 2;
+}
+
+message StandDto {
+    string vorgang = 1;
+    int32 gelesen = 2;
+}
+
+message ZurPruefungVorzulegenDto {
+    string vorgang = 1;
 }
 
 message SkalierenDto {

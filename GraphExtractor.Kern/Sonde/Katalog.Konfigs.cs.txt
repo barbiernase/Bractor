@@ -1,0 +1,24 @@
+namespace Sondenkatalog.Katalog;
+
+// ── Gebuehren ──
+
+public record WertTabellenKonfig(decimal Mindestwert, int Abschreibungsjahre = 5);
+public record GutachtenKonfig(decimal Zuschlag, TimeSpan Bedenkzeit);
+
+// ── Import ──
+
+public record CsvKonfig(string Trenner = ";");
+
+// ── Messung ──
+
+public record SensorabfrageKonfig(string[] Sensoren, TimeSpan Intervall);
+
+// ── Peilung ──
+
+/// <summary>Die Konfig einer Peilung (Werte am Knoten der Instanz): ab welcher Güte sie gilt.</summary>
+public record PeilKonfig(double MindestGuete);
+
+// ── Vorhersage ──
+
+public record GlaettungsKonfig(double Gewicht);
+public record SkalierungsKonfig(int Breite);

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Proto;
 using Proto.Cluster;
 using Pruefdomaene.Abrechnung;
-using Pruefwerk.Katalog.Abrechnung;
+using Pruefwerk.Katalog;
 using static Pruefdomaene.Integration.Tests.Pruefstand;
 
 namespace Pruefdomaene.Integration.Tests.Garantien;

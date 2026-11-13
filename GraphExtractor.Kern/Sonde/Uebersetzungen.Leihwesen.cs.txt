@@ -2,8 +2,7 @@ using Abstractions;
 using Leihwesen.Ausleihe;
 using Leihwesen.Gebuehren;
 using Leihwesen.Pruefung;
-using Sondenkatalog.Katalog.Gebuehren;
-using Sondenkatalog.Katalog.Pruefung;
+using Sondenkatalog.Katalog;
 
 // SONDE — die Übersetzungen des Leihwesens (docs/04 §4.4): die Köpfe der Graphen aus den Nachrichten der Clients, ihre Ergebnisse an
 // Schadensfall, Mahnvorgang und Seitenprüfung, die ANTWORT der Seitenprüfung auf den Start zurück in den Katalog — Guid ⇄ Id ausdrücklich. Die

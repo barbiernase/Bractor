@@ -1,5 +1,5 @@
 using Abstractions;
-using Bildvorschau.Katalog.Aufbereitung;
+using Bildvorschau.Katalog;
 using Domain.ImagePair;
 
 namespace Domain.Uebersetzungen.ImagePair;

@@ -74,7 +74,29 @@ public sealed partial class Sicht
             return tiefe[n] = t;
         }
         foreach (var kn in knoten) kn["tiefe"] = Tiefe(S(kn, "name"), knoten.Count);
+        f["passt"] = Passt(knoten);
         return f;
+    }
+
+    /// <summary>
+    /// Was im Graphen aneinander passt (für „＋“ an einem Port): je Paar von Knoten <c>von</c> → <c>nach</c> derselben Ebene, die noch nicht verbunden
+    /// sind, der Eingang <c>ein</c> von <c>nach</c> und der Ausgang <c>aus</c> von <c>von</c>, der ihn speist — gleicher Typ oder eine generische Ausgabe
+    /// mit dem Typargument des liefernden Knotens. Der Editor schlägt nur nach.
+    /// </summary>
+    private static JsonArray Passt(List<JsonObject> knoten)
+    {
+        static string Arg(string x) { var i = x.IndexOf('<'); return i > 0 && x.EndsWith('>') ? x[(i + 1)..^1] : ""; }
+        var passt = new JsonArray();
+        foreach (var z in knoten)
+            foreach (var t in L(z, "ein"))
+                foreach (var m in knoten)
+                {
+                    if (S(m, "name") == S(z, "name") || S(m, "graph") != S(z, "graph")) continue;
+                    if (Alle(z["von"]).Any(v => S(v, "knoten") == (S(m, "lokal") is { Length: > 0 } l ? l : S(m, "name")))) continue;
+                    var aus = L(m, "aus").FirstOrDefault(a => a == t || (Basis(a) == Basis(t) && Arg(a).Length > 0 && Arg(t) == Arg(S(m, "typ"))));
+                    if (aus != null) passt.Add(new JsonObject { ["von"] = S(m, "name"), ["nach"] = S(z, "name"), ["ein"] = t, ["aus"] = aus });
+                }
+        return passt;
     }
 
     private JsonObject FlachEbene(JsonObject g, string pfad, HashSet<string> offen)
@@ -211,6 +233,12 @@ public sealed partial class Sicht
             ["name"] = S(g, "name"),
             ["eltern"] = Arr(GraphenMitKnoten(S(g, "name")).OfType<string>().Where(x => x != gid)),
             ["knoten"] = kj, ["kanten"] = kanten, ["koepfe"] = koepfe, ["ausgaenge"] = ausgaenge,
+            // Offen: ein Command ohne Ziel, den der Graph ausgibt und den keine Übersetzung nimmt — er braucht einen Empfänger (CQRS120).
+            ["offen"] = Arr(L(g, "ausgaenge").Where(t => Sorte(t) == "command" && RecordAgg(Basis(t)).Length == 0
+                && !_uebersetzungen.Any(u => Basis(S(u, "ein")) == Basis(t)))),
+            // Die Quellen aus dem Katalog des Frameworks, deren Meldung ein Kopf des Graphen nimmt.
+            ["quellen"] = new JsonArray(Alle(_board["katalog"]).Where(k => L(k, "lauscht").Any(m => L(g, "koepfe").Any(t => Basis(t) == Basis(m))))
+                .Select(k => (JsonNode)new JsonObject { ["name"] = S(k, "name"), ["meldet"] = Arr(L(k, "lauscht")) }).ToArray()),
         };
     }
 
@@ -259,9 +287,7 @@ public sealed partial class Sicht
         foreach (var r in _records.Where(r => S(r, "kind") is "command" or "rejection"))
             if (KarteVon.TryGetValue("rec:" + S(r, "name"), out var k) && Besitzer(k) is var b && b.StartsWith("fb:", StringComparison.Ordinal))
                 nachrichten.Add(new JsonObject { ["typ"] = S(r, "name"), ["sorte"] = Sorte(S(r, "name")), ["besitzer"] = b });
-        // Die Kataloge der Anwendung: die Projekt-Wurzeln (Verzeichnisse), die ein Katalog sind — auch ein leerer, eben angelegter.
-        var kataloge = Arr(Eintraege(_board["rahmen"]?["verzeichnisse"] as JsonObject).Select(e => e.Key)
-            .Where(ns => Abstractions.Projektstruktur.KatalogVon(ns) == ns).OrderBy(x => x, StringComparer.Ordinal));
+        var kataloge = Arr(KatalogNamen());
         return new JsonObject
         {
             ["funktionen"] = funktionen, ["kataloge"] = kataloge, ["graphen"] = graphen, ["katalog"] = katalog, ["technik"] = technik, ["konfig"] = konfig,

@@ -147,7 +147,7 @@
           {
             "name": "PruefeVormerkung",
             "kind": "command",
-            "namespace": "Sondenkatalog.Katalog.Gebuehren",
+            "namespace": "Sondenkatalog.Katalog",
             "felder": [
               {
                 "name": "LeserId",
@@ -163,7 +163,7 @@
         "bausteinFunktionen": [
           {
             "name": "Vormerkpruefung",
-            "namespace": "Sondenkatalog.Katalog.Gebuehren",
+            "namespace": "Sondenkatalog.Katalog",
             "klasse": true,
             "konstruktor": [
               {
@@ -190,7 +190,7 @@
         "graphen": [
           {
             "name": "Mahnbemessung",
-            "namespace": "Sondenkatalog.Katalog.Pruefung",
+            "namespace": "Sondenkatalog.Katalog",
             "knoten": [
               {
                 "typ": "Offenzaehlung",
@@ -213,7 +213,7 @@
         "graphen": [
           {
             "name": "Kurzglaettung",
-            "namespace": "Sondenkatalog.Katalog.Vorhersage",
+            "namespace": "Sondenkatalog.Katalog",
             "knoten": [
               {
                 "typ": "Glaettung<Kurzfenster>",

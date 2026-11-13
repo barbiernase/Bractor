@@ -1,3 +1,0 @@
-namespace Sondenkatalog.Katalog.Messung;
-
-public record SensorabfrageKonfig(string[] Sensoren, TimeSpan Intervall);

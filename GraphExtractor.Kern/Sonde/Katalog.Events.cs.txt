@@ -1,0 +1,28 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog;
+
+// ── Gebuehren ──
+
+public record NichtSchaetzbar(string Grund) : ITransientEvent;
+
+// ── Peilung ──
+
+/// <summary>Ein Hinweis aus dem Katalog: die Frequenz ließ sich nicht peilen (flüchtig, an die Akteure, die ihn hören).</summary>
+public record PeilungUnmoeglich(double FrequenzMhz, string Grund) : ITransientEvent;
+
+/// <summary>Ein Hinweis aus dem Katalog: das Ergebnis einer Peilung, für die Anzeige.</summary>
+public record Peilbericht(double FrequenzMhz, double RichtungGrad) : ITransientEvent;
+
+/// <summary>Ein Hinweis aus dem Katalog: wie weit eine bestätigte Peilung von der letzten abweicht.</summary>
+public record Peilabweichung(double Grad) : ITransientEvent;
+
+// Absichtlich falsch (die Lage-Prüfung muss anschlagen): ein FAKT im Log entscheidet nur ein Aggregat — ein Katalog kennt keine Domäne.
+public record Peilprotokoll(double FrequenzMhz) : IEvent;
+
+// ── Vorhersage ──
+
+// Hinweise des Katalogs: flüchtig, nur an Akteure draußen (keine Funktion hört einen).
+public record Unwetter(Guid Station, string Stufe) : ITransientEvent;
+public record KarteBereit(Guid Station, int Breite) : ITransientEvent;
+public record KarteGeloescht(Guid Station) : ITransientEvent;

@@ -12,7 +12,7 @@
 - **Was etwas ist**, erkennen Werkzeuge weiterhin nur an Markern und Signaturen (`IState`, `ICommand`, `IProjektion`, `IFunktion` …). Ein Typ wird nie
   über seinen Namen oder Ordner als Aggregat, Projektion usw. erkannt. Die Struktur ordnet, die Marker bestimmen.
 - **Rollen, keine Domänen.** Die Projekte sind Rollen (Schreibseite, Leseseite, Übersetzungen …). Jede Domäne passt in dieselben Rollen; Domänen werden
-  innerhalb der Projekte durch Bereichs-Ordner getrennt.
+  innerhalb der Projekte durch Bereichs-Ordner getrennt. Ein Katalog ist dagegen eine geschlossene Einheit ohne Bereiche (§7.3).
 - **Eine Quelle, geprüft.** Die Tabellen unten gibt es im Code genau einmal. Liegt ein Typ im falschen Projekt oder Ordner, ist das ein Fehler im
   Build bzw. in `--check` — nie still.
 
@@ -30,7 +30,7 @@
 | `Domain.Client.Worker` | der .NET-Client, der auf die Fakten der Anwendung reagiert (der `ReaktionsWorker`, ein eigener Prozess) | Domain, Domain.Projections, Domain.Akteure, Domain.Leitung |
 | `Domain.Client.Worker.Python.*` | Python-Clients: Implementierungen der generierten Client-Basen (`domain_client/`), Generate unter `domain_client/generated/` | — |
 | `Domain.Client.Modules.*` | GUI-Clients (außerhalb des Editors, W12) | Client.Infrastructure |
-| `<Name>.Katalog` | ein **Funktionskatalog** (keine Rolle *einer* Anwendung, eigene Wurzel): **die einzigen Funktionen und Graphen** — mit ihren Nachrichten (Commands ohne Ziel, Hinweise), Konfig-Records, Technik, Lese-Fähigkeiten, Wertobjekten, Enums; domänenneutral (`Guid` statt `Id<T>`); die Werkbank legt ihn an („＋ 📚 Katalog“) | Abstractions, Core, andere Kataloge |
+| `<Name>.Katalog` | ein **Funktionskatalog** (keine Rolle *einer* Anwendung, eigene Wurzel): **die einzigen Funktionen und Graphen** — mit ihren Nachrichten (Commands ohne Ziel, Hinweise), Konfig-Records, Technik, Lese-Fähigkeiten, Wertobjekten, Enums; domänenneutral (`Guid` statt `Id<T>`), **flach** (ohne Bereichs-Ordner, §7.3); die Werkbank legt ihn an („＋ 📚 Katalog“) | Abstractions, Core, andere Kataloge |
 | `umgebungen/` | je Umgebung ein Ordner `<name>/` mit `umgebung.json` und `graphen/<instanz>.json` je Instanz (`Projektstruktur.UmgebungsOrdner`, `UmgebungsDatei`, `GraphenOrdner`) | — |
 
 **Rollen als Suffix zur Wurzel.** Die Projektnamen sind Suffixe zu einer Anwendungs-Wurzel (`""`, `.Projections`, `.Uebersetzungen`, `.Akteure`,
@@ -53,10 +53,14 @@ hören (`IHoert`); ein Client nennt nur Akteure.
 
 ## 7.3 Bereichs-Ordner und Namespaces
 
-- In jedem Projekt gibt es je fachlichem Bereich einen Ordner: `<Projekt>/<Bereich>/` (z. B. `Domain/Ausleihe/`, `Domain.Projections/Ausleihe/`,
-  `Domain.Uebersetzungen/Ausleihe/`). Ein Bereich ist meist ein Aggregat oder eine kleine Gruppe zusammengehöriger Aggregate; im Katalog ein
-  Themenbereich seiner Funktionen (`Bildvorschau.Katalog/Aufbereitung/`).
-- **Namespace = Projekt + Ordner:** `Domain.Ausleihe`, `Domain.Projections.Ausleihe`, `Domain.Uebersetzungen.Ausleihe`, `Bildvorschau.Katalog.Aufbereitung`.
+- In den Projekten einer Anwendung mit Bereichen (Schreibseite, Leseseite, Übersetzungen, Speicher) gibt es je fachlichem Bereich einen Ordner:
+  `<Projekt>/<Bereich>/` (z. B. `Domain/Ausleihe/`, `Domain.Projections/Ausleihe/`, `Domain.Uebersetzungen/Ausleihe/`). Ein Bereich ist meist ein
+  Aggregat oder eine kleine Gruppe zusammengehöriger Aggregate.
+- **Namespace = Projekt + Ordner:** `Domain.Ausleihe`, `Domain.Projections.Ausleihe`, `Domain.Uebersetzungen.Ausleihe`.
+- **Ein Katalog ist flach:** keine Bereichs-Ordner, jede Datei direkt in `<Name>.Katalog/`, der Namespace genau der Projektname
+  (`Bildvorschau.Katalog`). Ein Katalog ist eine geschlossene Einheit — jede seiner Funktionen sieht alle seine Nachrichten; was thematisch
+  getrennt sein soll, ist ein eigener Katalog. Neues im Katalog legt die Werkbank flach an (`Strukturort.Flach`); ein Unterordner oder ein
+  tieferer Namespace ist ein Befund von `--check` („Lage“).
 - Derselbe Bereichs-Name in allen Projekten zeigt, was zusammengehört; die Zugehörigkeit im Editor kommt trotzdem aus dem Graphen, nicht aus dem Namen.
 
 ## 7.4 Dateien je Primitive
@@ -74,14 +78,15 @@ hören (`IHoert`); ein Client nennt nur Akteure.
 | `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure (`record … : IAkteur`); Clients (`record … : IClient`) |
 | `Domain.Uebersetzungen/<Bereich>/` | `Uebersetzungen.cs` | Übersetzungen (Primitive `Uebersetzung`, `class {Quelle}_{Ziel}_{n}(TSource source) : ITranslate<TSource, TTarget>`) |
 | `Domain.Infrastructure/<Bereich>/` | `<Store>.cs`, `<Store>.Lesen.cs` | Store-Implementierung (Schreib- und Leseteil) |
-| `<Name>.Katalog/<Bereich>/` | `<Funktion>.cs` | je Funktion eine Datei (Primitive `Funktion`, eine Klasse mit Rumpf) |
+| `<Name>.Katalog/` | `<Funktion>.cs` | je Funktion eine Datei (Primitive `Funktion`, eine Klasse mit Rumpf) |
 | | `<Technik>.cs` | je Technik (Schnittstelle oder Klasse im Konstruktor einer Funktion) und je Umsetzung eine Datei (Primitive `Technik`) |
 | | `I<Fähigkeit>.cs` | Lese-Fähigkeiten, die seine Funktionen nehmen (umgesetzt im Speicher der Anwendung) |
 | | `Commands.cs`, `Events.cs` | Commands ohne Ziel (Primitive `KnotenCommand`); Hinweise (Primitive `Hinweis`) |
 | | `Graphen.cs`, `Konfigs.cs`, `ValueObjects.cs`, `Enums.cs` | Graphen (Primitive `Graph`, `record … : IGraph`), Konfig-Records, Wertobjekte, Enums |
 
-Typnamen sind frei; Klassen tragen ihren Namen als Dateinamen, Sammeldateien (`Commands.cs` …) bündeln Records einer Art. Hilfscode, der keine
-Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor als Code-Karte.
+Typnamen sind frei; Klassen tragen ihren Namen als Dateinamen, Sammeldateien (`Commands.cs` …) bündeln Records einer Art — im Katalog je Art eine
+für den ganzen Katalog. Hilfscode, der keine Primitive ist, liegt im Bereichs-Ordner seines Projekts (im Katalog direkt im Projekt) und erscheint im
+Editor als Code-Karte.
 
 ## 7.5 Was die Werkzeuge damit tun
 
@@ -90,7 +95,7 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 | Leseseiten-Generate | Namespace = Projekt (`ProjectionQueryService`, `{Projekt}.Generated`), Leseseite der Wurzel | `ProjectionQueryServiceGenerator`, `ProjectionServicesGenerator` |
 | Codegen-Schritt (Proto, STJ, Python-Generate) | je Anwendung (`--wurzel`, `--projekt`, `--alle` = je Komposition eine) Eingaben (`CodegenProjekte`, nur vorhandene) und Ausgabeorte (Proto nur mit Leitung, Python nur mit Worker); erzeugt nur bei geänderten DLLs (Hash je Wurzel) | `Cqrs.Codegen`, `Cqrs.Codegen/CqrsCodegen.targets` (importiert von der Leitung bzw. ohne Leitung von der Komposition), `codegen.sh` |
 | Projektlage (`--check`, Werkbank) | die Komposition der `StandardWurzel` ist die Laufzeit der Werkzeuge; eine zweite Anwendung derselben Solution bleibt außen vor | `GraphExtractor.Kern/Projektlage.cs` |
-| Scaffolder / Gesten | Zielprojekt (Rolle), -ordner (Bereich aus dem Namespace der Karte) und -datei einer neuen Karte; Umbenennen zieht `<Typ>.<Teil>.cs` mit | `DomainEditor/Strukturort.cs`, `Schreiben/Umbenennen.cs` |
+| Scaffolder / Gesten | Zielprojekt (Rolle), -ordner (Bereich aus dem Namespace der Karte; im Katalog flach) und -datei einer neuen Karte; Umbenennen zieht `<Typ>.<Teil>.cs` mit | `DomainEditor/Strukturort.cs`, `Schreiben/Umbenennen.cs` |
 | Werkbank (Stand-Hash, ⟳) | was zum Stand gehört, welches Projekt der Host ist, wo der Python-Worker liegt | `Werkbank/Server/WerkbankServer.cs`, `HostProzess.cs`, `Worker.cs` |
 | Analyzer CQRS098 | jede Primitive im Projekt ihrer Rolle (im Build, an der Karte) | `Domain.SourceGeneration/LageAnalyzer.cs` |
 | `--check` (Bereich „Lage“) | Rollen-Projekte, Referenzrichtung, Codegen-Referenzen, je Typ Projekt, Ordner, Namespace und Datei | `GraphExtractor.Kern/Lagepruefung.cs` |
@@ -106,7 +111,7 @@ Analyzer und `--check`.
 
 - Die Wurzel der Werkzeuge (Werkbank, Scaffolder, `--check`) ist `Projektstruktur.StandardWurzel`; Generatoren leiten sie aus dem Projektnamen
   ab, der Codegen aus dem Projekt, das ihn auslöst (`--projekt`). Die zweite Anwendung der Solution ist die Prüfdomäne (`Pruefdomaene`,
-  `Pruefdomaene.Uebersetzungen` zu den Graphen der Kataloge `Pruefwerk.Katalog` — Abrechnung, Import, Merkmalbildung — und `Rechenwerk.Katalog`;
+  `Pruefdomaene.Uebersetzungen` zu den Graphen der Kataloge `Pruefwerk.Katalog` — Abrechnungsablauf, Importablauf, Merkmalbildung — und `Rechenwerk.Katalog`;
   Auftrag und Verteilung sind Reaktionen ihres Workers, `Pruefdomaene.Akteure` mit `Rechnungspruefer`, `Messwart`, `Sachbearbeitung` und dem Client `ReaktionsWorker`, Leitung `Pruefdomaene.Leitung`,
   Komposition `Pruefdomaene.Laufzeit`, der Worker `Pruefdomaene.Client.Worker`, Host `Host.Pruefdomaene` für die E2E-Messung, Tests in
   `Pruefdomaene.Integration.Tests`); damit das Werkzeug ihre DLLs hat, referenziert `Cqrs.Codegen` auch sie. Mit ihrer Leitung startet sie den

@@ -110,8 +110,13 @@ public class LageAnalyzerTests
         Projektstruktur.KatalogeIn("""<ProjectReference Include="..\Domain\Domain.csproj" /><ProjectReference Include="..\Bild.Katalog\Bild.Katalog.csproj" />""")
             .Should().Equal("Bild.Katalog");
         Projektstruktur.Datei(Projektstruktur.Primitive.Hinweis, "Unlesbar").Should().Be("Events.cs");
-        Projektstruktur.PruefeOrt("Bild.Katalog", "Skalierung/Verkleinern.cs", "Bild.Katalog.Skalierung", Projektstruktur.Primitive.Funktion, "Verkleinern", null)
+        // Ein Katalog ist flach: jede Datei direkt im Projekt, der Namespace genau der Katalog (docs/07 §7.3).
+        Projektstruktur.PruefeOrt("Bild.Katalog", "Verkleinern.cs", "Bild.Katalog", Projektstruktur.Primitive.Funktion, "Verkleinern", null)
             .Should().BeEmpty();
+        Projektstruktur.PruefeOrt("Bild.Katalog", "Skalierung/Verkleinern.cs", "Bild.Katalog.Skalierung", Projektstruktur.Primitive.Funktion, "Verkleinern", null)
+            .Should().ContainSingle().Which.Should().Contain("Bild.Katalog/<Datei>");
+        Projektstruktur.PruefeOrt("Bild.Katalog", "Verkleinern.cs", "Bild.Katalog.Skalierung", Projektstruktur.Primitive.Funktion, "Verkleinern", null)
+            .Should().ContainSingle().Which.Should().Contain("Namespace = Projekt + Ordner: Bild.Katalog");
     }
 
     [Fact]

@@ -1,7 +1,7 @@
 using Abstractions;
 
 // SONDE — ein ABLAUF als Graph (docs/04 §4.4; früher ein Fluss mit Je/Sammle, ∧/∨, ⏳ und ✕, dann ein Zähl-Aggregat mit einer Funktion draußen).
-// Die Domäne ist rein: die Seitenprüfung und die Mahnbemessung sind Graphen des fremden Katalogs (Katalog.Pruefung.*), die Übersetzungen
+// Die Domäne ist rein: die Seitenprüfung und die Mahnbemessung sind Graphen des fremden Katalogs (Katalog.*.cs.txt, Teil Pruefung), die Übersetzungen
 // (Uebersetzungen.Leihwesen.cs.txt) binden sie:
 //         · ein Command ohne Ziel VON EINEM AKTEUR am Kopf (die Theke gibt die gescannte Rückgabe hinein, übersetzt in den Eingang des Katalogs);
 //         · der Start gibt einen Command an ein Aggregat aus (übersetzt) und hört dessen Event als ANTWORT (eine Antwort-Übersetzung);

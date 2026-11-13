@@ -1,4 +1,0 @@
-namespace Sondenkatalog.Katalog.Vorhersage;
-
-public record GlaettungsKonfig(double Gewicht);
-public record SkalierungsKonfig(int Breite);

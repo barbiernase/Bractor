@@ -1,6 +1,6 @@
 using Abstractions;
-using Pruefwerk.Katalog.Messung;
-using Rechenwerk.Katalog.Skalierung;
+using Pruefwerk.Katalog;
+using Rechenwerk.Katalog;
 using Pruefdomaene.Messung;
 
 namespace Pruefdomaene.Uebersetzungen.Messung;

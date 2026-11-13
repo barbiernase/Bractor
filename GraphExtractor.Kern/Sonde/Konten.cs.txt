@@ -5,7 +5,7 @@ using Abstractions;
 // „Keine zwei Benutzer mit derselben Adresse“ ist eine Invariante über viele Benutzer — sie gehört in EIN Aggregat: die Adresse selbst
 // (Eindeutigkeits-Aggregat, Id aus der normalisierten Adresse abgeleitet). Der Benutzer beantragt; auf das Fakt gibt die Adressprüfung (ein Client)
 // die Prüfung der Adresse als Command ohne Ziel hinein. Die Domäne ist rein: die Registrierung ist ein Graph des fremden Katalogs
-// (Katalog.Konten.*) — sein einziger Knoten reserviert die Adresse und hört die ANTWORTEN darauf, die ANTWORT-ÜBERSETZUNGEN aus den zwei Events des
+// (Katalog.*.cs.txt, Teil Konten) — sein einziger Knoten reserviert die Adresse und hört die ANTWORTEN darauf, die ANTWORT-ÜBERSETZUNGEN aus den zwei Events des
 // Adress-Aggregats machen (Uebersetzungen.Konten.cs.txt): reserviert → bestätigen, vergeben → ablehnen. Die Absage ist ein FAKT (der Modellierer
 // entscheidet über den Typ), weil der Ablauf an ihr weitergeht. Die Zugehörigkeit zum Benutzer ist ein fachliches Feld im Event (docs/10 A2).
 

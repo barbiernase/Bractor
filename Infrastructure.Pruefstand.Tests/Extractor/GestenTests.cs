@@ -258,7 +258,7 @@ public sealed class GestenTests : IDisposable
 
         await GesteAsync(Geaendert("bausteinFunktionen", karte));
 
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("IEnumerable<OneOf<Schaden, Mahnbetrag>> Auf(Rueckgabe p, Herkunft h)",
+        Text("Katalog.Funktionen.cs").Should().Contain("IEnumerable<OneOf<Schaden, Mahnbetrag>> Auf(Rueckgabe p, Herkunft h)",
             "die Ausgaben stehen in der Signatur (CQRS050); der Strom bleibt ein Strom");
     }
 
@@ -277,12 +277,12 @@ public sealed class GestenTests : IDisposable
         var karte = Karte(board, "bausteinFunktionen", f => (string?)f["name"] == "SchadenBeiRueckgabe");
         karte["eingaenge"]!.AsArray().OfType<JsonObject>().Single()["asynchron"] = true;
         await GesteAsync(Geaendert("bausteinFunktionen", karte));
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("IAsyncEnumerable<Schaden> Auf(Rueckgabe p, Herkunft h)");
+        Text("Katalog.Funktionen.cs").Should().Contain("IAsyncEnumerable<Schaden> Auf(Rueckgabe p, Herkunft h)");
 
         var schaetzer = Karte(await BoardAsync(), "bausteinFunktionen", f => (string?)f["name"] == "Schadensschaetzer");
         schaetzer["eingaenge"]!.AsArray().OfType<JsonObject>().Single()["asynchron"] = false;
         await GesteAsync(Geaendert("bausteinFunktionen", schaetzer));
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain(" SchadenGeschaetzt Auf(SchadenErfasst e)").And.NotContain("Task<SchadenGeschaetzt> Auf(SchadenErfasst e)",
+        Text("Katalog.Funktionen.cs").Should().Contain(" SchadenGeschaetzt Auf(SchadenErfasst e)").And.NotContain("Task<SchadenGeschaetzt> Auf(SchadenErfasst e)",
             "nur die Rückgabe folgt der Form — der Rumpf gehört dem Code (sein await baut danach nicht mehr: unfertig, W1)");
     }
 
@@ -291,7 +291,7 @@ public sealed class GestenTests : IDisposable
     {
         var neu = new JsonObject
         {
-            ["name"] = "Mahnlauf", ["namespace"] = "Sondenkatalog.Katalog.Gebuehren", ["klasse"] = true,
+            ["name"] = "Mahnlauf", ["namespace"] = "Sondenkatalog.Katalog", ["klasse"] = true,
             ["eingaenge"] = new JsonArray(new JsonObject { ["eingang"] = "Schaetze", ["herkunft"] = true, ["ausgaben"] = Liste("Schaden") }),
             ["konstruktor"] = new JsonArray(new JsonObject { ["typ"] = "WertTabellenKonfig", ["name"] = "konfig" }),
         };
@@ -325,15 +325,15 @@ public sealed class GestenTests : IDisposable
     [Fact]
     public async Task Knoten_hinzufuegen_ist_ein_Parameter_mehr_am_Graph_Record()
     {
-        var vorher = Text("Katalog.Pruefung.Graphen.cs");
+        var vorher = Text("Katalog.Graphen.cs");
         var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Mahnbemessung");
         karte["knoten"]!.AsArray().Add(Knoten("Seitenpruefer", "Pruefer", kopf: true));
 
         var bericht = await GesteAsync(Geaendert("graphen", karte));
 
-        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Katalog.Pruefung.Graphen.cs");
-        Text("Katalog.Pruefung.Graphen.cs").Should().Contain("public sealed record Mahnbemessung([Kopf] Offenzaehlung Zaehlung, [Kopf] Seitenpruefer Pruefer) : IGraph;");
-        Text("Katalog.Pruefung.Graphen.cs").Replace(", [Kopf] Seitenpruefer Pruefer", "").Should().Be(vorher, "alles andere bleibt Wort für Wort");
+        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Katalog.Graphen.cs");
+        Text("Katalog.Graphen.cs").Should().Contain("public sealed record Mahnbemessung([Kopf] Offenzaehlung Zaehlung, [Kopf] Seitenpruefer Pruefer) : IGraph;");
+        Text("Katalog.Graphen.cs").Replace(", [Kopf] Seitenpruefer Pruefer", "").Should().Be(vorher, "alles andere bleibt Wort für Wort");
         // Neu gelesen: der Knoten ist da, mit [Kopf]; die Köpfe folgen daraus.
         var neu = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Mahnbemessung");
         neu["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(bool?)k["kopf"]}").Should().Equal("Zaehlung:True", "Pruefer:True");
@@ -349,63 +349,63 @@ public sealed class GestenTests : IDisposable
 
         await GesteAsync(Geaendert("graphen", karte));
 
-        Text("Katalog.Gebuehren.Graphen.cs").Should().Contain("""
+        Text("Katalog.Graphen.cs").Should().Contain("""
             public sealed record Schadensbewertung(
                 [Kopf] Schadensaufnahme Aufnahme,
                 [Von(nameof(Aufnahme))] Schadensschaetzer Schaetzung,
                 MahnungNachSchaetzung Mahnung) : IGraph;
             """, "die Kante vom entfernten Knoten geht mit ihm (die Mahnung ist danach lose — Unfertiges ist Code, der nicht baut)");
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion",
+        Text("Katalog.Funktionen.cs").Should().Contain("public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion",
             "die Funktion bleibt — nur der Knoten geht");
     }
 
     [Fact]
     public async Task Trennen_und_verbinden_entfernt_bzw_setzt_ein_Von_am_nehmenden_Knoten()
     {
-        var vorher = Text("Katalog.Gebuehren.Graphen.cs");
+        var vorher = Text("Katalog.Graphen.cs");
         async Task MahnungVon(params string[] von)
         {
             var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
             karte["knoten"]!.AsArray().OfType<JsonObject>().Single(k => (string?)k["name"] == "Mahnung")["von"] = Liste(von);
-            (await GesteAsync(Geaendert("graphen", karte))).Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Katalog.Gebuehren.Graphen.cs");
+            (await GesteAsync(Geaendert("graphen", karte))).Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Katalog.Graphen.cs");
         }
 
         await MahnungVon();
-        Text("Katalog.Gebuehren.Graphen.cs").Should().Be(vorher.Replace("[Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung",
+        Text("Katalog.Graphen.cs").Should().Be(vorher.Replace("[Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung",
             "MahnungNachSchaetzung Mahnung"), "nur der Parameter des nehmenden Knotens ändert sich");
         var getrennt = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
         getrennt["kanten"]!.AsArray().Select(k => $"{(string?)k!["von"]}->{(string?)k["nach"]}").Should().NotContain("Gutachten->Mahnung");
 
         await MahnungVon("Gutachten");
-        Text("Katalog.Gebuehren.Graphen.cs").Should().Be(vorher, "verbinden setzt das Von wieder, wie es stand");
+        Text("Katalog.Graphen.cs").Should().Be(vorher, "verbinden setzt das Von wieder, wie es stand");
     }
 
     [Fact]
     public async Task Verlierbar_schreibt_ein_eigenes_Von_mit_Verlierbar_und_nimmt_es_wieder_weg()
     {
-        var vorher = Text("Katalog.Gebuehren.Graphen.cs");
+        var vorher = Text("Katalog.Graphen.cs");
         async Task<JsonObject> MahnungVerlierbar(params string[] verlierbar)
         {
             var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
             karte["knoten"]!.AsArray().OfType<JsonObject>().Single(k => (string?)k["name"] == "Mahnung")["verlierbar"] = Liste(verlierbar);
-            (await GesteAsync(Geaendert("graphen", karte))).Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Katalog.Gebuehren.Graphen.cs");
+            (await GesteAsync(Geaendert("graphen", karte))).Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Katalog.Graphen.cs");
             return Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
         }
 
         var gelesen = await MahnungVerlierbar("Gutachten");
-        Text("Katalog.Gebuehren.Graphen.cs").Should().Be(vorher.Replace("[Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung",
+        Text("Katalog.Graphen.cs").Should().Be(vorher.Replace("[Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung",
             "[Von(nameof(Gutachten), Verlierbar = true)] MahnungNachSchaetzung Mahnung"), "die Zustellung steht am Von des nehmenden Knotens");
         gelesen["knoten"]!.AsArray().OfType<JsonObject>().Single(k => (string?)k["name"] == "Mahnung")["verlierbar"]!.AsArray()
             .Select(v => (string?)v).Should().Equal(["Gutachten"], "gelesen, wie geschrieben");
 
         await MahnungVerlierbar();
-        Text("Katalog.Gebuehren.Graphen.cs").Should().Be(vorher, "ohne Verlierbar ist die Kante wieder gesichert");
+        Text("Katalog.Graphen.cs").Should().Be(vorher, "ohne Verlierbar ist die Kante wieder gesichert");
     }
 
     [Fact]
     public async Task Kopf_setzt_bzw_entfernt_das_Attribut_am_Knoten()
     {
-        var vorher = Text("Katalog.Gebuehren.Graphen.cs");
+        var vorher = Text("Katalog.Graphen.cs");
         async Task Kopf(bool kopf)
         {
             var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Rueckgabepruefung");
@@ -414,12 +414,12 @@ public sealed class GestenTests : IDisposable
         }
 
         await Kopf(false);
-        Text("Katalog.Gebuehren.Graphen.cs").Should().Contain("public sealed record Rueckgabepruefung(SchadenBeiRueckgabe Pruefung) : IGraph;");
+        Text("Katalog.Graphen.cs").Should().Contain("public sealed record Rueckgabepruefung(SchadenBeiRueckgabe Pruefung) : IGraph;");
         Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Rueckgabepruefung")["koepfe"]!.AsArray()
             .Should().BeEmpty("ohne [Kopf] nimmt der Graph nichts von außen");
 
         await Kopf(true);
-        Text("Katalog.Gebuehren.Graphen.cs").Should().Be(vorher);
+        Text("Katalog.Graphen.cs").Should().Be(vorher);
     }
 
     [Fact]
@@ -427,18 +427,18 @@ public sealed class GestenTests : IDisposable
     {
         var neu = new JsonObject
         {
-            ["name"] = "Rueckgabelauf", ["namespace"] = "Sondenkatalog.Katalog.Gebuehren",
+            ["name"] = "Rueckgabelauf", ["namespace"] = "Sondenkatalog.Katalog",
             ["knoten"] = new JsonArray(Knoten("Rueckgabepruefung", "Pruefung", kopf: true)),
         };
 
         var bericht = await GesteAsync(Geaendert("graphen", neu));
 
-        bericht.Patch.Select(p => p.Datei).Should().Equal(["Leihwesen/Katalog.Gebuehren.Graphen.cs"], "dort stehen die Graphen des Namespace");
-        Text("Katalog.Gebuehren.Graphen.cs").Should().Contain("public sealed record Rueckgabelauf([Kopf] Rueckgabepruefung Pruefung) : IGraph;");
+        bericht.Patch.Select(p => p.Datei).Should().Equal(["Leihwesen/Katalog.Graphen.cs"], "dort stehen die Graphen des Namespace");
+        Text("Katalog.Graphen.cs").Should().Contain("public sealed record Rueckgabelauf([Kopf] Rueckgabepruefung Pruefung) : IGraph;");
         var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Rueckgabelauf");
         karte["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(string?)k["typ"]}").Should().Equal("Pruefung:Rueckgabepruefung");
         karte["koepfe"]!.AsArray().Select(x => (string?)x).Should().Equal(["Rueckgabe"], "ein Graph im Graphen: die Signatur der Schachtel");
-        ((string?)karte["datei"]).Should().Be("Leihwesen/Katalog.Gebuehren.Graphen.cs");
+        ((string?)karte["datei"]).Should().Be("Leihwesen/Katalog.Graphen.cs");
     }
 
     [Fact]
@@ -453,7 +453,7 @@ public sealed class GestenTests : IDisposable
         var bericht = await GesteAsync(Geaendert("graphen", neu));
 
         bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Graphen.cs");
-        Text("Graphen.cs").Should().Contain("using Sondenkatalog.Katalog.Pruefung;").And.Contain("using Sondenkatalog.Katalog.Vorhersage;")
+        Text("Graphen.cs").Should().Contain("using Sondenkatalog.Katalog;")
             .And.Contain("namespace Leihwesen.Ausleihe;")
             .And.Contain("public sealed record Ausleihlauf([Kopf] Offenzaehlung Zaehlung, [Kopf] Glaettung<Kurzfenster> Glaettung) : IGraph;",
                 "der Typ einer generischen Funktion steht mit Typargument");
@@ -524,7 +524,7 @@ public sealed class GestenTests : IDisposable
 
     private static JsonObject Leuchte() => new()
     {
-        ["name"] = "ILeuchte", ["namespace"] = "Sondenkatalog.Katalog.Gebuehren", ["klasse"] = false,
+        ["name"] = "ILeuchte", ["namespace"] = "Sondenkatalog.Katalog", ["klasse"] = false,
         ["methoden"] = new JsonArray(new JsonObject { ["name"] = "Hell", ["rueckgabe"] = "bool", ["parameter"] = new JsonArray(Param("int", "stufe")) }),
         ["umsetzungen"] = new JsonArray(new JsonObject { ["name"] = "Leuchte" }),
     };
@@ -548,7 +548,7 @@ public sealed class GestenTests : IDisposable
 
         await GesteAsync(Geaendert("bausteinFunktionen", f));
 
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("    Task<bool> IstSchaetzbarAsync(Guid leserId);\n    decimal Runde(decimal betrag);\n}")
+        Text("Katalog.Funktionen.cs").Should().Contain("    Task<bool> IstSchaetzbarAsync(Guid leserId);\n    decimal Runde(decimal betrag);\n}")
             .And.Contain("    public decimal Runde(decimal betrag)\n    {\n        throw new NotImplementedException(\"TODO: LineareWertTabelle.Runde\");");
     }
 
@@ -573,7 +573,7 @@ public sealed class GestenTests : IDisposable
 
         await GesteAsync(Geaendert("bausteinFunktionen", f));
 
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("public sealed class LineareWertTabelle(WertTabellenKonfig konfig, GutachtenKonfig gutachten) : IWertTabelle");
+        Text("Katalog.Funktionen.cs").Should().Contain("public sealed class LineareWertTabelle(WertTabellenKonfig konfig, GutachtenKonfig gutachten) : IWertTabelle");
     }
 
     [Fact]
@@ -584,7 +584,7 @@ public sealed class GestenTests : IDisposable
 
         await GesteAsync(Geaendert("bausteinFunktionen", f));
 
-        Text("Katalog.Gebuehren.Funktionen.cs").Should().Contain("public sealed class Gutachtenanfrage(GutachtenKonfig konfig, IWertTabelle tabelle) : IFunktion")
+        Text("Katalog.Funktionen.cs").Should().Contain("public sealed class Gutachtenanfrage(GutachtenKonfig konfig, IWertTabelle tabelle) : IFunktion")
             .And.Contain("await Task.Delay(konfig.Bedenkzeit);", "der Rumpf gehört dem Code");
     }
 

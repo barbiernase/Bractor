@@ -360,6 +360,28 @@ public static class Grammatik
         new(Uhr, Command, "GR-FRIST"),
     ];
 
+    /// <summary>
+    /// Eine Store-Klasse (GR-STORE-KLASSE, docs/04 §4.3): ihr Marker und was sie im Code verlangt — Klasse 2 nimmt in jeder Schreib-Fähigkeit die
+    /// Herkunft (CQRS109), Klasse 3 nur für eine Projektion mit [MindestensEinmal] (CQRS110).
+    /// </summary>
+    public sealed record Storeklasse(int Nummer, string Name, string Marker, bool SchreibenMitHerkunft, bool NurMitMindestensEinmal);
+    public static readonly IReadOnlyList<Storeklasse> Storeklassen =
+    [
+        new(1, "atomar", nameof(Abstractions.IAtomaresZiel), false, false),
+        new(2, "wiederholungsfest", nameof(Abstractions.IWiederholungsfestesZiel), true, false),
+        new(3, "nur mindestens einmal", nameof(Abstractions.INurMindestensEinmal), false, true),
+    ];
+
+    /// <summary>
+    /// Ein Bündel (GR-BUENDEL): so viele Events, wie es Typen gibt (Abstractions.Buendelgrenzen); was Events verschiedener Streams beschreiben, hält
+    /// den Stand des jüngsten Eingangs — seine Schreib-Fähigkeit nimmt die Herkunft.
+    /// </summary>
+    public const int BuendelMindestens = Abstractions.Buendelgrenzen.Mindestens, BuendelHoechstens = Abstractions.Buendelgrenzen.Hoechstens;
+    public const bool BuendelSchreibtMitHerkunft = true;
+
+    /// <summary>Ein Typname, wie Werkbank und Editor ihn annehmen: groß beginnend, Buchstaben, Ziffern, Unterstrich (ein Namespace: Glieder mit Punkt).</summary>
+    public const string Typname = "[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*";
+
     /// <summary>Nachrichtensorte eines Records: aus seiner Art (Quellen sind Funktionen, die lauschen — ihre Commands sind gewöhnliche Commands).</summary>
     public static string? SorteVon(Record r) => SorteVonRecordArt(r.Kind);
 
@@ -424,6 +446,9 @@ public static class Grammatik
         portBaustein = EditorPortBaustein.Select(x => new[] { x.Schluessel, x.Baustein }),
         portGebrauch = EditorPortGebrauch,
         katalogSorte = EditorKatalogSorte,
+        storeklassen = Storeklassen.Select(k => new { nummer = k.Nummer, name = k.Name, marker = k.Marker, herkunft = k.SchreibenMitHerkunft, mindestensEinmal = k.NurMitMindestensEinmal }),
+        buendel = new { mindestens = BuendelMindestens, hoechstens = BuendelHoechstens, herkunft = BuendelSchreibtMitHerkunft },
+        typname = "^" + Typname + "$",
         // Für die Modul-Ableitung im Editor (dieselbe wie DomainEditor.Module): Sorten mit Konsumenten-/Erzeuger-Pflicht.
         offenEin = Module.BrauchtKonsument.Order(StringComparer.Ordinal),
         offenAus = Module.BrauchtErzeuger.Order(StringComparer.Ordinal),

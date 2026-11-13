@@ -1,4 +1,4 @@
-using Bildvorschau.Katalog.Aufbereitung;
+using Bildvorschau.Katalog;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;

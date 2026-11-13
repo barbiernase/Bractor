@@ -65,8 +65,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   je Ankunft — kein `T?`, `OneOf`, `IReadOnlyList` als Eingang, GR-EINGANG), dazu optional `Herkunft`, Lese-Fähigkeiten, `CancellationToken`; die Fälle der Rückgabe sind die Ausgangsports (`T`, `OneOf`, `IEnumerable`, `IAsyncEnumerable`:
   Commands und Hinweise). Ein Event hört sie nur als Antwort auf ihren eigenen Aggregat-Command (`CommandResult.Antwort`, CQRS108). Im Konstruktor:
   Konfig-Records, Technik (ohne Marker), `IZustand<T>`, `ILogger<T>`.
-- **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs` eines **Katalogs** (`<Name>.Katalog`, domänenneutral; Funktionen und
-  Graphen gibt es nur dort); jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch mehrfach). Domänenspezifisch macht ihn eine
+- **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs` eines **Katalogs** (`<Name>.Katalog`, domänenneutral, flach ohne
+  Bereichs-Ordner, Namespace = Projekt; Funktionen und Graphen gibt es nur dort); jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch mehrfach). Domänenspezifisch macht ihn eine
   **Übersetzung**: `class {Quelle}_{Ziel}_{n}(TSource source) : ITranslate<TSource, TTarget>` mit `TTarget Translate() => new(…source.Feld…)` in
   `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` — der Editor schreibt `Translate()` aus der Verdrahtung, der Compiler prüft sie; Feld für Feld ohne Logik, Routing über den Typ (jede Ausgabe eines laufenden Graphen, ein
   Client-Command am Kopf, eine Antwort auf ihren Command; docs/04 §4.4, CQRS119–121/123). Nur das Projekt der Übersetzungen (und
@@ -147,7 +147,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - Kommentare und Domäne auf Deutsch. Neue Verträge → `Abstractions`; Marten/Infra → `Infrastructure`.
 - **Nur Code-Fakten** (W2): neue Erkennung über Marker/Attribut/Symbol; neues Konstrukt ⇒ Sonde (`GraphExtractor.Kern/Sonde/`) + `soll.txt` erweitern.
 - **Projektstruktur = eine Tabelle** (`Abstractions/Projektstruktur.cs`, docs/07): Rollen als Suffix zur Wurzel, Primitive → Projekt und Datei;
-  nie Projektnamen tippen, sondern die Tabelle lesen. Falscher Ort = CQRS098 bzw. `--check` „Lage“; neue Primitive ⇒ `Lageart.cs` + Tabelle.
+  ein Katalog ist flach (keine Bereiche, keine Sonderrolle eines „allgemeinen“ Katalogs); nie Projektnamen tippen, sondern die Tabelle lesen. Falscher Ort = CQRS098 bzw. `--check` „Lage“; neue Primitive ⇒ `Lageart.cs` + Tabelle.
   Die Sonde muss alle allgemeinen Primitive abdecken, nicht nur die der Beispieldomäne.
 - **Neue Dispatch-Logik = Generator erweitern**, nie Handschalter, nie Reflection.
 - **Typisierte Ids:** ein Command an ein Aggregat ist `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (das Ziel steht im Typ;

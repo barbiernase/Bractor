@@ -42,7 +42,7 @@ public sealed class KontextBauer
         miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes
                               | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
-    private static readonly string[] Arten = { "decide", "apply", "projektion", "reader", "store" };
+    private static readonly string[] Arten = { "decide", "apply", "projektion", "reader", "store", "funktion" };
 
     private readonly SlotInventar _inv;
     private readonly DomainModel _dom;
@@ -363,6 +363,18 @@ public sealed class KontextBauer
             case "reader":
                 yield return $"Antworten ⊆ {{{string.Join(", ", aus.Select(a => a.Name))}}} — Compiler (Signatur)";
                 break;
+            case "funktion" when s.Methode!.Name == Abstractions.Funktionsvertrag.Auf:
+                yield return $"Ausgaben ⊆ {{{string.Join(", ", aus.Select(a => a.Name))}}} — Compiler (Signatur; je Auf genau eine Nachricht hinein, gerechnet je Ankunft)";
+                yield return "liest nie das Log; Gedächtnis nur über IZustand<T> im Konstruktor — Analyzer CQRS100/CQRS105";
+                yield return "jede Ausgabe geht über den Typ an den Knoten, der sie im Graphen nimmt ([Von]), sonst verlässt sie den Graphen — kein Ziel im Code";
+                break;
+            case "funktion" when s.Methode!.Name == Abstractions.Funktionsvertrag.Lausche:
+                yield return $"Quelle: meldet {{{string.Join(", ", aus.Select(a => a.Name))}}} als Strom — je Element eine Kette, nichts im Log; endet nur über das CancellationToken";
+                yield return "Gesehenes nur über IZustand<T> sichern (gesichert, wenn die Kette des Elements fertig ist)";
+                break;
+            case "funktion":
+                yield return "Technik: Signatur von der Schnittstelle vorgegeben — Compiler; die Funktion, die sie im Konstruktor nimmt, ruft sie";
+                break;
             case "store":
                 yield return "Signatur vom Store-Interface vorgegeben — Compiler";
                 if (IstAtomarerStore(s.Klasse) && StoreRolle(s) is { } schreibt)
@@ -489,6 +501,8 @@ public sealed class KontextBauer
         if (s.State != null) saat.Add(s.State);
         saat.AddRange(Felder(s).Select(f => TypVon(f)!));
         saat.AddRange(Helfer(s).SelectMany(h => h.Parameters.Select(p => p.Type).Append(h.ReturnType)));
+        // Eine Funktion arbeitet mit dem, was ihr Konstruktor nimmt (Technik, Konfig-Records, Zustand) — auch über einen Primärkonstruktor.
+        if (s.Art == "funktion") saat.AddRange(s.Klasse.InstanceConstructors.SelectMany(c => c.Parameters).Select(p => p.Type));
         if (s.Art == "store" && StoreVon(s) is { } st)
             saat.AddRange(_dom.ReadModels.Where(r => r.Store == st.Name || r.StoreKandidaten?.Contains(st.Name) == true).Select(r => Typ(r.Full)).OfType<INamedTypeSymbol>());
         var ausgang = Ausgänge(s).Select(a => a.Fq()).ToHashSet(StringComparer.Ordinal);
@@ -661,6 +675,33 @@ public sealed class KontextBauer
                 if (st.MehrdeutigeImpls.Count > 0) yield return $"mehrere Implementierungen: {string.Join(", ", st.MehrdeutigeImpls.Select(x => x.Split('.').Last()))}";
                 break;
             }
+            case "funktion":
+            {
+                // In welchen Graphen die Funktion ein Knoten ist; was ihren Eingang speist und wer ihre Ausgaben nimmt (Kanten aus [Von]).
+                //   Technik: die Funktionen, deren Konstruktor sie nimmt.
+                var technik = _dom.BausteinFunktionen.FirstOrDefault(f => !f.Klasse && f.UmsetzungenFull.Contains(s.Klasse.Fq()));
+                if (technik != null)
+                {
+                    var nutzer = _dom.BausteinFunktionen.Where(f => f.Konstruktor.Any(k => k.Typ.TrimEnd('?') == technik.Name)
+                        || f.UmsetzungsKonstruktoren.Values.Any(ks => ks.Any(k => k.Typ.TrimEnd('?') == technik.Name))).Select(f => f.Name).ToList();
+                    yield return $"Technik {technik.Name}, umgesetzt von {s.Klasse.Name}; genommen von: {(nutzer.Count == 0 ? "—" : string.Join(", ", nutzer))}";
+                    break;
+                }
+                var knoten = _dom.Graphen.SelectMany(g => g.Knoten.Where(k => k.Typ.Split('.').Last() == s.Klasse.Name).Select(k => (g, k))).ToList();
+                if (knoten.Count == 0) yield return "in keinem Graphen";
+                foreach (var (g, k) in knoten)
+                {
+                    var rein = g.Kanten.Where(x => x.Nach == k.Name).Select(x => $"{x.Typ.Split('.').Last()} von {x.Von}").ToList();
+                    var raus = g.Kanten.Where(x => x.Von == k.Name).Select(x => $"{x.Typ.Split('.').Last()} an {x.Nach}").ToList();
+                    yield return $"Graph {g.Name}, Knoten {k.Name}{(k.Kopf ? " (Kopf: nimmt von außen)" : "")}";
+                    yield return $"    hinein: {(rein.Count == 0 ? k.Kopf ? "von außen (Client, Übersetzung)" : "—" : string.Join(" · ", rein))}";
+                    yield return $"    hinaus: {(raus.Count == 0 ? "verlässt den Graphen" : string.Join(" · ", raus))}";
+                }
+                foreach (var o in Ausgänge(s))
+                    foreach (var u in _dom.Uebersetzungen.Where(u => u.Ein.Split('.').Last() == o.Name))
+                        yield return $"{o.Name} wird übersetzt von {u.Name} zu {u.Aus.Split('.').Last()}";
+                break;
+            }
         }
     }
 
@@ -750,6 +791,20 @@ public sealed class KontextBauer
                     foreach (var a in Aufrufer(st.Name, s.Disc))
                         yield return ($"{a.Titel} — ruft {s.Disc}", RumpfText(a.Rumpf));
                 break;
+            case "funktion":
+            {
+                // Funktion ↔ Technik: die Umsetzungs-Rümpfe der Technik, die ihr Konstruktor nimmt — bzw. bei einer Technik die Funktionen, die sie nehmen.
+                var ctor = s.Klasse.InstanceConstructors.SelectMany(c => c.Parameters).Select(p => p.Type.Fq()).ToHashSet(StringComparer.Ordinal);
+                foreach (var x in _inv.Slots.Where(x => x.Art == "funktion" && x != s))
+                {
+                    var xCtor = x.Klasse.InstanceConstructors.SelectMany(c => c.Parameters).Select(p => p.Type.Fq()).ToHashSet(StringComparer.Ordinal);
+                    if (x.Klasse.AllInterfaces.Any(i => ctor.Contains(i.Fq())))
+                        yield return ($"Technik {x.Klasse.Name}.{x.Methode!.Name} — vom Konstruktor genommen", RumpfText(x.Rumpf));
+                    else if (s.Klasse.AllInterfaces.Any(i => xCtor.Contains(i.Fq())))
+                        yield return ($"{x.Klasse.Name}.{x.Methode!.Name}({x.Disc}) — nimmt diese Technik", RumpfText(x.Rumpf));
+                }
+                break;
+            }
         }
     }
 

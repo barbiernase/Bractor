@@ -1,0 +1,7 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog;
+
+public interface IFenster { }
+public sealed record Kurzfenster : IFenster;
+public sealed record Langfenster : IFenster;

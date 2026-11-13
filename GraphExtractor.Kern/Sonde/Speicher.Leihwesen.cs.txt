@@ -1,7 +1,7 @@
 using Abstractions;
 using Core;
 using Marten;
-using Sondenkatalog.Katalog.Pruefung;
+using Sondenkatalog.Katalog;
 
 // SONDE — im Speicher der Anwendung: der Store, der die Lese-Fähigkeit der Mahnbemessung (Katalog) umsetzt (CQRS124).
 

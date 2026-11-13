@@ -4,7 +4,7 @@ using Abstractions;
 //
 // Viele Messwerte, wenige Fakten: ein Sensor zählt Überschreitungen seines Grenzwerts hintereinander (Zähl-Aggregat) und löst nach N den
 // Alarm aus; ein Messwert im Rahmen ändert nichts. Die Domäne ist rein: die Messkette (eine EIGENE QUELLFUNKTION am Kopf, ein Graph im Graphen),
-// die Störungsöffnung und die Alarmierung sind Graphen des fremden Katalogs (Katalog.Messung.*); die Übersetzungen (Uebersetzungen.Messnetz.cs.txt)
+// die Störungsöffnung und die Alarmierung sind Graphen des fremden Katalogs (Katalog.*.cs.txt, Teil Messung); die Übersetzungen (Uebersetzungen.Messnetz.cs.txt)
 // machen aus ihren Ergebnissen Commands an Sensor und Störungsfall und aus den Nachrichten der Schichtleitung ihre Köpfe. Ein Decide gibt nur Fakten
 // aus (Schritt 6): auf den Alarm öffnet die Schichtleitung die Störung desselben Sensors, auf die geöffnete Störung alarmiert sie die Bereitschaft.
 

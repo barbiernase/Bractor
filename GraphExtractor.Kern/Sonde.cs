@@ -64,13 +64,13 @@ public static class Sonde
             fork = fork.AddDocument(DocumentId.CreateNewId(projekt.Id), name, text, folders: new[] { "__sonde" },
                 filePath: Path.Combine(Path.GetDirectoryName(projekt.FilePath)!, "__sonde", name));
         }
-        // Der fremde Katalog als eigenes Projekt: jede Datei im Bereichs-Ordner, wie die Projektstruktur ihn will (docs/07 §7.3).
+        // Der fremde Katalog als eigenes Projekt: jede Datei flach im Projekt, wie die Projektstruktur ihn will (docs/07 §7.3).
         var gezeichnet = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (name, text) in Katalogtexte())
         {
-            var (bereich, datei) = KatalogDatei(name);
-            var pfad = Path.Combine(solutionDir, SondenKatalog, bereich, datei);
-            fork = fork.AddDocument(DocumentId.CreateNewId(katalog), datei, text, folders: new[] { bereich }, filePath: pfad);
+            var datei = name[KatalogPraefix.Length..];
+            var pfad = Path.Combine(solutionDir, SondenKatalog, datei);
+            fork = fork.AddDocument(DocumentId.CreateNewId(katalog), datei, text, filePath: pfad);
             gezeichnet.Add(Path.GetFullPath(pfad));
         }
         Console.WriteLine($"   Sonde „{string.Join("“, „", Wurzeln.Order(StringComparer.Ordinal))}\" ({Quellen().Count()} Dateien) im Speicher in {ziel.Name} "
@@ -431,21 +431,13 @@ public static class Sonde
         ("Speicher.", Abstractions.Projektstruktur.Rolle.Speicher),
     };
 
-    /// <summary>Die Quelltexte des fremden Katalogs der Sonde (Dateien „Katalog.&lt;Bereich&gt;.&lt;Datei&gt;.cs.txt“).</summary>
+    /// <summary>Die Quelltexte des fremden Katalogs der Sonde (Dateien „Katalog.&lt;Datei&gt;.cs.txt“, im Katalog flach als „&lt;Datei&gt;.cs“).</summary>
     public static IEnumerable<(string Name, string Text)> Katalogtexte() => Quellen().Where(q => q.Name.StartsWith(KatalogPraefix, StringComparison.Ordinal));
 
     private const string KatalogPraefix = "Katalog.";
 
     /// <summary>Das Projekt des fremden Katalogs der Sonde (docs/04 §4.4): nur Abstractions, genutzt von der Domäne der Anwendung.</summary>
     public const string SondenKatalog = "Sondenkatalog.Katalog";
-
-    /// <summary>„Katalog.Peilung.Commands.cs“ → Bereich „Peilung“, Datei „Commands.cs“.</summary>
-    private static (string Bereich, string Datei) KatalogDatei(string name)
-    {
-        var rest = name[KatalogPraefix.Length..];
-        var punkt = rest.IndexOf('.');
-        return (rest[..punkt], rest[(punkt + 1)..]);
-    }
 
     /// <summary>
     /// Der Fork mit dem Katalog-Projekt der Sonde: Optionen, Referenzen und Analyzer wie ein Katalog der Solution (sonst wie die Domäne), Projekt-Referenzen

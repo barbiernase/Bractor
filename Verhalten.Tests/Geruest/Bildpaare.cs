@@ -25,7 +25,7 @@ public sealed class Bildpaare(Testumgebung u)
     public async Task<Paar> LegeAbAsync()
     {
         var schluessel = _basis.AddSeconds(Interlocked.Increment(ref _n)).ToString("yyyy_MM_dd_HH_mm_ss_fff", CultureInfo.InvariantCulture);
-        var paar = new Paar(Bildvorschau.Katalog.Aufbereitung.Aufnahmename.ToDeterministicGuid(schluessel), schluessel);
+        var paar = new Paar(Bildvorschau.Katalog.Aufnahmename.ToDeterministicGuid(schluessel), schluessel);
         foreach (var datei in paar.Dateien) await LegeDateiAbAsync(datei);
         return paar;
     }

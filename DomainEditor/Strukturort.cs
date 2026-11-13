@@ -6,9 +6,10 @@ namespace DomainEditor;
 /// Wohin eine NEUE Karte gehört (<c>docs/07-projektstruktur.md</c>, Tabelle <see cref="P"/>): das Projekt folgt aus der Rolle ihrer Primitive,
 /// der Bereich aus dem Namespace, den die Karte mitbringt, der Dateiname aus der Tabelle. Ein neues ReadModel in <c>Domain.ImagePair</c> landet
 /// so in <c>Domain.Projections/ImagePair/ReadModels.cs</c> mit dem Namespace <c>Domain.Projections.ImagePair</c> — der Server entscheidet (W3), nicht
-/// der Editor. Bestehendes (mit Datei) bleibt, wo es ist; Namespaces außerhalb der Rollen-Projekte der Wurzel bleiben unverändert — auch die
-/// eines Katalogs: was dort angelegt wird, bleibt im Katalog (die Lage-Prüfung meldet, was dort nicht hingehört). Was nur in einen Katalog gehört
-/// (Funktion, Graph, Konfig, Technik), wählt der Editor dort; der Server verschiebt es nicht.
+/// der Editor. Bestehendes (mit Datei) bleibt, wo es ist; Namespaces außerhalb der Rollen-Projekte der Wurzel bleiben unverändert. Was in einem
+/// Katalog angelegt wird, bleibt in diesem Katalog (die Lage-Prüfung meldet, was dort nicht hingehört) und liegt flach: der Namespace ist genau der
+/// Katalog (<c>Bild.Katalog.Skalierung</c> → <c>Bild.Katalog</c>, docs/07 §7.3) — für Nachrichten, Funktionen, Technik, Graphen und
+/// Lese-Fähigkeiten gleich. Welchen Katalog, wählt der Editor.
 /// </summary>
 public static class Strukturort
 {
@@ -17,7 +18,7 @@ public static class Strukturort
     {
         var ergebnisse = Funktionsergebnisse(m);
         var anAggregat = Aggregatfragen(m);
-        string Ns(string ns, P.Rolle? rolle) => rolle is { } r ? Ziel(ns, r, wurzel) ?? ns : ns;
+        string Ns(string ns, P.Rolle? rolle) => rolle is { } r ? Ziel(ns, r, wurzel) ?? Flach(ns) : Flach(ns);
         // Im Aggregat angelegt (noch ohne Erzeuger): bei seiner Schreibseite — so muss nichts umziehen, wenn später ein Decide bzw. eine Frage ihn nimmt.
         string RecordNs(Record r) => r.AmAggregat is { } ag && m.Aggregate.FirstOrDefault(a => a.Name == ag) is { } agg
             ? Ns(agg.Namespace, P.Rolle.Schreibseite)
@@ -27,6 +28,9 @@ public static class Strukturort
         {
             Records = m.Records.Select(r => r.Datei != null ? r : r with { Namespace = RecordNs(r) }).ToList(),
             Aggregate = m.Aggregate.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Schreibseite) }).ToList(),
+            Enums = m.Enums.Select(e => e.Datei != null ? e : e with { Namespace = Flach(e.Namespace) }).ToList(),
+            BausteinFunktionen = m.BausteinFunktionen.Select(f => f.Datei != null ? f : f with { Namespace = Flach(f.Namespace) }).ToList(),
+            Graphen = m.Graphen.Select(g => g.Datei != null ? g : g with { Namespace = Flach(g.Namespace) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
             Clients = m.Clients.Select(c => c.Datei != null ? c : c with { Namespace = Ns(c.Namespace, P.Rolle.Akteure) }).ToList(),
             // Eine neue Übersetzung im Bereich einer Domäne: bei den Übersetzungen der Anwendung im selben Bereich (die Domäne bleibt rein).
@@ -36,6 +40,7 @@ public static class Strukturort
                 Stores = lesen.Stores.Select(s => (s.Datei != null ? s : s with { Namespace = Ns(s.Namespace, P.Rolle.Leseseite) }) with
                 {
                     Impl = s.Impl is { Datei: null } i ? i with { Namespace = Ns(i.Namespace, P.Rolle.Speicher) } : s.Impl,
+                    Fns = s.Fns.Select(f => f.Datei != null || f.Namespace == null ? f : f with { Namespace = Flach(f.Namespace) }).ToList(),
                 }).ToList(),
                 Konsumenten = lesen.Konsumenten.Select(k => k.Datei != null ? k : k with { Namespace = Ns(k.Namespace, P.Rolle.Leseseite) }).ToList(),
                 Reader = lesen.Reader.Select(r => r.Datei != null ? r : r with { Namespace = Ns(r.Namespace, P.Rolle.Leseseite) }).ToList(),
@@ -60,6 +65,9 @@ public static class Strukturort
         }
         return null;
     }
+
+    /// <summary>Ein Namespace in einem Katalog liegt flach: genau der Katalog (docs/07 §7.3); jeder andere bleibt.</summary>
+    public static string Flach(string ns) => P.KatalogVon(ns) ?? ns;
 
     /// <summary>Liegt der Namespace in einem Rollen-Projekt der Wurzel oder in einem Katalog (dann gelten die Dateiregeln der Tabelle)?</summary>
     public static bool InStruktur(string ns, string wurzel = P.StandardWurzel) =>

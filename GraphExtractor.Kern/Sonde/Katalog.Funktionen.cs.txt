@@ -1,0 +1,358 @@
+using System.IO;
+using System.Runtime.CompilerServices;
+using Abstractions;
+using Core.Katalog;
+
+namespace Sondenkatalog.Katalog;
+
+// ── Gebuehren ──
+
+// Gleichbleibend: nur ein beschädigt zurückgegebenes Medium ist ein Schadensfall — je Rückgabe genau einer (Id aus der Herkunft).
+public sealed class SchadenBeiRueckgabe : IFunktion
+{
+    public IEnumerable<Schaden> Auf(Rueckgabe p, Herkunft h)
+    {
+        if (p.Beschaedigt) yield return new Schaden(h.NeueId("schaden"), p.LeserId);
+    }
+}
+
+// WAHL: genau einer der drei Fälle je Lauf.
+public sealed class Schadensaufnahme : IFunktion
+{
+    public OneOf<SchadenErfasst, VorOrt, NichtSchaetzbar> Auf(Schaetze s)
+    {
+        if (s.LeserId == Guid.Empty) return new NichtSchaetzbar("unbekannter Leser");
+        if (s.Fall.ToByteArray()[0] % 2 == 0) return new VorOrt(s.Fall, s.LeserId);   // an den Schadensfall
+        return new SchadenErfasst(s.LeserId, 25m, 2);
+    }
+}
+
+// Technik hinter der Schätzung — eine Schnittstelle ohne Marker (der Schätzer nimmt sie im Konstruktor), eine Umsetzung mit Konfig-Record
+// (Werte am Knoten der Instanz).
+public interface IWertTabelle
+{
+    /// <summary>Der Restwert nach linearer Abschreibung.</summary>
+    decimal Restwert(decimal neuwert, int alterJahre);
+    Task<bool> IstSchaetzbarAsync(Guid leserId);
+}
+
+public sealed class LineareWertTabelle(WertTabellenKonfig konfig) : IWertTabelle
+{
+    public decimal Restwert(decimal neuwert, int alterJahre) => Math.Max(konfig.Mindestwert, neuwert * (1 - alterJahre / (decimal)konfig.Abschreibungsjahre));
+
+    public Task<bool> IstSchaetzbarAsync(Guid leserId)
+    {
+        return Task.FromResult(leserId != Guid.Empty);
+    }
+}
+
+// KETTE, Schritt 1: die Schätzung mit Technik.
+public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion
+{
+    public async Task<SchadenGeschaetzt> Auf(SchadenErfasst e)
+    {
+        var faktor = await tabelle.IstSchaetzbarAsync(e.LeserId) ? 1m : 0m;
+        return new SchadenGeschaetzt(e.LeserId, faktor * tabelle.Restwert(e.Neuwert, e.AlterJahre));
+    }
+}
+
+// KETTE, Schritt 2: ein Gutachten, das dauern kann — sein Zuschlag aus dem Konfig-Record des Knotens; den Betrag der Schätzung trägt es weiter.
+public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion
+{
+    public async Task<GutachtenErhalten> Auf(SchadenGeschaetzt g)
+    {
+        await Task.Delay(konfig.Bedenkzeit);
+        return new GutachtenErhalten(g.LeserId, g.Betrag, konfig.Zuschlag);
+    }
+}
+
+// KETTE, Schritt 3: die Mahnung aus dem, was das Gutachten mitträgt.
+public sealed class MahnungNachSchaetzung : IFunktion
+{
+    public Mahnbetrag Auf(GutachtenErhalten g, Herkunft h) => new(h.NeueId("mahnung"), g.Betrag + g.Zuschlag);
+}
+
+// ── Import ──
+
+// Der Eingang: aus der gefundenen Datei der Import (Id aus der Herkunft).
+public sealed class Katalogeingang : IFunktion
+{
+    public Importieren Auf(DateiGefunden d, Herkunft h) => new(h.NeueId("import:" + d.RelativerPfad), d.Pfad);
+}
+
+// Technik als Klasse (ohne Schnittstelle, ohne Marker) mit Konfig-Record.
+public sealed class CsvZerleger(CsvKonfig konfig)
+{
+    public string[] Zerlege(string zeile) => zeile.Split(konfig.Trenner);
+}
+
+// JE: je Zeile ein Unterlauf; je hundert Zeilen der Fortschritt, am Ende die Bilanz (beide verlassen den Graphen).
+public sealed class Zeilenleser(CsvZerleger zerleger) : IFunktion
+{
+    public async IAsyncEnumerable<OneOf<Zeile, Fortschritt, Bilanz>> Auf(KatalogBereit k)
+    {
+        var nummer = 0;
+        var fehler = 0;
+        await foreach (var text in File.ReadLinesAsync(k.Pfad))
+        {
+            nummer++;
+            var felder = zerleger.Zerlege(text);
+            if (felder.Length < 3) fehler++;
+            yield return new Zeile(k.Import, nummer, felder);
+            if (nummer % 100 == 0) yield return new Fortschritt(k.Import, nummer);
+        }
+        yield return new Bilanz(k.Import, nummer, fehler);
+    }
+}
+
+// Im Unterlauf je Zeile: der Artikel (Id aus der Herkunft und der Artikelnummer).
+public sealed class Artikelanlage : IFunktion
+{
+    public Artikeldaten Auf(Zeile z, Herkunft h) =>
+        new(h.NeueId("artikel:" + z.Felder[0]), z.Felder[0], z.Felder.ElementAtOrDefault(1) ?? "", decimal.Parse(z.Felder.ElementAtOrDefault(2) ?? "0"));
+}
+
+// ── Messung ──
+
+// ── Die Quelle: eine eigene Quellfunktion (Lausche) mit Konfig, gesichertem Zustand und Technik ─────────────────────────────────────────────
+
+/// <summary>Der Zustand der Abfrage: wie oft sie gelesen hat (gesichert mit dem Lauf; nach einem Neustart zählt sie weiter).</summary>
+public sealed class Abfragestand
+{
+    public long Abfragen { get; set; }
+}
+
+public interface ISensorbus
+{
+    Task<double?> LiesAsync(Guid sensor, CancellationToken ct);
+}
+
+public sealed class Feldbus : ISensorbus
+{
+    public Task<double?> LiesAsync(Guid sensor, CancellationToken ct) => Task.FromResult<double?>(null);
+}
+
+public sealed class Sensorabfrage(SensorabfrageKonfig konfig, IZustand<Abfragestand> stand, ISensorbus bus) : IFunktion
+{
+    public async IAsyncEnumerable<Rohwert> Lausche([EnumeratorCancellation] CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            foreach (var s in konfig.Sensoren)
+                if (await bus.LiesAsync(Guid.Parse(s), ct) is { } wert)
+                {
+                    stand.Wert.Abfragen++;
+                    yield return new Rohwert(Guid.Parse(s), wert, DateTimeOffset.UtcNow);
+                }
+            await Task.Delay(konfig.Intervall, ct);
+        }
+    }
+}
+
+// Die Aufbereitung: ein unlesbarer Wert ergibt nichts (ein leerer Strom), ein lesbarer den geprüften Wert.
+public sealed class Plausibilisierung : IFunktion
+{
+    public IEnumerable<Plausibel> Auf(Rohwert r)
+    {
+        if (!double.IsNaN(r.Wert) && !double.IsInfinity(r.Wert)) yield return new Plausibel(r.Sensor, r.Wert, r.GemessenAm);
+    }
+}
+
+public sealed class Messwertpruefung : IFunktion
+{
+    public Geprueft Auf(Plausibel p) => new(p.Sensor, p.Wert, p.GemessenAm);
+}
+
+// Der Alarm öffnet die Störung desselben Sensors (dieselbe Id wie der Sensor).
+public sealed class StoerungBeiAlarm : IFunktion
+{
+    public Stoerung Auf(Alarm a) => new(a.Sensor, a.Wert);
+}
+
+// ── RENNEN: die Bereitschaft wird über zwei Wege gesucht; jeder Weg meldet für sich ──────────────────────────────────────────────────────────
+public sealed class Alarmverteilung : IFunktion
+{
+    public AlarmVerteilt Auf(Alarmiere a) => new(a.Fall);
+}
+
+public interface ITelefonie
+{
+    Task<string> RufeAsync(Guid fall);
+}
+
+public sealed class Telefonanlage : ITelefonie
+{
+    public Task<string> RufeAsync(Guid fall) => Task.FromResult("110");
+}
+
+public sealed class Anrufkette(ITelefonie telefonie) : IFunktion
+{
+    public async Task<PerAnrufErreicht> Auf(AlarmVerteilt a) => new(a.Fall, await telefonie.RufeAsync(a.Fall));
+}
+
+public sealed class Funkruf : IFunktion
+{
+    public async Task<PerFunkErreicht> Auf(AlarmVerteilt a, CancellationToken ct)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(5), ct);
+        return new PerFunkErreicht(a.Fall, "Kanal 2");
+    }
+}
+
+public sealed class Alarmquittung : IFunktion
+{
+    public Erreicht Auf(PerAnrufErreicht anruf) => new(anruf.Fall, "Anruf " + anruf.Nummer);
+
+    public Erreicht Auf(PerFunkErreicht funk) => new(funk.Fall, "Funk " + funk.Kanal);
+}
+
+// ── Pruefung ──
+
+// Der Start: je gescannter Rückgabe ein Vorgang (Id aus der Herkunft); seine Antwort öffnet JE Seite einen Unterlauf.
+public sealed class Pruefungsstart : IFunktion
+{
+    public Starte Auf(Scan e, Herkunft h) => new(h.NeueId("pruefung"), e.LeserId, e.Seiten);
+
+    public IEnumerable<SeiteZuPruefen> Auf(Gestartet g) =>
+        g.Seiten.Select((seite, i) => new SeiteZuPruefen(g.Pruefung, i + 1, seite));
+}
+
+// Technik ohne Marker mit zwei Umsetzungen — welche, sagt die Instanz (Technik am Knoten).
+public interface ISeitenleser
+{
+    bool IstBeschaedigt(string seite);
+}
+
+public sealed class Lichtpruefung : ISeitenleser
+{
+    public bool IstBeschaedigt(string seite) => seite.Contains('#');
+}
+
+public sealed class Handpruefung : ISeitenleser
+{
+    public bool IstBeschaedigt(string seite) => seite.Length == 0;
+}
+
+// Im Unterlauf je Seite.
+public sealed class Seitenpruefer(ISeitenleser leser) : IFunktion
+{
+    public Seitenbefund Auf(SeiteZuPruefen s) => new(s.Pruefung, s.Nummer, leser.IstBeschaedigt(s.Seite));
+}
+
+// Lese-Fähigkeit: die Mahnung nach Ablauf der Leihfrist richtet sich nach der Zahl offener Ausleihen des Lesers.
+public sealed class Offenzaehlung : IFunktion
+{
+    public async IAsyncEnumerable<Mahnbetrag> Auf(Bemesse b, Herkunft h, IZaehleOffeneAusleihen offene)
+    {
+        var anzahl = await offene.AnzahlAsync(b.LeserId);
+        if (anzahl > 0) yield return new Mahnbetrag(h.NeueId("mahnung"), anzahl * 2m);
+    }
+}
+
+// ── Vorhersage ──
+
+// Die Prognose: der Kopf bildet eine Tendenz, die GABELT an zwei Knoten DERSELBEN GENERISCHEN Funktion (die Glättung, je Typargument ein Baustein:
+// kurzes und langes Fenster, jede mit eigenem Konfig-Record am Knoten); das Prognosemodell FÜHRT beide in seinem ZUSTAND ZUSAMMEN (IZustand: je
+// Glättung ein Auf, die erste wartet im Zustand auf die zweite, bis dahin ein leerer Strom), nimmt eine Technik mit eigenem Zustand und gibt in einer
+// WAHL entweder die Prognose oder eine Unwetter-Warnung als HINWEIS aus.
+//
+// Die Kartenausgabe (AUSDRÜCKLICHE KANTEN, docs/04 §4.4): sie zeichnet eine Karte und filtert sie in einem Graphen im Graphen (Kantenglättung,
+// Schärfung, nochmals Kantenglättung — DIESELBE Funktion zweimal, eine Kette Karte → Karte → Karte, kein Kreis); den Ausgang des Filters nehmen
+// zwei Knoten DERSELBEN Skalierung (Vorschau und Daumenbild, je eigene Konfig) — das Daumenbild VERLIERBAR; die Ablage trägt [Kopf] UND [Von].
+
+public sealed class Tendenzbildung : IFunktion
+{
+    public Tendenz Auf(Bilde b) => new(b.Station, b.Grad);
+}
+
+// Eine GENERISCHE Funktion: die offene Definition ist eine Blaupause, je Typargument eines Knotens ein Baustein.
+public sealed class Glaettung<TFenster>(GlaettungsKonfig konfig) : IFunktion where TFenster : IFenster
+{
+    public Geglaettet<TFenster> Auf(Tendenz t) => new(t.Station, t.Grad * konfig.Gewicht);
+}
+
+// Der Zustand des Modells: je Station, was es gelernt hat (gesichert, wenn der Lauf fertig ist).
+public sealed class Gewichte
+{
+    public Dictionary<Guid, double> Mittel { get; set; } = new();
+    public Dictionary<Guid, int> Anzahl { get; set; } = new();
+    public Dictionary<Guid, double> Kurz { get; set; } = new();
+    public Dictionary<Guid, double> Lang { get; set; } = new();
+}
+
+// Technik (ohne Marker, im Konstruktor des Modells) mit eigenem Zustand: zählt die Prognosen — ihr Zustand gehört dem Knoten des Modells.
+public interface IStatistik
+{
+    void Zaehle(Guid station);
+}
+
+public sealed class Zaehlung
+{
+    public Dictionary<Guid, int> Je { get; set; } = new();
+}
+
+public sealed class Statistik(IZustand<Zaehlung> zaehlung) : IStatistik
+{
+    public void Zaehle(Guid station) => zaehlung.Wert.Je[station] = zaehlung.Wert.Je.GetValueOrDefault(station) + 1;
+}
+
+// ZUSAMMENFÜHREN im Logik-Code: je Glättung ein Auf; der Zustand hält die erste, bis die zweite derselben Station da ist (bis dahin ein leerer
+// Strom); dann mit Technik eine WAHL zwischen Prognose und Warnung (Hinweis).
+public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik statistik) : IFunktion
+{
+    public IEnumerable<OneOf<Prognostiziert, Unwetter>> Auf(Geglaettet<Kurzfenster> kurz)
+    {
+        gewichte.Wert.Kurz[kurz.Station] = kurz.Grad;
+        return Prognose(kurz.Station);
+    }
+
+    public IEnumerable<OneOf<Prognostiziert, Unwetter>> Auf(Geglaettet<Langfenster> lang)
+    {
+        gewichte.Wert.Lang[lang.Station] = lang.Grad;
+        return Prognose(lang.Station);
+    }
+
+    private IEnumerable<OneOf<Prognostiziert, Unwetter>> Prognose(Guid s)
+    {
+        if (!gewichte.Wert.Kurz.TryGetValue(s, out var kurz) || !gewichte.Wert.Lang.TryGetValue(s, out var lang)) yield break;
+        gewichte.Wert.Kurz.Remove(s);
+        gewichte.Wert.Lang.Remove(s);
+        statistik.Zaehle(s);
+        var n = gewichte.Wert.Anzahl.GetValueOrDefault(s) + 1;
+        gewichte.Wert.Anzahl[s] = n;
+        gewichte.Wert.Mittel[s] = gewichte.Wert.Mittel.GetValueOrDefault(s) + (kurz - gewichte.Wert.Mittel.GetValueOrDefault(s)) / n;
+        if (Math.Abs(kurz - lang) > 10) yield return new Unwetter(s, "rot");
+        else yield return new Prognostiziert(s, gewichte.Wert.Mittel[s], n);
+    }
+}
+
+public sealed class Kartenzeichnung : IFunktion
+{
+    public KarteGezeichnet Auf(ZeichneKarte z) => new(z.Station, 2048);
+}
+
+public sealed class Kantenglaettung : IFunktion
+{
+    public KarteGezeichnet Auf(KarteGezeichnet k) => k;
+}
+
+public sealed class Kartenschaerfung : IFunktion
+{
+    public KarteGezeichnet Auf(KarteGezeichnet k) => k;
+}
+
+public sealed class Kartenskalierung(SkalierungsKonfig konfig) : IFunktion
+{
+    public KarteSkaliert Auf(KarteGezeichnet k) => new(k.Station, konfig.Breite);
+}
+
+public sealed class Kartenablage : IFunktion
+{
+    public KarteBereit Auf(KarteSkaliert k) => new(k.Station, k.Breite);
+    public KarteGeloescht Auf(LoescheKarte l) => new(l.Station);
+}
+
+public sealed class Daumenmeldung : IFunktion
+{
+    public KarteBereit Auf(KarteSkaliert k) => new(k.Station, k.Breite);
+}

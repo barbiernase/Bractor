@@ -125,9 +125,8 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
 
     /// <summary>
     /// Einen Funktionskatalog anlegen (docs/07 §7.2): Projektdatei, Eintrag in der Solution, Referenz der Übersetzungen —
-    /// danach lädt der Arbeitsbereich kalt neu (neue Projekte kennt nur das kalte Laden). Mit <paramref name="nutzer"/> nutzt dieser Katalog den
-    /// genannten (Referenz in seiner Projektdatei); gibt es den genannten noch nicht, entsteht er zuerst — so legt der erste Gebrauch den allgemeinen
-    /// Katalog an.
+    /// danach lädt der Arbeitsbereich kalt neu (neue Projekte kennt nur das kalte Laden). Mit <paramref name="nutzer"/> legt die Geste nichts an:
+    /// der Katalog <paramref name="nutzer"/> nutzt den vorhandenen Katalog <paramref name="name"/> (Referenz in seiner Projektdatei).
     /// </summary>
     public Task<GestenAntwort> KatalogAsync(string name, string? nutzer, CancellationToken ct) =>
         AusfuehrenAsync("katalog", "📚 Katalog " + name + (nutzer != null ? " für " + nutzer : ""), () =>
@@ -135,12 +134,12 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
         var puffer = new Dateipuffer(slnRoot);
         var projekt = Kataloge.Projektname(name);
         var meldungen = new List<string>();
-        if (nutzer == null || puffer.Lies($"{projekt}/{projekt}.csproj") == null)
+        if (nutzer == null)
         {
             Kataloge.Neu(puffer, name);
             meldungen.Add($"{projekt} angelegt und von den Abläufen genutzt");
         }
-        if (nutzer != null)
+        else
         {
             Kataloge.KatalogNutzt(puffer, nutzer, projekt);
             meldungen.Add($"{nutzer} nutzt {projekt}");

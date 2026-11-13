@@ -248,7 +248,7 @@ je `Auf` der Eingang als Objekt, die Ausgaben in Reihenfolge, reflexionsfrei).
 `IReadOnlyList<T>` als Eingang sind ein Formfehler (CQRS100, GR-EINGANG). Drei Wege, in dieser Reihenfolge:
 
 - **Die Nachricht trägt mit, was danach gebraucht wird.** Die Vorschau der Bildaufbereitung trägt die Datei der Quelle, so deutet die letzte
-  Funktion das Bild aus ihr allein (`Bildvorschau.Katalog/Aufbereitung/Dateinamendeutung.cs`):
+  Funktion das Bild aus ihr allein (`Bildvorschau.Katalog/Dateinamendeutung.cs`):
   ```csharp
   public OneOf<BildGedeutet, DateinameUnbekannt> Auf(VorschauErstellt vorschau) => …;
   ```
@@ -275,13 +275,13 @@ ist der Adapter eine eigene kleine Funktion. Der `GraphGenerator` erzeugt `Gener
 und Erzeugern, Köpfe, Ebenen); dieselbe Lesart (`Graphform`) liest der `GraphAnalyzer` (CQRS115: GR-GRAPH, GR-KANTE, GR-KOPF), der
 Extractor und `--graph <Typ>`. Eine Funktion in keinem Graphen läuft nie (CQRS117, Warnung).
 ```csharp
-// Bildvorschau.Katalog/Aufbereitung/Graphen.cs — eine Kette im Katalog; jede Nachricht trägt die Datei der Quelle mit
+// Bildvorschau.Katalog/Graphen.cs — eine Kette im Katalog; jede Nachricht trägt die Datei der Quelle mit
 public sealed record Bildaufbereitung(
     [Kopf] Bildeinlesen Einlesen,
     [Von(nameof(Einlesen))] Bildverkleinerung Verkleinern,
     [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast,
     [Von(nameof(Kontrast))] Dateinamendeutung Deuten) : IGraph;
-// Bildvorschau.Katalog/Aufbereitung/Graphen.cs — Quelle am Kopf, die Bildaufbereitung als Schachtel; das gedeutete Bild verlässt den Graphen
+// Bildvorschau.Katalog/Graphen.cs — Quelle am Kopf, die Bildaufbereitung als Schachtel; das gedeutete Bild verlässt den Graphen
 public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] Bildaufbereitung Aufbereitung) : IGraph;
 ```
 Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.txt`, Kartenausgabe): dieselbe Funktion zweimal, eine Kette gleichen
@@ -451,7 +451,7 @@ was gelang. Gerechnet wird hier nichts — der Ablauf besteht aus Fakten und den
   `KontingententlastungAngefordert`) — genau einmal, weil der Zustand es sich merkt; eine verspätete Rückmeldung nimmt sich selbst zurück. Der
   Worker sendet daraus den Gegenzug (`GibPostenFrei`, `EntlasteKontingent`).
 
-**Rechnen im Graphen, Zählen im Aggregat** (`Pruefwerk.Katalog/Messung/`, `Pruefdomaene.Uebersetzungen/Messung/`): ein neuer Messwert geht über die
+**Rechnen im Graphen, Zählen im Aggregat** (Graph `Merkmalbildung` in `Pruefwerk.Katalog`, `Pruefdomaene.Uebersetzungen/Messung/`): ein neuer Messwert geht über die
 Übersetzung in den Kopf der Merkmalbildung; sie bildet das Merkmal, prüft auf Ausreißer und schätzt mit Zustand und einer Lese-Fähigkeit des
 Katalogs (umgesetzt vom Store der Messreihe), die Übersetzungen machen aus Ausreißer und Schätzung Commands an die Messstelle. Was eingesammelt
 oder gezählt wird, entscheidet ein Aggregat (Zähl-Aggregat: je Element meldet sich ein Command, das Decide zählt mit und schließt nach dem
