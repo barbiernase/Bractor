@@ -11,8 +11,17 @@
     "Schema": "es"
   },
   "Cluster": {
-    "Art": "Einzelknoten",
     "Name": "cqrs-sim-${branch}"
+  },
+  "Rechner": {
+    "localhost": {
+      "Adresse": "localhost"
+    }
+  },
+  "Backend": {
+    "Rechner": [
+      "localhost"
+    ]
   },
   "Transport": {
     "GrpcPort": 5101,
@@ -31,47 +40,6 @@
       "sim-produktpruefer": "Produktpruefer",
       "sim-arbeitsplatz": "Inspekteur,KIOperator,Modellfreigeber,Produktpruefer",
       "sim-trainingssystem": "TrainingsSystem"
-    }
-  },
-  "Clients": {
-    "Arbeitsplatz": {
-      "Token": "sim-arbeitsplatz",
-      "Urls": "http://localhost:5110",
-      "Dateien": [
-        "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
-        "${env:HOME}/cqrs-sim/${branch}/preprocessed"
-      ]
-    },
-    "KlassifikationsWorker": {
-      "Token": "sim-klassifizierer",
-      "Worker": {
-        "Skript": "Domain.Client.Worker.Python.ML/run_stub.py"
-      }
-    },
-    "ReaktionsWorker": {
-      "Token": "sim-reaktionsworker",
-      "Worker": {
-        "Projekt": "Domain.Client.Worker"
-      }
-    },
-    "TrainingsWorker": {
-      "Token": "sim-trainingssystem",
-      "Worker": {
-        "Skript": "Domain.Client.Worker.Python.ML/run_train_stub.py"
-      }
-    },
-    "Linienrechner": {
-      "Eingaenge": {
-        "linie1": {
-          "Art": "Dateiwaechter",
-          "Akteur": "KameraSystem",
-          "Pfad": "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
-          "Intervall": "00:00:01",
-          "Fertig": "Stabil",
-          "Fenster": "00:00:01",
-          "Kennung": "PfadGroesseZeit"
-        }
-      }
     }
   }
 }

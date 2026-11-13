@@ -129,7 +129,7 @@ public static class ParitaetsPruefung
             $"{soll.Funktionen.Count} Funktionen, {soll.Quellarten.Count} Quellarten, {soll.Meldungen.Count} Meldungen, {soll.Queries.Count} Queries, {soll.Responses.Count} Responses, " +
             $"{soll.ReadModels.Count} ReadModels, {soll.Projektionen.Count} Projektionen, {soll.Readers.Count} Reader, " +
             $"{soll.Akteure.Count} Akteure ({soll.AkteurRechte.Values.Sum(x => x.Count)} Befugnisse), "
-            + $"{soll.Clients.Count} Clients ({soll.Clients.Values.Sum(x => x.Count)} verkörperte Akteure), {soll.Graphen.Count} Graphen ({soll.Graphen.Values.Sum(x => x.Count)} Knoten)."));
+            + $"{soll.Clients.Count} Clients ({soll.Clients.Values.Sum(x => x.Count)} verkörperte Akteure), {soll.Apps.Count} Apps ({soll.Apps.Values.Sum(x => x.Count - 1)} Quellen), {soll.Graphen.Count} Graphen ({soll.Graphen.Values.Sum(x => x.Count)} Knoten)."));
 
         // Ist = die Karten der Server-Kartenliste (Sicht) — je Art „Namespace.Name" ihres Bausteins.
         static string Voll(SichtKarte k) => $"{(string?)k.Ref["namespace"]}.{(string?)k.Ref["name"]}";
@@ -175,6 +175,17 @@ public static class ParitaetsPruefung
             if (!soll.Clients.TryGetValue(full, out var sollRand)) continue;
             var istRand = (c["verkoerpert"]?.AsArray() ?? new JsonArray()).Select(x => $"{full}|A:{(string?)x}").ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Client ({k.Name})", sollRand.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istRand, befunde);
+        }
+        // Apps (docs/10 E18): je App-Record eine Karte, ihr Client und ihre Quellen = die Parameter des Records.
+        Vergleiche("App", soll.Apps.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("app"), befunde);
+        foreach (var k in Arten("app"))
+        {
+            var full = Voll(k);
+            if (!soll.Apps.TryGetValue(full, out var sollRand)) continue;
+            var istRand = new HashSet<string>(StringComparer.Ordinal) { $"{full}|C:{(string?)k.Ref["client"]}" };
+            foreach (var q in (k.Ref["quellen"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>())
+                istRand.Add($"{full}|Q:{(string?)q["name"]}:{(string?)q["quellart"]}:" + string.Join(",", (q["uebersetzungen"]?.AsArray() ?? new JsonArray()).Select(x => (string?)x)));
+            Vergleiche($"App ({k.Name})", sollRand.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istRand, befunde);
         }
         // Graphen (docs/04 §4.4): je Graph-Record eine Karte, ihre Knoten = die Parameter des Records, mit [Kopf] und [Von(…)].
         Vergleiche("Graph", soll.Graphen.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("graph"), befunde);
@@ -251,6 +262,8 @@ public static class ParitaetsPruefung
         public Dictionary<string, HashSet<string>> AkteurHoert = new(StringComparer.Ordinal);
         /// <summary>Client (Record mit IClient) → wen er verkörpert („A:Akteur“) — aus der Basisliste.</summary>
         public Dictionary<string, HashSet<string>> Clients = new(StringComparer.Ordinal);
+        /// <summary>Je App ihr Client (<c>C:Client</c>) und je Quelle <c>Q:Name:Quellart:U1,U2</c> — wie geschrieben.</summary>
+        public Dictionary<string, HashSet<string>> Apps = new(StringComparer.Ordinal);
         /// <summary>Graph (Record mit IGraph) → seine Knoten „Name:Typ“ (Parameter des Records, Typ wie geschrieben).</summary>
         public Dictionary<string, HashSet<string>> Graphen = new(StringComparer.Ordinal);
         /// <summary>Die Übersetzungen: je Klasse <c>Namespace.Name|Ein→Aus|Feld(…)</c>.</summary>
@@ -314,6 +327,17 @@ public static class ParitaetsPruefung
                         {
                             inv.Clients[full] = t.Interfaces.Where(b => iVerkoerpert != null && b.OriginalDefinition.Fq() == iVerkoerpert.Fq())
                                 .Select(b => "A:" + b.TypeArguments[0].Name).ToHashSet(StringComparer.Ordinal);
+                            continue;
+                        }
+                        // App (Record mit IApp<Client>): ihr Client und je Parameter eine Quelle (Quellart, [Uebersetzt<U>]).
+                        if (t.ContainingType == null && Infrastructure.SourceGeneration.Clientvertragslesart.ClientDerApp(t) is { } appClient)
+                        {
+                            var rand = new HashSet<string>(StringComparer.Ordinal) { "C:" + appClient.Name };
+                            foreach (var p in (decl as RecordDeclarationSyntax)?.ParameterList?.Parameters ?? default)
+                                rand.Add($"Q:{p.Identifier.Text}:{p.Type}:" + string.Join(",", p.AttributeLists.SelectMany(l => l.Attributes)
+                                    .Select(a => a.Name.ToString()).Where(n => n.StartsWith("Uebersetzt<", StringComparison.Ordinal))
+                                    .Select(n => n["Uebersetzt<".Length..^1])));
+                            inv.Apps[full] = rand;
                             continue;
                         }
                         // Graph (Record mit IGraph): seine Knoten = die Parameter des Records (Name und Typ wie geschrieben, [Kopf], [Von(…)]).

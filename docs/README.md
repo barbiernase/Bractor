@@ -31,7 +31,7 @@ Stand 2026-11-07. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fa
 | [../vermessung/README.md](../vermessung/README.md) | Ablage der Messläufe |
 
 Gelöschte Dokumente (`01-ueberblick.md`, `02-design-prinzipien.md`, `konzept-werkbank.md` — Leitsätze W1–W12 in Kurzform in `CLAUDE.md` —, die
-Editor- und LLM-Konzepte samt „Funktionen im Editor“, die früheren Pläne bis „Katalog und Graphen“ und „ohne Pipeline“) liegen im Git-Verlauf.
+Editor- und LLM-Konzepte samt „Funktionen im Editor“, die früheren Pläne bis „Katalog und Graphen“, „ohne Pipeline“, „Clients und Quellen“ und „Rechner und Apps“) liegen im Git-Verlauf.
 
 ## Konventionen
 

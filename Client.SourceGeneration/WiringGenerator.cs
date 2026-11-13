@@ -19,7 +19,7 @@
 // Weitere generierte Members (auf derselben Klasse):
 //   - SubscribeAll(IServiceProvider, IBus)
 //   - UnsubscribeAll(IServiceProvider)
-//   - Vertrag, VertragHash (aus [assembly: IstClient<IVertrag>], docs/konzept-akteure.md §4)
+//   - Vertrag, VertragHash, Client (aus [assembly: IstApp<App>], docs/konzept-akteure.md §4)
 //   - ServerEventTypes (= Eingänge des Vertrags), CommandTypes (= IDarf der verkörperten Akteure), CommandAggregateTypes
 //   - RegisterQueries(QueryBridge, ClientBus) (= ihre Queries)
 //
@@ -70,7 +70,7 @@ public class WiringGenerator : IIncrementalGenerator
         var assemblyName = context.CompilationProvider
             .Select(static (c, _) => c.AssemblyName ?? "Unknown");
 
-        // 5. Der Client-Vertrag dieser Assembly ([assembly: IstClient<IVertrag>]) — dieselbe Lesart wie der Server-Generator.
+        // 5. Der Vertrag dieser Assembly: ihre App ([assembly: IstApp<App>]) — dieselbe Lesart wie der Server-Generator.
         var vertrag = context.CompilationProvider
             .Select(static (c, _) => ClientVertragInfo.Aus(c));
 
@@ -377,8 +377,10 @@ public class WiringGenerator : IIncrementalGenerator
         sb.AppendLine($"public static class {className}");
         sb.AppendLine("{");
 
-        sb.AppendLine($"    /// <summary>Handshake-Name des Client-Vertrags ({vertrag.Typ}).</summary>");
+        sb.AppendLine($"    /// <summary>Handshake-Name: die App ({vertrag.Typ}).</summary>");
         sb.AppendLine($"    public const string Vertrag = \"{vertrag.Name}\";");
+        sb.AppendLine("    /// <summary>Der Client, den die App umsetzt (Schlüssel Clients:&lt;Name&gt; der Umgebung).</summary>");
+        sb.AppendLine($"    public const string Client = \"{vertrag.Client}\";");
         sb.AppendLine("    /// <summary>Vertrags-Hash (Abstractions.Clientvertragsregeln.ClientKanon) — derselbe wie am Server.</summary>");
         sb.AppendLine($"    public const string VertragHash = \"{vertrag.Hash}\";");
         sb.AppendLine();

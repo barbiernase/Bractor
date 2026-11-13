@@ -1,7 +1,8 @@
 // ── Client.SourceGeneration/ClientVertrag.cs ──
 //
-// Der Client einer Client-Assembly ([assembly: IstClient<Arbeitsplatz>], docs/konzept-akteure.md §4) — gelesen mit derselben Lesart wie am
-// Server (Clientvertragslesart, per Link), dazu die Diagnosen CQRS093–097: der Client-Code wird gegen die Akteure seines Clients gehalten.
+// Die App einer Client-Assembly ([assembly: IstApp<ArbeitsplatzApp>], docs/konzept-akteure.md §4) — gelesen mit derselben Lesart wie am Server
+// (Clientvertragslesart.LiesApp, per Link), dazu die Diagnosen CQRS093–097: der Code wird gegen den Vertrag seiner App gehalten (die Akteure ihres
+// Clients ohne die Nachrichten ihrer Quellen).
 
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -18,6 +19,8 @@ internal sealed class ClientVertragInfo
 {
     public string Typ { get; private set; } = "";
     public string Name { get; private set; } = "";
+    /// <summary>Der Client, den die App umsetzt (Schlüssel <c>Clients:&lt;Name&gt;</c> der Umgebung).</summary>
+    public string Client { get; private set; } = "";
     public string Hash { get; private set; } = "";
     public List<string> Sendet { get; private set; } = new List<string>();
     public List<string> Fragt { get; private set; } = new List<string>();
@@ -26,22 +29,23 @@ internal sealed class ClientVertragInfo
 
     public static readonly ClientVertragInfo Leer = new ClientVertragInfo();
 
-    /// <summary>Der Client-Record aus <c>[assembly: IstClient&lt;T&gt;]</c>, sonst null.</summary>
+    /// <summary>Der App-Record aus <c>[assembly: IstApp&lt;T&gt;]</c>, wenn er eine App ist (<c>IApp&lt;TClient&gt;</c>), sonst null.</summary>
     public static INamedTypeSymbol? VertragsTyp(Compilation c) =>
         c.Assembly.GetAttributes()
             .Where(a => a.AttributeClass is { IsGenericType: true } k
-                        && k.OriginalDefinition.ToDisplayString() == "Abstractions.IstClientAttribute<TClient>")
-            .Select(a => a.AttributeClass!.TypeArguments[0]).OfType<INamedTypeSymbol>().FirstOrDefault();
+                        && k.OriginalDefinition.ToDisplayString() == "Abstractions.IstAppAttribute<TApp>")
+            .Select(a => a.AttributeClass!.TypeArguments[0]).OfType<INamedTypeSymbol>().FirstOrDefault(Clientvertragslesart.IstApp);
 
     public static ClientVertragInfo? Aus(Compilation c)
     {
         var typ = VertragsTyp(c);
         if (typ == null) return null;
-        var v = Clientvertragslesart.Lies(typ, c);
+        var v = Clientvertragslesart.LiesApp(typ, c);
         return new ClientVertragInfo
         {
             Typ = typ.ToDisplayString(),
             Name = v.Name,
+            Client = v.Client!.Name,
             Hash = v.Hash,
             Sendet = v.Sendet.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
             Fragt = v.Fragt.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
@@ -55,25 +59,26 @@ internal static class ClientVertragDiagnosen
     private const string Kategorie = "CQRS.Client";
 
     public static readonly DiagnosticDescriptor OhneVertrag = new DiagnosticDescriptor(
-        "CQRS093", "Client ohne Vertrag",
-        "Die Client-Assembly '{0}' nennt ihren Client nicht — [assembly: IstClient<MeinClient>] ergänzen (record MeinClient : IClient, IVerkoerpert<A>); "
-        + "ohne Client wüsste niemand, für welche Akteure sie spricht und was sie hört (docs/konzept-akteure.md §4)",
+        "CQRS093", "Client ohne App",
+        "Die Client-Assembly '{0}' nennt ihre App nicht — [assembly: IstApp<MeineApp>] ergänzen (record MeineApp : IApp<MeinClient>); "
+        + "ohne App wüsste niemand, für welche Akteure sie spricht, was sie sendet und was sie hört (docs/konzept-akteure.md §4)",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor CommandOhneSendet = new DiagnosticDescriptor(
-        "CQRS095", "Command nicht im Client-Vertrag",
-        "Der Client erzeugt '{0}', aber kein Akteur, den sein Client '{1}' verkörpert, darf ihn (IDarf<{0}>) — der Server würde den Command "
-        + "ablehnen; einen Akteur verkörpern, der ihn darf (IVerkoerpert<A>), oder im Client einen anderen Weg wählen",
+        "CQRS095", "Command nicht im Vertrag der App",
+        "Der Code erzeugt '{0}', aber er steht nicht im Vertrag der App '{1}' — kein Akteur ihres Clients darf ihn (IDarf<{0}>), oder eine Quelle der "
+        + "App erzeugt ihn (je Nachricht entweder die App oder Quellen); einen Akteur verkörpern, der ihn darf, die Quelle aus der App nehmen, oder im "
+        + "Client einen anderen Weg wählen",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor QueryOhneFragt = new DiagnosticDescriptor(
-        "CQRS096", "Query nicht im Client-Vertrag",
-        "Der Client stellt '{0}', aber kein Akteur, den sein Client '{1}' verkörpert, darf sie (IDarf<{0}>) — der Server würde die Query ablehnen",
+        "CQRS096", "Query nicht im Vertrag der App",
+        "Der Code stellt '{0}', aber kein Akteur des Clients der App '{1}' darf sie (IDarf<{0}>) — der Server würde die Query ablehnen",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor EventOhneKenntnis = new DiagnosticDescriptor(
-        "CQRS097", "Server-Event nicht im Client-Vertrag",
-        "'{2}.Handle({0})' hört ein Server-Event, das kein Akteur des Clients '{1}' hört (IHoert<{0}>) — abonniert wird nur, was seine "
+        "CQRS097", "Server-Event nicht im Vertrag der App",
+        "'{2}.Handle({0})' hört ein Server-Event, das kein Akteur des Clients der App '{1}' hört (IHoert<{0}>) — abonniert wird nur, was seine "
         + "Akteure hören; der Handler liefe nie",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 }
@@ -97,7 +102,7 @@ public sealed class ClientVertragAnalyzer : DiagnosticAnalyzer
             var c = start.Compilation;
             var typ = ClientVertragInfo.VertragsTyp(c);
             if (typ == null) return;   // CQRS093 meldet der Wiring-Generator
-            var v = Clientvertragslesart.Lies(typ, c);
+            var v = Clientvertragslesart.LiesApp(typ, c);
             var iCommand = c.GetTypeByMetadataName("Abstractions.ICommand");
             var iQuery = c.GetTypeByMetadataName("Abstractions.IQuery");
             var iEvent = c.GetTypeByMetadataName("Abstractions.IEvent");

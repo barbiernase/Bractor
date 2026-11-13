@@ -21,6 +21,7 @@ public sealed class DomainModel
     public List<AkteurRaw> Akteure { get; } = new();
     /// <summary><c>IClient</c>-Records: die Clients mit den Akteuren, die sie verkörpern (docs/konzept-akteure.md §4).</summary>
     public List<ClientRaw> Clients { get; } = new();
+    public List<AppRaw> Apps { get; } = new();
     /// <summary><c>IGraph</c>-Records: die Graphen mit ihren Knoten (Graphform: dieselbe Lesart wie Generator und Analyzer).</summary>
     public List<GraphRaw> Graphen { get; } = new();
     /// <summary><c>ITranslate&lt;TSource, TTarget&gt;</c>-Klassen: die Übersetzungen der Anwendung (Uebersetzungsform).</summary>
@@ -429,6 +430,18 @@ public sealed class ClientRaw
 }
 
 /// <summary>
+/// Eine App (<c>record X(…) : IApp&lt;Client&gt;</c>, docs/10 E18): ihr Client und je Parameter eine Quelle — Name, Quellart wie geschrieben und
+/// die Übersetzungen aus <c>[Uebersetzt&lt;U&gt;]</c> (Klassennamen); dazu die Namespaces der Quellarten außerhalb ihres eigenen.
+/// </summary>
+public sealed class AppRaw
+{
+    public string Name = "", Namespace = "", Full = "", Client = "";
+    public List<(string Name, string Quellart, List<string> Uebersetzungen)> Quellen = new();
+    public List<string> Usings = new();
+    public string? Datei, Doku;
+}
+
+/// <summary>
 /// Ein Graph (<c>record X(Knoten…) : IGraph</c>): die Knoten in Reihenfolge der Parameter (Name, Typ wie geschrieben, <c>[Kopf]</c>, die Namen aus
 /// <c>[Von]</c>); abgeleitet (nicht editierbar) die Köpfe, die Ausgänge und die Kanten (<c>Infrastructure.SourceGeneration.Graphform</c>).
 /// </summary>
@@ -750,6 +763,8 @@ public sealed partial class DomainExtractor
             if (t.ContainingType == null && technik.IstTechnik(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: true)); continue; }
             // Client (record X : IClient): die Software an der Leitung.
             if (t.TypeKind != TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
+            // App (record X(…) : IApp<Client>): die Software eines Clients, ihre Parameter sind ihre Quellen.
+            if (Infrastructure.SourceGeneration.Clientvertragslesart.IstApp(t)) { m.Apps.Add(ReadApp(t)); continue; }
             // Graph (record X(Knoten…) : IGraph): Knoten als Parameter, Kanten aus [Von], Köpfe aus [Kopf].
             if (Infrastructure.SourceGeneration.Graphform.IstGraph(t)) { m.Graphen.Add(ReadGraph(t)); continue; }
             if (Infrastructure.SourceGeneration.Uebersetzungsform.IstUebersetzung(t)) { m.Uebersetzungen.Add(ReadUebersetzung(t)); continue; }
@@ -781,6 +796,7 @@ public sealed partial class DomainExtractor
         m.Enums.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Akteure.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Clients.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        m.Apps.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.ValueObjects.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Responses.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.ReadModels.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
@@ -977,6 +993,33 @@ public sealed partial class DomainExtractor
             Fragt = Je(Abstractions.Clientvertragsregeln.Befugnisart.Fragt),
             Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
         };
+    }
+
+    // ── Apps: der Client aus IApp<Client>, je Parameter eine Quelle (Quellart wie geschrieben, [Uebersetzt<U>]) — dieselbe Lesart wie Generator und Analyzer ──
+    private AppRaw ReadApp(INamedTypeSymbol t)
+    {
+        var decl = QuellDeklarationen(t).FirstOrDefault();
+        var geschrieben = decl is RecordDeclarationSyntax r && r.ParameterList is { } pl
+            ? pl.Parameters.ToDictionary(p => p.Identifier.Text, p => p.Type?.ToString() ?? "")
+            : new Dictionary<string, string>();
+        var a = new AppRaw
+        {
+            Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(),
+            Client = Infrastructure.SourceGeneration.Clientvertragslesart.ClientDerApp(t)?.Name ?? "",
+            Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
+        };
+        foreach (var p in t.InstanceConstructors.Where(k => !k.IsImplicitlyDeclared || k.Parameters.Length > 0)
+                     .OrderByDescending(k => k.Parameters.Length)
+                     .FirstOrDefault(k => !(k.Parameters.Length == 1 && SymbolEqualityComparer.Default.Equals(k.Parameters[0].Type, t)))?.Parameters ?? [])
+        {
+            var uebersetzungen = p.GetAttributes().Where(x => x.AttributeClass is { IsGenericType: true } k
+                    && k.OriginalDefinition.ToDisplayString() == "Abstractions.UebersetztAttribute<TUebersetzung>")
+                .Select(x => x.AttributeClass!.TypeArguments[0].Name).ToList();
+            a.Quellen.Add((p.Name, geschrieben.GetValueOrDefault(p.Name) ?? p.Type.Name, uebersetzungen));
+            var ns = p.Type.ContainingNamespace?.Fq();
+            if (ns is { Length: > 0 } && ns != a.Namespace && !a.Usings.Contains(ns)) a.Usings.Add(ns);
+        }
+        return a;
     }
 
     // ── Graphen: Knoten als Parameter des Records, Kanten aus [Von], Köpfe aus [Kopf] (Graphform, eine Lesart mit Generator und Analyzer) ──────

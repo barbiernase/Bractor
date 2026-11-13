@@ -1,0 +1,13 @@
+{
+  "App": "ArbeitsplatzApp",
+  "Rechner": "localhost",
+  "Port": 5110,
+  "Token": "sim-arbeitsplatz",
+  "Start": {
+    "Projekt": "Host.Blazor"
+  },
+  "Dateien": [
+    "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
+    "${env:HOME}/cqrs-sim/${branch}/preprocessed"
+  ]
+}

@@ -199,10 +199,10 @@ public sealed class SitzungsActor : RahmenActor
 
     private async Task HandshakeAsync(IContext context, Leitung.CapabilitiesRequest request)
     {
-        // Client-Vertrag (docs/konzept-akteure.md §5.2): „ich bin Client X" — geprüft gegen die generierte Tabelle (wirksam ist Vertrag ∩ Token;
+        // Vertrag (docs/konzept-akteure.md §5.2): „ich bin App X" — geprüft gegen die generierte Tabelle der Apps (wirksam ist Vertrag ∩ Token;
         //   abweichender Hash = Warnung bzw. im strengen Modus Ablehnung). Ohne Tor sagt der Vertrag, wer da ist.
         var vp = ClientVertragsPruefung.Pruefe(request.Vertrag, request.VertragHash, _sitzung.Akteur, Anwendung.Akteure.Rechte,
-            _d.Tor?.VertragStreng ?? false, Anwendung.Akteure.ClientVertraege);
+            _d.Tor?.VertragStreng ?? false, Anwendung.Akteure.AppVertraege);
         if (vp.Ablehnung is { } ablehnung)
         {
             _logger.LogWarning("{Session} Vertrag {Vertrag} abgelehnt: {Grund}", _id, request.Vertrag, ablehnung);

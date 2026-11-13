@@ -37,7 +37,7 @@ public static class KartenSchluessel
     /// <summary>Die Sammlungen, die aus dem Code kommen und von Gesten geändert werden.</summary>
     public static readonly string[] Sammlungen =
     [
-        "records", "enums", "aggregate", "decider", "applier", "bausteinFunktionen", "akteure", "clients", "graphen", "uebersetzungen",
+        "records", "enums", "aggregate", "decider", "applier", "bausteinFunktionen", "akteure", "clients", "apps", "graphen", "uebersetzungen",
         "readModels", "stores", "projektionen", "reader",
     ];
 
@@ -139,6 +139,7 @@ public static class Gesten
         var fkt = Nach(code.BausteinFunktionen, f => f.Namespace + "|" + f.Name);
         var akt = Nach(code.Akteure, a => a.Namespace + "|" + a.Name);
         var cli = Nach(code.Clients, c => c.Namespace + "|" + c.Name);
+        var app = Nach(code.Apps, a => a.Namespace + "|" + a.Name);
         var gra = Nach(code.Graphen, g => g.Namespace + "|" + g.Name);
         var ueb = Nach(code.Uebersetzungen, g => g.Namespace + "|" + g.Name);
         var lesen = code.Lesen ?? new Leseseite();
@@ -162,6 +163,7 @@ public static class Gesten
             BausteinFunktionen = soll.BausteinFunktionen.Select(f => f with { Herkunft = fkt.GetValueOrDefault(f.Namespace + "|" + f.Name)?.Herkunft }).ToList(),
             Akteure = soll.Akteure.Select(a => a with { Herkunft = akt.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Clients = soll.Clients.Select(c => c with { Herkunft = cli.GetValueOrDefault(c.Namespace + "|" + c.Name)?.Herkunft }).ToList(),
+            Apps = soll.Apps.Select(a => a with { Herkunft = app.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Graphen = soll.Graphen.Select(g => g with { Herkunft = gra.GetValueOrDefault(g.Namespace + "|" + g.Name)?.Herkunft }).ToList(),
             Uebersetzungen = soll.Uebersetzungen.Select(u => u with { Herkunft = ueb.GetValueOrDefault(u.Namespace + "|" + u.Name)?.Herkunft }).ToList(),
             Lesen = l == null ? null : l with

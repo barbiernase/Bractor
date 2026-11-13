@@ -10,37 +10,21 @@
     "Schema": "es"
   },
   "Cluster": {
-    "Art": "Consul",
     "Name": "cqrs",
-    "Consul": "localhost:8500",
-    "AdvertisedHost": "localhost",
-    "Rechner": "prod-1"
+    "Consul": "localhost:8500"
+  },
+  "Rechner": {
+    "prod-1": {
+      "Adresse": "localhost"
+    }
+  },
+  "Backend": {
+    "Rechner": [
+      "prod-1"
+    ]
   },
   "Transport": {
     "GrpcPort": 5001,
     "EinblickPort": 5002
-  },
-  "Clients": {
-    "Arbeitsplatz": {
-      "Urls": "http://localhost:5010",
-      "Dateien": [
-        "/mnt/unlabeledgewebebilder/SNP/IO",
-        "/home/wirksam/cqrs-data/preprocessed"
-      ]
-    },
-    "Linienrechner": {
-      "Eingaenge": {
-        "linie1": {
-          "Art": "Dateiwaechter",
-          "Akteur": "KameraSystem",
-          "Rechner": "prod-1",
-          "Pfad": "/mnt/unlabeledgewebebilder/SNP/IO",
-          "Intervall": "00:00:01",
-          "Fertig": "Stabil",
-          "Fenster": "00:00:01",
-          "Kennung": "NameGroesse"
-        }
-      }
-    }
   }
 }

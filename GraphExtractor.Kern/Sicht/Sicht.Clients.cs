@@ -3,22 +3,20 @@ using Abstractions;
 
 namespace GraphExtractor;
 
-// DIE SPALTE CLIENTS der Fläche (docs/10 §10.9, Plan Clients und Quellen Schritt 4): je Client (record X : IClient, Code) eine Karte, darin je Umgebung
-//   seine Eingänge (Konfig, Clients:<Client>:Eingaenge:<eingang> in umgebung.json) und seine App-Verbindung (Token, Adresse, URLs, Worker). Von
-//   jedem Eingang eine Kante zu dem Akteur, für den er hineingibt — an den Port der Nachricht, die die Verwirklichung (Übersetzung der Akteur-Seite) aus
-//   der Meldung seiner Quellart macht. Dazu die Befunde, die der Start melden würde (dieselben Regeln wie Infrastructure.Quellen.Eingaenge.Aus): Client
-//   und Akteur gibt es, der Client verkörpert ihn, die Art ist eine Quellart, je Meldung eine Übersetzung auf ein IDarf des Akteurs, im Cluster ein
-//   Rechner (eine Annahme nennt keinen, dafür einen Pfad, je Umgebung eindeutig) — und die Werte gehören zur Konfig der Quellart. Gerechnet aus dem Board und rahmen.umgebungen (roh, Platzhalter bleiben stehen); der
-//   Editor wählt nur die Daten der aktiven Umgebung.
+// DIE APP-INSTANZEN der Fläche (docs/10 §10.9, docs/10 E18): je Umgebung und Rechner die Instanzen der Apps, die dort laufen
+//   (apps/<instanz>.json: App, Rechner, Port, Token, Start, je Quelle ihre Werte), geprüft wie beim Start (dieselben Regeln wie
+//   Infrastructure.Quellen.Eingaenge.Aus): die App gibt es, die Werte nennen nur ihre Quellen, das Token gibt es und nennt einen Akteur ihres Clients; je
+//   Quelle ein Akteur des Clients, der darf, was ihre Übersetzungen geben, eine Annahme mit Pfad (je Umgebung eindeutig), die Werte gehören zur Konfig der
+//   Quellart. Dazu die Kanten der Fläche: Rechner → Client (die App setzt ihn um) und Quelle → Port des Akteurs (was sie gibt). Gerechnet aus dem Board
+//   und rahmen.umgebungen (roh, Platzhalter bleiben stehen); der Editor wählt nur die aktive Umgebung.
 public sealed partial class Sicht
 {
-    /// <summary>Die Umgebungen roh (<c>rahmen.umgebungen</c>): Name → Inhalt der <c>umgebung.json</c>.</summary>
+    /// <summary>Die Umgebungen roh (<c>rahmen.umgebungen</c>): Name → Inhalt der <c>umgebung.json</c> (mit <c>Graphen</c> und <c>Apps</c>).</summary>
     private IEnumerable<(string Name, JsonObject Inhalt)> UmgebungenRoh() =>
         Eintraege(_board["rahmen"]?["umgebungen"] as JsonObject).Where(e => e.Value is JsonObject).Select(e => (e.Key, (JsonObject)e.Value!));
 
-    /// <summary>Der Client des Codes, dessen Handshake-Name <paramref name="name"/> ist (der Schlüssel unter <c>Clients</c>).</summary>
-    private JsonObject? ClientNamens(string name) =>
-        _clients.FirstOrDefault(c => Clientvertragsregeln.ClientName(S(c, "name")) == name);
+    /// <summary>Die App des Codes namens <paramref name="name"/>.</summary>
+    private JsonObject? AppNamens(string name) => _apps.FirstOrDefault(a => S(a, "name") == name);
 
     /// <summary>Die Felder der Konfig-Records einer Quellart in ihrer Reihenfolge: Name → Typ.</summary>
     private static List<(string Feld, string Typ)> QuellartFelder(JsonObject q) =>
@@ -33,165 +31,163 @@ public sealed partial class Sicht
         _ => n.ToJsonString(),
     };
 
-    /// <summary>
-    /// Ein Eingang geprüft wie beim Start: die Nachrichten, die er dem Akteur gibt (je passender Übersetzung ihr Ziel), und die Befunde. Leer heißt: er
-    /// startet so.
-    /// </summary>
-    private (List<(string Typ, string Uebersetzung)> Gibt, List<string> Befunde) EingangPruefen(string client, JsonObject? c, string name, JsonObject e, bool cluster,
-        IReadOnlyDictionary<string, List<string>> pfade)
-    {
-        var befunde = new List<string>();
-        var gibt = new List<(string, string)>();
-        var art = S(e, nameof(EingangKonfig.Art));
-        var akteur = S(e, nameof(EingangKonfig.Akteur));
-        var a = _akteure.FirstOrDefault(x => S(x, "name") == akteur);
-        if (c == null) befunde.Add($"einen Client {client} gibt es nicht (record {client} : IClient)");
-        if (akteur.Length == 0) befunde.Add("kein Akteur genannt");
-        else if (a == null) befunde.Add($"Akteur „{akteur}“ gibt es nicht");
-        else if (c != null && !L(c, "verkoerpert").Contains(akteur)) befunde.Add($"{client} verkörpert {akteur} nicht (IVerkoerpert<{akteur}>)");
-        var q = art.Length > 0 ? QuellartNamens(art) : null;
-        if (art.Length == 0) befunde.Add("keine Art genannt");
-        else if (q == null) befunde.Add($"„{art}“ ist keine Quellart (bekannt: {string.Join(", ", _quellarten.Select(x => S(x, "name")).DefaultIfEmpty("keine"))})");
-        if (q != null && a != null)
-            foreach (var meldung in Meldet(q))
-            {
-                var passend = Verwirklichungen.Where(u => Basis(S(u, "ein")) == meldung && L(a, "darf").Contains(Basis(S(u, "aus")))).ToList();
-                if (passend.Count == 0) befunde.Add($"keine Übersetzung macht aus {meldung} eine Nachricht, die {akteur} darf (＋ Verwirklichung im Modal Akteure und Clients)");
-                foreach (var u in passend)
-                {
-                    var typ = L(a, "darf").First(d => Basis(d) == Basis(S(u, "aus")));
-                    if (!gibt.Contains((typ, S(u, "name")))) gibt.Add((typ, S(u, "name")));
-                }
-            }
-        if (e[nameof(EingangKonfig.Rechner)] is JsonValue rv && rv.TryGetValue<string>(out var r)
-            && (r.Length == 0 || r.Trim() != r || r.Any(ch => ch is ',' or '*' or '?' || char.IsWhiteSpace(ch))))
-            befunde.Add($"Rechner „{r}“ ist kein Name — ein Rechner ist genau ein Name");
-        if (q != null && B(q, "annahme"))
-        {
-            // Eine Annahme (docs/04 §4.7): jeder Host nimmt an — kein Rechner, dafür ein Pfad, je Umgebung eindeutig.
-            if (e[nameof(EingangKonfig.Rechner)] != null) befunde.Add($"{art} nimmt an — jeder Host nimmt Aufrufe an, ein Rechner hat hier keine Bedeutung");
-            var pfad = Annahmevertrag.Normal(WertText(e[Annahmevertrag.Pfad]));
-            if (pfad.Length == 0) befunde.Add($"der Wert „{Annahmevertrag.Pfad}“ fehlt — unter ihm nimmt der Host an (POST {Annahmevertrag.Route}/<{Annahmevertrag.Pfad}>)");
-            else if (pfade.TryGetValue(pfad, out var mit) && mit.Count > 1)
-                befunde.Add($"Pfad „{pfad}“ nennen mehrere Eingänge ({string.Join(", ", mit)}) — ein Pfad gehört je Umgebung genau einem");
-        }
-        else if (cluster && e[nameof(EingangKonfig.Rechner)] == null) befunde.Add("im Cluster nennt ein Eingang seinen Rechner — eine Quelle lauscht genau einmal");
-        if (q != null)
-        {
-            var felder = QuellartFelder(q).Select(x => x.Feld).ToHashSet(StringComparer.Ordinal);
-            foreach (var (k, _) in e)
-                if (!EingangKonfig.Rahmenfelder.Contains(k) && !felder.Contains(k))
-                    befunde.Add($"„{k}“ ist kein Wert von {art} (Felder: {string.Join(", ", felder.Order(StringComparer.Ordinal).DefaultIfEmpty("keine"))})");
-        }
-        return (gibt, befunde);
-    }
+    /// <summary>Die Tokens einer Umgebung (<c>Identitaeten:Tokens</c>): Token → Akteure; null ohne Abschnitt (ohne Tor).</summary>
+    private static Dictionary<string, List<string>>? TokensRoh(JsonObject inhalt) =>
+        inhalt[UmgebungsAbschnitte.Identitaeten]?["Tokens"] is JsonObject t
+            ? Eintraege(t).ToDictionary(x => x.Key, x => x.Value is JsonArray a ? a.Select(v => WertText(v)).ToList() : AkteurTokens.Akteure(WertText(x.Value)).ToList(),
+                StringComparer.Ordinal)
+            : null;
+
+    /// <summary>Die App-Instanzen einer Umgebung roh: Name → Inhalt (nur Objekte).</summary>
+    private static IEnumerable<(string Name, JsonObject Inhalt)> AppsRoh(JsonObject inhalt) =>
+        Eintraege(inhalt[UmgebungsAbschnitte.Apps] as JsonObject).Where(e => e.Value is JsonObject).Select(e => (e.Key, (JsonObject)e.Value!));
+
+    /// <summary>Der Rechner einer App-Instanz (ohne Angabe <c>localhost</c>, wie im Lader).</summary>
+    private static string AppRechner(JsonObject i) => WertText(i[nameof(AppInstanzKonfig.Rechner)]) is { Length: > 0 } r ? r : Rechnerregeln.Standard;
+
+    /// <summary>Der Port einer App-Instanz (0 = keiner).</summary>
+    private static int AppPort(JsonObject i) => int.TryParse(WertText(i[nameof(AppInstanzKonfig.Port)]), out var p) ? p : 0;
 
     /// <summary>
-    /// <c>board.sicht.flaeche.eingaenge</c>: je Umgebung je Client-Karte seine Eingänge (Name, Art, Akteur, Rechner, Offen, die wichtigsten Werte,
-    /// was er gibt, Befunde) und seine App-Verbindung, die Kanten Eingang → Akteur und Befunde der Umgebung (Clients, die es im Code nicht gibt).
+    /// <c>flaeche.rechner[Umgebung].apps</c>, <c>.karten</c> und <c>.kanten</c>: je App-Instanz ihre Daten samt Befunden (wie beim Start), je Rechner des
+    /// Pools eine Karte der Spalte Rechner, die Kanten Rechner → Client und Quelle → Akteur. <paramref name="rechnerBefunde"/> sind die Befunde der
+    /// Rechnerregeln (Pool, Port).
     /// </summary>
-    private JsonObject EingaengeJson()
+    private (JsonObject Apps, JsonArray Karten, JsonArray Kanten) AppInstanzenJson(JsonObject inhalt, IReadOnlyCollection<string> pool, IReadOnlyList<string> backend,
+        IReadOnlyList<Rechnerbefund> rechnerBefunde)
     {
-        var aus = new JsonObject();
-        foreach (var (umgebung, inhalt) in UmgebungenRoh())
+        var apps = new JsonObject();
+        var kanten = new JsonArray();
+        var tokens = TokensRoh(inhalt);
+        var instanzen = AppsRoh(inhalt).ToList();
+        // Die Pfade der Annahmen dieser Umgebung (je Pfad die Quellen, die ihn nennen) — ein Pfad gehört genau einer.
+        var pfade = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var (name, i) in instanzen)
+            if (AppNamens(S(i, nameof(AppInstanzKonfig.App))) is { } ap)
+                foreach (var q in Alle(ap["quellen"]))
+                    if (QuellartNamens(S(q, "quellart")) is { } qa && B(qa, "annahme")
+                        && Annahmevertrag.Normal(WertText(i[nameof(AppInstanzKonfig.Quellen)]?[S(q, "name")]?[Annahmevertrag.Pfad])) is { Length: > 0 } p)
+                        (pfade.TryGetValue(p, out var l) ? l : pfade[p] = []).Add(name + "/" + S(q, "name"));
+        foreach (var (name, i) in instanzen.OrderBy(x => x.Name, StringComparer.Ordinal))
         {
-            var cluster = S(inhalt[UmgebungsAbschnitte.Cluster], nameof(ClusterKonfig.Art)) is { Length: > 0 } ca && ca != nameof(ClusterArt.Einzelknoten);
-            var karten = new JsonObject();
-            var kanten = new JsonArray();
-            var befunde = new JsonArray();
-            var clients = inhalt[UmgebungsAbschnitte.Clients] as JsonObject ?? new JsonObject();
-            // Die Pfade der Annahmen dieser Umgebung (je Pfad die Eingänge, die ihn nennen) — ein Pfad gehört genau einem.
-            var pfade = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-            foreach (var (client, cw) in clients)
-                foreach (var (name, ew) in (cw?[nameof(ClientKonfig.Eingaenge)] as JsonObject ?? new JsonObject()))
-                    if (ew is JsonObject e && QuellartNamens(S(e, nameof(EingangKonfig.Art))) is { } q && B(q, "annahme")
-                        && Annahmevertrag.Normal(WertText(e[Annahmevertrag.Pfad])) is { Length: > 0 } p)
-                        (pfade.TryGetValue(p, out var l) ? l : pfade[p] = []).Add(client + "/" + name);
-            foreach (var (client, cw) in clients.OrderBy(x => x.Key, StringComparer.Ordinal))
+            var befunde = rechnerBefunde.Where(b => b.Karte == Rechnerregeln.AppKarte(name)).Select(b => b.Text).ToList();
+            var appName = S(i, nameof(AppInstanzKonfig.App));
+            var rechner = AppRechner(i);
+            var token = WertText(i[nameof(AppInstanzKonfig.Token)]);
+            var ap = AppNamens(appName);
+            var cl = ap == null ? null : _clients.FirstOrDefault(c => S(c, "name") == S(ap, "client"));
+            foreach (var k in Eintraege(i).Select(e => e.Key).Where(k => !AppInstanzKonfig.Felder.Contains(k)))
+                befunde.Add($"„{k}“ ist kein Feld (bekannt: {string.Join(", ", AppInstanzKonfig.Felder)})");
+            if (appName.Length == 0) befunde.Add("keine App genannt");
+            else if (ap == null) befunde.Add($"eine App „{appName}“ gibt es nicht (record {appName} : IApp<Client>)");
+            var verk = cl == null ? [] : L(cl, "verkoerpert").ToList();
+            var wirksam = verk;
+            if (token.Length > 0 && tokens != null)
             {
-                if (cw is not JsonObject ck) continue;
-                var c = ClientNamens(client);
-                if (c == null)
+                if (!tokens.TryGetValue(token, out var ta)) befunde.Add($"das Token „{token}“ gibt es nicht (Identitaeten:Tokens)");
+                else
                 {
-                    befunde.Add((JsonNode)$"Clients:{client}: einen Client {client} gibt es nicht (record {client} : IClient)");
-                    continue;
+                    wirksam = verk.Where(ta.Contains).ToList();
+                    if (cl != null && wirksam.Count == 0) befunde.Add($"das Token „{token}“ nennt keinen Akteur von {S(cl, "name")} ({string.Join(", ", verk)})");
                 }
-                var kid = "cl:" + S(c, "_id");
-                var eingaenge = new JsonArray();
-                foreach (var (name, ew) in (ck[nameof(ClientKonfig.Eingaenge)] as JsonObject ?? new JsonObject()).OrderBy(x => x.Key, StringComparer.Ordinal))
+            }
+            var werteQuellen = i[nameof(AppInstanzKonfig.Quellen)] as JsonObject ?? new JsonObject();
+            if (ap != null)
+                foreach (var (q, _) in werteQuellen)
+                    if (Alle(ap["quellen"]).All(x => S(x, "name") != q))
+                        befunde.Add($"„{q}“ ist keine Quelle von {appName} (Quellen: {string.Join(", ", Alle(ap["quellen"]).Select(x => S(x, "name")).DefaultIfEmpty("keine"))})");
+            var quellen = new JsonArray();
+            var gibtAlle = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var q in ap == null ? [] : Alle(ap["quellen"]))
+            {
+                var qname = S(q, "name");
+                var qbef = new List<string>();
+                var art = S(q, "quellart");
+                var qa = QuellartNamens(art);
+                if (qa == null) qbef.Add($"{art} ist keine Quellart");
+                var ziele = L(q, "uebersetzungen").Select(u => Verwirklichungen.FirstOrDefault(v => S(v, "name") == u)).OfType<JsonObject>().ToList();
+                var gibt = ziele.Select(u => (Typ: Basis(S(u, "aus")), U: u)).ToList();
+                foreach (var g in gibt) gibtAlle.Add(g.Typ);
+                var akteur = wirksam.FirstOrDefault(an => _akteure.FirstOrDefault(a => S(a, "name") == an) is { } a
+                    && gibt.All(g => L(a, "darf").Any(d => Basis(d) == g.Typ)));
+                if (akteur == null && cl != null && gibt.Count > 0)
+                    qbef.Add($"kein Akteur von {S(cl, "name")}{(token.Length > 0 ? " unter dem Token " + token : "")} darf, was sie gibt ({string.Join(", ", gibt.Select(g => g.Typ).Distinct())})");
+                var w = werteQuellen[qname] as JsonObject ?? new JsonObject();
+                if (qa != null)
                 {
-                    if (ew is not JsonObject e) continue;
-                    var (gibt, bef) = EingangPruefen(client, c, name, e, cluster, pfade);
-                    var q = QuellartNamens(S(e, nameof(EingangKonfig.Art)));
-                    // Die wichtigsten Werte: die gesetzten Felder der Konfig der Quellart in ihrer Reihenfolge, höchstens zwei — ein Schlüssel nur verdeckt.
-                    var kurz = (q == null ? [] : QuellartFelder(q)).Where(f => e[f.Feld] != null).Take(2)
-                        .Select(f => (JsonNode)(f.Feld + ": " + (f.Feld == Annahmevertrag.Schluessel ? "•••" : WertText(e[f.Feld])))).ToArray();
-                    var akteur = S(e, nameof(EingangKonfig.Akteur));
-                    var a = _akteure.FirstOrDefault(x => S(x, "name") == akteur);
-                    var eo = new JsonObject
+                    var felder = QuellartFelder(qa).Select(x => x.Feld).ToHashSet(StringComparer.Ordinal);
+                    foreach (var (k, _) in w)
+                        if (!QuelleKonfig.Rahmenfelder.Contains(k) && !felder.Contains(k))
+                            qbef.Add($"„{k}“ ist kein Wert von {art} (Felder: {string.Join(", ", felder.Order(StringComparer.Ordinal).DefaultIfEmpty("keine"))})");
+                    if (B(qa, "annahme"))
                     {
-                        ["name"] = name, ["art"] = S(e, nameof(EingangKonfig.Art)), ["akteur"] = akteur,
-                        ["kurz"] = new JsonArray(kurz),
-                        ["gibt"] = new JsonArray(gibt.Select(g => (JsonNode)new JsonObject { ["typ"] = g.Typ, ["uebersetzung"] = g.Uebersetzung }).ToArray()),
-                        ["befunde"] = Arr(bef),
-                    };
-                    if (e[nameof(EingangKonfig.Rechner)] is JsonValue rv && rv.TryGetValue<string>(out var r)) eo["rechner"] = r;
-                    if (q != null && QuellartKarte(q) is { } qk) eo["quellart"] = qk;
-                    if (q != null && B(q, "annahme")) eo["annahme"] = true;
-                    eingaenge.Add(eo);
-                    if (a != null)
-                        foreach (var typ in gibt.Select(g => g.Typ).Distinct())
-                            kanten.Add(new JsonObject { ["von"] = kid, ["nach"] = "akt:" + S(a, "_id") + "|aus", ["typ"] = typ, ["art"] = "eingang", ["eingang"] = name });
+                        if (AppPort(i) <= 0) qbef.Add($"{art} nimmt an — die Instanz braucht einen Port, auf dem ihr Rechnerdienst annimmt");
+                        var pfad = Annahmevertrag.Normal(WertText(w[Annahmevertrag.Pfad]));
+                        if (pfad.Length == 0) qbef.Add($"der Wert „{Annahmevertrag.Pfad}“ fehlt — unter ihm nimmt der Rechnerdienst an (POST {Annahmevertrag.Route}/<{Annahmevertrag.Pfad}>)");
+                        else if (pfade.TryGetValue(pfad, out var mit) && mit.Count > 1)
+                            qbef.Add($"Pfad „{pfad}“ nennen mehrere Quellen ({string.Join(", ", mit)}) — ein Pfad gehört je Umgebung genau einer");
+                    }
                 }
-                // Die App-Verbindung: was der Client an Leitung hat (Token, Adresse, URLs, ein Worker der Werkbank) — nur, wenn etwas davon steht.
-                JsonObject? app = null;
-                foreach (var f in new[] { nameof(ClientKonfig.Token), nameof(ClientKonfig.Adresse), nameof(ClientKonfig.Urls) })
-                    if (ck[f] is { } w && WertText(w) is { Length: > 0 } t) (app ??= new JsonObject())[f.ToLowerInvariant()] = t;
-                if (ck[nameof(ClientKonfig.Worker)] is JsonObject wk)
-                    (app ??= new JsonObject())["worker"] = WertText(wk["Skript"]) is { Length: > 0 } sk ? sk : WertText(wk["Projekt"]);
-                var ko = new JsonObject { ["eingaenge"] = eingaenge };
-                if (app != null) ko["app"] = app;
-                karten[kid] = ko;
+                // Die wichtigsten Werte: die gesetzten Felder der Konfig der Quellart in ihrer Reihenfolge, höchstens zwei — ein Schlüssel nur verdeckt.
+                var kurz = (qa == null ? [] : QuellartFelder(qa)).Where(f => w[f.Feld] != null).Take(2)
+                    .Select(f => (JsonNode)(f.Feld + ": " + (f.Feld == Annahmevertrag.Schluessel ? "•••" : WertText(w[f.Feld])))).ToArray();
+                var qo = new JsonObject
+                {
+                    ["name"] = qname, ["quellart"] = art, ["akteur"] = akteur ?? "", ["annahme"] = qa != null && B(qa, "annahme"),
+                    ["gibt"] = new JsonArray(gibt.Select(g => (JsonNode)new JsonObject
+                        { ["typ"] = g.Typ, ["uebersetzung"] = S(g.U, "name"), ["karte"] = "ue:" + S(g.U, "_id") }).ToArray()),
+                    ["kurz"] = new JsonArray(kurz), ["befunde"] = Arr(qbef),
+                };
+                if (qa != null && QuellartKarte(qa) is { } qk) qo["quellartKarte"] = qk;
+                quellen.Add(qo);
+                if (akteur != null && _akteure.FirstOrDefault(a => S(a, "name") == akteur) is { } ak)
+                    foreach (var typ in gibt.Select(g => L(ak, "darf").First(d => Basis(d) == g.Typ)).Distinct())
+                        kanten.Add(new JsonObject
+                        {
+                            ["von"] = "re:" + rechner, ["nach"] = "akt:" + S(ak, "_id") + "|aus", ["typ"] = typ, ["art"] = "eingang", ["eingang"] = name + "/" + qname,
+                        });
             }
-            aus[umgebung] = new JsonObject { ["cluster"] = cluster, ["karten"] = karten, ["kanten"] = kanten, ["befunde"] = befunde };
+            // Was die App selbst sendet: die Commands der Akteure ihres Clients ohne die, die ihre Quellen geben.
+            var selbst = _akteure.Where(a => verk.Contains(S(a, "name"))).SelectMany(a => L(a, "darf")).Where(t => Sorte(t) == "command")
+                .Select(Basis).Distinct().Count(t => !gibtAlle.Contains(t));
+            var start = i[nameof(AppInstanzKonfig.Start)] as JsonObject;
+            var o = new JsonObject
+            {
+                ["app"] = appName, ["appKarte"] = ap == null ? "" : "ap:" + S(ap, "_id"),
+                ["client"] = cl == null ? "" : S(cl, "name"), ["clientKarte"] = cl == null ? "" : "cl:" + S(cl, "_id"),
+                ["rechner"] = rechner, ["port"] = AppPort(i), ["token"] = token,
+                ["start"] = start == null ? "" : WertText(start["Skript"]) is { Length: > 0 } sk ? sk : WertText(start["Projekt"]),
+                ["quellen"] = quellen, ["selbst"] = selbst, ["befunde"] = Arr(befunde),
+            };
+            apps[name] = o;
+            if (cl != null && pool.Contains(rechner))
+                kanten.Add(new JsonObject { ["von"] = "re:" + rechner, ["nach"] = "cl:" + S(cl, "_id"), ["typ"] = appName, ["art"] = "app", ["app"] = name });
         }
-        return aus;
+        var karten = new JsonArray(pool.Select(r => (JsonNode)new JsonObject
+        {
+            ["id"] = "re:" + r, ["karte"] = "", ["art"] = "rechner", ["name"] = r, ["spalte"] = "rechner", ["ports"] = new JsonArray(),
+        }).ToArray());
+        return (apps, karten, kanten);
     }
 
     /// <summary>
-    /// Was „＋ Eingang“ an der Karte eines Clients anbietet: je Quellart die verkörperten Akteure, die sie verwirklicht (eine Übersetzung der
-    /// Akteur-Seite von ihrer Meldung auf ein IDarf des Akteurs), und die verkörperten Akteure, die noch keine Quellart verwirklicht.
+    /// Die Befunde der Kanten aus App-Instanzen für die Paritätsprüfung: jede beginnt an einem Rechner des Pools und endet an einer Client-Karte bzw. an
+    /// einem Port des Akteurs.
     /// </summary>
-    private JsonObject ClientKandidaten(JsonObject c)
-    {
-        var verk = L(c, "verkoerpert").ToHashSet(StringComparer.Ordinal);
-        var arten = new JsonArray();
-        var verwirklicht = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var q in _quellarten.OrderBy(q => S(q, "name"), StringComparer.Ordinal))
-        {
-            var akteure = Verwirklicht(q).Select(x => S(x.Akteur, "name")).Where(verk.Contains).Distinct().Order(StringComparer.Ordinal).ToList();
-            if (akteure.Count == 0) continue;
-            verwirklicht.UnionWith(akteure);
-            arten.Add(new JsonObject { ["art"] = S(q, "name"), ["framework"] = B(q, "framework"), ["annahme"] = B(q, "annahme"), ["akteure"] = Arr(akteure) });
-        }
-        return new JsonObject
-        {
-            ["arten"] = arten,
-            ["ohne"] = Arr(verk.Where(a => !verwirklicht.Contains(a)).Order(StringComparer.Ordinal)),
-        };
-    }
-
-    /// <summary>Die Befunde der Kanten aus Eingängen für die Paritätsprüfung: jede beginnt an einer Client-Karte und endet an einem Port des Akteurs.</summary>
-    private IEnumerable<(string Schweregrad, string Meldung)> EingangsKantenBefunde(FlaechenBild f)
+    private IEnumerable<(string Schweregrad, string Meldung)> AppKantenBefunde(FlaechenBild f)
     {
         var karte = f.Karten.ToDictionary(k => k.Id, StringComparer.Ordinal);
-        foreach (var (umgebung, u) in Eintraege(EingaengeJson()))
+        foreach (var (umgebung, u) in Eintraege(RechnerJson()))
+        {
+            var rechner = Alle(u?["karten"]).Select(k => S(k, "id")).ToHashSet(StringComparer.Ordinal);
             foreach (var k in Alle(u?["kanten"]))
             {
-                if (!karte.TryGetValue(S(k, "von"), out var von) || von.Art != "client")
-                    yield return ("error", $"Fläche ({umgebung}): Eingang {S(k, "eingang")} an {S(k, "von")} ohne Client-Karte");
-                if (!karte.TryGetValue(S(k, "nach"), out var nach) || !nach.Ports.Any(p => p.Richtung == "aus" && p.Typ == S(k, "typ")))
-                    yield return ("error", $"Fläche ({umgebung}): Eingang {S(k, "eingang")} endet an {S(k, "nach")} ohne Port {S(k, "typ")}");
+                if (!rechner.Contains(S(k, "von"))) yield return ("error", $"Fläche ({umgebung}): {S(k, "art")} von {S(k, "von")} ohne Rechner-Karte");
+                var ok = S(k, "art") == "app"
+                    ? karte.TryGetValue(S(k, "nach"), out var c) && c.Art == "client"
+                    : karte.TryGetValue(S(k, "nach"), out var a) && a.Ports.Any(p => p.Richtung == "aus" && p.Typ == S(k, "typ"));
+                if (!ok) yield return ("error", $"Fläche ({umgebung}): {S(k, "art")} {S(k, "app")}{S(k, "eingang")} endet an {S(k, "nach")} ohne Karte bzw. Port {S(k, "typ")}");
             }
+        }
     }
 }

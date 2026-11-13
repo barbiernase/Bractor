@@ -82,15 +82,15 @@ internal sealed class Umgebungsdatei
     public int GrpcPort => (int)Json["Transport"]!["GrpcPort"]!;
     public string Python => Ersetze((string?)Json["Umgebung"]!["Python"] ?? "python3");
     /// <summary>
-    /// Das Verzeichnis des Dateiwächters: der Wert <c>Pfad</c> des ersten Eingangs eines Clients mit Art <c>Dateiwaechter</c>
-    /// (<c>Clients:&lt;Name&gt;:Eingaenge:&lt;eingang&gt;</c>, nach Client und Eingang geordnet); null ohne einen solchen Eingang.
+    /// Das Verzeichnis des Dateiwächters: der Wert <c>Pfad</c> der ersten Quelle der ersten App-Instanz (<c>apps/&lt;instanz&gt;.json</c>, nach Instanz
+    /// und Quelle geordnet), die einen nennt — in den Mess-Umgebungen die Kamera-App; null ohne eine solche Quelle.
     /// </summary>
     public string? Quellpfad =>
-        (Json["Clients"] as JsonObject ?? []).OrderBy(c => c.Key, StringComparer.Ordinal)
-            .SelectMany(c => (c.Value?["Eingaenge"] as JsonObject ?? []).OrderBy(e => e.Key, StringComparer.Ordinal))
-            .Select(e => e.Value)
-            .Where(e => (string?)e?["Art"] == "Dateiwaechter")
-            .Select(e => (string?)e?["Pfad"]).FirstOrDefault(p => p != null) is { } p ? Ersetze(p) : null;
+        Apps.OrderBy(a => a.Key, StringComparer.Ordinal)
+            .SelectMany(a => (a.Value["Quellen"] as JsonObject ?? []).OrderBy(q => q.Key, StringComparer.Ordinal))
+            .Select(q => (string?)q.Value?["Pfad"]).FirstOrDefault(p => p != null) is { } p ? Ersetze(p) : null;
+    /// <summary>Die App-Instanzen (Ordner <c>apps</c> der Umgebung): Name → Inhalt.</summary>
+    public Dictionary<string, JsonNode> Apps { get; init; } = new();
     /// <summary>Die Instanzen der Graphen (Ordner <c>graphen</c> der Umgebung): Name → Inhalt.</summary>
     public Dictionary<string, JsonNode> Instanzen { get; init; } = new();
 
@@ -102,8 +102,12 @@ internal sealed class Umgebungsdatei
     {
         var ordner = Path.Combine(wurzel, "umgebungen", name);
         var graphen = Path.Combine(ordner, "graphen");
+        var apps = Path.Combine(ordner, "apps");
         return new()
         {
+            Apps = Directory.Exists(apps)
+                ? Directory.GetFiles(apps, "*.json").ToDictionary(Path.GetFileNameWithoutExtension, d => JsonNode.Parse(File.ReadAllText(d))!)!
+                : new(),
             Name = name, Json = JsonNode.Parse(File.ReadAllText(Path.Combine(ordner, "umgebung.json")))!,
             Instanzen = Directory.Exists(graphen)
                 ? Directory.GetFiles(graphen, "*.json").ToDictionary(Path.GetFileNameWithoutExtension, d => JsonNode.Parse(File.ReadAllText(d))!)!

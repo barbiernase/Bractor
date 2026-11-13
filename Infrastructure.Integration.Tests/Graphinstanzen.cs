@@ -5,8 +5,8 @@ namespace Infrastructure.Integration.Tests;
 /// <summary>
 /// Die Instanzen der Graphen der Beispieldomäne für die Hosts der Integrations-Tests (je Graph eine, wie <c>umgebungen/sim-main/graphen</c>): die
 /// Bildaufbereitung (aus dem Katalog, Kopf <c>LiesBild</c>) mit Parallel und Wiederholungen ihrer drei Bild-Knoten und dem Ausgabe-Pfad, die übrigen
-/// mit den Standards. Das gedeutete Bild übersetzt die Domäne (Domain.Uebersetzungen); was ein Dateiwächter findet, gibt ein Eingang eines Clients
-/// hinein (Clients:Linienrechner:Eingaenge), nicht die Instanz.
+/// mit den Standards. Das gedeutete Bild übersetzt die Domäne (Domain.Uebersetzungen); was ein Dateiwächter findet, gibt die Quelle einer App-Instanz
+/// hinein (apps/<instanz>.json der Kamera-App), nicht die Instanz des Graphen.
 /// </summary>
 internal static class Graphinstanzen
 {

@@ -1,0 +1,8 @@
+{
+  "App": "KlassifikationsApp",
+  "Rechner": "localhost",
+  "Token": "sim-klassifizierer",
+  "Start": {
+    "Skript": "Domain.Client.Worker.Python.ML/run_stub.py"
+  }
+}

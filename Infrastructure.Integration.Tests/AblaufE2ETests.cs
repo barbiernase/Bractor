@@ -22,10 +22,10 @@ namespace Infrastructure.Integration.Tests;
 
 /// <summary>
 /// Ebene 2 — die ABLÄUFE der Beispieldomäne gegen echtes Marten/Consul: Aggregate entscheiden,
-/// Funktionen in Graphen tragen die Kanten, Fristen tragen die Zeit — ohne Dirigent. Der Bildeingang läuft über einen Eingang des Linienrechners (er
-/// verkörpert das Kamerasystem) und die ganze Bildaufbereitung —
+/// Funktionen in Graphen tragen die Kanten, Fristen tragen die Zeit — ohne Dirigent. Der Bildeingang läuft über die Quelle einer Instanz der Kamera-App (sie
+/// setzt den Linienrechner um, der das Kamerasystem verkörpert) und die ganze Bildaufbereitung —
 ///
-///   Datei im Verzeichnis ──Dateiwaechter (Quellart, Eingang Linienrechner/…, Zustand gesichert)──DateiGefunden──▶ Übersetzung der Akteur-Seite
+///   Datei im Verzeichnis ──Dateiwaechter (Quelle Kamera der App-Instanz, Zustand gesichert)──DateiGefunden──▶ Übersetzung der Akteur-Seite
 ///     ──LiesBild (offener Eingang am Kopf, im Namen des KameraSystems)──▶ ƒ Einlesen ──▶ ƒ Verkleinern ──▶ ƒ Kontrast (OpenCV im Host) ──▶ ƒ Deuten
 ///     ──BildGedeutet──▶ Übersetzung der Domäne ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“) ──ImagePairKomplett──▶ der Klassifizierer reagiert
 ///     (ein Client, der ihn verkörpert).
@@ -36,23 +36,22 @@ namespace Infrastructure.Integration.Tests;
 /// </summary>
 public class AblaufE2ETests
 {
-    /// <summary>Der Client, dessen Eingänge die Dateiwächter sind: er verkörpert das Kamerasystem (Domain.Akteure.Linienrechner).</summary>
-    private const string Linienrechner = "Linienrechner";
+    /// <summary>Die App des Linienrechners (er verkörpert das Kamerasystem) und ihre Quelle, ein Dateiwächter (Domain.Akteure.KameraApp).</summary>
+    private const string KameraApp = "KameraApp", Quelle = "Kamera";
 
-    /// <summary>Der Rechner, auf dem die Eingänge lauschen — im Cluster nennt jeder Eingang seinen (eine Quelle lauscht genau einmal).</summary>
+    /// <summary>Der Rechner der Instanzen der Kamera-App (ihr Rechnerdienst läuft hier in-process).</summary>
     private const string Linienrechnername = "linien";
 
     /// <summary>
-    /// Die Host-Verdrahtung wie Host.Grpc: Framework (samt Graphen und Uhr), Projektionen, je Graph eine Instanz, die Eingänge des Linienrechners (je
-    /// Verzeichnis einer, auf dem Rechner dieses Hosts) und die Technik mit den Werten ihrer Knoten und Eingänge.
+    /// Die Host-Verdrahtung wie Host.Grpc: Framework (samt Graphen und Uhr), Projektionen, je Graph eine Instanz und die Technik mit den Werten ihrer
+    /// Knoten. Quellen laufen nicht hier, sondern im Rechnerdienst (<see cref="Lauf"/>).
     /// </summary>
-    private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc, params (string Name, string Pfad)[] linien)
+    private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc)
     {
         s.AddCqrsFramework(opts =>
         {
             opts.EnableGrpc = grpc;
             opts.ClusterName = cluster;
-            if (linien.Length > 0) opts.Rechner = Linienrechnername;
         });
         s.AddGeneratedPullPaths();   // die Projektionen füllen die Read-Models, die die Datensatz-Funktionen lesen
         KnotenKonfig Bild(bool mitPfad)
@@ -68,33 +67,89 @@ public class AblaufE2ETests
             [nameof(Kontrastausgleich)] = Bild(true),
         });
         s.AddSingleton(instanzen);
-        var eingaenge = Eingaenge(linien);
-        s.AddSingleton(eingaenge);
-        TechnikExtensions.BindeTechnik(s, instanzen, eingaenge);
+        TechnikExtensions.BindeTechnik(s, instanzen);
     }
 
     /// <summary>
-    /// Die Eingänge des Linienrechners (Clients:Linienrechner:Eingaenge), geprüft wie beim Start (<see cref="Infrastructure.Quellen.Eingaenge.Aus"/>):
-    /// je Verzeichnis ein Dateiwächter für das Kamerasystem auf dem Rechner <see cref="Linienrechnername"/>.
+    /// Ein Host mit gRPC (wie Host.Grpc) und daneben der Lauf der Quellen des Rechnerdiensts (in-process, über die Leitung wie Host.Rechner): je Verzeichnis
+    /// eine Instanz der Kamera-App, ihre Quelle ein Dateiwächter. Ein Neustart des Rechnerdiensts ist ein neuer Lauf.
+    /// </summary>
+    private sealed class Lauf : IAsyncDisposable
+    {
+        public required WebApplication Host { get; init; }
+        public required int Port { get; init; }
+        public Client.Infrastructure.Quellen.Quellenlauf? Quellen { get; private set; }
+        private CancellationTokenSource? _ende;
+        private Task? _quellen;
+        private ServiceProvider? _dienste;
+
+        public static async Task<Lauf> StarteAsync(string ausgabe, string cluster, params (string Name, string Pfad)[] linien)
+        {
+            var port = FreierPort();
+            var builder = WebApplication.CreateBuilder();
+            builder.Logging.ClearProviders();
+            builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, port, l => l.Protocols = HttpProtocols.Http2));
+            builder.Services.AddGrpc();
+            Verdrahte(builder.Services, ausgabe, cluster, grpc: true);
+            var app = builder.Build();
+            app.MapCqrsGrpcService();
+            await app.StartAsync();
+            var lauf = new Lauf { Host = app, Port = port };
+            if (linien.Length > 0) lauf.StarteQuellen(linien);
+            return lauf;
+        }
+
+        /// <summary>Startet den Lauf der Quellen (neu: ein Neustart des Rechnerdiensts — die Quellarten beginnen ohne Gedächtnis).</summary>
+        public void StarteQuellen(params (string Name, string Pfad)[] linien)
+        {
+            var eingaenge = Eingaenge(linien);
+            _dienste = new ServiceCollection().AddLogging().BindeTechnik(GraphInstanzen.Keine, eingaenge).BuildServiceProvider();
+            var a = Infrastructure.Komposition.Anwendung.Aktuell;
+            _ende = new CancellationTokenSource();
+            Quellen = new Client.Infrastructure.Quellen.Quellenlauf(eingaenge, linien.ToDictionary(l => l.Name, l => Kamera(l.Pfad)), a.Akteure.AppVertraege,
+                _dienste, a.Nutzlast!, antwortfrist: TimeSpan.FromSeconds(2));
+            _quellen = Quellen.LaufeAsync($"http://127.0.0.1:{Port}", _ende.Token);
+        }
+
+        /// <summary>Hält den Lauf der Quellen an (der Rechnerdienst fällt aus).</summary>
+        public async Task StoppeQuellenAsync()
+        {
+            if (_ende is null) return;
+            await _ende.CancelAsync();
+            try { if (_quellen is not null) await _quellen; } catch { /* beendet */ }
+            if (_dienste is not null) await _dienste.DisposeAsync();
+            _ende = null;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await StoppeQuellenAsync();
+            await Host.StopAsync();
+            await Host.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Die Instanzen der Kamera-App (<c>KameraApp([Uebersetzt&lt;…&gt;] Dateiwaechter Kamera) : IApp&lt;Linienrechner&gt;</c>), geprüft wie im Rechnerdienst
+    /// (<see cref="Infrastructure.Quellen.Eingaenge.Aus"/>): je Verzeichnis eine Instanz auf dem Rechner <see cref="Linienrechnername"/>, ihre Quelle
+    /// ein Dateiwächter für das Kamerasystem.
     /// </summary>
     private static Infrastructure.Quellen.Eingaenge Eingaenge(params (string Name, string Pfad)[] linien)
     {
         if (linien.Length == 0) return Infrastructure.Quellen.Eingaenge.Keine;
-        var client = new ClientKonfig();
-        foreach (var (name, pfad) in linien) client.Eingaenge[name] = Waechter(pfad);
         var a = Infrastructure.Komposition.Anwendung.Aktuell;
-        return Infrastructure.Quellen.Eingaenge.Aus(new Dictionary<string, ClientKonfig> { [Linienrechner] = client }, a.Funktionen.Bausteine,
-            new Uebersetzungen(a.Funktionen.Uebersetzungen), a.Akteure.Rechte, a.Akteure.ClientVertraege, einzelknoten: false);
+        return Infrastructure.Quellen.Eingaenge.Aus(linien.ToDictionary(l => l.Name, l => Kamera(l.Pfad)), a.Akteure.AppVertraege, a.Funktionen.Bausteine,
+            new Uebersetzungen(a.Funktionen.Uebersetzungen), a.Akteure.Rechte, tokens: null);
     }
 
-    /// <summary>Ein Eingang mit Dateiwächter auf <paramref name="pfad"/> (*.tiff, schnell: Scan alle 200 ms, fertig nach 300 ms Ruhe).</summary>
-    private static EingangKonfig Waechter(string pfad) => new()
+    /// <summary>Eine Instanz der Kamera-App, ihr Dateiwächter auf <paramref name="pfad"/> (*.tiff, schnell: Scan alle 200 ms, fertig nach 300 ms Ruhe).</summary>
+    private static AppInstanzKonfig Kamera(string pfad) => new()
     {
-        Art = nameof(Core.Katalog.Dateiwaechter), Akteur = "KameraSystem", Rechner = Linienrechnername,
-        Werte = { ["Pfad"] = pfad, ["Muster:0"] = "*.tiff", ["Intervall"] = "00:00:00.200", ["Fenster"] = "00:00:00.300" },
+        App = KameraApp, Rechner = Linienrechnername,
+        Quellen = { [Quelle] = new QuelleKonfig { Werte = { ["Pfad"] = pfad, ["Muster:0"] = "*.tiff", ["Intervall"] = "00:00:00.200", ["Fenster"] = "00:00:00.300" } } },
     };
 
-    /// <summary>Ein Eingangsname je Lauf: der Zustand eines Eingangs bleibt in der geteilten DB über den Test hinaus.</summary>
+    /// <summary>Ein Instanzname je Lauf: der Zustand einer Quelle bleibt in der geteilten DB über den Test hinaus.</summary>
     private static string Linie(string name) => name + "-" + Guid.NewGuid().ToString("N")[..6];
 
     /// <summary>Ein echtes, kleines TIFF (OpenCV liest es) — geschrieben in <paramref name="verzeichnis"/>; Name und Pfad.</summary>
@@ -118,14 +173,10 @@ public class AblaufE2ETests
         var eingang = Path.Combine(verzeichnis, "ein");
         Directory.CreateDirectory(eingang);
         var linie = Linie("linie1");
-        var builder = Host.CreateApplicationBuilder();
-        Verdrahte(builder.Services, ausgabe, "ablauf-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false, (linie, eingang));
-
-        using var host = builder.Build();
-        await host.StartAsync();
+        var lauf = await Lauf.StarteAsync(ausgabe, "ablauf-e2e-" + Guid.NewGuid().ToString("N")[..8], (linie, eingang));
         try
         {
-            var es = host.Services.GetRequiredService<IEventStoreRepository>();
+            var es = lauf.Host.Services.GetRequiredService<IEventStoreRepository>();
             var t = Zufallszeit(8);
             var dc0 = Datei(eingang, t, BildVersion.Dc0);
             var dc2 = Datei(eingang, t, BildVersion.Dc2);
@@ -151,20 +202,20 @@ public class AblaufE2ETests
             bildEnv.Wirker.Should().Be("decide:ImagePair/NimmBildAuf");
             bildEnv.Ueber.Should().Be(WirkerId.FuerUebersetzung("BildGedeutet_NimmBildAuf_1"),
                 "der Absender des Commands ist die Übersetzung, die ihn aus BildGedeutet machte (W9)");
-            bildEnv.UserId.Should().Be("KameraSystem", "die Kette trägt den Akteur ihres Auslösers — des Eingangs");
+            bildEnv.UserId.Should().Be("KameraSystem", "die Kette trägt den Akteur ihres Auslösers — der Quelle (über die Leitung wie eine App)");
             Spur.ZerlegeUrsache(bildEnv.Ursache, out var quelle, out var version).Should().BeTrue();
             Guid Element((string Name, string Pfad) d)
             {
                 var fi = new FileInfo(d.Pfad);
-                return Kettenvertrag.Element(Linienrechner + "/" + linie, new DateiGefunden(d.Name, d.Pfad, d.Name, fi.Length,
+                return Kettenvertrag.Element(linie + "/" + Quelle, new DateiGefunden(d.Name, d.Pfad, d.Name, fi.Length,
                     new DateTimeOffset(fi.LastWriteTimeUtc, TimeSpan.Zero), default));
             }
-            new[] { Element(dc0), Element(dc2) }.Should().Contain(quelle, "die Ursache ist das Element des Eingangs — aus Eingang und Kennung der Datei");
+            new[] { Element(dc0), Element(dc2) }.Should().Contain(quelle, "die Ursache ist das Element der Quelle — aus Instanz, Quelle und Kennung der Datei");
             version.Should().Be(0);
         }
         finally
         {
-            await host.StopAsync();
+            await lauf.DisposeAsync();
             try { Directory.Delete(verzeichnis, recursive: true); } catch { /* egal */ }
         }
     }
@@ -180,17 +231,11 @@ public class AblaufE2ETests
 
         var verzeichnis = Path.Combine(Path.GetTempPath(), "ablauf-py-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(verzeichnis);
-        var port = FreierPort();
-        var builder = WebApplication.CreateBuilder();
-        builder.Logging.ClearProviders();
-        builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, port, l => l.Protocols = HttpProtocols.Http2));
-        builder.Services.AddGrpc();
         var eingangPy = Path.Combine(verzeichnis, "ein");
         Directory.CreateDirectory(eingangPy);
-        Verdrahte(builder.Services, Path.Combine(verzeichnis, "vorschau"), "ablauf-py-" + Guid.NewGuid().ToString("N")[..8], grpc: true, (Linie("linie1"), eingangPy));
-        var app = builder.Build();
-        app.MapCqrsGrpcService();
-        await app.StartAsync();
+        var lauf = await Lauf.StarteAsync(Path.Combine(verzeichnis, "vorschau"), "ablauf-py-" + Guid.NewGuid().ToString("N")[..8], (Linie("linie1"), eingangPy));
+        var app = lauf.Host;
+        var port = lauf.Port;
 
         var ausgabe = new System.Collections.Concurrent.ConcurrentQueue<string>();
         using var worker = new Process
@@ -235,7 +280,7 @@ public class AblaufE2ETests
         finally
         {
             try { if (!worker.HasExited) worker.Kill(entireProcessTree: true); } catch { /* egal */ }
-            await app.StopAsync();
+            await lauf.DisposeAsync();
             try { Directory.Delete(verzeichnis, recursive: true); } catch { /* egal */ }
         }
     }
@@ -328,78 +373,52 @@ public class AblaufE2ETests
     }
 
     /// <summary>
-    /// P1 (docs/04 §4.7): der Dateiwächter des Katalogs als Eingang des Linienrechners gegen ein Temp-Verzeichnis — eine Datei führt in genau einem Lauf
-    /// bis BildVerfuegbar; danach sichert der Läufer den Zustand des Wächters unter dem Eingang (<c>eingang:Linienrechner</c>, Name des Eingangs); nach
-    /// einem Neustart (neuer Host, dieselbe Datenbank) hat der Wächter diesen Zustand und meldet nichts erneut. Der Eingang lauscht genau einmal im
-    /// Cluster, auf seinem Rechner.
+    /// P1 (docs/04 §4.7, docs/10 E18): der Dateiwächter des Katalogs als Quelle einer Instanz der Kamera-App gegen ein Temp-Verzeichnis — eine
+    /// Datei führt in genau einem Lauf bis BildVerfuegbar. Nach einem Neustart des Rechnerdiensts meldet der Wächter sie erneut (er merkt sich nichts über
+    /// den Lauf hinaus) — mit derselben Kennung aus dem Inhalt: dieselben Ids, das Backend verwirft die Wiederholung, sie wirkt nicht noch einmal.
     /// </summary>
     [Trait("Kategorie", "Garantie")]
     [Fact]
-    public async Task Dateiwaechter_meldet_eine_Datei_genau_einmal_auch_nach_Neustart()
+    public async Task Dateiwaechter_wirkt_eine_Datei_genau_einmal_auch_wenn_er_sie_nach_einem_Neustart_erneut_meldet()
     {
         var verzeichnis = Path.Combine(Path.GetTempPath(), "quelle-e2e-" + Guid.NewGuid().ToString("N"));
         var eingangsOrdner = Path.Combine(verzeichnis, "ein");
         Directory.CreateDirectory(eingangsOrdner);
-        // Derselbe Eingang über beide Hosts (der Zustand gilt je Eingang über Neustarts), ein eigener je Lauf (die DB ist geteilt).
         var linie = Linie("linie1");
-        IHost Baue()
-        {
-            var builder = Host.CreateApplicationBuilder();
-            Verdrahte(builder.Services, Path.Combine(verzeichnis, "vorschau"), "quelle-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false, (linie, eingangsOrdner));
-            return builder.Build();
-        }
-        Task<GesicherterZustand?> Gesichert(IHost host) =>
-            host.Services.GetRequiredService<IZustandsAblage>().LadeAsync("eingang:" + Linienrechner, linie, default);
-
         var t = Zufallszeit(12);
         var datei = Datei(Path.Combine(verzeichnis, "vorlage"), t, BildVersion.Dc0);
         var paar = Aufnahmename.Resolve(datei.Name)!.Paar;
+        var lauf = await Lauf.StarteAsync(Path.Combine(verzeichnis, "vorschau"), "quelle-e2e-" + Guid.NewGuid().ToString("N")[..8], (linie, eingangsOrdner));
         try
         {
-            using (var host = Baue())
-            {
-                await host.StartAsync();
-                try
-                {
-                    (await Gesichert(host)).Should().BeNull("ein neuer Eingang hat noch nichts gesehen");
-                    var es = host.Services.GetRequiredService<IEventStoreRepository>();
-                    File.Copy(datei.Pfad, Path.Combine(eingangsOrdner, datei.Name));
-                    await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildVerfuegbar), TimeSpan.FromSeconds(60),
-                        "Die Datei führte nicht bis BildVerfuegbar — Dateiwächter → Bildaufbereitung lief nicht durch.");
-                    await Warte(async () => (await Gesichert(host))?.Nummer == 1, TimeSpan.FromSeconds(30),
-                        "Der Zustand des Wächters wurde nach dem Hineingeben der Datei nicht unter dem Eingang gesichert.");
-                }
-                finally { await host.StopAsync(); }
-            }
+            var es = lauf.Host.Services.GetRequiredService<IEventStoreRepository>();
+            File.Copy(datei.Pfad, Path.Combine(eingangsOrdner, datei.Name));
+            await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildVerfuegbar), TimeSpan.FromSeconds(60),
+                "Die Datei führte nicht bis BildVerfuegbar — Dateiwächter → Leitung → Bildaufbereitung lief nicht durch.");
 
-            using (var host = Baue())
-            {
-                await host.StartAsync();
-                try
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(3));   // viele Scans über das Fertig-Fenster hinaus
-                    var es = host.Services.GetRequiredService<IEventStoreRepository>();
-                    (await es.ReadStreamAsync(paar, 0, default)).Count(e => e.Payload is ImagePairErstellt).Should().Be(1);
-                    (await es.ReadStreamAsync(paar, 0, default)).Count(e => e.Payload is BildVerfuegbar).Should().Be(1,
-                        "der gesicherte Zustand kennt die Datei — kein zweiter Lauf");
-                    (await Gesichert(host))!.Nummer.Should().Be(1, "nichts Neues gemeldet, nichts neu gesichert");
-                }
-                finally { await host.StopAsync(); }
-            }
+            // Der Rechnerdienst fällt aus und kommt wieder: der neue Wächter meldet die Datei erneut.
+            await lauf.StoppeQuellenAsync();
+            lauf.StarteQuellen((linie, eingangsOrdner));
+            await Warte(() => Task.FromResult(lauf.Quellen!.Laeufer.TryGetValue(linie + "/" + Quelle, out var l) && l.Hineingegeben >= 1),
+                TimeSpan.FromSeconds(30), "Nach dem Neustart hat der Wächter die Datei nicht erneut gemeldet.");
+            await Task.Delay(TimeSpan.FromSeconds(5));   // was eine zweite Kette noch täte
+            var stream = await es.ReadStreamAsync(paar, 0, default);
+            stream.Count(e => e.Payload is ImagePairErstellt).Should().Be(1);
+            stream.Count(e => e.Payload is BildVerfuegbar).Should().Be(1, "dieselbe Kennung ergibt dieselben Ids — das Backend verwirft die Wiederholung");
         }
         finally
         {
+            await lauf.DisposeAsync();
             try { Directory.Delete(verzeichnis, recursive: true); } catch { /* egal */ }
         }
     }
 
     /// <summary>
-    /// Mehrere Verzeichnisse sind mehrere Eingänge eines Clients (docs/04 §4.7): zwei Dateiwächter des Linienrechners (je eine Datei des Paars) geben
-    /// beide in dieselbe Bildaufbereitung — der Graph läuft je Umgebung einmal —, beide führen bis zum Paar; jeder Eingang sichert seinen eigenen
-    /// Wächter-Zustand.
+    /// Mehrere Verzeichnisse sind mehrere Instanzen einer App (docs/04 §4.7): zwei Instanzen der Kamera-App (je eine Datei des Paars) geben beide in
+    /// dieselbe Bildaufbereitung — der Graph läuft je Umgebung einmal —, beide führen bis zum Paar; jede hat ihre eigene Verbindung und ihren Läufer.
     /// </summary>
     [Fact]
-    public async Task Zwei_Eingaenge_eines_Clients_auf_zwei_Verzeichnissen()
+    public async Task Zwei_Instanzen_einer_App_auf_zwei_Verzeichnissen()
     {
         var verzeichnis = Path.Combine(Path.GetTempPath(), "zwei-linien-" + Guid.NewGuid().ToString("N"));
         var linie1 = Path.Combine(verzeichnis, "linie1");
@@ -407,31 +426,23 @@ public class AblaufE2ETests
         Directory.CreateDirectory(linie1);
         Directory.CreateDirectory(linie2);
         var (n1, n2) = (Linie("linie1"), Linie("linie2"));
-        var builder = Host.CreateApplicationBuilder();
-        Verdrahte(builder.Services, Path.Combine(verzeichnis, "vorschau"), "zwei-linien-" + Guid.NewGuid().ToString("N")[..8], grpc: false,
-            (n1, linie1), (n2, linie2));
-        using var host = builder.Build();
-        await host.StartAsync();
+        var lauf = await Lauf.StarteAsync(Path.Combine(verzeichnis, "vorschau"), "zwei-linien-" + Guid.NewGuid().ToString("N")[..8], (n1, linie1), (n2, linie2));
         try
         {
-            host.Services.GetRequiredService<Infrastructure.Quellen.Eingaenge>().Alle.Select(e => e.Ort).Should()
-                .BeEquivalentTo([Linienrechner + "/" + n1, Linienrechner + "/" + n2], "je Verzeichnis ein Eingang desselben Clients");
-            host.Services.GetRequiredService<GraphInstanzen>().Alle.Count(i => i.Graph.Name == nameof(Bildaufbereitung)).Should().Be(1);
+            lauf.Host.Services.GetRequiredService<GraphInstanzen>().Alle.Count(i => i.Graph.Name == nameof(Bildaufbereitung)).Should().Be(1);
             var t = Zufallszeit(14);
             var dc0 = Datei(linie1, t, BildVersion.Dc0);
             Datei(linie2, t, BildVersion.Dc2);
             var paar = Aufnahmename.Resolve(dc0.Name)!.Paar;
-            var es = host.Services.GetRequiredService<IEventStoreRepository>();
+            var es = lauf.Host.Services.GetRequiredService<IEventStoreRepository>();
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is ImagePairKomplett), TimeSpan.FromSeconds(60),
                 "Das Paar wurde nicht komplett — je Linie ein Wächter, je Datei ein Lauf.");
-            var ablage = host.Services.GetRequiredService<IZustandsAblage>();
-            await Warte(async () => await ablage.LadeAsync("eingang:" + Linienrechner, n1, default) is { Nummer: 1 }
-                    && await ablage.LadeAsync("eingang:" + Linienrechner, n2, default) is { Nummer: 1 },
-                TimeSpan.FromSeconds(30), "jeder Eingang sichert seinen eigenen Wächter-Zustand");
+            lauf.Quellen!.Laeufer.Keys.Should().BeEquivalentTo([n1 + "/" + Quelle, n2 + "/" + Quelle], "je Verzeichnis eine Instanz derselben App");
+            lauf.Quellen.Laeufer.Values.Should().OnlyContain(l => l.Hineingegeben == 1, "jede Instanz gab ihre Datei hinein");
         }
         finally
         {
-            await host.StopAsync();
+            await lauf.DisposeAsync();
             try { Directory.Delete(verzeichnis, recursive: true); } catch { /* egal */ }
         }
     }

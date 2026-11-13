@@ -1,4 +1,5 @@
 using Abstractions;
+using Core.Katalog;
 using Sondenkatalog.Katalog;
 
 // SONDE — die Ablage und ihre VERWIRKLICHUNG (docs/04 §4.7): sie gibt jede abgelegte Katalog-Datei an den Kopf der Dateiannahme (eine Nachricht des
@@ -24,3 +25,14 @@ public sealed class Aufruf_NimmKatalogdateiAn_1(Aufruf source) : ITranslate<Aufr
 {
     public NimmKatalogdateiAn Translate() => new(Pfad: source.Inhalt, RelativerPfad: source.Kennung);
 }
+
+/// <summary>Der Ablagerechner: er verkörpert die Ablage — wo er steht und welche Ordner er beobachtet, sagt die Umgebung.</summary>
+public sealed record Ablagerechner : IClient, IVerkoerpert<Ablage>;
+
+/// <summary>Die App des Ablagerechners: zwei Quellen des Frameworks (ein Ordner, ein Webhook des Lieferanten) — keine eigene Software.</summary>
+public sealed record AblageApp(
+    [Uebersetzt<DateiGefunden_NimmKatalogdateiAn_1>] Dateiwaechter Eingangsordner,
+    [Uebersetzt<Aufruf_NimmKatalogdateiAn_1>] Webhook Lieferant) : IApp<Ablagerechner>;
+
+/// <summary>Die Oberfläche der Katalogpflege als App: alles, was die Katalogpflege tut, über die App selbst.</summary>
+public sealed record KatalogpflegeApp : IApp<KatalogpflegeOberflaeche>;

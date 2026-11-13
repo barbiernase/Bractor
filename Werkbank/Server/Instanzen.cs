@@ -5,28 +5,30 @@ using Abstractions;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Die Instanzen der Graphen einer Umgebung (<c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>, docs/04 §4.4, docs/10 §10.3.5): lesen (unaufgelöst,
-/// wie sie dastehen) und — als Geste — schreiben bzw. entfernen. Dazu das Formular einer Instanz, abgeleitet aus dem Board (W3): je Knoten (Pfad durch
-/// innere Graphen) die Rahmenfelder, die Felder seiner Konfig-Records und die Wahl seiner Technik.
+/// Die Instanzen einer Umgebung — der Graphen (<c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>, docs/04 §4.4, docs/10 §10.3.5) und der Apps
+/// (<c>apps/&lt;instanz&gt;.json</c>, docs/10 E18): lesen (unaufgelöst, wie sie dastehen) und — als Geste — schreiben bzw. entfernen. Dazu das
+/// Formular einer Instanz eines Graphen bzw. einer Quelle, abgeleitet aus dem Board (W3): die Rahmenfelder, die Felder der Konfig-Records und die Wahl
+/// der Technik.
 /// </summary>
 public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
 {
-    public string Ordner(string umgebung) => Path.Combine(umgebungen.Verzeichnis, umgebung, Projektstruktur.GraphenOrdner);
+    /// <param name="art">Der Ordner der Instanzen: <see cref="Projektstruktur.GraphenOrdner"/> oder <see cref="Projektstruktur.AppsOrdner"/>.</param>
+    public string Ordner(string umgebung, string art = Projektstruktur.GraphenOrdner) => Path.Combine(umgebungen.Verzeichnis, umgebung, art);
 
     /// <summary>Die Datei einer Instanz relativ zur Solution (Pfad im Patch einer Geste).</summary>
-    public string RelativeDatei(string umgebung, string instanz)
+    public string RelativeDatei(string umgebung, string instanz, string art = Projektstruktur.GraphenOrdner)
     {
         if (instanz.Length == 0 || instanz.IndexOfAny(['/', '\\', '.']) >= 0 || umgebung.IndexOfAny(['/', '\\']) >= 0 || umgebung.StartsWith('.'))
             throw new ArgumentException($"Kein gültiger Name: „{umgebung}/{instanz}“.");
-        return Path.GetRelativePath(slnRoot, Path.Combine(Ordner(umgebung), instanz + ".json")).Replace('\\', '/');
+        return Path.GetRelativePath(slnRoot, Path.Combine(Ordner(umgebung, art), instanz + ".json")).Replace('\\', '/');
     }
 
-    /// <summary>Alle Instanzen einer Umgebung: Name → Inhalt (Platzhalter bleiben stehen).</summary>
-    public JsonObject Liste(string umgebung)
+    /// <summary>Alle Instanzen einer Umgebung (Graphen bzw. Apps): Name → Inhalt (Platzhalter bleiben stehen).</summary>
+    public JsonObject Liste(string umgebung, string art = Projektstruktur.GraphenOrdner)
     {
         var aus = new JsonObject();
-        if (!Directory.Exists(Ordner(umgebung))) return aus;
-        foreach (var datei in Directory.GetFiles(Ordner(umgebung), "*.json").OrderBy(d => d, StringComparer.Ordinal))
+        if (!Directory.Exists(Ordner(umgebung, art))) return aus;
+        foreach (var datei in Directory.GetFiles(Ordner(umgebung, art), "*.json").OrderBy(d => d, StringComparer.Ordinal))
             aus[Path.GetFileNameWithoutExtension(datei)] = JsonNode.Parse(File.ReadAllText(datei),
                 documentOptions: new() { CommentHandling = JsonCommentHandling.Skip }) ?? new JsonObject();
         return aus;
@@ -107,11 +109,10 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
     }
 
     /// <summary>
-    /// Das Formular eines Eingangs aus der Quellart <paramref name="art"/> (docs/04 §4.7), aus dem Board: was sie meldet, ob sie Zustand hat, der Standard
-    /// für <c>Offen</c>, die Felder ihrer Konfig-Records (Typ, Standard, Werte eines Enums) und je Technik mit mehr als einer Umsetzung die Wahl — dieselbe
-    /// Ableitung wie am Knoten einer Instanz. Welche Akteure in Frage kommen, steht an der Karte des Clients (<c>sicht.flaeche</c>, W3).
+    /// Das Formular einer Quelle aus der Quellart <paramref name="art"/> (docs/04 §4.7), aus dem Board: was sie meldet, die Felder ihrer Konfig-Records (Typ, Standard, Werte eines Enums) und je Technik mit mehr als einer Umsetzung die Wahl — dieselbe
+    /// Ableitung wie am Knoten einer Instanz.
     /// </summary>
-    public static JsonObject EingangSchema(JsonObject board, string art)
+    public static JsonObject QuelleSchema(JsonObject board, string art)
     {
         var q = Liste(board["quellarten"]).FirstOrDefault(x => S(x, "name") == art) ?? throw new ArgumentException($"Keine Quellart „{art}“.");
         var funktionen = Liste(board["bausteinFunktionen"])
@@ -121,34 +122,12 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
         Bedarf(q, konfigs, technik, funktionen, []);
         return new JsonObject
         {
-            ["art"] = art, ["framework"] = (bool?)q["framework"] == true, ["zustand"] = (string?)q["zustand"],
-            // Eine Annahme (IAnnahme, der Webhook): jeder Host nimmt an — kein Rechner, dafür Pfad und Schlüssel (Werte ihrer Konfig).
+            ["art"] = art, ["framework"] = (bool?)q["framework"] == true,
+            // Eine Annahme (IAnnahme, der Webhook): der Rechnerdienst nimmt auf dem Port der Instanz an — dafür Pfad und Schlüssel (Werte ihrer Konfig).
             ["annahme"] = (bool?)q["annahme"] == true, ["route"] = Annahmevertrag.Route,
             ["meldet"] = (q["meldet"] ?? new JsonArray()).DeepClone(),
-            ["offenStandard"] = EingangKonfig.StandardOffen, ["konfigs"] = konfigs, ["technik"] = technik,
+            ["konfigs"] = konfigs, ["technik"] = technik,
         };
-    }
-
-    /// <summary>
-    /// Ein Eingang eines Clients in <c>umgebung.json</c> setzen (<paramref name="eingang"/>) bzw. entfernen (null): der Text der ganzen Datei danach —
-    /// geschrieben wird er als Geste (Verlauf, ↶, Branch-Sperre). Die übrigen Werte der Datei bleiben, wie sie dastehen (unaufgelöst).
-    /// </summary>
-    public string MitEingang(string umgebung, string client, string name, JsonObject? eingang)
-    {
-        if (!System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z0-9_-]+$")) throw new ArgumentException($"Kein gültiger Name für einen Eingang: „{name}“.");
-        if (!System.Text.RegularExpressions.Regex.IsMatch(client, "^[A-Za-z_][A-Za-z0-9_]*$")) throw new ArgumentException($"Kein Client: „{client}“.");
-        var inhalt = umgebungen.Roh(umgebung);
-        if (inhalt[UmgebungsAbschnitte.Clients] is not JsonObject clients) inhalt[UmgebungsAbschnitte.Clients] = clients = new JsonObject();
-        if (clients[client] is not JsonObject c) clients[client] = c = new JsonObject();
-        if (c[nameof(ClientKonfig.Eingaenge)] is not JsonObject alle) c[nameof(ClientKonfig.Eingaenge)] = alle = new JsonObject();
-        if (eingang == null)
-        {
-            if (!alle.Remove(name)) throw new ArgumentException($"Einen Eingang {client}/{name} gibt es in „{umgebung}“ nicht.");
-            if (alle.Count == 0) c.Remove(nameof(ClientKonfig.Eingaenge));
-            if (c.Count == 0) clients.Remove(client);
-        }
-        else alle[name] = eingang.DeepClone();
-        return Umgebungen.Text(inhalt);
     }
 
     /// <summary>
@@ -187,8 +166,8 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
     }
 
     /// <summary>
-    /// Wo welche Umsetzung einer Technik gewählt ist (<c>Technik</c> am Knoten einer Instanz bzw. an einem Eingang eines Clients), über alle Umgebungen:
-    /// Schnittstelle → [{umgebung, wo (<c>instanz/Knoten</c> bzw. <c>Client/Eingang</c>), umsetzung}]. Gelesen wie die Dateien dastehen (unaufgelöst); der
+    /// Wo welche Umsetzung einer Technik gewählt ist (<c>Technik</c> am Knoten einer Instanz bzw. an einer Quelle einer App-Instanz), über alle Umgebungen:
+    /// Schnittstelle → [{umgebung, wo (<c>instanz/Knoten</c> bzw. <c>App-Instanz/Quelle</c>), umsetzung}]. Gelesen wie die Dateien dastehen (unaufgelöst); der
     /// Editor zeigt es nur („gewählt in …“, W3).
     /// </summary>
     public JsonObject TechnikWahl()
@@ -212,11 +191,10 @@ public sealed class Instanzen(string slnRoot, Umgebungen umgebungen)
                     if (inhalt is JsonObject i)
                         foreach (var (knoten, wert) in i)
                             if (wert is JsonObject k) Dazu(k[nameof(KnotenKonfig.Technik)], name, instanz + "/" + knoten);
-                if (umgebungen.Roh(name)[UmgebungsAbschnitte.Clients] is JsonObject clients)
-                    foreach (var (client, c) in clients)
-                        if (c?[nameof(ClientKonfig.Eingaenge)] is JsonObject eingaenge)
-                            foreach (var (eingang, e) in eingaenge)
-                                Dazu(e?[nameof(EingangKonfig.Technik)], name, client + "/" + eingang);
+                foreach (var (app, inhalt) in Liste(name, Projektstruktur.AppsOrdner))
+                    if (inhalt?[nameof(AppInstanzKonfig.Quellen)] is JsonObject quellen)
+                        foreach (var (quelle, q) in quellen)
+                            Dazu(q?[nameof(QuelleKonfig.Technik)], name, app + "/" + quelle);
             }
             catch (Exception ex) when (ex is JsonException or IOException) { /* eine kaputte Datei meldet ⟳; hier zählt sie nicht */ }
         }

@@ -346,6 +346,7 @@ public sealed partial class Sicht
         switch (n.Art)
         {
             case "client": return _domaene[n.Id] = ClientPraefix + S(n.Ref, "name");
+            case "app": return _domaene[n.Id] = ClientPraefix + S(n.Ref, "client");
             case "akteur":
             {
                 // Was er hineingibt: seine Befugnisse; bei einer Funktion, die er rechnen darf, deren Ausgaben.

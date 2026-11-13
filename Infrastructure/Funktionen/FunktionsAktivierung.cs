@@ -27,7 +27,6 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     private readonly bool _technikZustand;
     private readonly KnotenKontext? _knoten;
     private readonly IZustandsAblage? _ablage;
-    private readonly bool _quelle;
     private AsyncServiceScope? _bereich;
     private object? _umsetzung;
     private object? _zustand;
@@ -39,11 +38,9 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     /// <param name="technikZustand">Trägt eine Technik in der Konstruktor-Kette Zustand (<see cref="TechnikWahl.MitZustand"/>)?</param>
     /// <param name="knoten">Der Knoten der Instanz, für den gebaut wird: seine Konfig-Records und seine Technik-Wahl (<see cref="KnotenBereich"/>).</param>
     /// <param name="ablage">Wo der Zustand gesichert ist (null: ein Prüfstand — frisch bei jeder Aktivierung).</param>
-    /// <param name="quelle">Eine Quellart (der Läufer eines Eingangs): sie sichert ihre laufende Nummer auch ohne Zustand.</param>
     public FunktionsAktivierung(IServiceProvider wurzel, Func<IServiceProvider, object?, object> baue, FunktionsZustandsform? zustand = null,
-        string name = "", bool technikZustand = false, KnotenKontext? knoten = null, IZustandsAblage? ablage = null, bool quelle = false)
+        string name = "", bool technikZustand = false, KnotenKontext? knoten = null, IZustandsAblage? ablage = null)
     {
-        _quelle = quelle;
         _knoten = knoten;
         _ablage = ablage;
         _wurzel = wurzel;
@@ -59,13 +56,13 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     /// <summary>Die Umsetzung dieser Aktivierung (nach <see cref="BeginneAsync"/>).</summary>
     public object Umsetzung => _umsetzung ?? throw new InvalidOperationException("Die Aktivierung ist nicht begonnen oder schon freigegeben.");
 
-    /// <summary>Die Nummer des letzten Elements, die diese Aktivierung gesichert vorfand bzw. zählte (eine Quelle zählt ihre Elemente hier).</summary>
+    /// <summary>Die Nummer des letzten Aufrufs, die diese Aktivierung gesichert vorfand.</summary>
     public long Nummer { get; set; }
 
     /// <summary>Das Bild der Zustände jetzt (der eigene und der jeder Technik), oder null ohne Zustand.</summary>
     public byte[]? Schnappschuss()
     {
-        if (!MitZustand && !_quelle || _umsetzung is null) return null;
+        if (!MitZustand || _umsetzung is null) return null;
         var je = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         if (_form is not null && _zustand is not null) je[""] = _form.Schreibe(_zustand);
         if (_bereich?.ServiceProvider.GetService<AktivierungsZustaende>() is { } technik)
@@ -85,7 +82,7 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
         {
             _zustand = _form?.Neu();
             if (_knoten is not null && bereich.ServiceProvider.GetService<KnotenBereich>() is { } k) k.Kontext = _knoten;
-            if ((MitZustand || _quelle) && _ablage is not null && _knoten is not null && await _ablage.LadeAsync(_knoten.Instanz, _knoten.Knoten, default) is { } gesichert)
+            if (MitZustand && _ablage is not null && _knoten is not null && await _ablage.LadeAsync(_knoten.Instanz, _knoten.Knoten, default) is { } gesichert)
             {
                 var je = Zustandsbild.Entpacke(gesichert.Bild);
                 if (_form is not null && _zustand is not null && je.TryGetValue("", out var eigen)) _form.Lies(_zustand, eigen);

@@ -89,7 +89,7 @@ public class KreislaufAbnahmeTests
         (schritt["karten"] as JsonArray).Should().NotBeEmpty("der Schritt liegt auf Karten des Boards");
 
         var board = JsonNode.Parse(await w.Http.GetStringAsync("/api/editor/model"))!.AsObject();
-        // ── 2b. Die Fläche in sieben Spalten und die Komposition (docs/10 §10.9): Karten, Ports, Kanten aus dem Code, die Eingänge der Clients aus der Umgebung ──
+        // ── 2b. Die Fläche in acht Spalten und die Komposition (docs/10 §10.9): Karten, Ports, Kanten aus dem Code, Rechner und App-Instanzen aus der Umgebung ──
         var flaeche = board["sicht"]!["flaeche"]!.AsObject();
         var flKarten = flaeche["karten"]!.AsArray().OfType<JsonObject>().ToList();
         string Spalte(string id) => (string)flKarten.Single(k => (string?)k["id"] == id)["spalte"]!;
@@ -97,15 +97,21 @@ public class KreislaufAbnahmeTests
         Spalte("agg:ImagePair").Should().Be("aggregate");
         Spalte("akt:akteur:Klassifizierer|aus").Should().Be("ausgang");
         Spalte("akt:akteur:Klassifizierer|ein").Should().Be("eingang");
-        flKarten.Should().NotContain(k => (string?)k["spalte"] == "quellen", "ein Graph kennt keine Quelle — der Dateiwächter ist ein Eingang des Linienrechners");
+        flKarten.Should().NotContain(k => (string?)k["spalte"] == "quellen", "ein Graph kennt keine Quelle — der Dateiwächter ist eine Quelle der Kamera-App");
         Spalte("cl:client:Linienrechner").Should().Be("clients");
-        // Der Eingang linie1 des Linienrechners (sim-main) gibt über seine Verwirklichung LiesBild an das KameraSystem — eine Kante, ohne Befund.
-        var sim = flaeche["eingaenge"]!["sim-main"]!.AsObject();
-        var linie1 = sim["karten"]!["cl:client:Linienrechner"]!["eingaenge"]!.AsArray().OfType<JsonObject>().Single(e => (string?)e["name"] == "linie1");
-        ((string?)linie1["art"]).Should().Be("Dateiwaechter");
+        // Die App-Instanz linie1 (sim-main, Kamera-App auf localhost) gibt mit ihrer Quelle Kamera über die Übersetzung LiesBild an das KameraSystem — eine
+        //   Kante vom Rechner zum Akteur, eine zum Client, ohne Befund.
+        var sim = flaeche["rechner"]!["sim-main"]!.AsObject();
+        sim["karten"]!.AsArray().OfType<JsonObject>().Should().Contain(k => (string?)k["id"] == "re:localhost" && (string?)k["spalte"] == "rechner");
+        var linie1 = sim["apps"]!["linie1"]!.AsObject();
+        ((string?)linie1["app"]).Should().Be("KameraApp");
         linie1["befunde"]!.AsArray().Should().BeEmpty();
-        sim["kanten"]!.AsArray().OfType<JsonObject>().Should().Contain(k => (string?)k["eingang"] == "linie1"
+        var kamera = linie1["quellen"]!.AsArray().OfType<JsonObject>().Single();
+        ((string?)kamera["quellart"]).Should().Be("Dateiwaechter");
+        kamera["befunde"]!.AsArray().Should().BeEmpty();
+        sim["kanten"]!.AsArray().OfType<JsonObject>().Should().Contain(k => (string?)k["eingang"] == "linie1/Kamera"
             && (string?)k["nach"] == "akt:akteur:KameraSystem|aus" && (string?)k["typ"] == "LiesBild");
+        sim["kanten"]!.AsArray().OfType<JsonObject>().Should().Contain(k => (string?)k["app"] == "linie1" && (string?)k["nach"] == "cl:client:Linienrechner");
         FlaechenKanten(board).Should().Contain(["agg:ImagePair -ImagePairKomplett/kenntnis-> akt:akteur:Klassifizierer|ein"]);
         KompositionsKanten(board, "Bildaufbereitung").Should().Contain("Verkleinern -BildVerkleinert-> Kontrast");
 
@@ -131,25 +137,26 @@ public class KreislaufAbnahmeTests
         foreach (var d in gestenDateien.Distinct())
             (await File.ReadAllBytesAsync(Path.Combine(w.Kopie, d))).Should().Equal(vorGesten[d], $"{d}: ↶ stellt die Datei byte-gleich wieder her");
 
-        // ── 3. ▶ Worker: der Klassifikations-Worker (ein Python-Client) verkörpert den Klassifizierer; ein Bildpaar läuft durch die Bildaufbereitung ──
-        var (_, worker) = await w.SendeAsync("/api/werkbank/worker/KlassifikationsWorker/start");
+        // ── 3. ▶ App: die Instanz klassifikation (KlassifikationsApp, Python) setzt den Klassifikations-Worker um, der den Klassifizierer verkörpert; ein
+        //   Bildpaar läuft durch die Bildaufbereitung ──
+        var (_, worker) = await w.SendeAsync("/api/werkbank/worker/klassifikation/start");
         ((bool?)worker["ok"]).Should().BeTrue(worker.ToJsonString());
-        async Task<string> WorkerLog() => string.Join("\n", (JsonNode.Parse(await w.Http.GetStringAsync("/api/werkbank/worker/KlassifikationsWorker/log")) as JsonArray ?? [])
+        async Task<string> WorkerLog() => string.Join("\n", (JsonNode.Parse(await w.Http.GetStringAsync("/api/werkbank/worker/klassifikation/log")) as JsonArray ?? [])
             .Select(z => (string?)z));
         await Werkbanklauf.Warte(async () => (await WorkerLog()).Contains("Arbeit angenommen", StringComparison.Ordinal), TimeSpan.FromSeconds(60),
             "Der Python-Worker hat die Arbeit des Klassifizierers nicht angenommen.");
 
         var t = new DateTimeOffset(2026, 10, 15, 8, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
-        // Die Datei landet im Verzeichnis des Eingangs linie1 des Linienrechners (Clients:Linienrechner:Eingaenge:linie1, ein Dateiwächter) — gemeldet
-        //   vom echten Dateiwächter im Host, nicht von der Werkbank.
-        var eingang = await w.HoleAsync("/api/werkbank/eingaenge/Linienrechner/linie1");
-        ((string?)eingang["pfad"]).Should().NotBeNullOrEmpty("der Eingang linie1 hat einen Dateiwächter mit Pfad: " + eingang.ToJsonString());
+        // Die Datei landet im Verzeichnis der Quelle Kamera der App-Instanz linie1 (apps/linie1.json, ein Dateiwächter) — gemeldet vom echten Dateiwächter
+        //   im Host, nicht von der Werkbank.
+        var eingang = await w.HoleAsync("/api/werkbank/eingaenge/linie1/Kamera");
+        ((string?)eingang["pfad"]).Should().NotBeNullOrEmpty("die Quelle Kamera von linie1 hat einen Dateiwächter mit Pfad: " + eingang.ToJsonString());
         foreach (var version in new[] { "DC0", "DC2" })
         {
-            var (_, abgelegt) = await w.SendeAsync($"/api/werkbank/eingaenge/Linienrechner/linie1/datei?name={t:yyyy_MM_dd_HH_mm_ss_fff}_{version}.tiff",
+            var (_, abgelegt) = await w.SendeAsync($"/api/werkbank/eingaenge/linie1/Kamera/datei?name={t:yyyy_MM_dd_HH_mm_ss_fff}_{version}.tiff",
                 new ByteArrayContent(Werkbanklauf.Tiff(96, 64)));
             ((bool?)abgelegt["ok"]).Should().BeTrue(abgelegt.ToJsonString());
-            ((string?)abgelegt["eingang"]).Should().Be("Linienrechner/linie1");
+            ((string?)abgelegt["eingang"]).Should().Be("linie1/Kamera");
         }
 
         // Der Vorgang des Paars beginnt mit ImagePairErstellt (der Dateiwächter schreibt nicht ins Log); er endet mit der Beurteilung des Workers.

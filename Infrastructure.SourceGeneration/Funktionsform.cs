@@ -240,6 +240,12 @@ namespace Infrastructure.SourceGeneration
                 return f;
             }
             f.Zustand = ZustandVon(t, f.Fehler);
+            // Eine Quellart läuft im Rechnerdienst auf ihrem Rechner — das Framework sichert für sie nichts (docs/10 E18): was
+            //   sie schon gesehen hat, merkt sie sich selbst; meldet sie ein Element erneut, trägt es dieselbe Kennung, und die Inbox verwirft es.
+            if (f.Quellart && ZustandsParameter(t).FirstOrDefault() is { } z)
+                f.Fehler.Add(("eine Quellart hat keinen gesicherten Zustand (IZustand<T>) — was sie schon gesehen hat, merkt sie sich selbst (im Speicher, "
+                    + "in einer eigenen Datei); meldet sie ein Element erneut, trägt es dieselbe Kennung aus dem Inhalt, und das Backend verwirft es",
+                    z.Locations.FirstOrDefault() ?? ort));
             // Eine generische Funktion (Bildverkleinerung<TFormat>) ist erlaubt: die offene Definition ist eine Blaupause, ein Knoten nennt sie mit
             //   Typargument — das unterscheidet gleiche Funktionen mit verschiedenem Ausgang (Entscheidung 4).
 

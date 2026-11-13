@@ -32,6 +32,6 @@ public sealed record Arbeitsplatz : IClient, IVerkoerpert<Inspekteur>, IVerkoerp
 
 /// <summary>
 /// Der Rechner an der Linie: er verkörpert das Kamerasystem und hat keine Leitung — seine Eingänge sind Dateiwächter auf den Verzeichnissen der Kameras
-/// (in der Umgebung: Clients:Linienrechner:Eingaenge, je Verzeichnis einer).
+/// (umgesetzt von der KameraApp; je Verzeichnis eine App-Instanz in der Umgebung, apps/<instanz>.json).
 /// </summary>
 public sealed record Linienrechner : IClient, IVerkoerpert<KameraSystem>;

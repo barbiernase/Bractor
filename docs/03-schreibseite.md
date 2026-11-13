@@ -301,8 +301,8 @@ Fortschritt der Projektion ([04](04-konsum-und-prozess-maschine.md) §4.1), bei 
 ## 3.6 Proto.Actor: virtuelle Cluster-Actors
 
 Wiring in `Infrastructure/Extensions/CqrsServiceExtension.cs`:
-- `ActorSystem` mit `PartitionIdentityLookup`; der Cluster-Provider folgt `Cluster.Art` der Umgebung: `Einzelknoten` (Mitgliedschaft
-  in-memory, ohne Consul — so läuft eine Sim) oder `Consul` (`ConsulProvider`, mehrere Knoten).
+- `ActorSystem` mit `PartitionIdentityLookup`; der Cluster-Provider folgt dem Backend der Umgebung (docs/06 §6.5): ein Rechner =
+  Einzelknoten (Mitgliedschaft in-memory, ohne Consul — so läuft eine Sim), mehrere = Consul (`ConsulProvider`).
 - **Aggregat-Kinds generiert**: `GeneratedAggregates.GetAllKinds(system)`. Pro `IState`-Klasse erzeugt der `AggregateActorGenerator`
   (a) `XActor : AggregateActorBase<X>` mit DI-Konstruktor und (b) `AddTransient<XActor>()` + `new ClusterKind(identität, PropsFor<XActor>())`.
   Die Kind-Identität = `[AggregatName("…")]` oder Typname — konsistent zum Routing.

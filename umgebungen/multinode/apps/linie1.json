@@ -1,0 +1,10 @@
+{
+  "App": "KameraApp",
+  "Rechner": "grpc1",
+  "Quellen": {
+    "Kamera": {
+      "Pfad": "/data/input",
+      "Kennung": "PfadGroesseZeit"
+    }
+  }
+}

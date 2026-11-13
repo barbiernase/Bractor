@@ -14,11 +14,26 @@ namespace Domain.SourceGeneration;
 /// <para><b>CQRS063/064 — Client</b> (<c>docs/konzept-akteure.md</c> §4): ein Client ist ein Record mit <c>IClient</c>, der nur nennt, wen er
 /// verkörpert (<c>IVerkoerpert&lt;A&gt;</c>), und selbst nichts deklariert (063); verkörpern kann er nur einen konkreten Akteur (064). Was über seine
 /// Leitung geht, sind die <c>IDarf</c> und <c>IHoert</c> seiner Akteure — es gibt kein zweites Wort dafür.</para>
+/// <para><b>CQRS125/126 — App</b> (docs/10 E18): eine App ist ein Record <c>X(…) : IApp&lt;TClient&gt;</c>, der sonst nichts nennt und
+/// nichts deklariert; jeder Parameter ist eine QUELLE — eine Quellart mit mindestens einem <c>[Uebersetzt&lt;U&gt;]</c> (125). Jedes U ist eine
+/// Übersetzung der Akteur-Seite, deren Quelle eine Meldung der Quellart ist und deren Ziel ein Command, den ein Akteur des Clients darf (126).</para>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class AkteurAnalyzer : DiagnosticAnalyzer
 {
-    public const string BefugnisId = "CQRS058", ClientFormId = "CQRS063", ClientBefugtId = "CQRS064";
+    public const string BefugnisId = "CQRS058", ClientFormId = "CQRS063", ClientBefugtId = "CQRS064", AppFormId = "CQRS125", AppQuelleId = "CQRS126";
+
+    /// <summary>CQRS125 — Form einer App: ein Record mit IApp&lt;TClient&gt;; jeder Parameter eine Quellart mit [Uebersetzt&lt;U&gt;]; sonst nichts.</summary>
+    private static readonly DiagnosticDescriptor AppForm = new(
+        AppFormId, "Ungültige App",
+        "'{0}': {1}",
+        "CQRS.Akteur", DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    /// <summary>CQRS126 — die Übersetzung einer Quelle passt: aus einer Meldung der Quellart in einen Command, den ein Akteur des Clients darf.</summary>
+    private static readonly DiagnosticDescriptor AppQuelle = new(
+        AppQuelleId, "Quelle einer App passt nicht",
+        "'{0}': {1}",
+        "CQRS.Akteur", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor Befugnis = new(
         BefugnisId, "Ungültiger Akteur",
@@ -38,7 +53,7 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
         "CQRS.Akteur", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(Befugnis, ClientForm, ClientBefugt);
+        ImmutableArray.Create(Befugnis, ClientForm, ClientBefugt, AppForm, AppQuelle);
 
     private sealed class Typen
     {
@@ -62,6 +77,7 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
             };
             start.RegisterSymbolAction(ctx => Pruefe(ctx, t), SymbolKind.NamedType);
             if (t.Client != null) start.RegisterSymbolAction(ctx => PruefeClient(ctx, t), SymbolKind.NamedType);
+            if (T("IApp`1") is { } iApp) start.RegisterSymbolAction(ctx => PruefeApp(ctx, iApp, c), SymbolKind.NamedType);
         });
     }
 
@@ -125,5 +141,56 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
         foreach (var t in typ.Interfaces.Where(b => Ist(b, x.Verkoerpert)).Select(b => b.TypeArguments[0]))
             if (!(Hat(t, x.Akteur) && Konkret(t)))
                 Melde(ClientBefugt, ort, $"IVerkoerpert<{t.Name}> — verkörpern kann man nur einen konkreten Akteur (ein Record mit IAkteur)");
+    }
+
+    private static void PruefeApp(SymbolAnalysisContext ctx, INamedTypeSymbol iApp, Compilation c)
+    {
+        var typ = (INamedTypeSymbol)ctx.Symbol;
+        if (typ.ContainingNamespace?.ToDisplayString() == "Abstractions"
+            || !typ.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iApp))) return;
+        var ort = typ.Locations.FirstOrDefault() ?? Location.None;
+        void Melde(DiagnosticDescriptor d, Location? o, string text) => ctx.ReportDiagnostic(Diagnostic.Create(d, o ?? ort, typ.Name, text));
+        if (!typ.IsRecord || typ.TypeKind != TypeKind.Class)
+        {
+            Melde(AppForm, ort, "eine App ist ein Record (record X(…) : IApp<Client>) — ihre Parameter sind ihre Quellen");
+            return;
+        }
+        if (typ.Interfaces.Count(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iApp)) > 1)
+            Melde(AppForm, ort, "setzt mehrere Clients um — eine App setzt genau einen Client um (IApp<Client>)");
+        foreach (var b in typ.Interfaces.Where(b => !SymbolEqualityComparer.Default.Equals(b.OriginalDefinition, iApp)
+                     && b.ToDisplayString() != "System.IEquatable<" + typ.ToDisplayString() + ">"))
+            Melde(AppForm, ort, $"nennt {b.Name} — eine App nennt nur, welchen Client sie umsetzt (IApp<Client>)");
+        foreach (var m in typ.GetMembers().Where(m => !m.IsImplicitlyDeclared
+                     && m is not IMethodSymbol { MethodKind: MethodKind.Constructor or MethodKind.PropertyGet or MethodKind.PropertySet }
+                     && !(m is IPropertySymbol pr && typ.InstanceConstructors.Any(k => k.Parameters.Any(pa => pa.Name == pr.Name)))))
+            Melde(AppForm, m.Locations.FirstOrDefault(), $"'{m.Name}' — eine App deklariert nichts selbst; ihre Parameter sind ihre Quellen");
+        var v = Infrastructure.SourceGeneration.Clientvertragslesart.LiesApp(typ, c);
+        var darf = new HashSet<ISymbol>(Infrastructure.SourceGeneration.Clientvertragslesart.Lies(v.Client!, c).Sendet, SymbolEqualityComparer.Default);
+        foreach (var q in v.Quellen)
+        {
+            var qort = q.Parameter.Locations.FirstOrDefault() ?? ort;
+            if (q.Quellart is not INamedTypeSymbol art || !Infrastructure.SourceGeneration.Funktionsform.IstQuellart(art))
+            {
+                Melde(AppForm, qort, $"Parameter {q.Name}: {q.Quellart.Name} ist keine Quellart (IQuellart) — ein Parameter einer App ist eine Quelle");
+                continue;
+            }
+            if (q.Uebersetzungen.Count == 0)
+            {
+                Melde(AppForm, qort, $"Quelle {q.Name}: keine Übersetzung — [Uebersetzt<{{Meldung}}_{{Command}}_n>] nennt, was aus ihrer Meldung wird");
+                continue;
+            }
+            var meldet = Infrastructure.SourceGeneration.Funktionsform.Lies(art).Meldet.ToList();
+            foreach (var (u, quelle, ziel, a) in q.Uebersetzungen)
+            {
+                var uort = a.ApplicationSyntaxReference?.GetSyntax(ctx.CancellationToken).GetLocation() ?? qort;
+                if (quelle == null || ziel == null)
+                    Melde(AppQuelle, uort, $"Quelle {q.Name}: {u.Name} ist keine Übersetzung (ITranslate<Meldung, Command>)");
+                else if (!meldet.Any(m => SymbolEqualityComparer.Default.Equals(m, quelle)))
+                    Melde(AppQuelle, uort, $"Quelle {q.Name}: {u.Name} übersetzt {quelle.Name} — {art.Name} meldet "
+                        + string.Join(", ", meldet.Select(m => m.Name).DefaultIfEmpty("nichts")));
+                else if (!darf.Contains(ziel))
+                    Melde(AppQuelle, uort, $"Quelle {q.Name}: {u.Name} macht {ziel.Name} — das darf kein Akteur von {v.Client!.Name} (IDarf<{ziel.Name}>)");
+            }
+        }
     }
 }

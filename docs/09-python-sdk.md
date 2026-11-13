@@ -7,7 +7,7 @@ Zwei Teile, streng getrennt (W11):
 - **Framework:** das domänenfreie Paket `cqrs_client` (`Client.Infrastructure.Python/cqrs_client/`).
 - **Beispieldomäne:** `Domain.Client.Worker.Python.ML/` — die Clients für Klassifikation und Training der Bildinspektion.
 
-Python läuft mit dem Interpreter der Umgebung: der des Workers (`Clients:<Name>:Worker:Python`), sonst `Umgebung:Python`, sonst `CQRS_PYTHON`,
+Python läuft mit dem Interpreter der Umgebung: der des Starts seiner App-Instanz (`apps/<instanz>.json`, `Start:Python`), sonst `Umgebung:Python`, sonst `CQRS_PYTHON`,
 sonst `python3` (eine Regel: `UmgebungKonfig.Python`, `Abstractions/Umgebung/UmgebungKonfig.cs`); die Werkbank nimmt ihn für Worker und
 `build_python.sh`.
 
@@ -21,7 +21,7 @@ Der Python-Teil ist ein Client am selben bidirektionalen gRPC-Stream (`CqrsClien
 | `mapper.PayloadMapper`, `mapper.NutzlastTabelle` | `ProtoMessageMapper`, `GeneratedNutzlast` |
 | `versioning.VersionTracker` | `Client.Infrastructure/Versioning/VersioningModule.cs` |
 | `proxy.GrpcProxy` | `Client.Infrastructure/Connection/GrpcProxy.cs` |
-| `vertrag.ClientVertragBasis` | `GeneratedWiring_<Assembly>` aus `[assembly: IstClient<X>]` |
+| `vertrag.ClientVertragBasis` | `GeneratedWiring_<Assembly>` aus `[assembly: IstApp<X>]` |
 
 Er ist ein Client am Rand, kein Konsument beim Framework. Was er tut, sagen die Akteure, die er verkörpert (Grammatik in
 [10](10-entwickler-api.md) §10.3.6, Begriffe in [konzept-akteure.md](konzept-akteure.md)) — über seine Leitung gehen ihr `IDarf` und ihr `IHoert`:
@@ -94,13 +94,13 @@ nichts (Kenntnis; nach `Domain.Client.Worker.Python.ML/run_stub.py`):
 
 ```python
 from domain_client.generated import BildVerfuegbarDto, ImagePairKomplettDto, KlassifiziereBildPaarDurchKiDto, ModellAktiviertDto
-from domain_client.generated.vertraege import KlassifikationsWorkerBasis
+from domain_client.generated.vertraege import KlassifikationsAppBasis
 
 @dataclass
 class StubState:
     bilder: dict[UUID, dict[int, str]] = field(default_factory=dict)
 
-class StubClassifier(KlassifikationsWorkerBasis[StubState]):
+class StubClassifier(KlassifikationsAppBasis[StubState]):
     async def auf_bild_verfuegbar(self, e: BildVerfuegbarDto, ctx, state: StubState):        # Kenntnis: gibt nichts aus
         state.bilder.setdefault(ctx.aggregate_id, {})[e.version] = e.pfad
 
@@ -155,19 +155,20 @@ UUID-Text im DTO, z. B. `aggregate_id=str(ctx.aggregate_id)`.
   von vorn — die Inbox der Ziele verwirft schon Gesendetes (dieselben Ids).
 - **Zustand im Worker** (ein Modell) sichert das Framework nicht; der Worker lädt ihn selbst, etwa auf eine Kenntnis hin (`ModellAktiviert`).
 
-Gestartet wird ein Python-Client über „▶ Worker“ in der Werkbank (`Werkbank/Server/Worker.cs`: `Clients:<Name>:Worker` der Umgebung — Skript,
-Argumente, Interpreter, Token) oder als eigener Prozess; Adresse und Akteur kommen aus `CQRS_GRPC_HOST`/`CQRS_GRPC_PORT`/`CQRS_AKTEUR_TOKEN`.
+Gestartet wird eine Python-App über „▶ Apps“ in der Werkbank (`Werkbank/Server/Worker.cs`: `Start` ihrer App-Instanz `apps/<instanz>.json` —
+Skript, Argumente, Interpreter; das Token steht an der Instanz) oder als eigener Prozess; Adresse und Akteur kommen aus
+`CQRS_GRPC_HOST`/`CQRS_GRPC_PORT`/`CQRS_AKTEUR_TOKEN`, wer sie ist, aus `CQRS_UMGEBUNG`, `CQRS_APP` und `CQRS_RECHNER`.
 
 ## 9.6 Beispieldomäne: Klassifikation und Training
 
 Knapp, weil Prüfling, nicht Architektur:
 
-- **Klassifikation** (`domain_client/classifier.py`, Start `run.py`; Rauchtest ohne Modell `run_stub.py`): erbt `KlassifikationsWorkerBasis`
-  (Client `KlassifikationsWorker`, Akteur `Klassifizierer`), merkt sich auf `BildVerfuegbar` die Bildpfade je Aggregat und reagiert auf
+- **Klassifikation** (`domain_client/classifier.py`, Start `run.py`; Rauchtest ohne Modell `run_stub.py`): erbt `KlassifikationsAppBasis`
+  (App `KlassifikationsApp`, Client `KlassifikationsWorker`, Akteur `Klassifizierer`), merkt sich auf `BildVerfuegbar` die Bildpfade je Aggregat und reagiert auf
   `ImagePairKomplett`: lädt beide Bilder über `/api/files/` des Blazor-Hosts (`image_loader.py`), führt TorchScript-Inferenz in `asyncio.to_thread`
   aus und gibt `KlassifiziereBildPaarDurchKi` zurück; ohne Bilder bleibt das Paar unbeurteilt (ein Fehler hielte jede spätere Reaktion an). Auf
   `ModellAktiviert` lädt er das neue Modell.
-- **Training** (`domain_client/training_worker.py`, Rauchtest `run_train_stub.py`): erbt `TrainingsWorkerBasis` (Client `TrainingsWorker`, Akteur
+- **Training** (`domain_client/training_worker.py`, Rauchtest `run_train_stub.py`): erbt `TrainingsAppBasis` (App `TrainingsApp`, Client `TrainingsWorker`, Akteur
   `TrainingsSystem`), reagiert auf `TrainingAngefordert` in Stücken (`MeldeTrainingBegonnen`, `MeldeFortschritt` je Epoche,
   `MeldeTrainingAbgeschlossen` bzw. `MeldeTrainingGescheitert`), zieht die Samples per Query (`HoleDatensatzSamples`) und liest nach jeder Epoche
   den Lauf (`HoleTrainingslauf`): steht er auf „abgebrochen“, hört er kooperativ auf; der Trainer ist ein Stub.

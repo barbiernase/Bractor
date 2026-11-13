@@ -985,3 +985,45 @@
 #de .av-stand{color:#8fd0ad;font-size:11px}
 #de .av-stand.offen{color:#ffb35c}
 #de .gnode2.n-client .ghead .fl-cl-plus{color:#14121f;border-color:#14121f66;background:#ffffff40;font-weight:600}
+/* Spalte Rechner (docs/10 E18): je Rechner eine Karte, darin die App-Instanzen und ihre Quellen */
+#de .gnode2.n-rechner{border-color:#2f5a49;width:330px}
+#de .gnode2.n-rechner .ghead{background:#2f5a49;color:#e6f2ec}
+#de .gnode2.n-rechner .ghead .fl-cl-plus{color:#e6f2ec;border-color:#e6f2ec66;background:#ffffff1a;font-weight:600}
+#de .gnode2.n-rechner .fl-cl-w{max-width:300px}
+#de .gnode2.n-rechner .fl-cl-t{white-space:nowrap}
+#de .fl-cl-z.app{border-style:solid;cursor:pointer;border-color:#3f6b59}
+#de .fl-cl-z.quelle{margin-left:14px;border-left:3px solid #5fae8a}
+#de .fl-cl-selbst{padding-left:14px}
+/* Rechner und Backend (docs/10 §10.9): die Zeile eines Rechners (Adresse, ✎, ✕), die Karte Backend über Graphen bis Projektionen */
+#de .fl-re{position:absolute;box-sizing:border-box;padding:6px 8px;border:1px solid #2f5a49;border-radius:10px;background:#121a19;color:#dfe5ef;pointer-events:auto;overflow:hidden;display:flex;flex-direction:column;gap:3px}
+#de .fl-re.backend{border-color:#3a4560;background:#131823}
+#de .fl-re-kopf{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+#de .fl-re-kopf b{font-size:13px}
+#de .fl-re-kopf button{margin-left:auto;padding:0 8px}
+#de .fl-re-u{font-size:11px;color:#8f9bb0}
+#de .fl-re-z{display:flex;align-items:center;gap:6px;height:22px;padding:0 6px;border:1px solid #2c3a3a;border-radius:6px;background:#151d1d;font-size:12px}
+#de .fl-re-z.befund{border-color:#d9a400}
+#de .fl-re-n{font-weight:600}
+#de .fl-re-a{color:#8f9bb0;font-family:ui-monospace,monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#de .fl-re-tag{font-size:10px;padding:0 5px;border-radius:8px;background:#2a3550;color:#b9c6e0}
+#de .fl-re-dort{font-size:11px;color:#8f9bb0}
+#de .fl-re-x{padding:0 4px;font-size:11px;background:none;border:none;color:#8f9bb0;cursor:pointer}
+#de .fl-re-z .fl-re-x:first-of-type{margin-left:auto}
+#de .fl-re-x:disabled{opacity:.3;cursor:default}
+#de .fl-re-bef{font-size:11px;color:#d9a400;padding-left:6px}
+#de .fl-re-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+#de .fl-re-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid #3a4560;border-radius:12px;background:#182033;font-size:12px;color:#dfe5ef}
+#de .fl-re-chip.wahl{cursor:pointer}
+#de .fl-re-chip.an{border-color:#5fae8a;background:#1b2e27}
+#de .fl-re-chip.befund,#de .fk-chip.befund{border-color:#d9a400}
+#de .fl-re-plus{padding:0 8px}
+/* Apps im Modal „Akteure, Clients und Apps“ (docs/10 E18) */
+#de .kom-b.app{padding-left:22px;font-size:12px}
+#de .app-innen{padding:18px 22px;display:flex;flex-direction:column;gap:12px;max-width:820px}
+#de .app-kopf{display:flex;align-items:center;gap:10px;font-size:14px}
+#de .app-liste{display:flex;flex-direction:column;gap:6px}
+#de .app-z{display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid #2c3547;border-radius:8px;background:#141925}
+#de .app-n{font-family:ui-monospace,monospace;font-size:12px;min-width:220px}
+#de .app-wer{font-size:12px;color:#8f9bb0;flex:1}
+#de .app-wer.q{color:#5fae8a}
+#de .app-q{display:flex;align-items:center;gap:8px;margin-left:28px;padding:4px 10px;border-left:2px solid #5fae8a;font-size:12px}

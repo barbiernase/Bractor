@@ -60,7 +60,7 @@ public sealed partial class Sicht
             case "quellart": return Anwendung;
             // Eine Meldung gehört der Quellart, die sie meldet (Signatur von Lausche) — eine ohne Quellart der Anwendung dem Rand.
             case "meldung": return Einer(n, MeldendeQuellarten(name).Select(QuellartKarte), leer: Rand);
-            case "akteur": case "client": return Rand;
+            case "akteur": case "client": case "app": return Rand;
             case "state": case "decider": case "applier": return AggId(S(r, "aggregat")) ?? Begriffe;
             case "handle": return n.Besitzer?.Id ?? Begriffe;
             case "fn": return n.Besitzer?.Id ?? Begriffe;

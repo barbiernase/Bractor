@@ -84,6 +84,7 @@ internal sealed class Lageart
         if (Hat(t, "IFunktion")) return Projektstruktur.Primitive.Funktion;
         if (Hat(t, "IAkteur")) return Projektstruktur.Primitive.Akteur;
         if (Hat(t, "IClient")) return Projektstruktur.Primitive.Client;
+        if (t.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString() == "Abstractions.IApp<TClient>")) return Projektstruktur.Primitive.App;
         if (Hat(t, "IStore") || Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreImplementierung;
         if (_konfigs.Contains(Name(t))) return Projektstruktur.Primitive.Konfig;
         if (_technik.IstTechnik(t) || _technik.IstUmsetzung(t)) return Projektstruktur.Primitive.Technik;

@@ -10,13 +10,14 @@ namespace Werkbank.Server;
 /// </summary>
 public static class Schema
 {
-    /// <param name="board">Das gelesene Board (warmer Workspace) — liefert die Clients (Code-Fakten), damit das Formular sie anbietet. Funktionen,
-    /// Technik und Konfig-Records stehen je Knoten in den Instanz-Dateien der Graphen (<c>graphen/&lt;instanz&gt;.json</c>), nicht in der Umgebung.</param>
+    /// <param name="board">Das gelesene Board (warmer Workspace). Funktionen, Technik und Konfig-Records stehen je Knoten in den Instanz-Dateien der
+    /// Graphen (<c>graphen/&lt;instanz&gt;.json</c>), Apps in denen der App-Instanzen (<c>apps/&lt;instanz&gt;.json</c>) — nicht in der Umgebung.</param>
     public static JsonObject Umgebung(JsonObject? board = null)
     {
         var aus = new JsonObject();
+        // Rechner und Backend stehen auf der Fläche (Karten Rechner und Backend) — je Absicht ein Ort; das Formular des Host-Rahmens lässt sie stehen.
         foreach (var p in typeof(UmgebungKonfig).GetProperties().Where(p => p.PropertyType.IsClass && p.PropertyType != typeof(string)
-                     && !p.PropertyType.IsGenericType))
+                     && !p.PropertyType.IsGenericType && p.PropertyType != typeof(BackendKonfig)))
             aus[p.Name] = Klasse(p.PropertyType);
         aus[UmgebungsAbschnitte.Identitaeten] = new JsonObject
         {
@@ -27,15 +28,6 @@ public static class Schema
                 ["Standard"] = new JsonObject { ["typ"] = "string", ["standard"] = "" },
                 ["VertragStreng"] = new JsonObject { ["typ"] = "bool", ["standard"] = "false" },
             },
-        };
-        // Clients (docs/konzept-akteure.md §4): je Client-Vertrag (Handshake-Name) Token, Adresse, URLs und Datei-Verzeichnisse.
-        var clients = new JsonObject();
-        foreach (var c in Liste(board?["clients"]))
-            clients[Abstractions.Clientvertragsregeln.ClientName((string?)c["name"] ?? "?")] = Klasse(typeof(ClientKonfig));
-        aus[UmgebungsAbschnitte.Clients] = new JsonObject
-        {
-            ["art"] = "je", ["schluessel"] = "Client", ["wert"] = Klasse(typeof(ClientKonfig)), ["eintraege"] = clients,
-            ["hilfe"] = "je Client (IClientVertrag) sein Token (Identitaeten), die gRPC-Adresse (leer = localhost:Transport.GrpcPort), URLs, Datei-Verzeichnisse",
         };
         return aus;
     }
@@ -74,12 +66,11 @@ public static class Schema
             else if (typ == typeof(TimeSpan)) feld = new JsonObject { ["typ"] = "dauer" };
             else if (typ == typeof(string)) feld = new JsonObject { ["typ"] = "string" };
             else if (typ == typeof(string[])) feld = new JsonObject { ["typ"] = "liste" };
-            // Name → Wert (z. B. Technik) als Liste von Schlüsseln. Name → Klasse sind die Eingänge eines Clients: sie stehen nicht hier, sondern auf der
-            //   Fläche (Spalte Clients: „＋ Eingang“, Doppelklick öffnet ihr Formular) — je Absicht ein Ort; das Formular des Host-Rahmens lässt sie stehen.
+            // Name → Wert (z. B. Technik) als Liste von Schlüsseln; Name → Klasse steht auf der Fläche — je Absicht ein Ort.
             else if (typ.IsGenericType && typ.GetGenericTypeDefinition() == typeof(Dictionary<,>))
                 feld = typ.GetGenericArguments()[1] == typeof(string)
                     ? new JsonObject { ["typ"] = "map" }
-                    : new JsonObject { ["art"] = "hinweis", ["hilfe"] = "auf der Fläche, Spalte Clients — „＋ Eingang“ an der Karte des Clients, Doppelklick öffnet einen" };
+                    : new JsonObject { ["art"] = "hinweis", ["hilfe"] = "auf der Fläche" };
             else if (typ.IsClass) feld = Klasse(typ);
             else feld = new JsonObject { ["typ"] = "string" };
             if (wert != null && !typ.IsClass || wert is string) feld["standard"] = wert switch { TimeSpan ts => ts.ToString(), bool b => b ? "true" : "false", _ => wert?.ToString() };

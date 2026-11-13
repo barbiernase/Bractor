@@ -3,9 +3,9 @@ namespace Abstractions;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // DIE MELDUNGEN DER QUELLARTEN DES FRAMEWORKS (docs/04 §4.7, Core/Katalog): was Dateiwächter, Taktgeber und Webhook melden. Eine MELDUNG (IMeldung)
 // ist kein Command: sie geht an keinen Knoten und keinen Kopf, eine Übersetzung der Akteur-Seite macht daraus eine Nachricht, die der Akteur des
-// Eingangs darf. Sie nennt die Kennung ihres Elements, aus seinem Inhalt. Meldungen stehen nicht im Log — ob eine Quelle Doppeltes vermeidet oder
-// nach einem Neustart weitermacht, regelt sie über ihren gesicherten Zustand; die Kennung macht, dass dasselbe Element nach einem Neustart dieselben
-// Ids ergibt, gleich in welcher Reihenfolge es wiederkommt.
+// Eingangs darf. Sie nennt die Kennung ihres Elements, aus seinem Inhalt. Meldungen stehen nicht im Log, und das Framework sichert für eine Quelle
+// nichts — ob sie Doppeltes vermeidet, regelt sie selbst; die Kennung macht, dass dasselbe Element nach einem Neustart dieselben Ids ergibt, gleich
+// in welcher Reihenfolge es wiederkommt, und das Backend verwirft die Wiederholung.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>

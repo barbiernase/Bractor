@@ -14,8 +14,8 @@ namespace Infrastructure.Pruefstand.Akteure;
 
 /// <summary>
 /// Client-Code = Vertrag (docs/konzept-akteure.md §4, GR-CLIENT-CODE): der Client-Generator nimmt Handshake-Name, Hash, Abos, gesendete Commands
-/// und gestellte Queries aus <c>[assembly: IstClient&lt;X&gt;]</c> (ein Record, seine Akteure tragen IDarf und IHoert) — mit derselben Lesart wie der Server (gleicher Hash); der Analyzer hält den
-/// Client-Code dagegen (CQRS093–097).
+/// und gestellte Queries aus <c>[assembly: IstApp&lt;X&gt;]</c> (eine App, ihr Client verkörpert Akteure, die IDarf und IHoert tragen) — mit derselben
+/// Lesart wie der Server (gleicher Hash); der Analyzer hält den Client-Code dagegen (CQRS093–097).
 /// </summary>
 public class ClientCodeVertragTests
 {
@@ -37,14 +37,15 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
     public sealed record Anders(Guid Id) : IEvent;
     public sealed record Gast : IAkteur, IDarf<Mach>, IDarf<Frag>, IHoert<Passiert>;
     public sealed record Pult : IClient, IVerkoerpert<Gast>;
+    public sealed record PultApp : IApp<Pult>;
     public sealed record Getippt : IClientEvent;
 }
 ";
 
-    private static CSharpCompilation Probe(string code, string? vertrag = "Probe.Pult")
+    private static CSharpCompilation Probe(string code, string? vertrag = "Probe.PultApp")
     {
         var kopf = "using System; using System.Collections.Generic; using Abstractions; using Client.Infrastructure.Abstractions;\n";
-        var text = kopf + (vertrag != null ? $"[assembly: IstClient<{vertrag}>]\n" : "") + Vertrag + code;
+        var text = kopf + (vertrag != null ? $"[assembly: IstApp<{vertrag}>]\n" : "") + Vertrag + code;
         var comp = CSharpCompilation.Create("ClientProbe", [CSharpSyntaxTree.ParseText(text)], Refs,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).Should().BeEmpty("die Probe selbst muss kompilieren");
@@ -83,7 +84,7 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
     }
 }");
         b.Should().HaveCount(3);
-        b.Should().Contain(x => x.StartsWith("CQRS095:") && x.Contains("'Verboten'") && x.Contains("'Pult'"));
+        b.Should().Contain(x => x.StartsWith("CQRS095:") && x.Contains("'Verboten'") && x.Contains("'PultApp'"));
         b.Should().Contain(x => x.StartsWith("CQRS096:") && x.Contains("'FragNicht'"));
         b.Should().Contain(x => x.StartsWith("CQRS097:") && x.Contains("Daneben.Handle(Anders)"));
     }
@@ -94,10 +95,11 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
         var comp = Probe(Handler);
         var (client, diag) = Generiert(comp, new WiringGenerator().AsSourceGenerator());
         diag.Should().BeEmpty();
-        Regex.Match(client, "public const string Vertrag = \"(\\w+)\"").Groups[1].Value.Should().Be("Pult");
+        Regex.Match(client, "public const string Vertrag = \"(\\w+)\"").Groups[1].Value.Should().Be("PultApp", "am Handshake nennt der Code seine App");
+        Regex.Match(client, "public const string Client = \"(\\w+)\"").Groups[1].Value.Should().Be("Pult");
         var clientHash = Regex.Match(client, "public const string VertragHash = \"(\\w+)\"").Groups[1].Value;
         var (server, _) = Generiert(comp, new Infrastructure.SourceGeneration.AkteurRechteGenerator());
-        Regex.Match(server, "\\[\"Pult\"\\] = new ClientVertrag\\(\"Pult\", typeof\\([^)]*\\), \"(\\w+)\"").Groups[1].Value
+        Regex.Match(server, "\\[\"PultApp\"\\] = new ClientVertrag\\(\"PultApp\", typeof\\([^)]*\\), \"(\\w+)\"").Groups[1].Value
             .Should().Be(clientHash).And.HaveLength(16);
         // Abonniert wird die Kenntnis, gesendet und gefragt nur, was der Gast darf — keine Selbstauskunft über „alle Events/Commands".
         var events = Abschnitt(client, "ServerEventTypes");
@@ -107,7 +109,7 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
     }
 
     [Fact]
-    public void Ohne_IstClient_meldet_der_Generator_CQRS093()
+    public void Ohne_IstApp_meldet_der_Generator_CQRS093()
     {
         var (_, diag) = Generiert(Probe(Handler, vertrag: null), new WiringGenerator().AsSourceGenerator());
         diag.Select(d => d.Id).Should().Equal("CQRS093");

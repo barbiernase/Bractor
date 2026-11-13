@@ -58,10 +58,10 @@ case "${1:-start}" in
 
     # Nur die Werte die vom Entwicklungs-Default abweichen:
     #   - die Umgebung "linux" (von build.sh geschrieben) trägt alle Werte; hier nur, was je Maschine abweicht:
-    #   - der Pfad des Dateiwächters (Eingang linie1 des Linienrechners, Clients:Linienrechner:Eingaenge:linie1:Pfad) und das DB-Passwort
+    #   - der Pfad des Dateiwächters (Quelle Kamera der App-Instanz linie1, apps/linie1.json → Quellen:Kamera:Pfad) und das DB-Passwort
     #     (als Verbindung) aus Variablen
     cd "$SCRIPT_DIR/grpc"
-    Clients__Linienrechner__Eingaenge__linie1__Pfad="$WATCH_PATH" \
+    Apps__linie1__Quellen__Kamera__Pfad="$WATCH_PATH" \
     EventStore__Verbindung="Host=localhost;Port=5432;Username=postgres;Password=$POSTGRES_PASSWORD" \
       ./host-grpc --umgebung linux > "$SCRIPT_DIR/logs/grpc.log" 2>&1 &
     echo $! > "$SCRIPT_DIR/grpc.pid"
@@ -80,11 +80,11 @@ case "${1:-start}" in
     echo ""
     echo "═══ 4. Host.Blazor starten ═══"
 
-    # Die Umgebung "linux" trägt Clients:Arbeitsplatz (Adresse, URLs, Dateien); hier nur, was je Maschine abweicht:
+    # Die Umgebung "linux" trägt die App-Instanz arbeitsplatz (apps/arbeitsplatz.json: Rechner, Port, Dateien); hier nur, was je Maschine abweicht:
     #   - das erste Datei-Verzeichnis = der WatchPath dieser Maschine (für den File-Endpunkt)
     cd "$SCRIPT_DIR/blazor"
-    Clients__Arbeitsplatz__Dateien__0="$WATCH_PATH" \
-      ./host-blazor --umgebung linux > "$SCRIPT_DIR/logs/blazor.log" 2>&1 &
+    Apps__arbeitsplatz__Dateien__0="$WATCH_PATH" \
+      ./host-blazor --umgebung linux --app arbeitsplatz > "$SCRIPT_DIR/logs/blazor.log" 2>&1 &
     echo $! > "$SCRIPT_DIR/blazor.pid"
     echo "  PID: $(cat "$SCRIPT_DIR/blazor.pid")"
     cd "$SCRIPT_DIR"

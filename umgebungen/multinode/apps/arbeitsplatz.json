@@ -1,0 +1,9 @@
+{
+  "App": "ArbeitsplatzApp",
+  "Rechner": "grpc1",
+  "Port": 5010,
+  "Dateien": [
+    "/data/input",
+    "/data/preprocessed"
+  ]
+}

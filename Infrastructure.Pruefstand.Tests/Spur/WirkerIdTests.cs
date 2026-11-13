@@ -15,7 +15,7 @@ public class WirkerIdTests
         WirkerId.FuerKnoten("linie1", "Aufbereitung.Vorschau").Should().Be("knoten:linie1/Aufbereitung.Vorschau");
         WirkerId.FuerProjektion("P").Should().Be("projektion:P");
         WirkerId.FuerAkteur("Disponent").Should().Be("akteur:Disponent");
-        WirkerId.FuerEingang("Linienrechner", "linie1").Should().Be("eingang:Linienrechner/linie1", "ein Eingang eines Clients aus einer Quelle");
+        WirkerId.FuerEingang("linie1", "Kamera").Should().Be("eingang:linie1/Kamera", "die Quelle einer App-Instanz");
         WirkerId.Zerlege("eingang:Linienrechner/linie1", out var eArt, out var eRest).Should().BeTrue();
         (eArt, eRest).Should().Be(("eingang", "Linienrechner/linie1"));
         WirkerId.Zerlege("funktion:Bildeingang", out var art, out var rest).Should().BeTrue();

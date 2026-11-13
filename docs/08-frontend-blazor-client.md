@@ -8,7 +8,7 @@ Zwei Ebenen, streng getrennt (W11):
 
 - **Framework** — ein generierter Redux/Flux-Bus-/Store-Stack mit gRPC-Anbindung: `Client.Infrastructure` (Transport, Bus, Store,
   Virtualisierung), `Client.SourceGeneration` (Generatoren + Analyzer, die den Client-Code gegen seine Akteure halten) und die Marker in
-  `Abstractions/Akteur.cs` (`IClient`, `IVerkoerpert<A>`, `IHoert<T>`, `[assembly: IstClient<T>]`). Er hängt
+  `Abstractions/Akteur.cs` (`IClient`, `IVerkoerpert<A>`, `IHoert<T>`, `IApp<TClient>`, `[assembly: IstApp<T>]`). Er hängt
   über **eine bidirektionale gRPC-Verbindung** (`CqrsClientService.Connect`, `Cqrs.Leitung/cqrs.proto`) an `Host.Grpc`; dort ist sie eine
   Sitzung (§8.3).
 - **Beispiel-App** — die Blazor-Server-GUI (MudBlazor) der Beispieldomäne Bildinspektion: `Host.Blazor` (Shell, Startup) +
@@ -24,7 +24,7 @@ Begriffe und Rechte: [konzept-akteure.md](konzept-akteure.md).
 
 ```csharp
 // Beispieldomäne: Domain.Client.Modules.Blazor/Arbeitsplatz.cs
-[assembly: IstClient<Arbeitsplatz>]
+[assembly: IstApp<ArbeitsplatzApp>]
 
 // Beispieldomäne: Domain.Akteure/Clients.cs — ein Record, der nur nennt, wen er verkörpert
 public sealed record Arbeitsplatz : IClient, IVerkoerpert<Inspekteur>, IVerkoerpert<Produktpruefer>, IVerkoerpert<KIOperator>, IVerkoerpert<Modellfreigeber>;
@@ -49,7 +49,7 @@ public sealed record Inspekteur : IAkteur, IDarf<LabelBildPaar>, …, IHoert<Ima
   `ClientVertragAnalyzer` meldet CQRS095 (erzeugter Command, den kein verkörperter Akteur darf), CQRS096 (gestellte Query, die kein verkörperter
   Akteur darf), CQRS097 (`Handle(E, MessageContext)` auf ein Server-Event, das keiner von ihnen hört).
   Gelesen werden Code-Fakten (Objekterzeugung, Signatur), keine Namen.
-- **Verbindung** aus der Umgebung: `Clients:<Name>` (Token, Adresse, Urls, Dateien) — §8.6.
+- **Verbindung** aus der Umgebung: die Instanz der App (`apps/<instanz>.json`: Rechner, Port, Token, Dateien), das Backend über seine Rechner — §8.6.
 
 ## 8.3 Leitung und Client.Infrastructure — Transport, Bus, Store
 
@@ -187,10 +187,13 @@ Vier Generatoren und ein Analyzer (Überblick über alle Generatoren: [05](05-ge
 Alles in diesem Abschnitt ist **Beispieldomäne** (Bildinspektion, Datensätze, Training).
 
 **Host.Blazor** (`Host.Blazor/Program.cs`, Blazor Server, net9.0):
-- Start mit Umgebung: `dotnet run --project Host.Blazor -- --umgebung sim-main` (bzw. `CQRS_UMGEBUNG`). Gelesen wird
-  `Clients:<Name>` der Umgebung (`Abstractions/Umgebung/UmgebungKonfig.cs`, `ClientKonfig`): **Token** (Akteur-Token aus `Identitaeten`;
-  leer = kein Header), **Adresse** (leer = `http://localhost:<Transport:GrpcPort>`), **Urls** (eigene URLs, Default `http://localhost:5010`),
-  **Dateien** (Verzeichnisse, die `/api/files/...` ausliefern darf). Fehlt der Abschnitt, startet der Host nicht. `${branch}` in der Umgebung
+- Start mit Umgebung und Instanz: `dotnet run --project Host.Blazor -- --umgebung sim-main --app arbeitsplatz` (bzw. `CQRS_UMGEBUNG`,
+  `CQRS_APP`; ohne `--app` die einzige Instanz seiner App, `AppInstanzwahl`). Gelesen wird die App-Instanz (`apps/<instanz>.json`,
+  `AppInstanzKonfig`, `Abstractions/Umgebung/UmgebungKonfig.cs`); sie muss die App dieses Codes sein (`GeneratedWiring.Vertrag`): **Rechner** und
+  **Port** (er hört unter `http://<Adresse>:<Port>`, auf einem Rechner mit Adresse `localhost` nur lokal, sonst auf allen Schnittstellen; ohne Port
+  startet er nicht), **Token** (Akteur-Token aus `Identitaeten`; leer = kein Header), **Dateien** (Verzeichnisse, die `/api/files/...` ausliefern
+  darf). Das Backend erreicht er
+  über den ersten Rechner des Backends und `Transport:GrpcPort` (`UmgebungKonfig.GrpcAdresse()`, docs/06 §6.5). `${branch}` in der Umgebung
   ersetzt `CQRS_BRANCH` (Default `main`, `UmgebungLader`).
 - DI-Scope **pro Circuit**; der ganze Stack ist `Scoped`: `ClientBus`, `GrpcProxy`, `VersioningModule`, `ConnectionModule`, `QueryBridge`,
   `FileBridge`, `ClientStartupService`. `CircuitHandlerBase` startet ihn beim Öffnen des Circuits und stoppt ihn beim Schließen.

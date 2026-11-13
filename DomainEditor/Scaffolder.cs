@@ -101,6 +101,11 @@ public static class Scaffolder
             dateien.Add(new(g.Key.Pfad, ClientDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
                 !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
 
+        // ── Apps (docs/10 E18) → ihre echte Datei; sonst die (eine) App-Datei ihres Namespace; sonst Apps.cs ──
+        foreach (var g in modell.Apps.GroupBy(a => (Pfad: a.Datei ?? AppZiel(modell, a.Namespace), a.Namespace)))
+            dateien.Add(new(g.Key.Pfad, AppDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
+                !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
+
         // ── Graphen (docs/04 §4.4) → ihre echte Datei; sonst die (eine) Graph-Datei ihres Namespace; sonst Graphen.cs im Verzeichnis ──
         foreach (var g in modell.Graphen.GroupBy(x => (Pfad: x.Datei ?? GraphZiel(modell, x.Namespace), x.Namespace)))
             dateien.Add(new(g.Key.Pfad, GraphDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
@@ -272,6 +277,39 @@ public static class Scaffolder
             Doku(b, clients[i].Doku, "");
             b.Append(ClientInterface(clients[i]));
             if (i < clients.Count - 1) b.AppendLine();
+        }
+        return b.ToString();
+    }
+
+    // ── Apps ────────────────────────────────────────────────────────────────────────────────────
+    private static string AppZiel(EditorModell m, string ns)
+    {
+        var dateien = m.Apps.Where(a => a.Namespace == ns && a.Datei != null).Select(a => a.Datei!).Distinct(StringComparer.Ordinal).ToList();
+        if (dateien.Count == 1) return dateien[0];
+        var v = Verzeichnis(m, ns);
+        var name = Abstractions.Projektstruktur.Sammeldatei(Abstractions.Projektstruktur.Primitive.App)!;
+        return v != null ? $"{v}/{name}" : $"{Unplatziert}{name}";
+    }
+
+    /// <summary>Die Parameter einer App: je Quelle <c>[Uebersetzt&lt;U&gt;] Quellart Name</c> (Reihenfolge der Quellen).</summary>
+    public static string AppParameter(App a) => string.Join(",\n    ", a.Quellen.Select(q =>
+        string.Concat(q.Uebersetzungen.Select(u => $"[Uebersetzt<{u}>] ")) + q.Quellart + " " + q.Name));
+
+    /// <summary>Eine App: <c>public sealed record X(…Quellen…) : IApp&lt;Client&gt;;</c> — ohne eigene Member.</summary>
+    public static string AppRecord(App a) => a.Quellen.Count == 0
+        ? $"public sealed record {a.Name} : IApp<{a.Client}>;\n"
+        : $"public sealed record {a.Name}(\n    {AppParameter(a)}) : IApp<{a.Client}>;\n";
+
+    private static string AppDatei(string ns, List<App> apps, EditorModell modell)
+    {
+        // usings: der Client (und über die Übersetzungen ihre Namespaces), die Quellarten (Usings der App, z. B. Core.Katalog).
+        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace], apps.Select(a => a.Client).Concat(apps.SelectMany(a => a.Quellen.SelectMany(q => q.Uebersetzungen))),
+            apps.SelectMany(a => a.Usings)));
+        for (var i = 0; i < apps.Count; i++)
+        {
+            Doku(b, apps[i].Doku, "");
+            b.Append(AppRecord(apps[i]));
+            if (i < apps.Count - 1) b.AppendLine();
         }
         return b.ToString();
     }
@@ -1058,6 +1096,8 @@ public static class Scaffolder
         foreach (var k in modell.Lesen?.Konsumenten ?? []) nsVon.TryAdd(k.Name, k.Namespace);
         foreach (var f in modell.BausteinFunktionen) nsVon.TryAdd(f.Name, f.Namespace);   // z. B. IDarf<IFunktion> am Akteur, Client über einen verkörperten Akteur
         foreach (var a in modell.Akteure) nsVon.TryAdd(a.Name, a.Namespace);      // IVerkoerpert<Akteur> am Client
+        foreach (var c in modell.Clients) nsVon.TryAdd(c.Name, c.Namespace);      // IApp<Client> an der App
+        foreach (var u in modell.Uebersetzungen) nsVon.TryAdd(u.Name, u.Namespace);   // [Uebersetzt<U>] an einer Quelle
         foreach (var g in modell.Graphen) nsVon.TryAdd(g.Name, g.Namespace);      // ein Graph als Knoten eines anderen
         foreach (var a in modell.Aggregate) nsVon.TryAdd(a.Name, a.Namespace);    // der Schlüssel eines Bündels ([Ueber<Aggregat>])
 

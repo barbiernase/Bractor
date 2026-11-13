@@ -4,7 +4,7 @@ KI-Classifier für industrielle Bildinspektion — der Client KlassifikationsWor
 
 Programmiert gegen seinen Client-Vertrag (Domain.Akteure.KlassifikationsWorker, docs/konzept-akteure.md §4): sein Akteur Klassifizierer
 reagiert auf ImagePairKomplett (ein Fakt, Schritt 6) mit seinem Urteil; davor merkt er sich den Pfad jedes Bildes (BildVerfuegbar, im Log
-davor) und lädt ein neu freigegebenes Modell (ModellAktiviert). Die generierte Basis `KlassifikationsWorkerBasis` verdrahtet den Dispatch, prüft
+davor) und lädt ein neu freigegebenes Modell (ModellAktiviert). Die generierte Basis `KlassifikationsAppBasis` verdrahtet den Dispatch, prüft
 jede Reaktion gegen das IDarf des Akteurs und meldet Client + Hash am Handshake; genau einmal wirkt sie mit einem Stand (`reaktion_stand`).
 Fehlt eine Methode, startet der Worker nicht.
 """
@@ -24,7 +24,7 @@ from domain_client.generated import (
     KlassifiziereBildPaarDurchKiDto,
     ModellAktiviertDto,
 )
-from domain_client.generated.vertraege import KlassifikationsWorkerBasis
+from domain_client.generated.vertraege import KlassifikationsAppBasis
 from domain_client.image_loader import download_and_convert
 
 log = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ class ClassifierState:
     aktives_modell: str = ""
 
 
-class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
+class ImageClassifier(KlassifikationsAppBasis[ClassifierState]):
 
     def __init__(self, registry, nutzlast, config: dict):
         super().__init__(registry, nutzlast, config)

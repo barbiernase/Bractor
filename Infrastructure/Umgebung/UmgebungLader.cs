@@ -6,8 +6,8 @@ using Microsoft.Extensions.Configuration;
 namespace Infrastructure.Umgebung;
 
 /// <summary>
-/// Lädt die Umgebung (docs/06 §6.5, W7: eine Umgebung = ein Ordner): <c>umgebungen/&lt;name&gt;/umgebung.json</c> und je Instanz eines Graphen
-/// <c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>; Name aus <c>--umgebung &lt;name&gt;</c> bzw. <c>CQRS_UMGEBUNG</c>. Umgebungsvariablen und
+/// Lädt die Umgebung (docs/06 §6.5, W7: eine Umgebung = ein Ordner): <c>umgebungen/&lt;name&gt;/umgebung.json</c>, je Instanz eines Graphen
+/// <c>graphen/&lt;instanz&gt;.json</c> und je Instanz einer App <c>apps/&lt;instanz&gt;.json</c>; Name aus <c>--umgebung &lt;name&gt;</c> bzw. <c>CQRS_UMGEBUNG</c>. Umgebungsvariablen und
 /// Kommandozeile überschreiben wie gewohnt; <c>${env:NAME}</c> und <c>${branch}</c> werden ersetzt. Ein unbekannter Abschnitt oder ein unbekanntes Feld
 /// ist ein Start-Fehler — die Bindung ist generiert, nicht reflektiert.
 /// </summary>
@@ -53,11 +53,14 @@ public static partial class UmgebungLader
     {
         PruefeAbschnitte(datei);
         konfig.AddJsonFile(datei, optional: false, reloadOnChange: false);
-        konfig.AddInMemoryCollection(Instanzen(Path.Combine(Path.GetDirectoryName(datei)!, Abstractions.Projektstruktur.GraphenOrdner)));
+        var ordner = Path.GetDirectoryName(datei)!;
+        konfig.AddInMemoryCollection(Instanzen(Path.Combine(ordner, Abstractions.Projektstruktur.GraphenOrdner)));
+        konfig.AddInMemoryCollection(Instanzen(Path.Combine(ordner, Abstractions.Projektstruktur.AppsOrdner), UmgebungsAbschnitte.Apps));
         konfig.AddEnvironmentVariables();
         konfig.AddCommandLine(args);
         Ersetze(konfig, branch ?? Environment.GetEnvironmentVariable("CQRS_BRANCH") ?? "main");
         var u = Binde(konfig);
+        u.DieserRechner = Rechnerregeln.NameAus(args);
         if (string.IsNullOrWhiteSpace(u.Umgebung.Name)) u.Umgebung.Name = name;
         if (u.Umgebung.Name != name)
             throw new InvalidOperationException($"Umgebung: die Datei {Path.GetFileName(datei)} heißt innen '{u.Umgebung.Name}'.");
@@ -65,10 +68,10 @@ public static partial class UmgebungLader
     }
 
     /// <summary>
-    /// Die Instanz-Dateien eines Ordners als Konfig-Schlüssel unter <c>Graphen:&lt;instanz&gt;</c> (Name der Instanz = Dateiname) — sie gehen durch dieselbe
-    /// Ersetzung der Platzhalter wie die Umgebung.
+    /// Die Instanz-Dateien eines Ordners als Konfig-Schlüssel unter <c>&lt;abschnitt&gt;:&lt;instanz&gt;</c> (Name der Instanz = Dateiname; Graphen bzw.
+    /// Apps) — sie gehen durch dieselbe Ersetzung der Platzhalter wie die Umgebung.
     /// </summary>
-    public static IEnumerable<KeyValuePair<string, string?>> Instanzen(string ordner)
+    public static IEnumerable<KeyValuePair<string, string?>> Instanzen(string ordner, string abschnitt = UmgebungsAbschnitte.Graphen)
     {
         if (!Directory.Exists(ordner)) yield break;
         foreach (var datei in Directory.GetFiles(ordner, "*.json").OrderBy(d => d, StringComparer.Ordinal))
@@ -76,7 +79,7 @@ public static partial class UmgebungLader
             var instanz = Path.GetFileNameWithoutExtension(datei);
             var werte = new ConfigurationBuilder().AddJsonFile(datei, optional: false, reloadOnChange: false).Build();
             foreach (var (key, wert) in werte.AsEnumerable().Where(kv => kv.Value != null))
-                yield return new($"{UmgebungsAbschnitte.Graphen}:{instanz}:{key}", wert);
+                yield return new($"{abschnitt}:{instanz}:{key}", wert);
         }
     }
 
@@ -105,38 +108,52 @@ public static partial class UmgebungLader
             Konsum = Abschnitt<KonsumKonfig>(konfig, UmgebungsAbschnitte.Konsum),
             Transport = Abschnitt<TransportKonfig>(konfig, UmgebungsAbschnitte.Transport),
         };
+        // Der Pool und das Backend (docs/06 §6.5): ohne Abschnitt nur localhost — eine Umgebung, die nichts nennt, läuft so wie bisher auf einem Rechner.
+        if (konfig.GetSection(UmgebungsAbschnitte.Rechner).GetChildren().ToList() is { Count: > 0 } pool)
+        {
+            u.Rechner = new Dictionary<string, RechnerKonfig>(StringComparer.Ordinal);
+            foreach (var r in pool) u.Rechner[r.Key] = r.Get<RechnerKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new RechnerKonfig();
+        }
+        if (konfig.GetSection(UmgebungsAbschnitte.Backend) is { } backend && backend.Exists())
+        {
+            // Von Hand: der Binder hängte die Liste an den Standard an, statt ihn zu ersetzen.
+            if (backend.GetChildren().FirstOrDefault(k => k.Key != nameof(BackendKonfig.Rechner)) is { } fremd)
+                throw new InvalidOperationException($"Umgebung: {UmgebungsAbschnitte.Backend}:{fremd.Key} ist kein Feld (bekannt: {nameof(BackendKonfig.Rechner)}).");
+            u.Backend = new BackendKonfig
+            {
+                Rechner = backend.GetSection(nameof(BackendKonfig.Rechner)).GetChildren().OrderBy(k => int.TryParse(k.Key, out var n) ? n : int.MaxValue)
+                    .Select(k => k.Value ?? "").ToArray(),
+            };
+        }
         foreach (var g in konfig.GetSection(UmgebungsAbschnitte.Graphen).GetChildren())
             u.Graphen[g.Key] = Instanz(g);
-        foreach (var c in konfig.GetSection(UmgebungsAbschnitte.Clients).GetChildren())
-            u.Clients[c.Key] = Client(c);
+        foreach (var a in konfig.GetSection(UmgebungsAbschnitte.Apps).GetChildren())
+            u.Apps[a.Key] = App(a);
         return u;
     }
 
     /// <summary>
-    /// Bindet einen Client streng — seine Eingänge von Hand (<see cref="Eingang"/>): ihre Werte sind die Felder der Konfig-Records ihrer Quellart, flach
-    /// wie am Knoten einer Instanz, geprüft beim Start gegen die Quellart.
+    /// Bindet eine App-Instanz streng: <see cref="AppInstanzKonfig.Felder"/>, <c>Start</c> und <c>Dateien</c> über den Binder, je Quelle von Hand
+    /// (<see cref="Quelle"/>) — ihre Werte sind die Felder der Konfig-Records ihrer Quellart, geprüft beim Start gegen die App.
     /// </summary>
-    public static ClientKonfig Client(IConfigurationSection c)
+    public static AppInstanzKonfig App(IConfigurationSection a)
     {
-        var ohne = new ConfigurationBuilder().AddInMemoryCollection(c.AsEnumerable(makePathsRelative: true)
-            .Where(kv => kv.Value != null && kv.Key.Split(':')[0] != nameof(ClientKonfig.Eingaenge))).Build();
-        var k = ohne.Get<ClientKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new ClientKonfig();
-        foreach (var e in c.GetSection(nameof(ClientKonfig.Eingaenge)).GetChildren()) k.Eingaenge[e.Key] = Eingang(c.Key, e);
+        if (a.GetChildren().FirstOrDefault(k => !AppInstanzKonfig.Felder.Contains(k.Key)) is { } fremd)
+            throw new InvalidOperationException($"Umgebung: App-Instanz {a.Key}: „{fremd.Key}“ ist kein Feld (bekannt: {string.Join(", ", AppInstanzKonfig.Felder)}).");
+        var ohne = new ConfigurationBuilder().AddInMemoryCollection(a.AsEnumerable(makePathsRelative: true)
+            .Where(kv => kv.Value != null && kv.Key.Split(':')[0] != nameof(AppInstanzKonfig.Quellen))).Build();
+        var k = ohne.Get<AppInstanzKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new AppInstanzKonfig();
+        if (string.IsNullOrWhiteSpace(k.Rechner)) k.Rechner = Rechnerregeln.Standard;
+        foreach (var q in a.GetSection(nameof(AppInstanzKonfig.Quellen)).GetChildren()) k.Quellen[q.Key] = Quelle(a.Key, q);
         return k;
     }
 
-    /// <summary>Bindet einen Eingang: <c>Art</c>, <c>Akteur</c>, <c>Rechner</c>, <c>Offen</c>, <c>Technik</c> — jeder andere Schlüssel ein Wert.</summary>
-    public static EingangKonfig Eingang(string client, IConfigurationSection e)
+    /// <summary>Bindet eine Quelle einer App-Instanz: <c>Technik</c> — jeder andere Schlüssel ein Wert.</summary>
+    public static QuelleKonfig Quelle(string instanz, IConfigurationSection q)
     {
-        var k = new EingangKonfig
-        {
-            Art = e[nameof(EingangKonfig.Art)] ?? "", Akteur = e[nameof(EingangKonfig.Akteur)] ?? "", Rechner = e[nameof(EingangKonfig.Rechner)],
-        };
-        if (e[nameof(EingangKonfig.Offen)] is { } offen)
-            k.Offen = int.TryParse(offen, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= 0
-                ? n : throw new InvalidOperationException($"Umgebung: Clients:{client}:Eingaenge:{e.Key}: Offen „{offen}“ ist keine Zahl ab 0 (0 = Standard).");
-        foreach (var t in e.GetSection(nameof(EingangKonfig.Technik)).GetChildren()) k.Technik[t.Key] = t.Value ?? "";
-        foreach (var (key, wert) in e.AsEnumerable(makePathsRelative: true).Where(kv => kv.Value != null && !EingangKonfig.Rahmenfelder.Contains(kv.Key.Split(':')[0])))
+        var k = new QuelleKonfig();
+        foreach (var t in q.GetSection(nameof(QuelleKonfig.Technik)).GetChildren()) k.Technik[t.Key] = t.Value ?? "";
+        foreach (var (key, wert) in q.AsEnumerable(makePathsRelative: true).Where(kv => kv.Value != null && !QuelleKonfig.Rahmenfelder.Contains(kv.Key.Split(':')[0])))
             k.Werte[key] = wert;
         return k;
     }

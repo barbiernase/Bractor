@@ -678,7 +678,7 @@ public sealed class KontextBauer
             }
             case "funktion" when s.Methode!.Name == Abstractions.Funktionsvertrag.Lausche:
                 // Eine Quellart ist kein Knoten: ihre Meldung macht eine Übersetzung der Akteur-Seite zu einer Nachricht, die ein Akteur darf.
-                yield return "Quellart: in keinem Graphen — sie läuft als Eingang eines Clients; ihr Akteur gibt hinein, was die Übersetzung der Akteur-Seite aus der Meldung macht";
+                yield return "Quellart: in keinem Graphen — sie ist eine Quelle einer App ([Uebersetzt<U>] Quellart Name); ein Akteur ihres Clients gibt hinein, was die Übersetzung der Akteur-Seite aus der Meldung macht";
                 foreach (var o in Ausgänge(s))
                     foreach (var u in _dom.Uebersetzungen.Where(u => u.Ein.Split('.').Last() == o.Name))
                         yield return $"{o.Name} wird übersetzt von {u.Name} zu {u.Aus.Split('.').Last()} (Akteur-Seite)";

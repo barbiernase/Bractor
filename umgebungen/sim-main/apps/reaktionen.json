@@ -1,0 +1,8 @@
+{
+  "App": "ReaktionsApp",
+  "Rechner": "localhost",
+  "Token": "sim-reaktionsworker",
+  "Start": {
+    "Projekt": "Domain.Client.Worker"
+  }
+}

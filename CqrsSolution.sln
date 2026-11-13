@@ -105,6 +105,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain.Uebersetzungen", "Do
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pruefdomaene.Uebersetzungen", "Pruefdomaene.Uebersetzungen\Pruefdomaene.Uebersetzungen.csproj", "{7A4329C2-B619-45D6-AD9B-F9D0E5BE9FB7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Host.Rechner", "Host.Rechner\Host.Rechner.csproj", "{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -727,6 +729,18 @@ Global
 		{7A4329C2-B619-45D6-AD9B-F9D0E5BE9FB7}.Release|x64.Build.0 = Release|Any CPU
 		{7A4329C2-B619-45D6-AD9B-F9D0E5BE9FB7}.Release|x86.ActiveCfg = Release|Any CPU
 		{7A4329C2-B619-45D6-AD9B-F9D0E5BE9FB7}.Release|x86.Build.0 = Release|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Debug|x64.Build.0 = Debug|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Debug|x86.Build.0 = Debug|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Release|x64.ActiveCfg = Release|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Release|x64.Build.0 = Release|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Release|x86.ActiveCfg = Release|Any CPU
+		{AF96DF4C-BAB2-49AD-9014-21D1EDBBC40A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

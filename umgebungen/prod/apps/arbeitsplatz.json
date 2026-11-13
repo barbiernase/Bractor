@@ -1,0 +1,9 @@
+{
+  "App": "ArbeitsplatzApp",
+  "Rechner": "prod-1",
+  "Port": 5010,
+  "Dateien": [
+    "/mnt/unlabeledgewebebilder/SNP/IO",
+    "/home/wirksam/cqrs-data/preprocessed"
+  ]
+}

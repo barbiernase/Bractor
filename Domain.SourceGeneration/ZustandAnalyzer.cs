@@ -21,7 +21,10 @@ namespace Domain.SourceGeneration;
 ///   Schnittstelle mit Eingängen (draußen lebt der Zustand im Worker, A8), nicht in einem Aggregat oder sonst wo. Je Klasse höchstens einer, T eine
 ///   eigene, nicht generische Klasse.</item>
 /// </list>
-/// Technik im Konstruktor (gehalten in <c>readonly</c>-Feldern oder Parametern) ist Ressource der Aktivierung, kein Zustand. Nur Code-Fakten:
+/// Eine QUELLART ist davon ausgenommen (docs/10 E18): sie läuft im Rechnerdienst, das Framework sichert für sie nichts, und
+/// was sie schon gesehen hat, merkt sie sich selbst — in einem Feld, einer eigenen Datei. Meldet sie ein Element erneut, trägt es dieselbe Kennung aus dem
+/// Inhalt; <c>IZustand&lt;T&gt;</c> nimmt sie nicht (CQRS100). Technik im Konstruktor (gehalten in <c>readonly</c>-Feldern oder Parametern) ist
+/// Ressource der Aktivierung, kein Zustand. Nur Code-Fakten:
 /// Marker, Konstruktor-Parameter, Feld- und Eigenschafts-Symbole.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -64,7 +67,8 @@ public sealed class ZustandAnalyzer : DiagnosticAnalyzer
     {
         var t = (INamedTypeSymbol)ctx.Symbol;
         if (t.TypeKind != TypeKind.Class) return;
-        var baustein = !t.IsAbstract && (Funktionsform.IstFunktion(t) || Funktionsform.IstQuellart(t));
+        var quellart = !t.IsAbstract && Funktionsform.IstQuellart(t);
+        var baustein = !t.IsAbstract && (Funktionsform.IstFunktion(t) || quellart);
         var technikUmsetzung = !t.IsAbstract && technik.IstUmsetzung(t);
 
         // IZustand<T> außerhalb einer Funktions-Klasse bzw. Technik-Umsetzung.
@@ -81,7 +85,7 @@ public sealed class ZustandAnalyzer : DiagnosticAnalyzer
             foreach (var (text, ort) in fehler) ctx.ReportDiagnostic(Diagnostic.Create(Regel, ort, t.Name, text));
         }
 
-        if (!baustein) return;
+        if (!baustein || quellart) return;   // eine Quellart merkt sich selbst, was sie gesehen hat
         foreach (var m in t.GetMembers().Where(m => !m.IsImplicitlyDeclared))
         {
             switch (m)

@@ -18,7 +18,7 @@ from domain_client.generated.nutzlast_tabelle import TABELLE as NUTZLAST
 from cqrs_client import VertragsVerletzung
 from cqrs_client.router import MessageContext
 from domain_client.domain_registry import create_registry
-from domain_client.generated.vertraege import KlassifikationsWorkerBasis, TrainingsWorkerBasis
+from domain_client.generated.vertraege import KlassifikationsAppBasis, TrainingsAppBasis
 from domain_client.training_worker import TrainingWorker
 
 
@@ -36,22 +36,23 @@ async def _hoere(worker, payload, ctx):
 
 
 def test_generat_nennt_die_fakten_und_das_idarf():
-    assert KlassifikationsWorkerBasis.CLIENT == "KlassifikationsWorker"
-    assert KlassifikationsWorkerBasis.AKTEURE == ("Klassifizierer",)
-    assert re.fullmatch(r"[0-9a-f]{16}", KlassifikationsWorkerBasis.VERTRAG_HASH)
-    assert set(KlassifikationsWorkerBasis.HOERT) == {g.BildVerfuegbarDto, g.ImagePairKomplettDto, g.ModellAktiviertDto}
-    assert g.KlassifiziereBildPaarDurchKiDto in KlassifikationsWorkerBasis.SPONTAN
-    assert TrainingsWorkerBasis.HOERT == {g.TrainingAngefordertDto: "auf_training_angefordert"}
-    assert set(TrainingsWorkerBasis.SPONTAN) == {g.MeldeTrainingBegonnenDto, g.MeldeFortschrittDto, g.MeldeTrainingAbgeschlossenDto,
+    assert KlassifikationsAppBasis.APP == "KlassifikationsApp"
+    assert KlassifikationsAppBasis.CLIENT == "KlassifikationsWorker"
+    assert KlassifikationsAppBasis.AKTEURE == ("Klassifizierer",)
+    assert re.fullmatch(r"[0-9a-f]{16}", KlassifikationsAppBasis.VERTRAG_HASH)
+    assert set(KlassifikationsAppBasis.HOERT) == {g.BildVerfuegbarDto, g.ImagePairKomplettDto, g.ModellAktiviertDto}
+    assert g.KlassifiziereBildPaarDurchKiDto in KlassifikationsAppBasis.SPONTAN
+    assert TrainingsAppBasis.HOERT == {g.TrainingAngefordertDto: "auf_training_angefordert"}
+    assert set(TrainingsAppBasis.SPONTAN) == {g.MeldeTrainingBegonnenDto, g.MeldeFortschrittDto, g.MeldeTrainingAbgeschlossenDto,
                                                  g.MeldeTrainingGescheitertDto}
-    assert TrainingsWorkerBasis.FRAGT == (g.HoleDatensatzSamplesDto, g.HoleTrainingslaufDto)
+    assert TrainingsAppBasis.FRAGT == (g.HoleDatensatzSamplesDto, g.HoleTrainingslaufDto)
 
 
 def test_training_worker_meldet_sich_als_client():
     w = _training()
     req = w._build_capabilities_request()
-    assert req.vertrag == "TrainingsWorker", "am Handshake steht der CLIENT (er leitet die Akteure ab)"
-    assert req.vertrag_hash == TrainingsWorkerBasis.VERTRAG_HASH
+    assert req.vertrag == "TrainingsApp", "am Handshake steht die APP (ihr Client leitet die Akteure ab)"
+    assert req.vertrag_hash == TrainingsAppBasis.VERTRAG_HASH
     assert "TrainingAngefordert" in req.message_types
 
 
@@ -81,7 +82,7 @@ def test_eine_reaktion_gibt_nichts_ausserhalb_des_idarf_aus():
 
 
 def test_ohne_jede_methode_des_vertrags_startet_kein_worker():
-    class Unvollstaendig(KlassifikationsWorkerBasis[SimpleNamespace]):
+    class Unvollstaendig(KlassifikationsAppBasis[SimpleNamespace]):
         async def auf_image_pair_komplett(self, e, ctx, state):
             return None
 

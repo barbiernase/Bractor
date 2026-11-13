@@ -62,7 +62,7 @@ public sealed record Inspekteur     : IAkteur, IDarf<LabelBildPaar>, IDarf<Marki
 - **Verwirklichung:** womit ein Akteur seine Nachrichten tatsächlich erzeugt — eine App gegen seinen generierten Vertrag, oder eine **Quellart**
   (Dateiwächter, Taktgeber, Webhook, eine eigene): eine Übersetzung der Akteur-Seite in `Domain.Akteure/Uebersetzungen.cs` macht aus ihrer Meldung
   eine Nachricht, die er darf (`DateiGefunden_LiesBild_1` für `KameraSystem : IDarf<LiesBild>`). Welche Quellarten ihn verwirklichen können, folgt
-  aus diesen Übersetzungen; welche laufen, sagen die Eingänge der Clients ([04](04-konsum-und-prozess-maschine.md) §4.7).
+  aus diesen Übersetzungen; welche laufen, sagen die Quellen der Apps und deren Instanzen ([04](04-konsum-und-prozess-maschine.md) §4.7; Apps hier §4.7).
 
 ### 2.2 Katalog der Beispieldomäne (`Domain.Akteure/Akteure.cs`)
 
@@ -139,10 +139,11 @@ public sealed record Arbeitsplatz         : IClient, IVerkoerpert<Inspekteur>, I
 public sealed record Linienrechner        : IClient, IVerkoerpert<KameraSystem>;   // ohne Leitung: Eingänge aus Quellen
 ```
 
-- Ein Client ist die Software-Einheit, die Akteure verkörpert — über **eine Leitung** (eine Verbindung, eine Sitzung) und/oder über **Eingänge aus
-  Quellen**, die im Host laufen (in der Umgebung `Clients:<Name>:Eingaenge`, je Eingang Art, Akteur, Rechner, Werte; drei Verzeichnisse = drei
-  Eingänge, auch verschiedener Art und für verschiedene seiner Akteure). Er kann mehrere Akteure verkörpern, und ein Akteur kann über mehrere
-  Clients laufen (n:m). Ein Eingang aus einer Quelle braucht kein Token: wirksam ist sein Akteur.
+- Ein Client ist das Konzept, das Akteure verkörpert; umgesetzt wird er von **Apps** (§4.7) — über **eine Leitung** (eine Verbindung, eine
+  Sitzung) und/oder über **Quellen** der App (Parameter ihres Records), die mit jeder Instanz der App im Rechnerdienst ihres Rechners laufen. Wo eine App läuft, sagt
+  je Instanz eine Datei der Umgebung (`apps/<instanz>.json`: Rechner, Port, Token, je Quelle Werte; drei Verzeichnisse = drei Instanzen). Er kann
+  mehrere Akteure verkörpern, und ein Akteur kann über mehrere Clients laufen (n:m). Das Token der Instanz begrenzt auch, für welchen Akteur ihre
+  Quellen hineingeben.
 - Der Client ist ein Record und **nennt nur**, wen er verkörpert (`IVerkoerpert<A>`, nur konkrete Akteure); eigene Member, eigene Befugnisse oder
   ein eigenes Hören gibt es nicht (CQRS063, CQRS064). Gelesen wird er an einer Stelle (`Infrastructure.SourceGeneration/Clientvertragslesart.cs`).
 - Handshake-Name = Name des Records (`Clientvertragsregeln.ClientName`); Akteur- und Client-Namen sind zusammen eindeutig (CQRS059).
@@ -180,17 +181,35 @@ geht über die Leitung; client-interne Typen stehen nie bei einem Akteur.
 Ein Ketten-Command, den nur ein Graph ausgibt, steht bei keinem Akteur (Prüfdomäne: `ReservierePosten` aus der Auftragsabwicklung); die
 Mehrfach-Auswahl beim Kuratieren schickt je Paar `NimmPaarAuf`.
 
-### 4.6 C#-Client (Blazor): Code = Akteure
+### 4.6 C#-Client (Blazor): Code = Vertrag der App
 
-- Die Client-Assembly nennt ihren Client: `[assembly: IstClient<Arbeitsplatz>]` (`Domain.Client.Modules.Blazor/Arbeitsplatz.cs`).
-- Der Client-Generator (`Client.SourceGeneration/WiringGenerator.cs`, `ClientVertrag.cs`) liest ihn mit **derselben** Lesart wie der Server
-  (`Clientvertragslesart`, per Link) und erzeugt `Vertrag` (den Client-Namen), `VertragHash` (derselbe Hash wie `GeneratedClientVertraege`),
-  `ServerEventTypes` = das `IHoert` der Akteure (Kenntnis), `CommandTypes` und `RegisterQueries` = Commands bzw. Queries ihres `IDarf`.
+- Die Client-Assembly nennt ihre App: `[assembly: IstApp<ArbeitsplatzApp>]` (`Domain.Client.Modules.Blazor/Arbeitsplatz.cs`).
+- Der Client-Generator (`Client.SourceGeneration/WiringGenerator.cs`, `ClientVertrag.cs`) liest sie mit **derselben** Lesart wie der Server
+  (`Clientvertragslesart`, per Link) und erzeugt `Vertrag` (den Namen der App), `Client` (ihr Client),
+  `VertragHash` (derselbe Hash wie `GeneratedAppVertraege`), `ServerEventTypes` = das `IHoert` der Akteure (Kenntnis), `CommandTypes` und
+  `RegisterQueries` = die Commands des Vertrags bzw. die Queries des `IDarf`.
 - Der Handshake nennt nur `vertrag` und `vertrag_hash`. Nennt die Antwort einen anderen Client, startet die Verbindung nicht
   (`ConnectionModule.ConnectAsync`); ein abweichender Hash steht als Warnung im Client, im strengen Modus lehnt schon der Server ab (§5.2).
 - Build-Regeln: §7 (CQRS093, 095–097).
-- Verbindung aus der **Umgebung**: `Host.Blazor --umgebung <name>` liest `Clients:<Name>` (`Token`, `Adresse` — leer = localhost:`Transport:GrpcPort`,
-  `Urls`, `Dateien`). In `sim-main` nennt das Token `sim-arbeitsplatz` die vier Akteure. Mehr: [08](08-frontend-blazor-client.md) §8.2, §8.6.
+- Verbindung aus der **Umgebung**: `Host.Blazor --umgebung <name> --app <instanz>` liest seine App-Instanz (`apps/<instanz>.json`: `Rechner`,
+  `Port`, `Token`, `Dateien`); das Backend erreicht er über seine Rechner (docs/06 §6.5). In `sim-main` nennt das Token `sim-arbeitsplatz` die vier Akteure. Mehr: [08](08-frontend-blazor-client.md) §8.2, §8.6.
+
+
+### 4.7 Apps: die Software eines Clients
+
+Ein Client ist der Begriff; umgesetzt wird er von **Apps** (`Domain.Akteure/Apps.cs`): `record X(…) : IApp<Client>`. Jeder Parameter ist eine
+**Quelle** — eine Quellart mit `[Uebersetzt<U>]`, U eine Übersetzung der Akteur-Seite aus ihrer Meldung in einen Command, den ein Akteur des Clients
+darf (CQRS125/126). Je Nachricht setzt entweder die App selbst sie um oder eine Quelle; der **Vertrag der App** ist der ihres Clients ohne die Ziele
+ihrer Quellen (`Clientvertragslesart.LiesApp`, Hash wie beim Client aus `ClientKanon` mit dem Namen der App). Gegen ihn wird verbindlich entwickelt:
+am Handshake nennt sich die App (`GeneratedAppVertraege`), der Server prüft Hash und Akteure ihres Clients ∩ Token. Beispieldomäne: `ArbeitsplatzApp`
+(Blazor), `KlassifikationsApp` und `TrainingsApp` (Python), `ReaktionsApp` (.NET-Worker), `KameraApp` (nur eine Quelle: der Dateiwächter).
+
+Wo eine App läuft, ist Konfig: je **App-Instanz** eine Datei der Umgebung (`umgebungen/<name>/apps/<instanz>.json`, `AppInstanzKonfig`, docs/06
+§6.5) — App, Rechner aus dem Pool, Port, Token, wie die Werkbank sie startet, Dateien und je Quelle ihre Werte. Eine App läuft beliebig oft (zwei
+Linien-PCs = zwei Instanzen der `KameraApp`), ein Rechner trägt mehrere Apps auf verschiedenen Ports; ein Prozess weiß über `--app <instanz>` bzw.
+`CQRS_APP`, welche Instanz er ist. Der Start prüft jede Instanz (`Eingaenge.Aus`): die App gibt es, die Werte nennen nur ihre Quellen, das Token nennt
+einen Akteur ihres Clients; je Quelle gibt der Akteur des Clients (unter denen des Tokens) hinein, der darf, was die Übersetzung gibt. Auf der Fläche
+der Werkbank steht jede Instanz auf der Karte ihres Rechners (Spalte Rechner), mit Kanten zum Client und von ihren Quellen zum Akteur (docs/10 §10.9).
 
 ---
 
@@ -280,7 +299,7 @@ des Eingangs: die Kette und ihre Commands tragen das Fakt als Ursache. Nimmt kei
   lückenlos, ein Vorgang ist seine Korrelation samt ihren Folgen über `ursache`. Ein Client, der reagiert, ist ein eigener Client (ein Worker),
   keine Oberfläche. In der Beispieldomäne ist das der `ReaktionsWorker` (`Domain.Client.Worker`): als
   `Datensatzpfleger` löst er Ranges auf und schließt das Einfrieren ab, als `Teilmelder` meldet er jedes fertige Teil am Sammelvorgang. Die
-  Werkbank startet einen .NET-Worker über `Clients:<Name>:Worker:Projekt` (`dotnet run --project`), Prüfstände lassen ihn neben dem Host laufen
+  Werkbank startet ihn als Instanz der `ReaktionsApp` über `Start:Projekt` (`dotnet run --project`), Prüfstände lassen ihn neben dem Host laufen
   (Prüfdomäne: in-process über gRPC; Verhaltens-Netz: `Hostlauf` startet den Worker der Anwendung je Host; Messung: `Cqrs.Vermessung/Reaktionsworker.cs`).
 - **Keine Queries an einen Client:** ein Client fragt, er beantwortet nie — eine Query hat genau ein Ziel, einen Reader oder ein Aggregat (R4).
 
@@ -291,9 +310,10 @@ des Eingangs: die Kette und ihre Commands tragen das Fakt als Ursache. Nimmt kei
 | Generat | Ort | Inhalt |
 |---|---|---|
 | `GeneratedAkteurRechte` | `Infrastructure.SourceGeneration/AkteurRechteGenerator.cs` | je Akteur: Commands, Queries, Hinweise (aus `IDarf`), gehörte Events und Hinweise (aus `IHoert`) |
-| `GeneratedClientVertraege` | dito | je Client: die verkörperten Akteure und der Client-Hash |
-| `GeneratedWiring_<Assembly>` (C#-Client) | `Client.SourceGeneration/WiringGenerator.cs` | `Vertrag`, `VertragHash`, `ServerEventTypes` (`IHoert` der Akteure), `CommandTypes` und `RegisterQueries` (ihr `IDarf`) — aus `[assembly: IstClient<X>]` |
-| `domain_client/generated/vertraege.py` | `Cqrs.Codegen/PythonVertragsEmitter.cs` (Codegen-Schritt im Build) | je Client `<Client>Basis` (`CLIENT`, `AKTEURE`, `VERTRAG_HASH`, `HOERT`, `SPONTAN`, `FRAGT`, abstrakte Methode `auf_<event>` je gehörtem Typ) |
+| `GeneratedClientVertraege` | dito | je Client: die verkörperten Akteure |
+| `GeneratedAppVertraege` | dito | je App: ihr Client, dessen Akteure, der Hash ihres Vertrags — gegen ihn prüft der Handshake — und ihre Quellen (Parameter, Quellart, Übersetzungen), aus denen der Start je App-Instanz die Eingänge macht |
+| `GeneratedWiring_<Assembly>` (C#-Client) | `Client.SourceGeneration/WiringGenerator.cs` | `Vertrag`, `Client`, `VertragHash`, `ServerEventTypes` (`IHoert` der Akteure), `CommandTypes` und `RegisterQueries` (Vertrag der App) — aus `[assembly: IstApp<X>]` |
+| `domain_client/generated/vertraege.py` | `Cqrs.Codegen/PythonVertragsEmitter.cs` (Codegen-Schritt im Build) | je App `<App>Basis` (`APP`, `CLIENT`, `AKTEURE`, `VERTRAG_HASH`, `HOERT`, `SPONTAN` ohne die Ziele ihrer Quellen, `FRAGT`, abstrakte Methode `auf_<event>` je gehörtem Typ) |
 
 - **Kanon und Hash** an einer Stelle (`Abstractions/Clientvertragsregeln.cs`: `Kanon`, `ClientKanon`, `Hash` = 16 Hex von SHA-256): Server,
   Python und Extractor ergeben denselben Hash; ein Client gegen einen anderen Stand fällt am Handshake auf. Die Generatoren laufen nur in der
@@ -313,7 +333,8 @@ des Eingangs: die Kette und ihre Commands tragen das Fakt als Ursache. Nimmt kei
 | CQRS063 | GR-CLIENT | Client: ein Record, der nur `IClient` und `IVerkoerpert<A>` nennt; deklariert selbst nichts |
 | CQRS064 | GR-CLIENT-BEFUGT | Verkörpert = ein konkreter Akteur |
 | CQRS116 | GR-COMMAND | ein Command ohne Ziel hat genau einen Empfänger: einen Knoten desselben Graphen oder den Kopf genau eines Graphen |
-| CQRS093, 095–097 | GR-CLIENT-CODE | C#-Client: Client genannt (093), erzeugte Commands (095) und gestellte Queries (096) darf ein verkörperter Akteur, `Handle(E, MessageContext)` auf ein Server-Event nur, wenn einer es hört (097) — `Client.SourceGeneration/ClientVertrag.cs` |
+| CQRS125, 126 | GR-APP | App: ein Record `IApp<Client>`, Parameter = Quellarten mit `[Uebersetzt<U>]`, sonst nichts (125); U übersetzt eine Meldung der Quellart in ein `IDarf` des Clients (126) |
+| CQRS093, 095–097 | GR-CLIENT-CODE | C#-Code: App genannt (093), erzeugte Commands stehen im Vertrag der App (095), gestellte Queries darf ein Akteur (096), `Handle(E, MessageContext)` auf ein Server-Event nur, wenn einer es hört (097) — `Client.SourceGeneration/ClientVertrag.cs` |
 | — (Laufzeit-Tor) | GR-HERKUNFT | jeder Command und jede Query kommt von einem Akteur, direkt oder über die Kette (Warnung in der Grammatik; das Tor weist ohne `IDarf` ab) |
 
 Die Grammatik ist eine Quelle (`DomainEditor/Grammatik.cs`, [10](10-entwickler-api.md) §10.6: R16, R17); `--check` prüft, dass jede genannte
@@ -343,7 +364,7 @@ Zur Laufzeit trägt ein Command genau einen Akteur (§2.3, §5.1).
 Steht in [13](13-reifegrad-schulden-bewertung.md) §13.0:
 
 - **AK-1** — `als` im Envelope bei mehreren verkörperten Akteuren (heute der erste, der darf), Anmeldung je Person am Arbeitsplatz (heute ein
-  Token je Umgebung), kein Start-Check, ob `Clients:<Name>:Token` die Akteure des Clients nennt.
+  Token je Umgebung). (Der Start prüft seit den App-Instanzen, dass ihr Token einen Akteur ihres Clients nennt.)
 - **FB-14** — das Python-SDK kennt weder Ausgangskorb noch neu Fragen nach `Aktualisiert` (ab Position liest nur sein Reaktions-Läufer).
 - **FB-15** — Überlast an einer Sitzung: Verwerfen nur mit Log-Warnung; Nachrichten des Clients ohne Grenze in der Mailbox.
 - **FB-19** — Antworten eines Aggregats auf eine direkte Query werden nicht beobachtet (kein `Aktualisiert`).

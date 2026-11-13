@@ -45,7 +45,7 @@ from domain_client.generated import (
     MeldeTrainingAbgeschlossenDto,
     MeldeTrainingGescheitertDto,
 )
-from domain_client.generated.vertraege import TrainingsWorkerBasis
+from domain_client.generated.vertraege import TrainingsAppBasis
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class TrainingState:
     abbruch: dict[str, threading.Event] = field(default_factory=dict)
 
 
-class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
+class TrainingWorker(TrainingsAppBasis[TrainingState]):
     """Der Client TrainingsWorker — programmiert gegen seinen Vertrag (Domain.Akteure.TrainingsWorker: reagiert auf TrainingAngefordert)."""
 
     # Seiten-Größe beim Ziehen der Samples (paginiert, wie SucheImagePairs).

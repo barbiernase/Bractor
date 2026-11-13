@@ -91,7 +91,7 @@ public sealed class FunktionsOrte(Cluster? cluster, string? rechner = null, ILog
         _verdraengt = verdraengt;
         if (verdraengt)
             logger?.LogError("[Funktionen] Rechner {Rechner}: auch das Mitglied {Anderer} ({Adresse}) trägt diesen Namen — es hat Vorrang, dieser Knoten hält "
-                + "seine festgelegten Instanzen nicht. Ein Rechnername gehört genau einer Maschine (Cluster:Rechner).", rechner, vorrang, mitglieder[vorrang!]);
+                + "seine festgelegten Instanzen nicht. Ein Rechnername gehört genau einer Maschine (CQRS_RECHNER).", rechner, vorrang, mitglieder[vorrang!]);
         else logger?.LogWarning("[Funktionen] Rechner {Rechner}: kein anderes Mitglied trägt diesen Namen mehr — dieser Knoten hält seine festgelegten Instanzen", rechner);
         _beobachter?.Invoke(verdraengt);
     }

@@ -127,6 +127,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
         foreach (var c in modell.Clients.Where(c => c.Datei != null && Herkunft.Geaendert(c.Herkunft, Herkunft.Von(c))))
             Datei(c.Datei!, $"client {c.Namespace}.{c.Name}", t => ClientVertrag(t, c));
+        foreach (var a in modell.Apps.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
+            Datei(a.Datei!, $"app {a.Namespace}.{a.Name}", t => AppQuellen(t, a));
         // Graph (docs/04 §4.4): die Knoten SIND die Parameterliste des Records — Knoten hinzu/weg/umbenannt; vorhandene Parameter bleiben Wort für Wort.
         foreach (var g in modell.Graphen.Where(g => g.Datei != null && Herkunft.Geaendert(g.Herkunft, Herkunft.Von(g))))
             Datei(g.Datei!, $"graph {g.Namespace}.{g.Name}", t => GraphKnoten(t, g));
@@ -654,6 +656,17 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (MitNamespaces(Anwenden(text, [(bl.Types[0].SpanStart, bl.Types[^1].Span.End, neu)]), c.Verkoerpert), "Client");
     }
 
+    // ── App (docs/10 E18): ihre Quellen SIND die Parameter des Records, ihr Client steht in IApp<Client>; Kopf und Doku bleiben stehen. ──
+    private (string, string)? AppQuellen(string text, App a)
+    {
+        if (Typ(Parse(text), a.Name, a.Namespace) is not RecordDeclarationSyntax decl) return (text, $"App {a.Name} nicht gefunden");
+        var soll = Scaffolder.AppRecord(a).TrimEnd();
+        var von = decl.Modifiers.Count > 0 ? decl.Modifiers[0].SpanStart : decl.Keyword.SpanStart;
+        if (N(text[von..decl.Span.End]) == N(soll)) return null;
+        return (MitNamespaces(Anwenden(text, [(von, decl.Span.End, soll)]),
+            a.Quellen.Select(q => q.Quellart).Concat(a.Quellen.SelectMany(q => q.Uebersetzungen)).Append(a.Client)), "App");
+    }
+
     // ── Graph (docs/04 §4.4): die Knoten sind die Parameter des Records (Name = Konfig-Schlüssel, Typ = Funktion oder Graph, [Kopf], [Von(nameof(…))]) ──
     private (string, string)? GraphKnoten(string text, Graph g)
     {
@@ -758,6 +771,10 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             .Concat(modell.Akteure.Select(a => (a.Name, a.Namespace)))
             // Graphen: ein Graph als Knoten eines anderen.
             .Concat(modell.Graphen.Select(g => (g.Name, g.Namespace)))
+            // Apps: ihr Client (IApp<Client>), ihre Quellarten (auch die des Frameworks) und die Übersetzungen ihrer Quellen.
+            .Concat(modell.Clients.Select(c => (c.Name, c.Namespace)))
+            .Concat(modell.Quellarten.Select(q => (q.Name, q.Namespace)))
+            .Concat(modell.Uebersetzungen.Select(u => (u.Name, u.Namespace)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal);
         var root = Parse(text);
         var dateiNs = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();

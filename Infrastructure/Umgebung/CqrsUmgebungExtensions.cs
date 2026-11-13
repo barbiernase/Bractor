@@ -44,6 +44,7 @@ public static class CqrsUmgebungExtensions
     {
         // Die Anwendung zuerst: alles Weitere liest ihre Tabellen (docs/07, Rolle Komposition).
         Anwendung.Setze(anwendung);
+        PruefeRechner(u);
         var s = builder.Services;
         s.AddSingleton(anwendung);
         s.AddSingleton(u);
@@ -64,11 +65,11 @@ public static class CqrsUmgebungExtensions
             o.EventStoreConnectionString = UmgebungLader.Verbindung(u.EventStore);
             o.EventStoreSchema = u.EventStore.Schema;
             o.CommandTimeoutSeconds = u.EventStore.BefehlsTimeoutSekunden;
-            o.Einzelknoten = u.Cluster.Art == ClusterArt.Einzelknoten;
-            o.Rechner = u.Cluster.Rechner;
+            o.Einzelknoten = u.Einzelknoten;
+            o.Rechner = u.DieserRechner;
             o.ClusterName = u.Cluster.Name;
             o.ConsulAddress = u.Cluster.Consul;
-            o.AdvertisedHost = u.Cluster.AdvertisedHost;
+            o.AdvertisedHost = u.Adresse(u.DieserRechner);
             o.SchemaRole = u.Cluster.Rolle switch
             {
                 KnotenRolle.Migrator => MartenSchemaRole.Migrator,
@@ -97,10 +98,38 @@ public static class CqrsUmgebungExtensions
         s.AddBackendMonitoring();
         s.AddAkteure(builder.Configuration.GetSection(UmgebungsAbschnitte.Identitaeten));
         var instanzen = s.BindeGraphen(u);
-        var eingaenge = s.BindeEingaenge(u);
-        s.BindeTechnik(instanzen, eingaenge);   // nach Instanzen und Eingängen: gebunden wird, was ihre Umsetzungen brauchen
+        s.PruefeApps(u, Tokens(builder.Configuration.GetSection(UmgebungsAbschnitte.Identitaeten)));   // laufen tun sie im Rechnerdienst
+        s.BindeTechnik(instanzen);   // nach den Instanzen: gebunden wird, was ihre Umsetzungen brauchen
         s.AddEinblick(u);
         return builder;
+    }
+
+    /// <summary>Die Tokens der Umgebung (<c>Identitaeten:Tokens</c>, <see cref="AkteurTokens"/>): Token → Akteure; ohne Abschnitt null (ohne Tor).</summary>
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>>? Tokens(Microsoft.Extensions.Configuration.IConfigurationSection identitaeten)
+    {
+        var tokens = identitaeten.GetSection("Tokens");
+        if (!Microsoft.Extensions.Configuration.ConfigurationExtensions.Exists(tokens)) return null;
+        return tokens.GetChildren().ToDictionary(t => t.Key, t => t.Value is { } wert ? AkteurTokens.Akteure(wert)
+            : (IReadOnlyList<string>)t.GetChildren().Select(x => x.Value ?? "").Where(x => x.Length > 0).ToList(), StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Rechner und Backend (docs/06 §6.5, <see cref="Rechnerregeln"/>): Pool, Backend und die Rechner der Instanzen stimmen, und dieser Host läuft auf einem
+    /// Rechner des Backends (der Migrator eines Kaltstarts ist kein Knoten und darf überall laufen). Boot-Fehler mit der Karte des Befunds.
+    /// </summary>
+    public static void PruefeRechner(UmgebungKonfig u)
+    {
+        var pool = u.Rechner.ToDictionary(r => r.Key, r => r.Value.Adresse, StringComparer.Ordinal);
+        if (Rechnerregeln.Befunde(pool, u.Backend.Rechner, u.Graphen.Select(g => (g.Key, g.Value.Rechner)),
+                u.Apps.Select(a => (a.Key, a.Value.Rechner, a.Value.Port)), [u.Transport.GrpcPort, u.Transport.EinblickPort]).FirstOrDefault() is { } b)
+            throw new BootFehler(b.Text + ".", b.Karte);
+        if (u.Cluster.Rolle == KnotenRolle.Migrator) return;   // der Migrator eines Kaltstarts ist kein Knoten
+        if (!pool.ContainsKey(u.DieserRechner))
+            throw new BootFehler($"Dieser Host läuft als Rechner {u.DieserRechner} ({Rechnerregeln.Argument} bzw. {Rechnerregeln.Variable}) — den gibt es im Pool "
+                + $"nicht (Rechner: {string.Join(", ", pool.Keys)}).", Rechnerregeln.Karte(u.DieserRechner));
+        if (!u.Backend.Rechner.Contains(u.DieserRechner))
+            throw new BootFehler($"Dieser Host läuft als Rechner {u.DieserRechner} — er gehört nicht zum Backend ({string.Join(", ", u.Backend.Rechner)}).",
+                Rechnerregeln.BackendKarte);
     }
 
     /// <summary>
@@ -122,12 +151,11 @@ public static class CqrsUmgebungExtensions
             app.MapBackendMonitoring();
             app.MapEinblick(u);
             app.MapEingang(u);
-            app.MapAnnahme(u);   // POST /eingang/webhook/<Pfad>: nur mit Eingängen, die der Host annimmt (docs/04 §4.7)
         }
         catch (Exception e) { CqrsBoot.Melde(e); throw; }
         Console.WriteLine();
         Console.WriteLine($"  CQRS/ES Host · Umgebung {u.Umgebung.Name} ({u.Umgebung.Art}) · gRPC :{u.Transport.GrpcPort}"
-            + (u.Transport.EinblickPort > 0 ? $" · Einblick :{u.Transport.EinblickPort}" + (u.Transport.JsonEingang ? " (+ JSON-Eingang)" : "") : "") + $" · DB {u.EventStore.Datenbank} · Cluster {u.Cluster.Name} ({u.Cluster.Art})");
+            + (u.Transport.EinblickPort > 0 ? $" · Einblick :{u.Transport.EinblickPort}" + (u.Transport.JsonEingang ? " (+ JSON-Eingang)" : "") : "") + $" · DB {u.EventStore.Datenbank} · Cluster {u.Cluster.Name} ({(u.Einzelknoten ? "Einzelknoten" : "Consul")}) · Rechner {u.DieserRechner}");
         Console.WriteLine();
         try { await app.RunAsync(); }
         catch (Exception e) { CqrsBoot.Melde(e); throw; }

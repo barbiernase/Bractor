@@ -38,7 +38,7 @@ public class EingangE2ETests
         {
             Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim },
             EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_eingang_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
-            Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
+            Cluster = new ClusterKonfig { Name = "cqrs-" + name },
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
         };
         var verz = Directory.CreateTempSubdirectory("eingang-it-").FullName;
@@ -137,7 +137,7 @@ public class EingangE2ETests
         {
             Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim },
             EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_wiederholung_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
-            Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
+            Cluster = new ClusterKonfig { Name = "cqrs-" + name },
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
         };
         var verz = Directory.CreateTempSubdirectory("wiederholung-it-").FullName;

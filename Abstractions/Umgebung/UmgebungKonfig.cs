@@ -4,8 +4,8 @@ using System.Collections.Generic;
 namespace Abstractions;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// UMGEBUNGEN (docs/06 §6.5): je Umgebung EIN Ordner `umgebungen/<name>/` — `umgebung.json` und je Instanz eines Graphen
-// `graphen/<instanz>.json`. Struktur ist Code (was
+// UMGEBUNGEN (docs/06 §6.5): je Umgebung EIN Ordner `umgebungen/<name>/` — `umgebung.json`, je Instanz eines Graphen
+// `graphen/<instanz>.json` und je Instanz einer App `apps/<instanz>.json`. Struktur ist Code (was
 // existiert), Auswahl und Werte sind Konfig (was aktiv ist). Sim und Prod unterscheiden sich nur hier — nie im Code. Die Typen
 // unten sind zugleich das Schema, aus dem die Werkbank ihr Formular zeichnet (generischer Formular-Renderer).
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -15,9 +15,6 @@ public enum UmgebungsArt { Sim, Prod }
 
 /// <summary>Wer eine Ressource betreibt: <c>Aus</c> (nicht genutzt), <c>Verwaltet</c> (die Werkbank startet sie per Docker), <c>Vorhanden</c>.</summary>
 public enum Betrieb { Aus, Verwaltet, Vorhanden }
-
-/// <summary>Cluster-Mitgliedschaft: ein einzelner Knoten (in-memory) oder Consul (mehrere Knoten).</summary>
-public enum ClusterArt { Einzelknoten, Consul }
 
 /// <summary>Rolle eines Knotens beim Schema (Multi-Node-Kaltstart): allein, der eine Migrator, oder Mitglied.</summary>
 public enum KnotenRolle { Allein, Migrator, Mitglied }
@@ -46,20 +43,33 @@ public sealed class EventStoreKonfig
     public int BefehlsTimeoutSekunden { get; set; } = 30;
 }
 
-/// <summary>Der Cluster (Proto.Actor).</summary>
+/// <summary>
+/// Der Cluster (Proto.Actor): sein Name und die Consul-Adresse. Ob er ein Einzelknoten ist, folgt aus dem Backend (ein Rechner = Einzelknoten, mehrere
+/// = Consul); unter welcher Adresse ein Knoten erreichbar ist, aus seinem Rechner im Pool (<see cref="UmgebungKonfig.Rechner"/>).
+/// </summary>
 public sealed class ClusterKonfig
 {
-    public ClusterArt Art { get; set; } = ClusterArt.Einzelknoten;
     /// <summary>Cluster-Name — ein Sim-Knoten darf nie dem Prod-Cluster beitreten (Siegel prüft ihn mit).</summary>
     public string Name { get; set; } = "cqrs";
     public string Consul { get; set; } = "localhost:8500";
-    public string AdvertisedHost { get; set; } = "localhost";
+    /// <summary>Rolle dieses Prozesses beim Schema (Multi-Node-Kaltstart) — eine Angabe je Prozess (<c>Cluster__Rolle</c>), kein Ort.</summary>
     public KnotenRolle Rolle { get; set; } = KnotenRolle.Allein;
-    /// <summary>
-    /// Der Name dieser Maschine (docs/04 §4.4, z. B. <c>gpu-1</c>, gern <c>${env:CQRS_RECHNER}</c>): eine Instanz, die ihn als <c>Rechner</c> nennt,
-    /// läuft nur hier. Ohne Namen bedient der Host nur Instanzen, die keinen Rechner nennen.
-    /// </summary>
-    public string? Rechner { get; set; }
+}
+
+/// <summary>Ein Rechner des Pools (Abschnitt <c>Rechner:&lt;Name&gt;</c>, docs/06 §6.5): wie man ihn erreicht.</summary>
+public sealed class RechnerKonfig
+{
+    /// <summary>IP oder Hostname, unter dem der Rechner erreichbar ist (ohne Schema und Port).</summary>
+    public string Adresse { get; set; } = "";
+}
+
+/// <summary>
+/// Das Backend (Abschnitt <c>Backend</c>, docs/06 §6.5): die Rechner des Pools, auf denen der Server-Host läuft. Aggregate und Projektionen verteilen sich
+/// selbst über sie; was einen Ort braucht (eine Graph-Instanz mit Zustand oder GPU), nennt einen von ihnen.
+/// </summary>
+public sealed class BackendKonfig
+{
+    public string[] Rechner { get; set; } = [Rechnerregeln.Standard];
 }
 
 /// <summary>Der Schreibpfad (Tuning, nie Semantik).</summary>
@@ -157,51 +167,38 @@ public sealed class GraphInstanzKonfig
     /// (<see cref="StandardStraenge"/>). <c>Parallel</c> am Knoten bleibt die Obergrenze seiner Kinder.
     /// </summary>
     public int Straenge { get; set; }
-    /// <summary>Der Rechner, auf dem die Instanz läuft (sein <c>Cluster:Rechner</c>); ohne Angabe auf jedem Host. Pflicht mit Zustand im Cluster.</summary>
+    /// <summary>Der Backend-Rechner, auf dem die Instanz läuft; ohne Angabe auf jedem Rechner des Backends. Pflicht mit Zustand im Cluster.</summary>
     public string? Rechner { get; set; }
     public Dictionary<string, KnotenKonfig> Knoten { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>
-/// Ein Client als Prozess (Werkbank, docs/06 §6.5): <c>Python Skript Argumente…</c> oder ein .NET-Projekt (<see cref="Projekt"/>, <c>dotnet run</c>). Die
-/// Werkbank setzt <c>CQRS_GRPC_HOST</c>, <c>CQRS_GRPC_PORT</c>
-/// und <c>CQRS_AKTEUR_TOKEN</c> (aus <see cref="Token"/>) — der Client meldet sich damit am gRPC-Port an.
+/// Wie die Werkbank eine App-Instanz als Prozess startet (Durchspielen, W6): ein Python-Skript (<see cref="Skript"/>) oder ein .NET-Projekt
+/// (<see cref="Projekt"/>, <c>dotnet run</c>). Die Werkbank setzt <c>CQRS_UMGEBUNG</c>, <c>CQRS_APP</c> (die Instanz), <c>CQRS_RECHNER</c>,
+/// <c>CQRS_GRPC_HOST</c>, <c>CQRS_GRPC_PORT</c> und <c>CQRS_AKTEUR_TOKEN</c> — die App meldet sich damit am gRPC-Port an. Ein Host liest es nie.
 /// </summary>
-public sealed class WorkerKonfig
+public sealed class StartKonfig
 {
-    /// <summary>Der Interpreter dieses Workers (leer = der der Umgebung, <see cref="UmgebungKonfig.Python"/>).</summary>
+    /// <summary>Der Interpreter (leer = der der Umgebung, <see cref="UmgebungKonfig.Python"/>).</summary>
     public string Python { get; set; } = "";
     /// <summary>Das Skript, relativ zur Solution.</summary>
     public string Skript { get; set; } = "";
-    /// <summary>Statt eines Skripts: ein .NET-Projekt, relativ zur Solution (<c>Domain.Client.Worker</c>) — die Werkbank startet es mit <c>dotnet run --project</c>.</summary>
+    /// <summary>Statt eines Skripts: ein .NET-Projekt, relativ zur Solution — die Werkbank startet es mit <c>dotnet run --project</c>.</summary>
     public string Projekt { get; set; } = "";
     public string[] Argumente { get; set; } = [];
-    /// <summary>Das Akteur-Token (Abschnitt <c>Identitaeten</c>), mit dem sich der Client anmeldet — es muss die Akteure verkörpern, deren Arbeit er tut.</summary>
-    public string Token { get; set; } = "";
 }
 
 /// <summary>
-/// Ein EINGANG eines Clients aus einer Quelle (docs/04 §4.7, Abschnitt <c>Clients:&lt;Name&gt;:Eingaenge:&lt;eingang&gt;</c>): welche Quellart läuft
-/// (<see cref="Art"/>, Klassenname mit <c>IQuellart</c>), für welchen Akteur sie hineingibt (der Client verkörpert ihn; eine Übersetzung der
-/// Akteur-Seite macht aus ihrer Meldung eine Nachricht, die er darf), auf welchem Rechner sie lauscht und ihre Werte — die Felder ihrer Konfig-Records,
-/// flach wie am Knoten einer Instanz. Drei Verzeichnisse sind drei Eingänge. Struktur ist Code, Auswahl und Werte sind Konfig (W7).
+/// Eine QUELLE einer App-Instanz (docs/04 §4.7; Schlüssel = Name des Parameters der App, <c>record KameraApp([Uebersetzt&lt;U&gt;] Dateiwaechter Kamera)</c>):
+/// die Werte ihrer Quellart — die Felder ihrer Konfig-Records, flach wie am Knoten einer Instanz — und die Wahl ihrer Technik. Welche Quellart läuft
+/// und welche Übersetzung ihre Meldung zur Nachricht macht, sagt der Code der App; hier stehen nur die Werte (W7). Sie läuft im Rechnerdienst des
+/// Rechners der Instanz; einen Gegendruck gibt es nicht — der Läufer gibt ein Element hinein, wartet auf die Quittung und nimmt das nächste.
 /// </summary>
-public sealed class EingangKonfig
+public sealed class QuelleKonfig
 {
-    /// <summary>Die Schlüssel eines Eingangs, die keine Felder eines Konfig-Records sind.</summary>
-    public static readonly IReadOnlyList<string> Rahmenfelder = [nameof(Art), nameof(Akteur), nameof(Rechner), nameof(Offen), nameof(Technik)];
+    /// <summary>Die Schlüssel einer Quelle, die keine Felder eines Konfig-Records sind.</summary>
+    public static readonly IReadOnlyList<string> Rahmenfelder = [nameof(Technik)];
 
-    /// <summary>Der Standard für <see cref="Offen"/>.</summary>
-    public const int StandardOffen = 10_000;
-
-    /// <summary>Die Quellart (Klassenname, z. B. <c>Dateiwaechter</c>).</summary>
-    public string Art { get; set; } = "";
-    /// <summary>Der Akteur, für den der Eingang hineingibt (ein Akteur, den der Client verkörpert).</summary>
-    public string Akteur { get; set; } = "";
-    /// <summary>Der Rechner, auf dem die Quelle lauscht (sein <c>Cluster:Rechner</c>) — im Cluster Pflicht: eine Quelle lauscht genau einmal.</summary>
-    public string? Rechner { get; set; }
-    /// <summary>So viele hineingegebene Elemente dürfen offen sein (noch nicht fertig gerechnet), bevor die Quelle wartet; 0 = der Standard.</summary>
-    public int Offen { get; set; }
     /// <summary>Je Technik im Konstruktor der Quellart die gewählte Umsetzung (nötig, wenn es mehrere gibt).</summary>
     public Dictionary<string, string> Technik { get; set; } = new(StringComparer.Ordinal);
     /// <summary>Die Felder der Konfig-Records der Quellart (Schlüssel flach, eine Liste als <c>Feld:0</c>, <c>Feld:1</c> …).</summary>
@@ -212,21 +209,69 @@ public sealed class EingangKonfig
 }
 
 /// <summary>
-/// Wie sich ein Client (<c>IClient</c>, Handshake-Name = Record-Name) in dieser Umgebung verbindet (Abschnitt <c>Clients:&lt;Name&gt;</c>): das
-/// Akteur-Token (Abschnitt <c>Identitaeten</c>; sein Akteur-Satz muss Akteure des Clients verkörpern), die Adresse des gRPC-Servers (leer =
-/// <c>http://localhost:&lt;Transport:GrpcPort&gt;</c>), die eigenen URLs (Blazor), die Verzeichnisse, aus denen er Dateien zeigen darf, und wie die
-/// Werkbank ihn als Prozess startet (<see cref="Worker"/>, nur ein Python-Client).
+/// Eine Instanz einer App (docs/10 E18, Datei <c>umgebungen/&lt;name&gt;/apps/&lt;instanz&gt;.json</c>): welche App (<c>IApp&lt;TClient&gt;</c>,
+/// Name des Records) auf welchem Rechner des Pools läuft, unter welchem Port, mit welchem Akteur-Token, wie die Werkbank sie startet, die Verzeichnisse,
+/// aus denen sie Dateien zeigen darf, und je Quelle der App ihre Werte. Eine App kann mehrfach laufen (zwei Linien-PCs), auf einem Rechner mehrere Apps
+/// auf verschiedenen Ports. Struktur ist Code (die App), Auswahl und Werte sind Konfig.
 /// </summary>
-public sealed class ClientKonfig
+public sealed class AppInstanzKonfig
 {
-    /// <summary>Wie die Werkbank den Client als Prozess startet (▶ Worker starten). Der Host liest es nie.</summary>
-    public WorkerKonfig? Worker { get; set; }
+    /// <summary>Die Schlüssel einer Instanz (alles andere ist ein Fehler).</summary>
+    public static readonly IReadOnlyList<string> Felder =
+        [nameof(App), nameof(Rechner), nameof(Port), nameof(Token), nameof(Start), nameof(Dateien), nameof(Quellen)];
+
+    /// <summary>Die App (Record-Name, <c>record X : IApp&lt;TClient&gt;</c>).</summary>
+    public string App { get; set; } = "";
+    /// <summary>Der Rechner des Pools, auf dem sie läuft; ohne Angabe <c>localhost</c>.</summary>
+    public string Rechner { get; set; } = Rechnerregeln.Standard;
+    /// <summary>Der Port, unter dem sie erreichbar ist (eine App mit Oberfläche); 0 = keiner. Je Rechner eindeutig.</summary>
+    public int Port { get; set; }
+    /// <summary>Das Akteur-Token (Abschnitt <c>Identitaeten</c>), mit dem sie sich anmeldet — es nennt Akteure ihres Clients.</summary>
     public string Token { get; set; } = "";
-    public string Adresse { get; set; } = "";
-    public string Urls { get; set; } = "http://localhost:5010";
+    /// <summary>Wie die Werkbank sie als Prozess startet (Durchspielen); ohne Angabe startet sie nicht aus der Werkbank.</summary>
+    public StartKonfig? Start { get; set; }
+    /// <summary>Die Verzeichnisse, aus denen sie Dateien zeigen darf (eine App mit Oberfläche).</summary>
     public string[] Dateien { get; set; } = [];
-    /// <summary>Seine Eingänge aus Quellen (Name → Eingang): sie laufen im Host, je Eingang ein Läufer auf seinem Rechner.</summary>
-    public Dictionary<string, EingangKonfig> Eingaenge { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>Je Quelle der App (Name des Parameters) ihre Werte.</summary>
+    public Dictionary<string, QuelleKonfig> Quellen { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>Die URL, unter der sie auf ihrem Rechner hört (nur mit Port).</summary>
+    public string? Url(UmgebungKonfig u) => Port > 0 ? $"http://{u.Adresse(Rechner)}:{Port}" : null;
+}
+
+/// <summary>Welche App-Instanz ein Prozess ist: <c>--app &lt;instanz&gt;</c> bzw. <c>CQRS_APP</c>; ohne Angabe die eine Instanz seiner App.</summary>
+public static class AppInstanzwahl
+{
+    public const string Argument = "--app";
+    public const string Variable = "CQRS_APP";
+
+    /// <summary>Der Name aus den Argumenten oder der Variablen; null = keiner angegeben.</summary>
+    public static string? NameAus(string[] args)
+    {
+        var i = Array.IndexOf(args, Argument);
+        if (i >= 0 && i + 1 < args.Length) return args[i + 1];
+        var g = args.FirstOrDefault(a => a.StartsWith(Argument + "=", StringComparison.Ordinal));
+        return g?[(Argument.Length + 1)..] ?? (Environment.GetEnvironmentVariable(Variable) is { Length: > 0 } v ? v : null);
+    }
+
+    /// <summary>
+    /// Die Instanz der App <paramref name="app"/> dieses Prozesses: die genannte (sie muss diese App sein), sonst die einzige dieser App in der Umgebung.
+    /// </summary>
+    public static (string Name, AppInstanzKonfig Instanz) Waehle(UmgebungKonfig u, string app, string[] args)
+    {
+        if (NameAus(args) is { } name)
+        {
+            if (!u.Apps.TryGetValue(name, out var a))
+                throw new InvalidOperationException($"Umgebung {u.Umgebung.Name}: eine App-Instanz {name} gibt es nicht (apps/{name}.json).");
+            if (a.App != app)
+                throw new InvalidOperationException($"Umgebung {u.Umgebung.Name}: die App-Instanz {name} ist {a.App}, dieser Prozess ist {app}.");
+            return (name, a);
+        }
+        var von = u.Apps.Where(x => x.Value.App == app).ToList();
+        return von.Count == 1 ? (von[0].Key, von[0].Value)
+            : throw new InvalidOperationException($"Umgebung {u.Umgebung.Name}: {(von.Count == 0 ? "keine Instanz" : von.Count + " Instanzen")} von {app} — "
+                + $"{Argument} <instanz> bzw. {Variable} nennt, welche dieser Prozess ist.");
+    }
 }
 
 /// <summary>
@@ -238,7 +283,7 @@ public sealed class StoreKonfig
     public string? Verzeichnis { get; set; }
 }
 
-/// <summary>Die gebundene Umgebung (ohne Identitäten — die binden ihren eigenen Abschnitt) mit den Instanzen ihrer Graphen.</summary>
+/// <summary>Die gebundene Umgebung (ohne Identitäten — die binden ihren eigenen Abschnitt) mit den Instanzen ihrer Graphen und Apps.</summary>
 public sealed class UmgebungKonfig
 {
     public UmgebungKopf Umgebung { get; set; } = new();
@@ -248,37 +293,59 @@ public sealed class UmgebungKonfig
     public LebenszyklusKonfig Lebenszyklus { get; set; } = new();
     public KonsumKonfig Konsum { get; set; } = new();
     public TransportKonfig Transport { get; set; } = new();
+    /// <summary>Der Pool (Abschnitt <c>Rechner</c>): Name → wie man ihn erreicht. Ohne Abschnitt nur <c>localhost</c>.</summary>
+    public Dictionary<string, RechnerKonfig> Rechner { get; set; } = new(StringComparer.Ordinal)
+    {
+        [Rechnerregeln.Standard] = new() { Adresse = Rechnerregeln.Standard },
+    };
+    /// <summary>Welche Rechner des Pools das Backend bilden.</summary>
+    public BackendKonfig Backend { get; set; } = new();
+    /// <summary>
+    /// Der Rechner dieses Prozesses (kein Abschnitt der Datei): <c>--rechner &lt;name&gt;</c> bzw. <c>CQRS_RECHNER</c>, sonst <c>localhost</c>
+    /// (<see cref="Rechnerregeln.Standard"/>). Ein Prozess nimmt sich aus der Umgebung, was diesem Rechner zugewiesen ist.
+    /// </summary>
+    public string DieserRechner { get; set; } = Rechnerregeln.Standard;
     /// <summary>Die Instanzen der Graphen (Dateien im Ordner <c>graphen</c> der Umgebung): Name der Instanz (Dateiname) → Konfig.</summary>
     public Dictionary<string, GraphInstanzKonfig> Graphen { get; set; } = new(StringComparer.Ordinal);
-    public Dictionary<string, ClientKonfig> Clients { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>Die Instanzen der Apps (Dateien im Ordner <c>apps</c> der Umgebung): Name der Instanz (Dateiname) → Konfig.</summary>
+    public Dictionary<string, AppInstanzKonfig> Apps { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, StoreKonfig> Stores { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Der Python-Interpreter — eine Regel für alle Aufrufer: der des Workers, sonst der der Umgebung (<c>Umgebung:Python</c>), sonst
+    /// Der Python-Interpreter — eine Regel für alle Aufrufer: der des Starts einer App, sonst der der Umgebung (<c>Umgebung:Python</c>), sonst
     /// <c>CQRS_PYTHON</c>, sonst <c>python3</c> vom PATH.
     /// </summary>
-    public string Python(WorkerKonfig? worker = null) =>
-        worker?.Python is { Length: > 0 } w ? w
+    public string Python(StartKonfig? start = null) =>
+        start?.Python is { Length: > 0 } w ? w
         : Umgebung.Python is { Length: > 0 } u ? u
         : Environment.GetEnvironmentVariable("CQRS_PYTHON") is { Length: > 0 } e ? e
         : "python3";
 
-    /// <summary>Die gRPC-Adresse, unter der sich ein Client verbindet: seine eigene Angabe, sonst der lokale gRPC-Port der Umgebung.</summary>
-    public string GrpcAdresse(ClientKonfig c) => c.Adresse is { Length: > 0 } a ? a : $"http://localhost:{Transport.GrpcPort}";
+    /// <summary>Besteht das Backend aus einem Rechner? Dann läuft der Cluster als Einzelknoten (in-memory), sonst über Consul.</summary>
+    public bool Einzelknoten => Backend.Rechner.Length <= 1;
+
+    /// <summary>Die Adresse eines Rechners des Pools (sein Name, wenn er keine nennt).</summary>
+    public string Adresse(string rechner) => Rechner.TryGetValue(rechner, out var r) && r.Adresse is { Length: > 0 } a ? a : rechner;
+
+    /// <summary>Die gRPC-Adresse des Backends, unter der sich ein Client verbindet: sein erster Rechner und der gRPC-Port der Umgebung.</summary>
+    public string GrpcAdresse() => $"http://{Adresse(Backend.Rechner.FirstOrDefault() ?? Rechnerregeln.Standard)}:{Transport.GrpcPort}";
 }
 
 /// <summary>Die Abschnitte einer Umgebungs-Datei — ein anderer Abschnitt ist ein Start-Fehler.</summary>
 public static class UmgebungsAbschnitte
 {
-    public const string Umgebung = "Umgebung", EventStore = "EventStore", Cluster = "Cluster",
+    public const string Umgebung = "Umgebung", EventStore = "EventStore", Cluster = "Cluster", Rechner = "Rechner", Backend = "Backend",
         Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Konsum = "Konsum", Transport = "Transport", Identitaeten = "Identitaeten",
-        Clients = "Clients", Stores = "Stores", Logging = "Logging";
+        Stores = "Stores", Logging = "Logging";
 
     /// <summary>Der Abschnitt, unter den der Lader die Instanz-Dateien hängt (<c>Graphen:&lt;instanz&gt;:…</c>) — er steht nie in <c>umgebung.json</c>.</summary>
     public const string Graphen = "Graphen";
 
+    /// <summary>Der Abschnitt, unter den der Lader die App-Instanzen hängt (<c>Apps:&lt;instanz&gt;:…</c>) — er steht nie in <c>umgebung.json</c>.</summary>
+    public const string Apps = "Apps";
+
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Clients, Stores, Logging];
+        [Umgebung, EventStore, Cluster, Rechner, Backend, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Stores, Logging];
 }
 
 /// <summary>

@@ -58,15 +58,15 @@ public class KatalogTests
 
     [Trait("Kategorie", "Garantie")]
     [Fact]
-    public void Gemeldet_steht_im_Zustand_wird_nicht_wiederholt_eine_ersetzte_Datei_aber_schon()
+    public void Gemeldet_steht_im_Gedaechtnis_wird_nicht_wiederholt_eine_ersetzte_Datei_aber_schon()
     {
         var gesehen = new Gesehen();
         var scan = new DateiScan(Konfig(), gesehen);
         scan.Fertige([Stand("a")], T0).Should().BeEmpty();
         var a = scan.Fertige([Stand("a")], T0.AddSeconds(1)).Single();
         scan.Gemeldet(a);
-        gesehen.Je.Should().ContainKey("a", "das Gedächtnis gehört dem Zustand — gesichert mit dem Lauf");
-        new DateiScan(Konfig(), gesehen).Fertige([Stand("a")], T0.AddSeconds(9)).Should().BeEmpty("nach einem Neustart mit dem gesicherten Zustand: schon gemeldet");
+        gesehen.Je.Should().ContainKey("a", "das Gedächtnis des Wächters (im Speicher)");
+        new DateiScan(Konfig(), gesehen).Fertige([Stand("a")], T0.AddSeconds(9)).Should().BeEmpty("mit demselben Gedächtnis: schon gemeldet");
         var neu = new DateiScan(Konfig(), gesehen);
         neu.Fertige([Stand("a", 10, T0.AddMinutes(1))], T0.AddSeconds(10)).Should().BeEmpty();
         neu.Fertige([Stand("a", 10, T0.AddMinutes(1))], T0.AddSeconds(11)).Should().ContainSingle("neu geschrieben → neue Kennung");
@@ -83,7 +83,7 @@ public class KatalogTests
     }
 
     [Fact]
-    public async Task Der_Dateiwaechter_meldet_jede_fertige_Datei_einmal_und_mit_seinem_Zustand_nach_einem_Neustart_nur_Neues()
+    public async Task Der_Dateiwaechter_meldet_jede_fertige_Datei_einmal_und_nach_einem_Neustart_alles_erneut_mit_derselben_Kennung()
     {
         var verz = Directory.CreateTempSubdirectory("dateiwaechter-").FullName;
         try
@@ -91,17 +91,17 @@ public class KatalogTests
             await File.WriteAllTextAsync(Path.Combine(verz, "a.tiff"), "a");
             await File.WriteAllTextAsync(Path.Combine(verz, "b.txt"), "b");
             var konfig = new Dateiwaechterkonfig(verz, ["*.tiff"], Intervall: TimeSpan.FromMilliseconds(100), Fenster: TimeSpan.FromMilliseconds(200));
-            var zustand = new Zustand<Gesehen>();
+            var waechter = new Dateiwaechter(konfig);
 
-            async Task<List<string>> Lausche(int erwartet, TimeSpan geduld)
+            async Task<List<DateiGefunden>> Lausche(Dateiwaechter w, int erwartet, TimeSpan geduld)
             {
                 using var stopp = new CancellationTokenSource(geduld);
-                var aus = new List<string>();
+                var aus = new List<DateiGefunden>();
                 try
                 {
-                    await foreach (var d in new Dateiwaechter(konfig, zustand).Lausche(stopp.Token))
+                    await foreach (var d in w.Lausche(stopp.Token))
                     {
-                        aus.Add(d.Name);
+                        aus.Add(d);
                         if (aus.Count == erwartet) break;
                     }
                 }
@@ -109,10 +109,15 @@ public class KatalogTests
                 return aus;
             }
 
-            (await Lausche(1, TimeSpan.FromSeconds(10))).Should().Equal("a.tiff");
+            var erst = await Lausche(waechter, 1, TimeSpan.FromSeconds(10));
+            erst.Select(d => d.Name).Should().Equal("a.tiff");
             await File.WriteAllTextAsync(Path.Combine(verz, "c.tiff"), "c");
-            (await Lausche(1, TimeSpan.FromSeconds(10))).Should().Equal(["c.tiff"], "a.tiff steht im Zustand — ein neuer Wächter mit ihm meldet nur Neues");
-            (await Lausche(1, TimeSpan.FromSeconds(1))).Should().BeEmpty();
+            (await Lausche(waechter, 1, TimeSpan.FromSeconds(10))).Select(d => d.Name).Should().Equal(["c.tiff"], "derselbe Wächter merkt sich a.tiff — er meldet nur Neues");
+            (await Lausche(waechter, 1, TimeSpan.FromSeconds(1))).Should().BeEmpty();
+            // Ein Neustart (ein neuer Wächter) meldet alles erneut — mit derselben Kennung aus dem Inhalt: das Backend verwirft, was schon gewirkt hat.
+            var neu = await Lausche(new Dateiwaechter(konfig), 2, TimeSpan.FromSeconds(10));
+            neu.Select(d => d.Name).Should().Equal("a.tiff", "c.tiff");
+            ((IMeldung)neu[0]).Kennung.Should().Be(((IMeldung)erst[0]).Kennung, "die Kennung kommt aus dem Inhalt, nicht aus dem Lauf");
         }
         finally { Directory.Delete(verz, recursive: true); }
     }
@@ -128,16 +133,18 @@ public class KatalogTests
     }
 
     [Fact]
-    public async Task Der_Taktgeber_meldet_ein_Intervall_nur_einmal_auch_nach_einem_Neustart_mit_seinem_Zustand()
+    public async Task Der_Taktgeber_meldet_ein_Intervall_einmal_und_nach_einem_Neustart_dasselbe_mit_derselben_Kennung()
     {
-        var stand = new Zustand<Taktstand>();
         using var stopp = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await using var e = new Taktgeber(new Taktkonfig(TimeSpan.FromHours(1)), stand).Lausche(stopp.Token).GetAsyncEnumerator(stopp.Token);
+        await using var e = new Taktgeber(new Taktkonfig(TimeSpan.FromHours(1))).Lausche(stopp.Token).GetAsyncEnumerator(stopp.Token);
         (await e.MoveNextAsync()).Should().BeTrue();
-        stand.Wert.Letzter.Should().Be(e.Current.Zeitpunkt);
+        var erster = e.Current;
         using var kurz = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-        var zweiter = new Taktgeber(new Taktkonfig(TimeSpan.FromHours(1)), stand).Lausche(kurz.Token).GetAsyncEnumerator(kurz.Token);
-        (await zweiter.MoveNextAsync()).Should().BeFalse("dasselbe Intervall steht im Zustand — ein neuer Taktgeber meldet es nicht noch einmal");
+        var weiter = e.MoveNextAsync().AsTask();
+        (await Task.WhenAny(weiter, Task.Delay(400))).Should().NotBe(weiter, "im selben Intervall meldet er nichts mehr");
+        await using var zweiter = new Taktgeber(new Taktkonfig(TimeSpan.FromHours(1))).Lausche(kurz.Token).GetAsyncEnumerator(kurz.Token);
+        (await zweiter.MoveNextAsync()).Should().BeTrue("ein Neustart meldet das laufende Intervall erneut");
+        ((IMeldung)zweiter.Current).Kennung.Should().Be(((IMeldung)erster).Kennung, "mit derselben Kennung — das Backend verwirft es");
     }
 
     [Fact]

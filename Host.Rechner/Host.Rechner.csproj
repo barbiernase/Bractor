@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Der RECHNERDIENST (docs/10 E18): ein Prozess des Frameworks je Rechner — er trägt die Quellen der App-Instanzen seines Rechners und gibt
+       über die Leitung hinein wie eine App. Kein Cluster, kein Marten im Lauf; die Tabellen (Quellarten, Übersetzungen, Apps) kommen aus der
+       Komposition der Anwendung, die Leitung aus Client.Infrastructure. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Domain.Laufzeit\Domain.Laufzeit.csproj" />
+    <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Die Umgebungen reisen mit dem Dienst (umgebungen/<name>/umgebung.json und apps/<instanz>.json neben dem Programm). -->
+    <Content Include="..\umgebungen\**\*.json" Link="umgebungen\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

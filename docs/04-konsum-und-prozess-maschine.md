@@ -112,8 +112,8 @@ Kommt nichts hinein, arbeiten nur die Takte (gemessen auf dem Messserver, Diagno
 - **Batch-Poll** alle 30 s je Projektion und Partition eine Weckung, ohne Neues eine Abfrage (Beispieldomäne: 5 Projektionen × 8 Partitionen =
   40 Abfragen je 30 s — er wächst mit Projektionen × Partitionen, PF-15);
 - **Zusteller** jede Sekunde je Knoten die fälligen offenen Eingänge (eine Abfrage über den Index von `cqrs_eingaenge`);
-- **Eingänge aus Quellen** nach ihrer Art: der Dateiwächter scannt sein Verzeichnis je Intervall (Standard 1 s), der Taktgeber wartet auf sein
-  Intervall; bei voller Grenze sieht der Läufer alle 500 ms nach, was noch offen ist (eine Abfrage über den Schlüssel von `cqrs_eingaenge`);
+- **Quellen** im Rechnerdienst nach ihrer Art: der Dateiwächter scannt sein Verzeichnis je Intervall (Standard 1 s), der Taktgeber wartet auf sein
+  Intervall — im Host nichts davon;
 - **Uhr** jede Sekunde die DB-Uhr und die fälligen Fristen (eine Abfrage über den Index von `cqrs_fristen`).
 
 **Nachlauf.** Nach einer Last schreiben die Batch-Leser ihre Position über fremde Events einmal fest; danach ist der Host still.
@@ -306,7 +306,7 @@ Event (eine Antwort), `TTarget` ein Command (CQRS121); ein Graph nennt eine Übe
 - **Kopf:** einen Command ohne Ziel eines Clients (eine Nachricht der Domäne) übersetzt der Eingang in den Eingang eines Graphen
   (`Verkettung.Ziele`).
 - **Akteur-Seite:** eine Übersetzung mit einer **Meldung** als Quelle (`ITranslate<DateiGefunden, LiesBild>`, bei den Akteuren) rechnet der Läufer
-  eines Eingangs aus einer Quelle (§4.7).
+  einer Quelle im Rechnerdienst (§4.7).
 Der Wirker in der Spur ist die Übersetzung (`uebersetzung:<Name>`). Ein Graph eines Katalogs **läuft** in einer Anwendung, wenn eine Übersetzung oder
 ein Akteur ihn bindet.
 ```csharp
@@ -354,7 +354,7 @@ sofort. Haltbar ist allein der Kopf: fehlt sein „fertig“ (Absturz, Umzug), k
 eines Aufrufs aus der Kennung seiner Nachricht, dem Ort (`instanz/knoten`) und der Operation (`Kettenvertrag.Aufruf`); die Nachricht, die er an
 Knoten desselben Graphen gibt, aus Aufruf, Ort und Stelle (`Kettenvertrag.Weiter`); die Command-Id aus Aufruf, Stelle, Typ und Ziel
 (`Kettenvertrag.Befehl`; die Stelle zählt über den ganzen Aufruf, auch Ausgaben auf Antworten). Am Kopf ist die Nachricht der Eingang, bei einer
-Eingang aus einer Quelle seine Kennung aus Eingang und Kennung der Meldung (`Kettenvertrag.Element`, aus dem Inhalt des Elements, nie aus seiner Stelle). Neue Aggregat-Ids
+Eingang aus einer Quelle seine Kennung aus Instanz, Quelle und Kennung der Meldung (`Kettenvertrag.Element`, aus dem Inhalt des Elements, nie aus seiner Stelle). Neue Aggregat-Ids
 leitet die Funktion über `h.NeueId<T>(zweck)` ab (R13). `Herkunft` nennt bei einem Eingang eines Clients, der auf ein Fakt reagiert, dessen Stream und
 Version, aus einer Quelle die Kennung ihres Elements als Stream (Version 0) und die Zeit, dazu den Akteur der Kette.
 
@@ -368,8 +368,8 @@ seine `Warteschlange` erlaubt, antwortet er „später“; der Absender schickt 
 Actor), darunter je Instanz einen **Graph-Actor** `funktionen/<instanz>` — den Halter ihrer Schritte und ihren Kopf — und darunter je Knoten einen
 **Parent** `funktionen/<instanz>/<knoten>` mit Kindern bis `Parallel`. Die Adresse eines Schritts folgt aus Instanz, Knotenpfad und Rechner; die
 Aufrufe einer Kette bleiben auf dem Rechner, der ihren Kopf annahm (Parent an Parent, ohne Netz). Ob ein Cluster-Knoten eine Instanz **hält**
-(Eingänge an sie bekommt), meldet die Wurzel sofort im Gossip-Zustand (`FunktionsOrte`). Eine Instanz, die einen **Rechner** nennt, legt nur der Host
-mit diesem `Cluster:Rechner` an (`EigenerRechner`); jeder Host meldet seinen Namen im Gossip-Zustand, und tragen zwei denselben, hält nur das Mitglied
+(Eingänge an sie bekommt), meldet die Wurzel sofort im Gossip-Zustand (`FunktionsOrte`). Eine Instanz, die einen **Rechner** nennt (einen des Backends, docs/06 §6.5), legt
+nur der Host an, der als dieser Rechner läuft (`EigenerRechner`, `CQRS_RECHNER`); jeder Host meldet seinen Namen im Gossip-Zustand, und tragen zwei denselben, hält nur das Mitglied
 mit der kleineren Id die festgelegten Instanzen (der andere meldet den Fehler). Die **Wege** (`FunktionsWege`) schicken einen Eingang an den eigenen
 Knoten, wenn er die Instanz hält, sonst reihum an einen, der sie hält (`Bote.FrageAnKnotenAsync`). Der Graph-Actor erkennt einen doppelten Kopf an der
 Kennung (in Arbeit: er hängt sich an; fertig: sofort „fertig“, Gedächtnis 10 000); sind schon so viele Ketten offen, wie die Instanz Stränge hat,
@@ -508,58 +508,76 @@ Inbox des Ziels einmal. In Sim verschiebt ein Uhr-Versatz die Datenbank-Uhr (Dur
 
 **Quellen.** Was draußen geschieht — eine Datei ist fertig, ein Intervall beginnt, ein Webhook wird gerufen —, meldet eine **Quellart**: eine Klasse
 `: IQuellart` mit `Lausche(CancellationToken)`, einem asynchronen Strom ihrer **Meldungen** (`IMeldung`, kein Command) — oder eine **Annahme**
-(`: IAnnahme<Aufruf>`), die nicht lauscht: ihre Meldungen nimmt der Host an, was sie meldet, steht im Typargument (ein `Lausche` an ihr ist CQRS100,
-ebenso eine andere Meldung als `Aufruf` — der Host baut aus dem HTTP-Aufruf einen `Aufruf`). Ihr Konstruktor nimmt wie eine Funktion Konfig-Records,
-`IZustand<T>`, Technik und `ILogger<T>`; sie liegt in einem Katalog (die des Frameworks in `Core/Katalog/`) und ist **nie ein Knoten eines Graphen**
-(CQRS115). Jede Meldung nennt die **Kennung** ihres Elements, aus seinem Inhalt.
+(`: IAnnahme<Aufruf>`), die nicht lauscht: ihre Meldungen nimmt der Rechnerdienst an, was sie meldet, steht im Typargument (ein `Lausche` an ihr ist
+CQRS100, ebenso eine andere Meldung als `Aufruf` — aus dem HTTP-Aufruf wird ein `Aufruf`). Ihr Konstruktor nimmt wie eine Funktion Konfig-Records,
+Technik und `ILogger<T>` — **keinen gesicherten Zustand** (`IZustand<T>` ist CQRS100): das Framework sichert für eine Quelle nichts; was sie schon
+gesehen hat, merkt sie sich selbst (im Speicher, in einer eigenen Datei — veränderliche Felder sind ihr erlaubt, CQRS105 gilt für sie nicht). Sie liegt
+in einem Katalog (die des Frameworks in `Core/Katalog/`) und ist **nie ein Knoten eines Graphen** (CQRS115). Jede Meldung nennt die **Kennung** ihres
+Elements, aus seinem Inhalt: meldet die Quelle ein Element erneut, trägt es dieselbe Kennung, und das Backend verwirft die Wiederholung.
 
-| Quellart | meldet (Kennung) | Konfig (Werte des Eingangs) | Zustand |
+| Quellart | meldet (Kennung) | Konfig (Werte der Quelle) | merkt sich (im Speicher, je Lauf) |
 |---|---|---|---|
-| `Dateiwaechter` | `DateiGefunden` je fertige, noch nicht gemeldete Datei (relativer Pfad, Größe, letzte Änderung) | `Pfad`, `Muster`, `Unterordner`, `Erkennung` (`Abfrage` oder `EreignisUndAbfrage`), `Intervall`, `Fertig` (`Stabil` über ein `Fenster` oder `Marker` mit `Endung`), `Kennung` (`NameGroesse` oder `PfadGroesseZeit`) | `Gesehen`: relativer Pfad → Kennung |
-| `Taktgeber` | `Takt` je Intervall (sein Beginn, auf das Intervall gerundet, UTC) | `Intervall` (mindestens 1 s) | `Taktstand`: das letzte gemeldete Intervall |
-| `Webhook` (Annahme) | `Aufruf` je Aufruf an `POST /eingang/webhook/<Pfad>` (die Kennung des Absenders, Kopf `kennung`, Pflicht) | `Pfad` (Pflicht, je Umgebung eindeutig), `Schluessel` (wahlweise, als `${env:NAME}`) | keiner |
+| `Dateiwaechter` | `DateiGefunden` je fertige, noch nicht gemeldete Datei (relativer Pfad, Größe, letzte Änderung) | `Pfad`, `Muster`, `Unterordner`, `Erkennung` (`Abfrage` oder `EreignisUndAbfrage`), `Intervall`, `Fertig` (`Stabil` über ein `Fenster` oder `Marker` mit `Endung`), `Kennung` (`NameGroesse` oder `PfadGroesseZeit`) | was er gemeldet hat; nach einem Neustart meldet er alles im Verzeichnis erneut |
+| `Taktgeber` | `Takt` je Intervall (sein Beginn, auf das Intervall gerundet, UTC) | `Intervall` (mindestens 1 s) | das letzte Intervall; nach einem Neustart meldet er das laufende erneut |
+| `Webhook` (Annahme) | `Aufruf` je Aufruf an `POST /eingang/webhook/<Pfad>` (die Kennung des Absenders, Kopf `kennung`, Pflicht) | `Pfad` (Pflicht, je Umgebung eindeutig), `Schluessel` (wahlweise, als `${env:NAME}`) | nichts |
 
 Eine Quellart **verwirklicht einen Akteur**: eine **Übersetzung der Akteur-Seite** (`class DateiGefunden_LiesBild_1(DateiGefunden source) :
 ITranslate<DateiGefunden, LiesBild>` in `<Wurzel>.Akteure/Uebersetzungen.cs`) macht aus der Meldung eine Nachricht, die der Akteur darf
-(`KameraSystem : IDarf<LiesBild>`). Welche Quellarten einen Akteur verwirklichen können, folgt daraus. Laufen tut sie als **Eingang eines Clients**
-in der Umgebung (`Clients:<Name>:Eingaenge:<eingang>`, `EingangKonfig`): Art, Akteur, Rechner, `Offen` und die Werte ihrer Konfig, flach wie am
-Knoten einer Instanz — drei Verzeichnisse sind drei Eingänge:
-```json
-"Clients": { "Linienrechner": { "Eingaenge": { "linie1": { "Art": "Dateiwaechter", "Akteur": "KameraSystem", "Rechner": "prod-1",
-  "Pfad": "/mnt/linie1", "Fertig": "Stabil", "Kennung": "NameGroesse" } } } }
+(`KameraSystem : IDarf<LiesBild>`). Welche Quellarten einen Akteur verwirklichen können, folgt daraus. Laufen tut sie als **Quelle einer App**: ein
+Parameter des Records, der einen Client umsetzt, mit der Übersetzung als Attribut (docs/konzept-akteure.md §4.7):
+```csharp
+public sealed record KameraApp([Uebersetzt<DateiGefunden_LiesBild_1>] Dateiwaechter Kamera) : IApp<Linienrechner>;
 ```
-Der Start prüft jeden Eingang (`Eingaenge.Aus`, Boot-Fehler mit der Karte `eingang:<Client>/<Eingang>`): den Client gibt es und er verkörpert den
-Akteur, die Art ist eine Quellart, je Meldung, die sie melden kann, macht eine Übersetzung daraus eine Nachricht, die der Akteur darf, und im Cluster
-nennt ein lauschender Eingang seinen Rechner. Eine Annahme nennt keinen Rechner (jeder Host nimmt an; einer ist ein Fehler), dafür ihren `Pfad`
-(Pflicht, je Umgebung eindeutig über alle Annahmen), und die Umgebung braucht den Einblick-Port. Werte und Technik-Wahl bindet `BindeTechnik` wie
-bei den Knoten.
+Wo die App läuft und mit welchen Werten, sagt je **App-Instanz** eine Datei der Umgebung (`umgebungen/<name>/apps/<instanz>.json`,
+`AppInstanzKonfig`): App, Rechner, Port, Token, wie die Werkbank sie startet, und je Quelle `Technik` und die Werte ihrer Konfig, flach wie am
+Knoten einer Instanz — drei Verzeichnisse sind drei Instanzen der App:
+```json
+{ "App": "KameraApp", "Rechner": "prod-1", "Token": "kamera",
+  "Quellen": { "Kamera": { "Pfad": "/mnt/linie1", "Fertig": "Stabil", "Kennung": "NameGroesse" } } }
+```
+Der Start des Hosts und der Rechnerdienst prüfen jede App-Instanz (`Eingaenge.Aus`, Boot-Fehler mit der Karte `appinstanz:<Instanz>` bzw.
+`eingang:<Instanz>/<Quelle>`): die App
+gibt es, die Werte nennen nur ihre Quellen, das Token gibt es und es nennt einen Akteur ihres Clients; je Quelle ist der Typ eine Quellart, jede ihrer
+Meldungen nimmt eine ihrer Übersetzungen, und ein Akteur des Clients (unter denen des Tokens) darf, was sie geben — er ist der Akteur des Eingangs.
+Rechner, Pool und Ports prüft `Rechnerregeln` (der Rechner steht im Pool, ein Port je Rechner einmal und nicht der des Hosts). Eine Annahme nennt ihren
+`Pfad` (Pflicht, je Umgebung eindeutig über alle Annahmen) und braucht einen Port der Instanz. Laufen tun die Quellen nicht im Host.
 
-Hineingegeben wird auf **einem** Weg (`Infrastructure/Quellen/Hineingabe.cs`), für den Läufer wie für die Annahme: die Kennung des Elements folgt
-aus Eingang und Kennung der Meldung (`Kettenvertrag.Element`); die Übersetzungen der Akteur-Seite machen daraus die Nachrichten des Akteurs; ein
-Command an ein Aggregat geht über den Emitter (Id aus Kennung, Übersetzung und Stelle; ein unbekannter Ausgang wird wiederholt), ein Command ohne Ziel
-als offener Eingang am Kopf (`cqrs_eingaenge`, dann der schnelle Weg) — im Namen des Akteurs, mit dem Eingang als Wirker (W9). Kehrt sie zurück, ist
-jede Nachricht des Elements durabel; die Kennungen der offenen Eingänge merkt sie sich für den Gegendruck.
+**Der Rechnerdienst** (`Host.Rechner`, `--umgebung <u> --rechner <r>` bzw. `CQRS_UMGEBUNG`, `CQRS_RECHNER`; Laufzeit in
+`Client.Infrastructure/Quellen/`) ist ein Prozess des Frameworks je Rechner. Er nimmt aus der Umgebung die App-Instanzen seines Rechners, prüft sie
+und bindet Werte und Technik-Wahl ihrer Quellen (`BindeTechnik`, wie bei den Knoten). Je Instanz öffnet er eine **Verbindung über die Leitung** wie jede
+App — mit dem Token der Instanz und dem Vertrag ihrer App am Handshake —, darauf je lauschender Quelle einen Läufer und je annehmender die Annahme. Kein
+Cluster, kein Marten; dieselbe Komposition liefert die Tabellen (Quellarten, Übersetzungen, Apps). Ohne Quellen auf seinem Rechner endet er gleich.
+Bricht die Verbindung ab, enden die Läufer der Instanz, sie verbindet neu und beginnt von vorn. Die Werkbank startet ihn mit ⟳ für jeden Rechner dieser
+Maschine, das Verhaltens-Netz neben dem ersten Host, Multinode als eigenen Container (`rechnerdienst-grpc1`).
 
-Je lauschendem Eingang lauscht ein **Läufer** (`Infrastructure/Quellen/QuellLaeufer.cs`, Kind der Wurzel `funktionen`) genau einmal im Cluster: auf dem Host mit
-seinem Rechner (bei doppeltem Rechnernamen nur auf dem mit Vorrang). Er aktiviert die Quellart wie ein Kind seine Funktion (Zustand in
-`cqrs_zustaende` unter `eingang:<Client>` und dem Eingang) und gibt je Meldung über die Hineingabe hinein **wie eine App**. Ist die Nachricht
-durabel, sichert er den Zustand der Quellart. Was er enthält, meldet die Quelle nicht wieder; was danach kam, meldet sie nach einem Neustart mit derselben Kennung erneut —
-eine offene Zeile wird nicht doppelt gelegt, ein Command wirkt über die Inbox einmal. **Gegendruck:** sind so viele hineingegebene Elemente offen, wie
-`Offen` erlaubt (Standard 10 000), wartet der Läufer, bevor er die nächste Meldung nimmt. Endet `Lausche` oder wirft es, beginnt er nach einer Pause
-neu, mit dem gesicherten Stand. Meldungen stehen **nicht im Log**; der Dateiwächter **liest** nur (er legt nichts an, verschiebt und löscht nichts),
-ein Weckruf (Intervall, wahlweise ein Dateisystem-Ereignis) löst einen Scan aus, der Scan entscheidet.
+Hineingegeben wird auf **einem** Weg (`Client.Infrastructure/Quellen/Hineingabe.cs`), für den Läufer wie für die Annahme: die Kennung des Elements
+folgt aus Instanz, Quelle und Kennung der Meldung (`Kettenvertrag.Element`); die Übersetzungen, die der Parameter der App nennt, machen daraus die
+Nachrichten; ein Command an ein Aggregat geht mit der Id aus Kennung, Übersetzung und Stelle (Modus ohne Versionsprüfung, die Inbox dedupliziert), ein
+Command ohne Ziel mit der Id aus Kennung und Stelle an den Kopf (die Sitzung legt den offenen Eingang `cqrs_eingaenge` mit dieser Id an) — Ursache in der
+Spur ist das Element (`Kennung:0`), den Akteur stempelt die Sitzung aus dem Token. Die **Abgabe** (`Abgabe.cs`) wartet auf die Antwort mit der
+Korrelation des Commands (die `CommandQuittung` der Sitzung, eine Ablehnung, ein `CommandFailed`); bleibt sie aus, geht er mit derselben Id noch einmal.
+Kehrt die Hineingabe zurück, ist jede Nachricht des Elements durabel.
 
-Eine **Annahme** hat keinen Läufer: **jeder Host** nimmt `POST /eingang/webhook/<Pfad>` auf seinem Einblick-Port an (`Infrastructure/Quellen/
-AnnahmeEndpunkt.cs`, gemappt, sobald die Umgebung einen Annahme-Eingang hat — unabhängig vom JSON-Eingang der Werkbank; Logik in `Annahmen.cs`):
+Je lauschender Quelle einer Instanz lauscht ein **Läufer** (`Client.Infrastructure/Quellen/QuellLaeufer.cs`) im Rechnerdienst ihres Rechners. Er
+aktiviert die Quellart (`FunktionsAktivierung`, Konfig und Technik aus der Instanz) und gibt je Meldung über die Hineingabe hinein; erst nach der
+Quittung nimmt er die nächste — einen Gegendruck darüber hinaus gibt es nicht, was im Backend wartet, hält der offene Eingang am Kopf, gerechnet wird
+nach den Strängen der Instanz. Endet `Lausche` oder wirft es (auch weil die Verbindung fehlt), beginnt er nach einer Pause mit einer frischen
+Aktivierung neu. Was die Quellart dann noch einmal meldet, trägt dieselbe Kennung: dieselben Ids, die Inbox des Ziels bzw. der offene Eingang verwirft
+die Wiederholung — solange sie die Id kennt (Inbox-Horizont, `InboxHorizontTage`, Standard 30 Tage); ein Command ohne Ziel, dessen Kette schon fertig
+ist, startet eine neue Kette, deren Commands an Aggregate die Inbox verwirft. Wer das nicht will, löst es in seiner Quellart (eine eigene
+Gesehen-Datei, nur Dateien jünger als x, verarbeitete Dateien verschieben). Meldungen stehen **nicht im Log**; der Dateiwächter **liest** nur (er legt
+nichts an, verschiebt und löscht nichts), ein Weckruf (Intervall, wahlweise ein Dateisystem-Ereignis) löst einen Scan aus, der Scan entscheidet.
+
+Eine **Annahme** hat keinen Läufer: der Rechnerdienst ihrer Instanz nimmt `POST /eingang/webhook/<Pfad>` auf dem **Port der Instanz** an
+(`Client.Infrastructure/Quellen/Annahmen.cs`, Endpunkt in `Rechnerdienst.cs`; auf einem Rechner mit Adresse `localhost` nur lokal):
 ```
 POST /eingang/webhook/lieferant          kennung: auftrag-4711          schluessel: <Geheimnis>          {"…": "…"}
 ```
-Kein Eingang unter dem Pfad → 404; nennt der Eingang einen `Schluessel`, muss der Kopf `schluessel` ihn tragen (zeitkonstant verglichen) → sonst 401;
-ohne Kopf `kennung` → 400 (aus ihr folgen alle Ids — ohne sie bekäme eine Wiederholung neue Ids und wirkte doppelt). Daraus ein `Aufruf(kennung,
-Körper)`, über die Hineingabe durabel abgelegt — **erst dann 202** mit der Kennung und dem Element. Scheitert es (Aggregat unbekannt, Datenbank, kein
-Kopf), heißt es 503 „später“: der Absender wiederholt mit derselben Kennung, es entstehen dieselben Ids, die Inbox bzw. die offene Zeile macht daraus
-eine Wirkung. **Gegendruck je Host:** sind so viele Elemente des Eingangs offen, wie `Offen` erlaubt — gezählt sind die Kennungen, die dieser Prozess
-hineingab —, antwortet er 503; ein Cluster mit n Hosts nimmt also bis zu n × `Offen` an.
+Keine Quelle unter dem Pfad auf diesem Port → 404; nennt die Quelle einen `Schluessel`, muss der Kopf `schluessel` ihn tragen (zeitkonstant
+verglichen) → sonst 401; ohne Kopf `kennung` → 400 (aus ihr folgen alle Ids — ohne sie bekäme eine Wiederholung neue Ids und wirkte doppelt). Daraus
+ein `Aufruf(kennung, Körper)`, über die Hineingabe hineingegeben — **erst nach der Quittung 202** mit der Kennung und dem Element. Steht die Verbindung
+nicht oder scheitert es, heißt es 503 „später“: der Absender wiederholt mit derselben Kennung, es entstehen dieselben Ids, das Backend macht daraus eine
+Wirkung.
 
 ## 4.8 Dead-Letter & Snapshots
 
@@ -579,8 +597,8 @@ und Wirker in den Command-Envelope, das Ziel-Aggregat schreibt mit `wirker = dec
 - **Knoten eines Graphen:** Ursache = die Ursache seiner Kette (das Fakt, auf das der Client reagierte, der den Kopf speiste; bei einer Antwort das
   Event, das das Ziel entschied), Wirker am Command = der Knoten, `knoten:<Instanz>/<Knoten>` — die Spur zeigt so den Schritt der Kette. Der Akteur
   der Kette reist mit. Was zwischen Knoten fließt, steht nie im Log.
-- **Eingang aus einer Quelle:** ein Element hat keinen Log-Eintrag als Wurzel; seine Ursache ist die Kennung des Elements (aus Eingang und Meldung,
-  Version 0), der Wirker `eingang:<Client>/<Eingang>`, der Akteur der des Eingangs.
+- **Eingang aus einer Quelle:** ein Element hat keinen Log-Eintrag als Wurzel; seine Ursache ist die Kennung des Elements (aus Instanz, Quelle und
+  Meldung, Version 0). Hineingegeben über die Leitung, schreibt der Akteur (Wirker `akteur:<A>`, vom Token gestempelt) wie bei jeder App.
 - **Uhr:** Ursache = das Frist-Event, Wirker `uhr` (ohne Karte).
 - **Akteur:** ein Command von draußen trägt `ueber = akteur:<Akteur>`; reagiert ein Client auf ein Event, nennt die Hülle es als `ursache`
   (`Stream:Version`, der Läufer setzt sie), sonst ist die Ursache leer.
@@ -590,6 +608,6 @@ Das Format steht an einer Stelle (`Abstractions/Spur/WirkerId.cs`), den Weg eine
 
 ## 4.10 Offen
 
-Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): der Webhook nur mit JSON-Eingang und je Prozess (GF-2), Durchsatz einer Instanz
+Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): der Webhook ist über HTTP gegen einen echten Host noch ungeprüft (GF-2), Durchsatz einer Instanz
 mit Zustand (PF-34), Instanzen ohne Ort (FV-4), Kreise Graph ↔ Aggregat (FB-5), hartkodierte Intervalle P2-8, reflektive Snapshot-Kopie W10-2,
 Projektlage W2-1.

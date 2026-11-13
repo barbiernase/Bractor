@@ -18,7 +18,7 @@ public sealed class Infra(string slnRoot)
     {
         var pg = new NpgsqlConnectionStringBuilder(u.EventStore.Verbindung);
         var aus = new List<Dienst> { Pruefe("Postgres", pg.Host ?? "localhost", pg.Port, u.EventStore.Betrieb) };
-        if (u.Cluster.Art == ClusterArt.Consul)
+        if (!u.Einzelknoten)
         {
             var (h, p) = HostPort(u.Cluster.Consul.Replace("http://", "").Replace("https://", ""), 8500);
             aus.Add(Pruefe("Consul", h, p, u.EventStore.Betrieb));

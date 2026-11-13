@@ -1,6 +1,6 @@
 {
   "Graph": "Bildaufbereitung",
-  "Rechner": "messrechner",
+  "Rechner": "localhost",
   "Einlesen": {
     "Wiederholungen": 1
   },

@@ -10,11 +10,18 @@
     "Schema": "es"
   },
   "Cluster": {
-    "Art": "Consul",
     "Name": "cqrs-vermessung-pruefdomaene",
-    "Consul": "localhost:8500",
-    "AdvertisedHost": "localhost",
-    "Rechner": "messrechner"
+    "Consul": "localhost:8500"
+  },
+  "Rechner": {
+    "localhost": {
+      "Adresse": "localhost"
+    }
+  },
+  "Backend": {
+    "Rechner": [
+      "localhost"
+    ]
   },
   "Transport": {
     "GrpcPort": 5211,

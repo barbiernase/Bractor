@@ -5,8 +5,9 @@
 #
 # Alle Container liegen im selben Docker-Netz → erreichen sich über die
 # Service-Namen (grpc1, consul, postgres, …). Der entscheidende Multi-Node-
-# Wert ist `Cluster__AdvertisedHost` = eigener Service-Name je Node: nur so
-# können die anderen Member diesen Node über die Leitung erreichen.
+# Wert ist `CQRS_RECHNER` = eigener Service-Name je Node: der Rechner im Pool
+# der Umgebung (umgebungen/multinode) nennt ihn als Adresse — nur so können
+# die anderen Member diesen Node über die Leitung erreichen.
 #
 # Start:      docker compose -f deploy-multinode/docker-compose.yml up -d --build
 # Stoppen:    docker compose -f deploy-multinode/docker-compose.yml down -v
@@ -14,11 +15,11 @@
 
 name: cqrs-multinode
 
-# Gemeinsame Cluster-Env aller Nodes (grpc1/2/3 + loadharness). AdvertisedHost wird je Node überschrieben.
+# Gemeinsame Cluster-Env aller Nodes (grpc1/2/3). Der Rechner (CQRS_RECHNER) steht je Node.
 # Cluster__Rolle=Mitglied: alle laufen mit AutoCreate.None (kein Runtime-Lazy-Create) — der dedizierte
 # `migrate`-Service (Role=migrator) legt das Marten-Schema vorher eager + lock-gesichert an.
 x-cluster-env: &cluster-env
-  # Alle Werte stehen in umgebungen/multinode/ (umgebung.json, graphen/) (docs/06 §6.5); je Node nur Rolle + AdvertisedHost.
+  # Alle Werte stehen in umgebungen/multinode/ (umgebung.json, graphen/) (docs/06 §6.5); je Node nur Rolle + Rechner.
   CQRS_UMGEBUNG: multinode
   Cluster__Rolle: Mitglied
 
@@ -69,8 +70,7 @@ services:
     image: cqrs-host-grpc:mn
     environment:
       <<: *cluster-env
-      Cluster__Rolle: Migrator
-      Cluster__AdvertisedHost: migrate
+      Cluster__Rolle: Migrator   # kein Knoten: läuft ohne eigenen Rechner im Pool
     restart: "no"
     depends_on: *infra-deps
 
@@ -78,11 +78,10 @@ services:
     image: cqrs-host-grpc:mn
     environment:
       <<: *cluster-env
-      Cluster__AdvertisedHost: grpc1
-      Cluster__Rechner: grpc1   # der Dateiwächter (Eingang linie1 des Linienrechners) und die Bildaufbereitung laufen hier (umgebungen/multinode)
+      CQRS_RECHNER: grpc1   # die Bildaufbereitung läuft hier (umgebungen/multinode); die Quellen der App-Instanzen auf grpc1 trägt rechnerdienst-grpc1
     ports:
       - "127.0.0.1:5001:5001"   # nur grpc1 nach außen (h2c) — für optionale externe Checks
-      - "127.0.0.1:5002:5002"   # Einblick-Port (HTTP/1.1): /health und die Webhooks (Eingänge der Art Webhook)
+      - "127.0.0.1:5002:5002"   # Einblick-Port (HTTP/1.1): /health
     depends_on:
       <<: *infra-deps
       migrate:
@@ -98,8 +97,7 @@ services:
     image: cqrs-host-grpc:mn
     environment:
       <<: *cluster-env
-      Cluster__AdvertisedHost: grpc2
-      Cluster__Rechner: grpc2
+      CQRS_RECHNER: grpc2
     depends_on:
       <<: *infra-deps
       migrate:
@@ -109,9 +107,25 @@ services:
     image: cqrs-host-grpc:mn
     environment:
       <<: *cluster-env
-      Cluster__AdvertisedHost: grpc3
-      Cluster__Rechner: grpc3
+      CQRS_RECHNER: grpc3
     depends_on:
       <<: *infra-deps
       migrate:
         condition: service_completed_successfully
+
+  # Der RECHNERDIENST des Rechners grpc1 (docs/10 E18): trägt die Quellen der App-Instanzen auf grpc1 (linie1: der Dateiwächter auf
+  #   /data/input) und gibt über die Leitung hinein — an das Backend unter grpc1:5001, mit dem Token der Instanz. Kein Cluster, kein Marten.
+  rechnerdienst-grpc1:
+    build:
+      context: ..
+      dockerfile: deploy-multinode/Dockerfile
+      args:
+        PROJECT: Host.Rechner
+        ENTRY_DLL: Host.Rechner.dll
+    image: cqrs-host-rechner:mn
+    environment:
+      CQRS_UMGEBUNG: multinode
+      CQRS_RECHNER: grpc1
+    depends_on:
+      grpc1:
+        condition: service_healthy

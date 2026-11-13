@@ -57,6 +57,7 @@ S = TypeVar("S")
 # ── so sieht ein generierter Client aus (vgl. domain_client/generated/vertraege.py) ──
 
 class KassenplatzBasis(ClientVertragBasis[S]):
+    APP: ClassVar[str] = "KassenApp"
     CLIENT: ClassVar[str] = "Kassenplatz"
     AKTEURE: ClassVar[tuple] = ("Kassierer", "Revisor")
     VERTRAG_HASH: ClassVar[str] = "def456"
@@ -145,7 +146,7 @@ def test_die_registry_kennt_die_typen_des_vertrags():
 
 def test_handshake_nennt_client_und_hash():
     req = _platz()._build_capabilities_request()
-    assert req.vertrag == "Kassenplatz", "am Handshake steht der Client — der Server leitet seine Akteure ab"
+    assert req.vertrag == "KassenApp", "am Handshake steht die App — der Server kennt ihren Client und leitet seine Akteure ab"
     assert req.vertrag_hash == "def456"
 
 

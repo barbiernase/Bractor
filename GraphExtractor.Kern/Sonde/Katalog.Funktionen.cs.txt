@@ -115,13 +115,7 @@ public sealed class Artikelanlage : IFunktion
 
 // ── Messung ──
 
-// ── Die Quelle: eine eigene QUELLART (Sensorabfrage.cs) mit Konfig, gesichertem Zustand und Technik — hier ihr Zustand und ihre Technik ──────────
-
-/// <summary>Der Zustand der Abfrage: wie oft sie gelesen hat (gesichert, sobald ihre Nachricht hineingegeben ist; nach einem Neustart zählt sie weiter).</summary>
-public sealed class Abfragestand
-{
-    public long Abfragen { get; set; }
-}
+// ── Die Quelle: eine eigene QUELLART (Sensorabfrage.cs) mit Konfig und Technik — hier ihre Technik ──────────────────────────────────────────────
 
 public interface ISensorbus
 {

@@ -32,26 +32,29 @@ public sealed record Dateiwaechterkonfig(
     public IReadOnlyList<string> WirksameMuster => Muster is { Length: > 0 } m ? m : ["*"];
 }
 
-/// <summary>Was der Dateiwächter gemeldet hat: relativer Pfad → Kennung (gesichert mit dem Lauf; nach einem Neustart meldet er nur Neues).</summary>
+/// <summary>Was der Dateiwächter gemeldet hat: relativer Pfad → Kennung (im Speicher, je Lauf; nach einem Neustart meldet er alles erneut).</summary>
 public sealed class Gesehen
 {
     public Dictionary<string, string> Je { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>
-/// Der DATEIWÄCHTER (Katalog des Frameworks, docs/04 §4.7): eine Quellart (IQuellart), läuft als Eingang eines Clients. Er LIEST nur — er legt nichts an, verschiebt und
+/// Der DATEIWÄCHTER (Katalog des Frameworks, docs/04 §4.7): eine Quellart (IQuellart), eine Quelle einer App. Er LIEST nur — er legt nichts an, verschiebt und
 /// löscht nichts. Ein Weckruf (Intervall oder, bei <see cref="DateiErkennung.EreignisUndAbfrage"/>, ein Dateisystem-Ereignis) löst einen Scan aus; der
-/// Scan entscheidet (Inv. 2); je fertige, noch nicht gesehene Datei ein <see cref="DateiGefunden"/> — ein neuer Lauf. Was er gemeldet hat, steht in
-/// seinem Zustand: gesichert, sobald der Lauf der Datei fertig ist; nach einem Neustart meldet er, was danach kam. Ein unlesbares Verzeichnis heißt
-/// eine wachsende Pause (bis eine Minute); der nächste Scan holt alles nach.
+/// Scan entscheidet (Inv. 2); je fertige, noch nicht gesehene Datei ein <see cref="DateiGefunden"/> — ein neuer Lauf. Was er gemeldet hat, merkt er
+/// sich im Speicher; nach einem Neustart meldet er alles im Verzeichnis erneut — mit derselben Kennung aus dem Inhalt, das Backend verwirft, was schon
+/// gewirkt hat (Inbox; ihr Horizont begrenzt das, docs/04 §4.7). Ein unlesbares Verzeichnis heißt eine wachsende Pause (bis eine Minute); der nächste
+/// Scan holt alles nach.
 /// </summary>
-public sealed class Dateiwaechter(Dateiwaechterkonfig konfig, IZustand<Gesehen> gesehen) : IQuellart
+public sealed class Dateiwaechter(Dateiwaechterkonfig konfig) : IQuellart
 {
     private static readonly TimeSpan MaxPause = TimeSpan.FromMinutes(1);
 
+    private readonly Gesehen _gesehen = new();
+
     public async IAsyncEnumerable<DateiGefunden> Lausche([EnumeratorCancellation] CancellationToken ct)
     {
-        var scan = new DateiScan(konfig, gesehen.Wert);
+        var scan = new DateiScan(konfig, _gesehen);
         using var weck = new SemaphoreSlim(0);
         FileSystemWatcher? beobachter = null;
         var pause = konfig.WirksamesIntervall;
@@ -127,7 +130,7 @@ public sealed record DateiStand(string Pfad, string RelativerPfad, string Name, 
 
 /// <summary>
 /// Der Kern des Dateiwächters ohne Dateisystem und Uhr (alles kommt als Argument, der Prüfstand beweist ihn vollständig): Kennung bilden,
-/// Fertig-Erkennung (Stabil/Marker), Wartezone und was schon gemeldet ist (das Gedächtnis gehört dem Zustand des Wächters).
+/// Fertig-Erkennung (Stabil/Marker), Wartezone und was schon gemeldet ist (das Gedächtnis des Wächters, im Speicher).
 /// </summary>
 public sealed class DateiScan(Dateiwaechterkonfig konfig, Gesehen gesehen)
 {

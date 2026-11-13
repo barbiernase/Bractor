@@ -26,7 +26,7 @@ public sealed partial class Sicht
 
     private readonly JsonObject _board;
     private readonly List<JsonObject> _records, _enums, _aggregate, _decider, _applier, _states,
-        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _codeKarten, _bausteinFunktionen, _graphen, _uebersetzungen, _quellarten;
+        _akteure, _clients, _apps, _readModels, _stores, _projektionen, _reader, _codeKarten, _bausteinFunktionen, _graphen, _uebersetzungen, _quellarten;
     private readonly Dictionary<string, (HashSet<string> Direkt, HashSet<string> Kette)> _mengen = new(StringComparer.Ordinal);
 
     public IReadOnlyList<SichtKarte> Karten { get; }
@@ -40,7 +40,7 @@ public sealed partial class Sicht
         List<JsonObject> Liste(string k) => Alle(board[k]).ToList();
         _records = Liste("records"); _enums = Liste("enums"); _aggregate = Liste("aggregate"); _decider = Liste("decider");
         _applier = Liste("applier");
-        _akteure = Liste("akteure"); _clients = Liste("clients"); _readModels = Liste("readModels"); _stores = Liste("stores");
+        _akteure = Liste("akteure"); _clients = Liste("clients"); _apps = Liste("apps"); _readModels = Liste("readModels"); _stores = Liste("stores");
         _projektionen = Liste("projektionen"); _reader = Liste("reader"); _codeKarten = Liste("codeKarten");
         _bausteinFunktionen = Liste("bausteinFunktionen"); _graphen = Liste("graphen"); _uebersetzungen = Liste("uebersetzungen");
         _quellarten = Liste("quellarten");
@@ -135,6 +135,8 @@ public sealed partial class Sicht
         var k = new List<SichtKarte>();
         foreach (var a in _akteure) k.Add(new("akt:" + S(a, "_id"), "akteur", S(a, "name"), a));
         foreach (var c in _clients) k.Add(new("cl:" + S(c, "_id"), "client", ClientAnzeige(c), c));
+        // Apps (docs/10 E18): eine Karte je App — sie setzt einen Client um, ihre Parameter sind Quellen.
+        foreach (var a in _apps) k.Add(new("ap:" + S(a, "_id"), "app", S(a, "name"), a));
         foreach (var r in _records) k.Add(new("rec:" + S(r, "name"), S(r, "kind"), S(r, "name"), r));
         foreach (var a in _aggregate) k.Add(new("agg:" + S(a, "name"), "aggregate", S(a, "name"), a));
         foreach (var s in _states) k.Add(new("st:" + S(s, "_id"), "state", S(s, "aggregat") is { Length: > 0 } x ? x : "frei", s));

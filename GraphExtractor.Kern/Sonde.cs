@@ -364,6 +364,10 @@ public static class Sonde
         // Clients (docs/konzept-akteure.md §4): ein Record, der nur nennt, wen er verkörpert (was über seine Leitung geht, sagen die Akteur-Zeilen).
         foreach (var c in A(b, "clients").Where(Sonde))
             z.Add($"client {S(c, "namespace")}.{S(c, "name")} | verkoerpert {Namen(c, "verkoerpert")}");
+        // Apps (docs/10 E18): welchen Client sie umsetzt, je Parameter eine Quelle (Quellart, Übersetzungen aus [Uebersetzt<U>]).
+        foreach (var ap in A(b, "apps").Where(Sonde))
+            z.Add($"app {S(ap, "namespace")}.{S(ap, "name")} | client {S(ap, "client")} | quellen "
+                + (A(ap, "quellen").Any() ? string.Join(", ", A(ap, "quellen").Select(q => $"{S(q, "name")}:{S(q, "quellart")}[{string.Join("+", A(q, "uebersetzungen").Select(u => (string?)u))}]")) : "-"));
         // Graphen (docs/04 §4.4): die Knoten (Parameter des Records, Typ wie geschrieben, [Kopf], [Von …]); abgeleitet daraus: Köpfe, Ausgänge, Quelle und
         //   die Kanten (aufgefaltete Pfade bei einem Graphen im Graphen).
         string Knoten(JsonNode k) => $"{S(k, "name")}:{S(k, "typ")}{(k["kopf"]?.GetValue<bool>() == true ? " [Kopf]" : "")}"

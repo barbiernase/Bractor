@@ -102,7 +102,7 @@ melden die Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein 
 |---|---|---|
 | `HandleMethodGenerator` | `Handle(TEvent, MessageContext)` | Store-/Handler-Dispatch nach Rückgabetyp (`{Klasse}.Dispatch.g.cs`) |
 | `ModuleRegistryGenerator` | `IUiModule` | DI-Registrierung (`GeneratedModuleRegistry_{Assembly}`) |
-| `WiringGenerator` | Syntax + referenzierte Assemblies, `[assembly: IstClient<IX>]` | `GeneratedWiring_{Assembly}`: DI, Abos, Vertrag + Hash, Commands/Queries aus dem Vertrag, Ziel-Aggregat je Command aus `ICommand<TAggregat>` (CQRS093) |
+| `WiringGenerator` | Syntax + referenzierte Assemblies, `[assembly: IstApp<X>]` | `GeneratedWiring_{Assembly}`: DI, Abos, Vertrag + Hash, Commands/Queries aus dem Vertrag, Ziel-Aggregat je Command aus `ICommand<TAggregat>` (CQRS093) |
 | `ViewModelGenerator` | `IViewModel` | ungenutzt (docs/13 P3-2) |
 
 ## 5.3 Die Regeln: Analyzer, Generator-Diagnosen, Boot-Guards

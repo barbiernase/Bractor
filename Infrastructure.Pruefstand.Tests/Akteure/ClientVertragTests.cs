@@ -25,6 +25,7 @@ namespace Infrastructure.Pruefstand.Akteure;
 public class ClientVertragTests
 {
     private static ClientVertrag C(string name) => GeneratedClientVertraege.Alle[name];
+    private static ClientVertrag App(string name) => GeneratedAppVertraege.Alle[name];
     private static AkteurRechte A(string name) => GeneratedAkteurRechte.Alle[name];
 
     [Fact]
@@ -36,6 +37,20 @@ public class ClientVertragTests
         C("KlassifikationsWorker").Verkoerpert.Should().Equal("Klassifizierer");
         C("KlassifikationsWorker").Typ.Should().Be(typeof(Domain.Akteure.KlassifikationsWorker), "der Client ist ein Record");
         C("TrainingsWorker").Verkoerpert.Should().Equal("TrainingsSystem");
+    }
+
+    [Fact]
+    public void Je_App_ein_Vertrag_mit_ihrem_Client_und_ohne_die_Nachrichten_ihrer_Quellen()
+    {
+        GeneratedAppVertraege.Alle.Keys.Should().BeEquivalentTo("ArbeitsplatzApp", "KlassifikationsApp", "TrainingsApp", "ReaktionsApp", "KameraApp");
+        App("KlassifikationsApp").Client.Should().Be("KlassifikationsWorker");
+        App("KlassifikationsApp").Verkoerpert.Should().Equal("Klassifizierer", "die App spricht für die Akteure ihres Clients");
+        App("KlassifikationsApp").Typ.Should().Be(typeof(Domain.Akteure.KlassifikationsApp));
+        App("KameraApp").Client.Should().Be("Linienrechner");
+        App("KameraApp").Hash.Should().NotBe(App("KlassifikationsApp").Hash);
+        // Die Kamera-App erzeugt LiesBild über ihre Quelle — ihr Vertrag sendet nichts (je Nachricht entweder die App oder Quellen).
+        var kanon = Abstractions.Clientvertragsregeln.ClientKanon("KameraApp", ["KameraSystem"], [], [], []);
+        App("KameraApp").Hash.Should().Be(Abstractions.Clientvertragsregeln.Hash(kanon));
     }
 
     [Fact]
@@ -88,12 +103,13 @@ public class ClientVertragTests
     }
 
     [Fact]
-    public void Handshake_nennt_den_Client_und_abonniert_genau_was_er_hoert()
+    public void Handshake_nennt_die_App_und_abonniert_genau_was_ihre_Akteure_hoeren()
     {
-        var e = ClientVertragsPruefung.Pruefe("KlassifikationsWorker", C("KlassifikationsWorker").Hash, null, GeneratedAkteurRechte.Alle,
-            streng: true, GeneratedClientVertraege.Alle);
+        var e = ClientVertragsPruefung.Pruefe("KlassifikationsApp", App("KlassifikationsApp").Hash, null, GeneratedAkteurRechte.Alle,
+            streng: true, GeneratedAppVertraege.Alle);
         e.Ablehnung.Should().BeNull();
-        e.Client!.Name.Should().Be("KlassifikationsWorker");
+        e.Client!.Name.Should().Be("KlassifikationsApp");
+        e.Client!.Client.Should().Be("KlassifikationsWorker");
 
         var wunsch = new CapabilitiesResult { SubscribedEvents = { "TrainingAngefordert" } };
         var abweichung = ClientVertragsPruefung.Wende(wunsch, e.Vertrag!, Loese);
@@ -105,22 +121,24 @@ public class ClientVertragTests
     }
 
     [Fact]
-    public void Ohne_Vertrag_bleibt_alles_wie_bisher_ein_unbekannter_Client_wird_abgelehnt()
+    public void Ohne_Vertrag_bleibt_alles_wie_bisher_eine_unbekannte_App_wird_abgelehnt()
     {
-        ClientVertragsPruefung.Pruefe("", "", null, GeneratedAkteurRechte.Alle, true, GeneratedClientVertraege.Alle)
+        ClientVertragsPruefung.Pruefe("", "", null, GeneratedAkteurRechte.Alle, true, GeneratedAppVertraege.Alle)
             .Should().Be(new ClientVertragsPruefung.Ergebnis(null, null, null));
-        ClientVertragsPruefung.Pruefe("Klassifizierer", "x", null, GeneratedAkteurRechte.Alle, false, GeneratedClientVertraege.Alle)
-            .Ablehnung.Should().Contain("unbekannt", "ein Akteur ist kein Client — der Akteur-Vertrag mit Auf ist entfallen");
+        ClientVertragsPruefung.Pruefe("Klassifizierer", "x", null, GeneratedAkteurRechte.Alle, false, GeneratedAppVertraege.Alle)
+            .Ablehnung.Should().Contain("unbekannt", "ein Akteur ist keine App");
+        ClientVertragsPruefung.Pruefe("KlassifikationsWorker", C("KlassifikationsWorker").Hash, null, GeneratedAkteurRechte.Alle, false,
+            GeneratedAppVertraege.Alle).Ablehnung.Should().Contain("unbekannt", "am Handshake nennt man die App, nicht den Client");
     }
 
     [Fact]
     public void Handshake_lehnt_Token_ohne_passenden_Akteur_und_streng_einen_falschen_Hash_ab()
     {
-        ClientVertragsPruefung.Pruefe("Arbeitsplatz", C("Arbeitsplatz").Hash, A("TrainingsSystem"), GeneratedAkteurRechte.Alle, false,
-            GeneratedClientVertraege.Alle).Ablehnung.Should().Contain("keinen der Akteure des Clients Arbeitsplatz");
-        ClientVertragsPruefung.Pruefe("Arbeitsplatz", "0000000000000000", null, GeneratedAkteurRechte.Alle, true, GeneratedClientVertraege.Alle)
+        ClientVertragsPruefung.Pruefe("ArbeitsplatzApp", App("ArbeitsplatzApp").Hash, A("TrainingsSystem"), GeneratedAkteurRechte.Alle, false,
+            GeneratedAppVertraege.Alle).Ablehnung.Should().Contain("keinen der Akteure der App ArbeitsplatzApp (Client Arbeitsplatz");
+        ClientVertragsPruefung.Pruefe("ArbeitsplatzApp", "0000000000000000", null, GeneratedAkteurRechte.Alle, true, GeneratedAppVertraege.Alle)
             .Ablehnung.Should().Contain("anderen Domänen-Stand");
-        ClientVertragsPruefung.Pruefe("Arbeitsplatz", "0000000000000000", null, GeneratedAkteurRechte.Alle, false, GeneratedClientVertraege.Alle)
+        ClientVertragsPruefung.Pruefe("ArbeitsplatzApp", "0000000000000000", null, GeneratedAkteurRechte.Alle, false, GeneratedAppVertraege.Alle)
             .Warnung.Should().Contain("anderen Domänen-Stand");
     }
 
@@ -158,12 +176,12 @@ public class ClientVertragTests
 
     /// <summary>Beide Generate aus derselben Quelle (Clientvertragsregeln.ClientKanon) — der Python-Client meldet so den Server-Hash.</summary>
     [Fact]
-    public void Python_Generat_traegt_dieselben_Client_Hashes_wie_der_Server()
+    public void Python_Generat_traegt_dieselben_App_Hashes_wie_der_Server()
     {
         var text = File.ReadAllText(Path.Combine(Wurzel(), "Domain.Client.Worker.Python.ML", "domain_client", "generated", "vertraege.py"));
-        var clients = Regex.Matches(text, "CLIENT: ClassVar\\[str\\] = \"(\\w+)\"[\\s\\S]*?VERTRAG_HASH: ClassVar\\[str\\] = \"(\\w+)\"")
+        var apps = Regex.Matches(text, "APP: ClassVar\\[str\\] = \"(\\w+)\"[\\s\\S]*?VERTRAG_HASH: ClassVar\\[str\\] = \"(\\w+)\"")
             .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
-        clients.Should().BeEquivalentTo(GeneratedClientVertraege.Alle.ToDictionary(x => x.Key, x => x.Value.Hash),
+        apps.Should().BeEquivalentTo(GeneratedAppVertraege.Alle.ToDictionary(x => x.Key, x => x.Value.Hash),
             "vertraege.py ist veraltet → ./codegen.sh --force");
     }
 

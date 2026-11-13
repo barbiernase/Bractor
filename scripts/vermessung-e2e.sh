@@ -31,7 +31,7 @@ if [ "$(docker exec cqrs-postgres psql -U postgres -tAc "show max_connections")"
 fi
 
 # ── Release-Build der Hosts und des Treibers (der Debug-Build der Werkbank bleibt unberührt) ──
-for p in Host.Grpc Host.Pruefdomaene Cqrs.Vermessung; do
+for p in Host.Grpc Host.Rechner Host.Pruefdomaene Cqrs.Vermessung; do
   if ! ausgabe=$(dotnet build "$p/$p.csproj" -c Release -nologo -v q -nodeReuse:false 2>&1); then
     echo "$ausgabe" | grep -E "error" | sort -u; echo "Build von $p fehlgeschlagen." >&2; exit 1
   fi

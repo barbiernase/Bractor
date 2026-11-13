@@ -19,14 +19,19 @@ namespace Infrastructure.Pruefstand.Umgebung;
 [Trait("Kategorie", "Garantie")]
 public class UmgebungLaderTests
 {
-    /// <summary>Eine Umgebung als Ordner (<c>umgebungen/&lt;name&gt;/umgebung.json</c>) mit ihren Instanz-Dateien (<c>graphen/&lt;instanz&gt;.json</c>).</summary>
+    /// <summary>
+    /// Eine Umgebung als Ordner (<c>umgebungen/&lt;name&gt;/umgebung.json</c>) mit ihren Instanz-Dateien (<c>graphen/&lt;instanz&gt;.json</c>; eine Instanz
+    /// <c>apps/&lt;name&gt;</c> ist eine App-Instanz).
+    /// </summary>
     private static (ConfigurationManager Konfig, string Verz) Datei(string name, string json, params (string Instanz, string Json)[] instanzen)
     {
         var verz = Directory.CreateTempSubdirectory("umgebung-").FullName;
         var ordner = Path.Combine(verz, "umgebungen", name);
         Directory.CreateDirectory(Path.Combine(ordner, "graphen"));
+        Directory.CreateDirectory(Path.Combine(ordner, "apps"));
         File.WriteAllText(Path.Combine(ordner, "umgebung.json"), json);
-        foreach (var (instanz, inhalt) in instanzen) File.WriteAllText(Path.Combine(ordner, "graphen", instanz + ".json"), inhalt);
+        foreach (var (instanz, inhalt) in instanzen)
+            File.WriteAllText(Path.Combine(ordner, instanz.Contains('/') ? instanz : "graphen/" + instanz) + ".json", inhalt);
         Environment.SetEnvironmentVariable("CQRS_UMGEBUNGEN", Path.Combine(verz, "umgebungen"));
         return (new ConfigurationManager(), verz);
     }
@@ -45,11 +50,14 @@ public class UmgebungLaderTests
         var (k, verz) = Datei("sim-t", """
             { "Umgebung": { "Name": "sim-t", "Art": "Sim" },
               "EventStore": { "Verbindung": "Host=db;Password=${env:CQRS_TEST_PW}", "Datenbank": "cqrs_sim_${branch}" },
-              "Cluster": { "Art": "Consul", "Name": "c-${branch}", "Rolle": "Mitglied" },
-              "Clients": { "Linienrechner": { "Eingaenge": { "kamera1": {
-                  "Art": "Dateiwaechter", "Akteur": "KameraSystem", "Rechner": "linie-${branch}", "Offen": 50,
-                  "Pfad": "/bilder/${branch}", "Muster": [ "*.tiff", "*.png" ], "Intervall": "00:00:01" } } } } }
-            """, ("linie1", """
+              "Cluster": { "Name": "c-${branch}", "Rolle": "Mitglied" },
+              "Rechner": { "server-1": { "Adresse": "10.0.1.5" }, "linie-${branch}": { "Adresse": "10.0.4.21" } },
+              "Backend": { "Rechner": [ "server-1", "linie-${branch}" ] } }
+            """, ("apps/kamera1", """
+            { "App": "KameraApp", "Rechner": "linie-${branch}", "Port": 5120, "Token": "t", "Start": { "Skript": "kamera.py", "Argumente": [ "-v" ] },
+              "Quellen": { "Kamera": { "Technik": { "IUhr": "Systemuhr" }, "Pfad": "/bilder/${branch}", "Muster": [ "*.tiff", "*.png" ],
+                "Intervall": "00:00:01" } } }
+            """), ("linie1", """
             { "Graph": "Bildaufbereitung", "Straenge": 2,
               "Verkleinern": { "Parallel": 4, "Technik": { "IImageResizer": "ImageResizer" }, "AusgabePfad": "/daten/${branch}", "Endungen": [ "png", "tif" ] } }
             """));
@@ -59,7 +67,11 @@ public class UmgebungLaderTests
             u.Umgebung.Art.Should().Be(UmgebungsArt.Sim);
             u.EventStore.Datenbank.Should().Be("cqrs_sim_feature_werkbank_p2", "${branch} wird DB-tauglich");
             UmgebungLader.Verbindung(u.EventStore).Should().Contain("Password=geheim").And.Contain("Database=cqrs_sim_feature_werkbank_p2");
-            u.Cluster.Art.Should().Be(ClusterArt.Consul);
+            u.Rechner.Keys.Should().Equal(["server-1", "linie-feature_werkbank_p2"], "Platzhalter gelten auch im Pool");
+            u.Rechner["server-1"].Adresse.Should().Be("10.0.1.5");
+            u.Backend.Rechner.Should().Equal(["server-1", "linie-feature_werkbank_p2"], "die Liste ersetzt den Standard, statt sich anzuhängen");
+            u.Einzelknoten.Should().BeFalse("zwei Rechner im Backend sind ein Cluster über Consul");
+            u.GrpcAdresse().Should().Be($"http://10.0.1.5:{u.Transport.GrpcPort}", "ein Client erreicht das Backend über seinen ersten Rechner");
             u.Cluster.Rolle.Should().Be(KnotenRolle.Mitglied);
             var knoten = u.Graphen["linie1"].Knoten["Verkleinern"];
             u.Graphen["linie1"].Graph.Should().Be("Bildaufbereitung", "die Instanz heißt wie ihre Datei");
@@ -70,16 +82,22 @@ public class UmgebungLaderTests
             knoten.Werte.Should().Contain("AusgabePfad", "/daten/feature_werkbank_p2", "Platzhalter gelten auch in den Instanzen")
                 .And.Contain("Endungen:0", "png").And.Contain("Endungen:1", "tif");
 
-            // Ein Eingang des Clients: Art, Akteur, Rechner, Offen als Rahmen; alles andere sind Werte der Quellart, flach (eine Liste als Feld:0 …).
-            var e = u.Clients["Linienrechner"].Eingaenge["kamera1"];
-            e.Art.Should().Be("Dateiwaechter");
-            e.Akteur.Should().Be("KameraSystem");
-            e.Rechner.Should().Be("linie-feature_werkbank_p2", "Platzhalter gelten auch im Eingang");
-            e.Offen.Should().Be(50);
+            // Eine App-Instanz (apps/<instanz>.json): App, Rechner, Port, Token, Start; je Quelle Offen und Technik als Rahmen, alles andere sind Werte der
+            //   Quellart, flach (eine Liste als Feld:0 …).
+            var a = u.Apps["kamera1"];
+            a.App.Should().Be("KameraApp", "die Instanz heißt wie ihre Datei");
+            a.Rechner.Should().Be("linie-feature_werkbank_p2", "Platzhalter gelten auch in der App-Instanz");
+            a.Port.Should().Be(5120);
+            a.Url(u).Should().Be("http://10.0.4.21:5120", "Adresse ihres Rechners und ihr Port");
+            a.Token.Should().Be("t");
+            a.Start!.Skript.Should().Be("kamera.py");
+            a.Start.Argumente.Should().Equal("-v");
+            var e = a.Quellen["Kamera"];
+            e.Technik.Should().Equal(new Dictionary<string, string> { ["IUhr"] = "Systemuhr" });
             e.Werte.Should().BeEquivalentTo(new Dictionary<string, string?>
             {
                 ["Pfad"] = "/bilder/feature_werkbank_p2", ["Muster:0"] = "*.tiff", ["Muster:1"] = "*.png", ["Intervall"] = "00:00:01",
-            }, "Art, Akteur, Rechner und Offen sind keine Werte");
+            }, "Technik ist kein Wert");
             e.AlsKnoten().Werte.Should().BeSameAs(e.Werte, "die Aktivierung liest die Werte wie am Knoten einer Instanz");
         }
         finally { Directory.Delete(verz, true); }
@@ -102,22 +120,27 @@ public class UmgebungLaderTests
     }
 
     [Fact]
-    public void Offen_eines_Eingangs_ist_eine_Zahl_ab_null()
+    public void Ein_unbekanntes_Feld_einer_App_Instanz_ist_ein_Fehler_ohne_Rechner_laeuft_sie_auf_localhost()
     {
-        var (k, verz) = Datei("sim-o", """
-            { "Umgebung": { "Name": "sim-o" },
-              "Clients": { "Linienrechner": { "Eingaenge": { "kamera1": { "Art": "Dateiwaechter", "Akteur": "KameraSystem", "Offen": "viele" } } } } }
-            """);
-        try { FluentActions.Invoking(() => UmgebungLader.Lade(k, "sim-o", [])).Should().Throw<Exception>().WithMessage("*Linienrechner:Eingaenge:kamera1*Offen*viele*"); }
+        var (k, verz) = Datei("sim-c", """{ "Umgebung": { "Name": "sim-c" } }""", ("apps/kamera1", """{ "App": "KameraApp", "Tokn": "x" }"""));
+        try { FluentActions.Invoking(() => UmgebungLader.Lade(k, "sim-c", [])).Should().Throw<InvalidOperationException>().WithMessage("*kamera1*Tokn*"); }
+        finally { Directory.Delete(verz, true); }
+        (k, verz) = Datei("sim-d", """{ "Umgebung": { "Name": "sim-d" } }""", ("apps/kamera1", """{ "App": "KameraApp" }"""));
+        try { UmgebungLader.Lade(k, "sim-d", []).Apps["kamera1"].Rechner.Should().Be(Rechnerregeln.Standard); }
         finally { Directory.Delete(verz, true); }
     }
 
     [Fact]
-    public void Ein_unbekanntes_Feld_eines_Clients_ausserhalb_der_Eingaenge_ist_ein_Fehler()
+    public void Eine_App_Instanz_waehlt_der_Prozess_ueber_app_sonst_die_einzige_seiner_App()
     {
-        var (k, verz) = Datei("sim-c", """{ "Umgebung": { "Name": "sim-c" }, "Clients": { "Linienrechner": { "Tokn": "x", "Eingaenge": {} } } }""");
-        try { FluentActions.Invoking(() => UmgebungLader.Lade(k, "sim-c", [])).Should().Throw<InvalidOperationException>().WithMessage("*Tokn*"); }
-        finally { Directory.Delete(verz, true); }
+        var u = new UmgebungKonfig { Umgebung = { Name = "u" } };
+        u.Apps["a1"] = new AppInstanzKonfig { App = "ArbeitsplatzApp", Port = 5110 };
+        AppInstanzwahl.Waehle(u, "ArbeitsplatzApp", []).Name.Should().Be("a1", "die einzige Instanz der App");
+        u.Apps["a2"] = new AppInstanzKonfig { App = "ArbeitsplatzApp", Port = 5111 };
+        FluentActions.Invoking(() => AppInstanzwahl.Waehle(u, "ArbeitsplatzApp", [])).Should().Throw<InvalidOperationException>().WithMessage("*2 Instanzen*--app*");
+        AppInstanzwahl.Waehle(u, "ArbeitsplatzApp", ["--app", "a2"]).Instanz.Port.Should().Be(5111);
+        FluentActions.Invoking(() => AppInstanzwahl.Waehle(u, "KameraApp", ["--app", "a2"])).Should().Throw<InvalidOperationException>()
+            .WithMessage("*a2 ist ArbeitsplatzApp*KameraApp*");
     }
 
     [Fact]
@@ -205,7 +228,7 @@ public class UmgebungLaderTests
     [Fact]
     public void Ein_Graph_laeuft_je_Umgebung_genau_einmal()
     {
-        // Ein Graph kennt keine Quelle mehr: jeder Kopf nimmt Commands (genau ein Empfänger) — mehrere Verzeichnisse sind mehrere Eingänge eines Clients.
+        // Ein Graph kennt keine Quelle mehr: jeder Kopf nimmt Commands (genau ein Empfänger) — mehrere Verzeichnisse sind mehrere Instanzen einer App.
         FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
                 ["a"] = new() { Graph = "Bildaufbereitung" }, ["b"] = new() { Graph = "Bildaufbereitung" },
@@ -238,22 +261,25 @@ public class UmgebungLaderTests
         var verz = AppContext.BaseDirectory;
         while (verz != null && !Directory.Exists(Path.Combine(verz, "umgebungen"))) verz = Path.GetDirectoryName(verz);
         Environment.SetEnvironmentVariable("CQRS_UMGEBUNGEN", Path.Combine(verz!, "umgebungen"));
-        var u = UmgebungLader.Lade(new ConfigurationManager(), name, [], branch: "main");
+        var u = UmgebungLader.Lade(new ConfigurationManager(), name, [Rechnerregeln.Argument, "test-rechner"], branch: "main");
         u.Umgebung.Name.Should().Be(name);
+        // Pool und Backend stimmen, und ein Host auf dem ersten Rechner des Backends startet (dieselbe Prüfung wie beim Start).
+        u.DieserRechner.Should().Be("test-rechner", "der Rechner des Prozesses kommt aus --rechner");
+        u.DieserRechner = u.Backend.Rechner[0];
+        CqrsUmgebungExtensions.PruefeRechner(u);
         GraphInstanzen.Aus(u.Graphen, Graphen).Alle.Select(i => i.Graph.Name)
             .Should().BeEquivalentTo(["Bildaufbereitung"], "je Graph eine Instanz; Arbeit hat kein Akteur, die Worker reagieren");
         foreach (var k in new[] { "Einlesen", "Verkleinern", "Kontrast" })
             u.Graphen["bildaufbereitung"].Knoten[k].Wiederholungen.Should().Be(1);
         u.Graphen["bildaufbereitung"].Knoten.Keys.Should().BeEquivalentTo(["Einlesen", "Verkleinern", "Kontrast"], "ohne Quellknoten, ohne Präfix");
 
-        // Der Dateiwächter ist ein Eingang des Linienrechners, der das Kamerasystem verkörpert — geprüft wie beim Start.
-        var linie = u.Clients["Linienrechner"].Eingaenge["linie1"];
-        linie.Art.Should().Be("Dateiwaechter");
-        linie.Akteur.Should().Be("KameraSystem");
+        // Der Dateiwächter ist die Quelle Kamera der Kamera-App (sie setzt den Linienrechner um, der das Kamerasystem verkörpert) — geprüft wie beim Start.
+        u.Apps["linie1"].App.Should().Be("KameraApp");
+        var linie = u.Apps["linie1"].Quellen["Kamera"];
         var a = Infrastructure.Komposition.Anwendung.Aktuell;
-        var eingaenge = Infrastructure.Quellen.Eingaenge.Aus(u.Clients, a.Funktionen.Bausteine, new Uebersetzungen(a.Funktionen.Uebersetzungen),
-            a.Akteure.Rechte, a.Akteure.ClientVertraege, u.Cluster.Art == ClusterArt.Einzelknoten);
-        eingaenge.Alle.Select(e => e.Ort).Should().Equal("Linienrechner/linie1");
+        var eingaenge = Infrastructure.Quellen.Eingaenge.Aus(u.Apps, a.Akteure.AppVertraege, a.Funktionen.Bausteine, new Uebersetzungen(a.Funktionen.Uebersetzungen),
+            a.Akteure.Rechte, null);
+        eingaenge.Alle.Select(e => (e.Ort, e.Akteur)).Should().Equal([("linie1/Kamera", "KameraSystem")]);
         eingaenge.Alle.Single().Uebersetzungen[typeof(DateiGefunden)].Select(x => x.Name).Should().Equal("DateiGefunden_LiesBild_1");
         new ServiceCollection().BindeTechnik(GraphInstanzen.Aus(u.Graphen, Graphen), eingaenge);   // Werte und Technik binden — auch die des Eingangs
 
@@ -262,12 +288,13 @@ public class UmgebungLaderTests
             u.Transport.JsonEingang.Should().BeTrue("Sim: die Werkbank handelt als Akteur");
             u.Graphen["bildaufbereitung"].Knoten["Verkleinern"].Werte["AusgabePfad"].Should().EndWith("/cqrs-sim/main/preprocessed");
             u.Graphen["bildaufbereitung"].Knoten["Kontrast"].Werte["AusgabePfad"].Should().EndWith("/cqrs-sim/main/preprocessed");
-            linie.Werte["Pfad"].Should().EndWith("/cqrs-sim/main/DateiErkannt", "der Wächter des Eingangs lauscht auf dem Verzeichnis der Kamera");
+            linie.Werte["Pfad"].Should().EndWith("/cqrs-sim/main/DateiErkannt", "der Wächter der Quelle lauscht auf dem Verzeichnis der Kamera");
+            u.Apps["arbeitsplatz"].Url(u).Should().Be("http://localhost:5110", "der Arbeitsplatz hört auf seinem Rechner und Port");
         }
         else
         {
             u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
-            linie.Rechner.Should().NotBeNullOrEmpty("eine Quelle lauscht im Cluster genau einmal, auf ihrem Rechner (Cluster:Rechner des Hosts)");
+            u.Rechner.Should().ContainKey(u.Apps["linie1"].Rechner, "die Quelle läuft im Rechnerdienst eines Rechners aus dem Pool");
         }
     }
 

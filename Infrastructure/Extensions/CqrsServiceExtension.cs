@@ -383,7 +383,7 @@ public static class CqrsServiceExtensions
                         ? builder.ConsulAddress 
                         : $"http://{builder.ConsulAddress}"));
             
-            // Einzelknoten (Umgebung Cluster:Art = Einzelknoten): ohne Consul, Mitgliedschaft in-memory — eine Sim läuft so ohne
+            // Einzelknoten (das Backend der Umgebung hat einen Rechner): ohne Consul, Mitgliedschaft in-memory — eine Sim läuft so ohne
             //   weitere Infrastruktur und kann nie einem fremden Cluster beitreten.
             IClusterProvider clusterProvider = builder.Einzelknoten
                 ? new Proto.Cluster.Testing.TestProvider(new Proto.Cluster.Testing.TestProviderOptions(), new Proto.Cluster.Testing.InMemAgent())
@@ -487,7 +487,7 @@ public class CqrsFrameworkBuilder
     /// <summary>Einzelner Knoten ohne Consul (in-memory Mitgliedschaft). Default false = Consul.</summary>
     public bool Einzelknoten { get; set; }
 
-    /// <summary>Der Name dieser Maschine (<c>Cluster:Rechner</c>): Instanzen, die ihn als Rechner nennen, laufen nur hier.</summary>
+    /// <summary>Der Name dieser Maschine (ihr Rechner im Pool der Umgebung): Instanzen, die ihn als Rechner nennen, laufen nur hier.</summary>
     public string? Rechner { get; set; }
     public string ConsulAddress { get; set; } = "localhost:8500";
     

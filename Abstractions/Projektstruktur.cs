@@ -78,8 +78,9 @@ static class Projektstruktur
         /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — im Katalog,
         /// je Typ eine eigene Datei.</summary>
         Technik,
-        /// <summary>Ein Akteur (<c>record … : IAkteur</c>) bzw. ein Client (<c>record … : IClient</c>): beim Rand, in <c>Akteure.cs</c> bzw. <c>Clients.cs</c>.</summary>
-        Akteur, Client,
+        /// <summary>Ein Akteur (<c>record … : IAkteur</c>) bzw. ein Client (<c>record … : IClient</c>) bzw. eine App (<c>record … : IApp&lt;TClient&gt;</c>):
+        /// beim Rand, in <c>Akteure.cs</c>, <c>Clients.cs</c> bzw. <c>Apps.cs</c>.</summary>
+        Akteur, Client, App,
         /// <summary>Eine Quellart (Klasse mit <c>IQuellart</c> und <c>Lausche</c>, oder eine Annahme <c>IAnnahme&lt;Aufruf&gt;</c>, docs/04 §4.7): im Katalog, je Quellart eine eigene Datei — nie ein Knoten.</summary>
         Quellart,
         /// <summary>Eine Meldung einer Quellart (<c>record … : IMeldung</c>): im Katalog, in <c>Meldungen.cs</c>.</summary>
@@ -96,7 +97,8 @@ static class Projektstruktur
     public const string StandardWurzel = "Domain";
 
     /// <summary>Der Ordner der Umgebungen (relativ zur Solution, docs/07 §7.2, Leitsatz W7): je Umgebung ein Ordner <c>&lt;name&gt;</c> mit
-    /// <see cref="UmgebungsDatei"/> und dem Ordner <see cref="GraphenOrdner"/> (je Instanz eines Graphen eine Datei).</summary>
+    /// <see cref="UmgebungsDatei"/>, dem Ordner <see cref="GraphenOrdner"/> (je Instanz eines Graphen eine Datei) und dem Ordner <see cref="AppsOrdner"/>
+    /// (je Instanz einer App eine Datei).</summary>
     public const string UmgebungsOrdner = "umgebungen";
 
     /// <summary>Die Datei einer Umgebung in ihrem Ordner.</summary>
@@ -105,8 +107,14 @@ static class Projektstruktur
     /// <summary>Der Ordner der Instanzen in einer Umgebung: je Instanz <c>&lt;instanz&gt;.json</c>.</summary>
     public const string GraphenOrdner = "graphen";
 
+    /// <summary>Der Ordner der App-Instanzen in einer Umgebung: je Instanz <c>&lt;instanz&gt;.json</c> — welche App wo läuft (Rechner, Port).</summary>
+    public const string AppsOrdner = "apps";
+
     /// <summary>Das Projekt, dessen Host die Werkbank baut und startet (⟳).</summary>
     public const string ServerHost = "Host.Grpc";
+
+    /// <summary>Das Projekt des Rechnerdiensts (je Rechner ein Prozess, der die Quellen seiner App-Instanzen trägt) — die Werkbank baut und startet es mit ⟳.</summary>
+    public const string RechnerHost = "Host.Rechner";
 
     /// <summary>Wohin der Codegen die STJ-Kontexte schreibt: der Ordner Serialization der Komposition (relativ zur Solution).</summary>
     public static string SerialisierungsOrdner(string wurzel) => Projekt(wurzel, Rolle.Komposition) + "/Serialization";
@@ -149,7 +157,7 @@ static class Projektstruktur
         new Eintrag(Rolle.Uebersetzungen, ".Uebersetzungen", true, new[] { Rolle.Schreibseite },
             new[] { "Uebersetzungen.cs" }),
         new Eintrag(Rolle.Akteure, ".Akteure", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Uebersetzungen },
-            new[] { "Akteure.cs", "Clients.cs", "Uebersetzungen.cs" }),
+            new[] { "Akteure.cs", "Clients.cs", "Apps.cs", "Uebersetzungen.cs" }),
         new Eintrag(Rolle.Speicher, ".Infrastructure", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
             new string[0]),
         new Eintrag(Rolle.Leitung, ".Leitung", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Uebersetzungen },
@@ -270,7 +278,7 @@ static class Projektstruktur
             case Primitive.Funktion: case Primitive.Graph:
             case Primitive.Konfig: case Primitive.Technik:
                 return new[] { Rolle.Katalog };
-            case Primitive.Akteur: case Primitive.Client: case Primitive.Verwirklichung:
+            case Primitive.Akteur: case Primitive.Client: case Primitive.App: case Primitive.Verwirklichung:
                 return new[] { Rolle.Akteure };
             case Primitive.Quellart: case Primitive.Meldung:
                 return new[] { Rolle.Katalog };
@@ -301,6 +309,7 @@ static class Projektstruktur
             case Primitive.Konfig: return "Konfigs.cs";
             case Primitive.Akteur: return "Akteure.cs";
             case Primitive.Client: return "Clients.cs";
+            case Primitive.App: return "Apps.cs";
             default: return null;
         }
     }
@@ -402,6 +411,7 @@ static class Projektstruktur
             case Primitive.Konfig: return "ein Konfig-Record";
             case Primitive.Akteur: return "ein Akteur";
             case Primitive.Client: return "ein Client";
+            case Primitive.App: return "eine App";
             case Primitive.Quellart: return "eine Quellart";
             case Primitive.Meldung: return "eine Meldung";
             case Primitive.Verwirklichung: return "eine Übersetzung der Akteur-Seite";

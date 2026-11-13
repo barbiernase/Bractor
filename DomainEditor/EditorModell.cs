@@ -39,7 +39,7 @@ public sealed record EditorModell
     /// <summary>
     /// Quellarten (<c>IQuellart</c>, docs/04 §4.7): Klassen mit <c>Lausche</c>, die je Element eine Meldung (<c>IMeldung</c>) melden — die der Anwendung
     /// (in einem Katalog) und die des Frameworks (<see cref="Quellart.Framework"/>, nur gelesen). Nie ein Knoten eines Graphen: ein Akteur verwirklicht
-    /// sich mit ihr über eine Übersetzung der Akteur-Seite, laufen tut sie als Eingang eines Clients in der Umgebung.
+    /// sich mit ihr über eine Übersetzung der Akteur-Seite, laufen tut sie als Quelle einer App (Parameter ihres Records) mit deren Instanzen.
     /// </summary>
     public IReadOnlyList<Quellart> Quellarten { get; init; } = [];
     /// <summary>
@@ -52,6 +52,11 @@ public sealed record EditorModell
     /// die Akteure, die er verkörpert. Was er hört, sendet und fragt, sind das <c>IHoert</c> und <c>IDarf</c> dieser Akteure — abgeleitet.
     /// </summary>
     public IReadOnlyList<Client> Clients { get; init; } = [];
+    /// <summary>
+    /// Apps (docs/10 E18): die konkrete Software, die einen Client umsetzt — je App ein Record (<c>record X(…) : IApp&lt;Client&gt;</c>):
+    /// ihr Client und ihre Quellen (Parameter: Quellart mit <c>[Uebersetzt&lt;U&gt;]</c>). Ihr Vertrag ist der ihres Clients ohne die Ziele ihrer Quellen.
+    /// </summary>
+    public IReadOnlyList<App> Apps { get; init; } = [];
     /// <summary>
     /// Graphen (docs/04 §4.4): je Graph ein Record (<c>record X(Knoten…) : IGraph</c>) — seine Knoten (Parameter: Name und Typ, eine Funktion oder ein
     /// Graph, dazu <c>[Kopf]</c> und <c>[Von(…)]</c>). Köpfe, Ausgänge und Kanten folgen aus den Attributen — abgeleitet, nicht Modell.
@@ -308,7 +313,7 @@ public sealed record BausteinFunktion
 }
 
 /// <summary>
-/// Eine QUELLART (<c>public sealed class X(Konfig, IZustand&lt;T&gt;, Technik…) : IQuellart</c> mit <c>Lausche(CancellationToken)</c>, oder eine Annahme
+/// Eine QUELLART (<c>public sealed class X(Konfig, Technik…) : IQuellart</c> mit <c>Lausche(CancellationToken)</c>, oder eine Annahme
 /// <c>: IAnnahme&lt;Aufruf&gt;</c>, docs/04 §4.7): was sie
 /// meldet (<see cref="Meldet"/>, Meldungen mit <c>IMeldung</c>) und ihr Konstruktor. Sie liegt in einem Katalog (die des Frameworks in <c>Core/Katalog</c>),
 /// nie in einem Graphen; welche Akteure sie verwirklichen kann, folgt aus den Übersetzungen der Akteur-Seite.
@@ -320,14 +325,14 @@ public sealed record Quellart
     /// <summary>Was sie meldet (einfache Namen der Meldungen) — aus der Signatur von <c>Lausche</c> bzw. dem Typargument von <c>IAnnahme</c>.</summary>
     public IReadOnlyList<string> Meldet { get; init; } = [];
     /// <summary>
-    /// Eine ANNEHMENDE Quellart (<c>IAnnahme&lt;TMeldung&gt;</c>, der Webhook): sie lauscht nicht — jeder Host nimmt ihre Meldungen an
-    /// (<c>POST /eingang/webhook/&lt;Pfad&gt;</c>); ihr Eingang nennt keinen Rechner, dafür einen Pfad.
+    /// Eine ANNEHMENDE Quellart (<c>IAnnahme&lt;TMeldung&gt;</c>, der Webhook): sie lauscht nicht — der Rechnerdienst ihrer App-Instanz nimmt ihre
+    /// Meldungen auf dem Port der Instanz an (<c>POST /eingang/webhook/&lt;Pfad&gt;</c>); ihre Werte nennen einen Pfad.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Annahme { get; init; }
-    /// <summary>Konstruktor der Klasse: Konfig-Records (die Werte eines Eingangs), <c>IZustand&lt;T&gt;</c>, Technik, Logger.</summary>
+    /// <summary>Konstruktor der Klasse: Konfig-Records (die Werte ihrer Quelle), Technik, Logger — kein gesicherter Zustand.</summary>
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
-    /// <summary>Was sie gesehen hat (<c>IZustand&lt;T&gt;</c> im Konstruktor): der einfache Name von T, sonst null.</summary>
+    /// <summary>Ein <c>IZustand&lt;T&gt;</c> im Konstruktor (ein Befund, CQRS100: eine Quellart hat keinen gesicherten Zustand): der einfache Name von T, sonst null.</summary>
     public string? Zustand { get; init; }
     /// <summary>Aus dem Framework (<c>Core/Katalog</c>): nur gelesen, ohne Karte; der Scaffolder schreibt sie nie.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -651,6 +656,37 @@ public sealed record Client
     /// Signatur (Herkunft), geändert wird sie über ✓ Übernehmen am 🤖 bzw. die IDE.
     /// </summary>
     public IReadOnlyList<ClientImpl> Implementierungen { get; init; } = [];
+}
+
+/// <summary>
+/// Eine APP — die konkrete Software eines Clients (docs/10 E18): <c>public sealed record {Name}([Uebersetzt&lt;U&gt;] {Quellart} {Quelle}, …) :
+/// IApp&lt;{Client}&gt;;</c>. Je Nachricht des Clients setzt sie entweder die App selbst um oder eine Quelle; ihr Vertrag (Handshake-Name, was sie sendet)
+/// ist der des Clients ohne die Ziele ihrer Quellen.
+/// </summary>
+public sealed record App
+{
+    /// <summary>Der Record-Name wie im Code (<c>KameraApp</c>) — zugleich der Handshake-Name.</summary>
+    public string Name { get; init; } = "";
+    public string Namespace { get; init; } = "";
+    /// <summary>Der Client, den sie umsetzt (<c>IApp&lt;Client&gt;</c>).</summary>
+    public string Client { get; init; } = "";
+    /// <summary>Ihre Quellen in Reihenfolge der Parameter.</summary>
+    public IReadOnlyList<AppQuelle> Quellen { get; init; } = [];
+    /// <summary>Die Namespaces der Quellarten außerhalb der Akteure (z. B. <c>Core.Katalog</c>) — wie geschrieben.</summary>
+    public IReadOnlyList<string> Usings { get; init; } = [];
+    public string? Doku { get; init; }
+    /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
+    public string? Datei { get; init; }
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>Eine Quelle einer App: Name des Parameters (Schlüssel ihrer Werte in der App-Instanz), die Quellart und die Übersetzungen der Akteur-Seite.</summary>
+public sealed record AppQuelle
+{
+    public string Name { get; init; } = "";
+    public string Quellart { get; init; } = "";
+    /// <summary>Die Übersetzungen aus <c>[Uebersetzt&lt;U&gt;]</c> (Klassennamen) — ihr Ziel ist eine Nachricht, die nicht die App sendet.</summary>
+    public IReadOnlyList<string> Uebersetzungen { get; init; } = [];
 }
 
 /// <summary>

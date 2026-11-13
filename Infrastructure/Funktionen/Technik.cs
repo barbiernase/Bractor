@@ -171,7 +171,7 @@ public static class TechnikExtensions
         => services.BindeTechnik(HostKnoten(instanzen).Concat(eingaenge?.Bindungen() ?? []), Anwendung.Technik.Umsetzungen, Anwendung.Technik.Braucht,
             Anwendung.Technik.Konfigs);
 
-    /// <summary>Die Karte eines Bindungs-Fehlers: der Eingang eines Clients (<c>eingang:Client/Eingang</c>) bzw. die Instanz.</summary>
+    /// <summary>Die Karte eines Bindungs-Fehlers: die Quelle einer App-Instanz (<c>eingang:Instanz/Quelle</c>) bzw. die Instanz.</summary>
     private static string KarteVon(KnotenKontext k) =>
         k.Instanz.StartsWith("eingang:", StringComparison.Ordinal) ? WirkerId.FuerEingang(k.Instanz["eingang:".Length..], k.Knoten) : "instanz:" + k.Instanz;
 

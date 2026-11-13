@@ -31,7 +31,7 @@ public class UmgebungE2ETests
     {
         Umgebung = new UmgebungKopf { Name = name, Art = art },
         EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = db, Schema = "es" },
-        Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
+        Cluster = new ClusterKonfig { Name = "cqrs-" + name },
         Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = 0 },
     };
 

@@ -4,12 +4,15 @@ using Abstractions;
 namespace Sondenkatalog.Katalog;
 
 // SONDE — eine eigene QUELLART (docs/04 §4.7) im fremden Katalog: sie lauscht am Feldbus und meldet je gelesenem Wert einen Rohwert (IMeldung) —
-// mit Konfig (die Werte eines Eingangs), gesichertem Zustand und Technik im Konstruktor wie eine Funktion, aber nie ein Knoten eines Graphen. Welchen
-// Akteur sie verwirklicht, sagt die Übersetzung der Akteur-Seite (Rohwert ↦ NimmMesswert beim Sensornetz); laufen tut sie als Eingang eines Clients.
+// mit Konfig (die Werte ihrer Quelle) und Technik im Konstruktor wie eine Funktion, aber ohne gesicherten Zustand (was sie zählt, merkt sie sich selbst)
+// und nie ein Knoten eines Graphen. Welchen Akteur sie verwirklicht, sagt die Übersetzung der Akteur-Seite (Rohwert ↦ NimmMesswert beim Sensornetz);
+// laufen tut sie als Quelle einer App.
 
 /// <summary>Liest die Sensoren der Konfig im Takt ihres Intervalls und meldet jeden lesbaren Wert.</summary>
-public sealed class Sensorabfrage(SensorabfrageKonfig konfig, IZustand<Abfragestand> stand, ISensorbus bus) : IQuellart
+public sealed class Sensorabfrage(SensorabfrageKonfig konfig, ISensorbus bus) : IQuellart
 {
+    private long _abfragen;
+
     public async IAsyncEnumerable<Rohwert> Lausche([EnumeratorCancellation] CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
@@ -17,7 +20,7 @@ public sealed class Sensorabfrage(SensorabfrageKonfig konfig, IZustand<Abfragest
             foreach (var s in konfig.Sensoren)
                 if (await bus.LiesAsync(Guid.Parse(s), ct) is { } wert)
                 {
-                    stand.Wert.Abfragen++;
+                    _abfragen++;
                     yield return new Rohwert(Guid.Parse(s), wert, DateTimeOffset.UtcNow);
                 }
             await Task.Delay(konfig.Intervall, ct);

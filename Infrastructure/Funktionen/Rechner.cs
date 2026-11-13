@@ -1,12 +1,12 @@
 namespace Infrastructure.Funktionen;
 
 /// <summary>
-/// Der RECHNER dieses Hosts (docs/04 §4.4, <c>Cluster:Rechner</c>): eine Instanz bzw. ein Eingang, der einen Rechner nennt, läuft nur auf ihm — eine
+/// Der RECHNER dieses Hosts (docs/04 §4.4, docs/06 §6.5: <c>--rechner</c> bzw. <c>CQRS_RECHNER</c>, ein Rechner des Backends): eine Instanz bzw. ein Eingang, der einen Rechner nennt, läuft nur auf ihm — eine
 /// Quelle an ihrer Steuerung, ein Modell auf seiner GPU. Ein Schreiber folgt so aus der Konfiguration; fällt der Rechner aus, zieht nichts um, die durablen Eingänge
 /// warten. Im Einzelknoten-Betrieb ist der eine Host der Rechner jeder Instanz.
 /// </summary>
 /// <param name="Name">Der Name dieser Maschine; null = keiner (der Host bedient nur Instanzen ohne Rechner).</param>
-/// <param name="Einzelknoten">Besteht der Cluster nur aus diesem Host?</param>
+/// <param name="Einzelknoten">Besteht das Backend nur aus diesem Rechner?</param>
 public sealed record EigenerRechner(string? Name, bool Einzelknoten)
 {
     public static readonly EigenerRechner Keiner = new(null, Einzelknoten: false);
@@ -27,6 +27,6 @@ public sealed record EigenerRechner(string? Name, bool Einzelknoten)
         if (Einzelknoten || !instanzen.AusUmgebung) return;
         foreach (var i in instanzen.Alle.Where(i => i.Rechner is null && mitZustand(i)))
             throw new Infrastructure.Umgebung.BootFehler($"Instanz {i.Name}: sie hat Zustand und nennt keinen Rechner — "
-                + "im Cluster läuft sie genau auf einem: \"Rechner\": \"<Name>\" in ihrer Datei, derselbe Name als Cluster:Rechner des Hosts.", "instanz:" + i.Name);
+                + "im Cluster läuft sie genau auf einem: \"Rechner\": \"<Name>\" in ihrer Datei, ein Rechner des Backends.", "instanz:" + i.Name);
     }
 }

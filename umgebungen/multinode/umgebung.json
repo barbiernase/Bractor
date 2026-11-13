@@ -10,33 +10,29 @@
     "Schema": "es"
   },
   "Cluster": {
-    "Art": "Consul",
     "Name": "cqrs-multinode",
-    "Consul": "consul:8500",
-    "AdvertisedHost": "localhost"
+    "Consul": "consul:8500"
+  },
+  "Rechner": {
+    "grpc1": {
+      "Adresse": "grpc1"
+    },
+    "grpc2": {
+      "Adresse": "grpc2"
+    },
+    "grpc3": {
+      "Adresse": "grpc3"
+    }
+  },
+  "Backend": {
+    "Rechner": [
+      "grpc1",
+      "grpc2",
+      "grpc3"
+    ]
   },
   "Transport": {
     "GrpcPort": 5001,
     "EinblickPort": 5002
-  },
-  "Clients": {
-    "Arbeitsplatz": {
-      "Urls": "http://localhost:5010",
-      "Dateien": [
-        "/data/input",
-        "/data/preprocessed"
-      ]
-    },
-    "Linienrechner": {
-      "Eingaenge": {
-        "linie1": {
-          "Art": "Dateiwaechter",
-          "Akteur": "KameraSystem",
-          "Rechner": "grpc1",
-          "Pfad": "/data/input",
-          "Kennung": "PfadGroesseZeit"
-        }
-      }
-    }
   }
 }

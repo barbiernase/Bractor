@@ -60,6 +60,14 @@ internal sealed class HostLauf : IAsyncDisposable
         _prozess.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (log) log.WriteLine("ERR " + e.Data); };
         _prozess.BeginOutputReadLine();
         _prozess.BeginErrorReadLine();
+        if (_einblickPort <= 0)
+        {
+            // Ohne Einblick-Port (der Rechnerdienst): bereit, sobald er läuft — er verbindet sich selbst und wiederholt, bis das Backend da ist.
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            if (_prozess.HasExited && _prozess.ExitCode != 0)
+                throw new InvalidOperationException($"{Path.GetFileName(_dll)} ({_umgebung}) beendet beim Start (Code {_prozess.ExitCode}) — siehe {_logDatei}");
+            return;
+        }
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         var sw = Stopwatch.StartNew();

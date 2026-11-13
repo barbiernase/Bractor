@@ -169,6 +169,11 @@ public static class ModellMapper
                 // Handshake-Name = Record-Name — derselbe Name, unter dem die generierte Python-Basis den Client führt.
                 Implementierungen = pyImpls.GetValueOrDefault(x.Name) ?? [],
             }).ToList(),
+            Apps = dom.Apps.Select(x => new App
+            {
+                Name = x.Name, Namespace = x.Namespace, Client = x.Client, Usings = x.Usings, Doku = x.Doku, Datei = Rel(x.Datei),
+                Quellen = x.Quellen.Select(q => new AppQuelle { Name = q.Name, Quellart = q.Quellart, Uebersetzungen = q.Uebersetzungen }).ToList(),
+            }).ToList(),
             Graphen = dom.Graphen.Select(x => new Graph
             {
                 Name = x.Name, Namespace = x.Namespace, Knoten = x.Knoten.Select(k => new GraphKnoten { Typ = k.Typ, Name = k.Name, Kopf = k.Kopf, Von = k.Von, Verlierbar = k.Verlierbar })
@@ -609,7 +614,7 @@ public static class ModellMapper
         var storeVon = dom.Stores.GroupBy(x => x.Namespace + "." + x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var bausteinVon = dom.BausteinFunktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var quellartVon = dom.Quellarten.GroupBy(q => q.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "quellarten", "akteure", "clients", "graphen", "uebersetzungen", "readModels", "projektionen", "reader", "stores" })
+        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "quellarten", "akteure", "clients", "apps", "graphen", "uebersetzungen", "readModels", "projektionen", "reader", "stores" })
             foreach (var k in Alle(root[sammlung]))
             {
                 var full = S(k, "namespace") + "." + S(k, "name");
@@ -710,6 +715,7 @@ public static class ModellMapper
         foreach (var q in Alle(root["quellarten"])) q["_id"] = "quellart:" + S(q, "name");
         foreach (var a in Alle(root["akteure"])) a["_id"] = Abstractions.WirkerId.FuerAkteur(S(a, "name"));
         foreach (var c in Alle(root["clients"])) c["_id"] = "client:" + S(c, "name");
+        foreach (var a in Alle(root["apps"])) a["_id"] = "app:" + S(a, "name");
         foreach (var g in Alle(root["graphen"])) g["_id"] = "graph:" + S(g, "name");
         foreach (var u in Alle(root["uebersetzungen"])) u["_id"] = Abstractions.WirkerId.FuerUebersetzung(S(u, "name"));
     }

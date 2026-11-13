@@ -1,7 +1,7 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-11-09, nach dem Umbau „Graphen im Katalog, Übersetzungen neben der reinen Domäne“ (die Grammatik steht in
+hierher. Stand: 2026-11-13, nach dem Umbau „Rechner und Apps“ (die Grammatik steht in
 [10](10-entwickler-api.md), die Garantien in [11](11-garantien.md)). Maßstab sind die sechs Invarianten und die Werkbank-Leitsätze W1–W12
 (`CLAUDE.md`). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
@@ -16,14 +16,25 @@ Hinweise und Fristen aus; was nach einem Fakt geschieht, stößt ein Client an, 
 liegen **Funktionen und Graphen nur in Katalogen**, eine Anwendung macht sie mit **Übersetzungen** (`<Wurzel>.Uebersetzungen`, Routing über den
 Typ) domänenspezifisch, die **Domäne bleibt rein** (kein Katalog in Schreib- und Leseseite); die Rolle `Pipeline` ist entfallen (docs/04 §4.4,
 docs/07). Damit erledigt: FV-1, FV-2, FB-6, FB-8, FB-21, PF-7
-(§13.6); offen: GF-2, GF-3, GF-6, VM-3. Der Editor (Fläche in sieben Spalten, docs/10 §10.9): ED-1, ED-2, ED-3 (ED-4, Lese-Fähigkeit eines Katalogs im Modal, erledigt 2026-11-09).
+(§13.6); offen: GF-2, GF-3, GF-6, VM-3. Der Editor (Fläche in acht Spalten, docs/10 §10.9): ED-1, ED-2, ED-3 (ED-4, Lese-Fähigkeit eines Katalogs im Modal, erledigt 2026-11-09).
+
+**Umbau „Rechner und Apps“ (2026-11-13, docs/10 E18):** ein Pool von Rechnern und eine Backend-Karte statt Cluster-Art und Adressen; die App
+(`IApp<Client>`, Parameter = Quellen) ist der Vertrag an der Leitung; App-Instanzen als Dateien `apps/<instanz>.json`; Quellen laufen im
+Rechnerdienst (`Host.Rechner`) und geben über die Leitung hinein, das Framework sichert für sie nichts (Invariante 6 neu gefasst). Offen: RA-1 bis
+RA-5, VM-4.
 
 **Frühere Umbauten:** Pub/Sub-Neustrukturierung (2026-10-26 bis 2026-10-29) und „Funktionen vor dem Aggregat“ (2026-11-01); was sie erledigt
 haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7).
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| GF-2 | Der `Webhook` (eine Annahme, jeder Host nimmt an, 202 erst nach dem durablen Ablegen) prüft nur den Schlüssel seines Eingangs, kein Akteur-Tor; der Endpunkt ist nur store-frei geprüft (`AnnahmeTests`), über HTTP gegen echtes Marten und im Cluster noch nicht; sein Gegendruck zählt je Host | P2 |
+| GF-2 | Der `Webhook` (eine Annahme im Rechnerdienst auf dem Port seiner App-Instanz, 202 erst nach der Quittung) prüft nur den Schlüssel seiner Quelle; befugt ist der Akteur aus dem Token der Instanz. Der Endpunkt ist nur gegen eine Leitung im Speicher geprüft (`AnnahmeTests`), über HTTP gegen einen echten Host noch nicht | P2 |
+| VM-4 | Die Laufzeit-Suiten nach dem Umbau „Rechner und Apps“ (2026-11-13) sind nicht gelaufen: Prüfstand (`RechnerdienstTests`, `AnnahmeTests`, `EingaengeTests`, `UmgebungLaderTests`), Integration (`AblaufE2ETests` mit dem Quellenlauf in-process), Verhaltens-Netz (`Hostlauf` startet den Rechnerdienst), Werkbank-Abnahme und Messung S1 (Bildeingang über den Rechnerdienst) | P1 |
+| RA-1 | Der Rechnerdienst (`Host.Rechner`) hängt an der ganzen Komposition (`Domain.Laufzeit`): Marten und Proto.Actor liegen im Paket, laufen aber nicht. Ein schlankes Generat (Quellarten, Übersetzungen der Akteur-Seite, Apps, Leitung) fehlt | P2 |
+| RA-2 | Spur: Wirker eines Elements aus einer Quelle ist der Akteur aus dem Token (`akteur:<A>`), nicht die Quelle (`eingang:<Instanz>/<Quelle>`) — die Leitung trägt keinen Wirker; die Karte der Quelle leuchtet im Editor nicht | P3 |
+| RA-3 | Wiederholt gemeldete Elemente: die Inbox verwirft sie nur innerhalb ihres Horizonts (`InboxHorizontTage`); ein Command ohne Ziel, dessen Kette fertig ist, startet eine neue Kette (deren Commands an Aggregate die Inbox verwirft). Ein Dateiwächter meldet nach jedem Neustart das ganze Verzeichnis erneut — Last auf der Leitung, Spur-Rauschen | P2 |
+| RA-4 | Die Werkbank startet Rechnerdienste nur für Rechner dieser Maschine (Adresse `localhost`/`127.0.0.1`); App-Instanzen auf anderen Rechnern laufen in Sim nicht (kein Deploy, W12) — der Editor sagt das nicht an der Karte | P3 |
+| RA-5 | `build.sh` und die Deploy-Skripte schreiben bzw. erwarten noch die alte Umgebung (Cluster-Art, `Clients`, `Quellen`); `deploy-linux` startet keinen Rechnerdienst | P2 |
 | GF-3 | Editor: „Adapter vorschlagen“ (eine kleine Funktion, wenn ein Typ nicht passt) fehlt als Geste; ⊕ im Panel findet auf der Fläche keine Ziele mehr (verbunden wird durch Ziehen von Port zu Karte) | P2 |
 | ED-1 | Editor-Fläche: Karten lassen sich in ihrer Zelle nicht von Hand senkrecht umordnen (die Reihenfolge rechnet der Editor); eine neue, leere Domäne erscheint nicht als Band | P3 |
 | ED-3 | Werkbank-Abnahme rot im Worker-Schritt (2026-11-04, Server): zwei Bilddateien in der Quelle `linienimport` ergeben in 120 s kein `ImagePairErstellt`; ⟳, Akteur, Fläche und Gesten davor sind grün. Ungeklärt, ob Dateiwächter, Instanz (Rechner) oder Kette; der Test war seit E4 aus | P1 |
@@ -37,7 +48,7 @@ haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS1
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
 | G-16 | Lesen nach Schreiben im Verhaltens-Netz einmal verfehlt (`ClientVerhaltenTests.Nach_dem_eigenen_Command_sieht_die_naechste_Query…`, 1 von 3 Läufen am 2026-10-28): die Query direkt nach der Quittung zeigte den eigenen Stand nicht; vermutlich derselbe Mechanismus wie G-14 oder der damalige Redis-Index (nach dem Commit geschrieben, überschreibend, mit Ablauf); seit Phase 6 kommt der Stand aus dem Guard der Projektion (mit den Wirkungen in einer Transaktion) — am 2026-10-28 mit diesem Stand wieder einmal in drei vollen Läufen rot — der Redis-Index war es also nicht. Seit Phase 7 wartet die Leseseite selbst auf „mindestens S auf v“ (keine Nachfrage im Client mehr); ob G-16 damit weg ist, zeigt erst eine Reihe voller Läufe | P2 |
 | G-15 | Hinweise zwischen zwei Actors ohne zugesicherte Reihenfolge: der Bote meldet jede Nachricht für sich — zwei Hinweise desselben Absenders an denselben Verteiler können sich überholen; ohne Nachweis-Test | P3 |
-| PF-34 | Eine Instanz mit Zustand oder Quelle rechnet im Cluster auf genau einem Host, ihrem Rechner, mit einem Kind je Knoten mit Zustand: ihr Durchsatz ist der dieses Kinds; dazu die Sicherung in `cqrs_zustaende` nach beendeten Aufrufen — beides ungemessen | P3 |
+| PF-34 | Eine Instanz mit Zustand rechnet im Cluster auf genau einem Host, ihrem Rechner, mit einem Kind je Knoten mit Zustand: ihr Durchsatz ist der dieses Kinds; dazu die Sicherung in `cqrs_zustaende` nach beendeten Aufrufen — beides ungemessen | P3 |
 | PF-40 | Decke von S5 bei ≈ 1 800 (4 Slots) bzw. 2 400 (16 Slots) Vorgängen/s durchgehend; Postgres trägt die Last, der Host nutzt 3–4 Kerne. Die DB-Zeit trägt das Lesen der Konsumenten je Partition (Partition über `get_byte(uuid_send(stream_id), …) % n`, Typ-Filter, Ausschluss-Liste). Erster Teil erledigt (`195a83d`): der Funktions-Actor liest ab der Grenze seiner letzten Seite statt ab der Position — mit 16 Slots je Aufruf 3,0 → 0,69 ms, DB-Zeit 207 → 107 s, S5-64 2 028 → 2 405 Vorgänge/s; mit 4 Slots kaum Unterschied (0,47 → 0,42 ms, 1 758 → 1 830, im Rauschen). Offen: auch so trägt das Lesen 65–76 % der DB-Zeit, weil jede Partition dasselbe Ende des Logs durchgeht und ≈ 9 von 10 Zeilen verwirft (Plan auf der Mess-DB: 500 Treffer aus ≈ 5 700 Zeilen). Kandidat: ein Index über Partition und Sequenz für die eingestellte Zahl der Partitionen — Entscheidung offen (docs/12). Seit dem Umbau „Funktionen vor dem Aggregat“ lesen nur noch die Projektionen | P1 |
 | PF-13 | Unter S5-64: der Nachschub (Graph `Nachschubablauf`) wartet am heißen Posten hinter den Reservierungen — p99 im Sekundenbereich (Zahlen docs/12) | P3 |
 | PF-10 | Der Dateiwächter meldet eine Datei nach der anderen (das nächste Element erst, wenn der Graph-Actor die Kette angenommen hat): das Melde-Tempo bestimmt S1 mit — ob eine Quelle mehrere Läufe zugleich anstoßen soll, ist offen | P2 |
@@ -244,8 +255,8 @@ selbst; die Ortsangaben prüft es nicht (CQRS056 steht dort falsch als Analyzer 
 Grammatik-Regel. Funktion und Technik werden im Inventar nur nach Namen verglichen. Die Sonde deckt die Graph-Muster, Reaktionen,
 Kenntnis, Clients und eine Quellfunktion ab; Count-Join und Kompensation im Vorgangs-Aggregat noch nicht.
 
-**AK-1 · Akteure und Clients** (`konzept-akteure.md` §9): `als` im Envelope bei mehreren verkörperten Akteuren, Anmeldung je Person; kein
-Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert. (Was ein Client auf ein Fakt hin tut, wirkt genau einmal über seine
+**AK-1 · Akteure und Clients** (`konzept-akteure.md` §9): `als` im Envelope bei mehreren verkörperten Akteuren, Anmeldung je Person (den
+Boot-Check, ob das Token einer App-Instanz einen Akteur ihres Clients nennt, gibt es seit Schritt 3 des Plans Rechner und Apps). (Was ein Client auf ein Fakt hin tut, wirkt genau einmal über seine
 Reaktionen: die Position hält der Client, die Command-Ids sind abgeleitet, `konzept-akteure.md` §5.5.)
 
 **PF-31 · Volles Falten nach Schema-Wechsel, neue Funktion ab 0.** Passt die Schema-Version eines Snapshots nicht, faltet die erste Aktivierung den

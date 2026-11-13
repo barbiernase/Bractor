@@ -306,7 +306,7 @@ class CqrsClient(HandlerBase, Generic[S]):
     def _resolve_state_type(self) -> type | None:
         """
         Extrahiert den State-Typ aus CqrsClient[S] — auch über Zwischenklassen (z. B. eine generierte
-        Vertragsbasis: class Worker(KlassifikationsWorkerBasis[MeinState])): die erste konkrete Typ-Angabe in der MRO.
+        Vertragsbasis: class Worker(KlassifikationsAppBasis[MeinState])): die erste konkrete Typ-Angabe in der MRO.
         """
         for klasse in type(self).__mro__:
             for base in klasse.__dict__.get('__orig_bases__', ()):

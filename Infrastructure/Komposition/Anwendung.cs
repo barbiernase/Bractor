@@ -115,6 +115,8 @@ public interface IAkteurTabelle
 {
     IReadOnlyDictionary<string, AkteurRechte> Rechte { get; }
     IReadOnlyDictionary<string, ClientVertrag> ClientVertraege { get; }
+    /// <summary>Die Verträge an der Leitung: je App (<c>IApp&lt;TClient&gt;</c>) — gegen sie prüft der Handshake.</summary>
+    IReadOnlyDictionary<string, ClientVertrag> AppVertraege { get; }
 }
 
 public interface IFunktionsTabelle

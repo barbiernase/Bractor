@@ -19,6 +19,7 @@ public static class Herkunft
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
     public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Hoert });
     public static string Von(Client c) => Hash(new { c.Name, c.Verkoerpert });
+    public static string Von(App a) => Hash(new { a.Name, a.Client, Quellen = a.Quellen.Select(q => new { q.Name, q.Quellart, q.Uebersetzungen }).ToList() });
     public static string Von(Graph g) => Hash(new { g.Name, g.Knoten });
     public static string Von(Uebersetzung u) => Hash(new { u.Name, u.Ein, u.Aus, u.Felder });
     // Eine Funktion: ihre Form, je Eingang (Auf) Eingang und Ausgaben bzw. je gerufene Methode ihre Signatur, der Konstruktor der Klasse und je
@@ -53,6 +54,7 @@ public static class Herkunft
             Quellarten = m.Quellarten.Select(q => q with { Herkunft = Von(q) }).ToList(),
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
+            Apps = m.Apps.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Graphen = m.Graphen.Select(g => g with { Herkunft = Von(g) }).ToList(),
             Uebersetzungen = m.Uebersetzungen.Select(u => u with { Herkunft = Von(u) }).ToList(),
             Lesen = l == null ? null : l with
@@ -77,6 +79,7 @@ public static class Herkunft
         foreach (var q in m.Quellarten.Where(q => !q.Framework)) Pruefe(q.Herkunft, Von(q), $"quellart {q.Namespace}.{q.Name}");
         foreach (var a in m.Akteure) Pruefe(a.Herkunft, Von(a), $"akteur {a.Namespace}.{a.Name}");
         foreach (var c in m.Clients) Pruefe(c.Herkunft, Von(c), $"client {c.Namespace}.{c.Name}");
+        foreach (var a in m.Apps) Pruefe(a.Herkunft, Von(a), $"app {a.Namespace}.{a.Name}");
         var l = m.Lesen;
         if (l == null) return aus;
         foreach (var st in l.Stores) foreach (var f in st.Fns) Pruefe(f.Herkunft, Von(f), $"fähigkeit {st.Name}.{f.Methode}");

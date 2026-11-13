@@ -34,6 +34,7 @@ public static class Strukturort
             Graphen = m.Graphen.Select(g => g.Datei != null ? g : g with { Namespace = Flach(g.Namespace) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
             Clients = m.Clients.Select(c => c.Datei != null ? c : c with { Namespace = Ns(c.Namespace, P.Rolle.Akteure) }).ToList(),
+            Apps = m.Apps.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
             // Eine neue Übersetzung im Bereich einer Domäne: bei den Übersetzungen der Anwendung im selben Bereich (die Domäne bleibt rein); eine der
             //   Akteur-Seite (ihre Quelle ist eine Meldung, eine Verwirklichung) bei den Akteuren, flach wie Akteure und Clients.
             Uebersetzungen = m.Uebersetzungen.Select(u => u.Datei != null ? u

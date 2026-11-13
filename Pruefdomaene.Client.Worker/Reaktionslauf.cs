@@ -9,9 +9,9 @@ using Pruefdomaene.Messung;
 using Pruefdomaene.Posten;
 using Pruefdomaene.Verteilung;
 
-// Dieser Client IST der ReaktionsWorker der Prüfdomäne (docs/konzept-akteure.md §4): er verkörpert die Sachbearbeitung — was sie hört und darf,
-//   steht dort.
-[assembly: IstClient<ReaktionsWorker>]
+// Diese Assembly IST die ReaktionsApp der Prüfdomäne (docs/konzept-akteure.md §4) des Clients ReaktionsWorker: er verkörpert die Sachbearbeitung —
+//   was sie hört und darf, steht dort.
+[assembly: IstApp<ReaktionsApp>]
 
 namespace Pruefdomaene.Client.Worker;
 

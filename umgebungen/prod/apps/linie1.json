@@ -1,0 +1,13 @@
+{
+  "App": "KameraApp",
+  "Rechner": "prod-1",
+  "Quellen": {
+    "Kamera": {
+      "Pfad": "/mnt/unlabeledgewebebilder/SNP/IO",
+      "Intervall": "00:00:01",
+      "Fertig": "Stabil",
+      "Fenster": "00:00:01",
+      "Kennung": "NameGroesse"
+    }
+  }
+}

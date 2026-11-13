@@ -21,6 +21,9 @@ public sealed class WerkbankServer
     private readonly SemaphoreSlim _einLauf = new(1, 1);
     public Umgebungen Umgebungen { get; }
     public HostProzess Host { get; }
+
+    /// <summary>Die Rechnerdienste dieser Maschine (je lokalem Rechner mit App-Instanzen einer; ⟳ startet sie nach dem Host).</summary>
+    public Rechnerdienste Rechnerdienste { get; }
     public Infra Infra { get; }
     public SimDatenbank Db { get; } = new();
     public Fortschritt Fortschritt { get; } = new();
@@ -42,6 +45,7 @@ public sealed class WerkbankServer
         _root = slnRoot;
         Umgebungen = new Umgebungen(slnRoot);
         Host = new HostProzess(slnRoot);
+        Rechnerdienste = new Rechnerdienste(slnRoot);
         Infra = new Infra(slnRoot);
         Arbeitsbereich = new Arbeitsbereich(slnRoot, Fortschritt.Melde);
         Gesten = new GestenDienst(slnRoot, Arbeitsbereich, new Verlauf(slnRoot, Umgebungen.Branch), Umgebungen.Branch, Fortschritt.Melde);
@@ -64,7 +68,7 @@ public sealed class WerkbankServer
                 try
                 {
                     var u = Umgebungen.Aufgeloest(n);
-                    return (u.Umgebung.Art == UmgebungsArt.Sim ? 0 : 4) + (u.Cluster.Art == ClusterArt.Einzelknoten ? 0 : 2) + (u.EventStore.Betrieb == Betrieb.Verwaltet ? 0 : 1);
+                    return (u.Umgebung.Art == UmgebungsArt.Sim ? 0 : 4) + (u.Einzelknoten ? 0 : 2) + (u.EventStore.Betrieb == Betrieb.Verwaltet ? 0 : 1);
                 }
                 catch { return 9; }
             }
@@ -173,6 +177,13 @@ public sealed class WerkbankServer
             // -p:CqrsStand: der Host stempelt diesen Stand an jedes Event (Spur) — Board, Build und Lauf tragen denselben.
             var host = Abstractions.Projektstruktur.ServerHost;
             var bau = await Prozesse.LaufeAsync("dotnet", ["build", $"{host}/{host}.csproj", "-v", "q", "-nologo", "-clp:NoSummary", $"-p:CqrsStand={stand}"], _root, ct: ct);
+            // Der Rechnerdienst (Host.Rechner) trägt die Quellen der App-Instanzen — dieselbe Komposition, gebaut gleich danach (meist nur noch er selbst).
+            if (bau.Ok)
+            {
+                var rechner = Abstractions.Projektstruktur.RechnerHost;
+                var rb = await Prozesse.LaufeAsync("dotnet", ["build", $"{rechner}/{rechner}.csproj", "-v", "q", "-nologo", "-clp:NoSummary"], _root, ct: ct);
+                bau = rb.Ok ? bau : rb;
+            }
             var diagnosen = Karten.Zuordnen(Diagnosen.Lies(bau.Zeilen, _root), vorher.Board);
             Schritt(schritte, new Schritt("Bauen", bau.Ok, (long)bau.Dauer.TotalMilliseconds,
                 bau.Ok ? ["0 Fehler"] : diagnosen.Count > 0 ? diagnosen.Select(x => $"{x.Datei}:{x.Zeile} {x.Code} {x.Text}").Take(20).ToList() : bau.Zeilen.TakeLast(15).ToList()));
@@ -250,10 +261,14 @@ public sealed class WerkbankServer
                 verzeichnisse.Count > 0 ? [.. infra.Meldungen, $"Verzeichnis(se) der Eingänge angelegt: {string.Join(", ", verzeichnisse)}"] : infra.Meldungen));
             if (!infra.Ok) return Ende(false, diagnosen);
 
-            // 6 Host ersetzen. Den Proto-Stand der Daten schreibt der Host beim Start selbst (UmgebungsSiegel, jede Umgebung).
+            // 6 Host ersetzen, danach die Rechnerdienste dieser Maschine (sie tragen die Quellen der App-Instanzen und geben über die Leitung hinein).
+            //   Den Proto-Stand der Daten schreibt der Host beim Start selbst (UmgebungsSiegel, jede Umgebung).
             Beginne("Starten");
+            await Rechnerdienste.StoppeAlleAsync();
             var start = await Host.StarteAsync(name, u.Transport.EinblickPort, Umgebungen.Branch(), ct);
-            Schritt(schritte, new Schritt("Starten", start.Ok, 0, start.Ok ? [$"Host läuft · {name} · DB {u.EventStore.Datenbank}"] : start.Boot.Select(b => b.Text).ToList()));
+            var dienste = start.Ok ? await Rechnerdienste.StarteAsync(u, Umgebungen.Branch(), ct) : [];
+            Schritt(schritte, new Schritt("Starten", start.Ok, 0, start.Ok ? [$"Host läuft · {name} · DB {u.EventStore.Datenbank}", .. dienste]
+                : start.Boot.Select(b => b.Text).ToList()));
             if (start.Ok)
             {
                 LaufStand = stand;
@@ -319,13 +334,21 @@ public sealed class WerkbankServer
     }
 
     /// <summary>
-    /// Legt je Eingang eines Clients mit einem Dateiwächter (<c>Clients:&lt;Client&gt;:Eingaenge:&lt;eingang&gt;:Pfad</c>) das Verzeichnis an, falls es fehlt
-    /// (der Dateiwächter selbst legt nichts an). Gibt die Eingänge (<c>Client/Eingang</c>) zurück, deren Verzeichnis neu ist.
+    /// Die Quellart einer Quelle einer App aus dem gelesenen Code (Board: <c>apps[].quellen[]</c>) — null, wenn es App oder Quelle nicht gibt.
+    /// </summary>
+    public string? Quellart(string app, string quelle) =>
+        (Arbeitsbereich.Board?["apps"] as System.Text.Json.Nodes.JsonArray ?? []).OfType<System.Text.Json.Nodes.JsonObject>()
+            .Where(a => (string?)a["name"] == app).SelectMany(a => (a["quellen"] as System.Text.Json.Nodes.JsonArray ?? []).OfType<System.Text.Json.Nodes.JsonObject>())
+            .Where(q => (string?)q["name"] == quelle).Select(q => (string?)q["quellart"]).FirstOrDefault();
+
+    /// <summary>
+    /// Legt je Quelle einer App-Instanz mit einem Dateiwächter (<c>apps/&lt;instanz&gt;.json</c>, Quellen:&lt;quelle&gt;:Pfad) das Verzeichnis an, falls es
+    /// fehlt (der Dateiwächter selbst legt nichts an). Gibt die Quellen (<c>Instanz/Quelle</c>) zurück, deren Verzeichnis neu ist.
     /// </summary>
     public List<string> EingangsVerzeichnisseAnlegen(string umgebung)
     {
         var angelegt = new List<string>();
-        foreach (var (eingang, pfad) in Umgebungen.EingangsPfade(umgebung))
+        foreach (var (eingang, pfad) in Umgebungen.EingangsPfade(umgebung, Quellart))
         {
             if (Directory.Exists(pfad)) continue;
             Directory.CreateDirectory(pfad);

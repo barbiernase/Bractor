@@ -30,7 +30,7 @@ public class LeseseitenStandE2ETests
     {
         Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim },
         EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = db, Schema = "es" },
-        Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
+        Cluster = new ClusterKonfig { Name = "cqrs-" + name },
         Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = 0 },
     };
 

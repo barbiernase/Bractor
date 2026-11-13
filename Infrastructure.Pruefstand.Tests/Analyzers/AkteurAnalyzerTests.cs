@@ -148,4 +148,45 @@ public sealed record Leser : IAkteur, IDarf<Zeige>, IHoert<Gebucht>, IHoert<Hinw
     public async Task Verkoerpern_nur_einen_konkreten_Akteur()
         => (await Ids("public interface IRolle : IAkteur { } public sealed record Kassenplatz : IClient, IVerkoerpert<IRolle>;"))
             .Should().Contain("CQRS064");
+
+    // ── CQRS125/126: eine App (docs/10 E18) — ein Record, der einen Client umsetzt; seine Parameter sind Quellen ──
+
+    private const string Quellen = @"
+public sealed record Kasse : IClient, IVerkoerpert<Kassierer>;
+public sealed record Bon(string Kennung, string Nummer) : IMeldung;
+public sealed record Fremd(string Kennung) : IMeldung;
+public sealed class Bonleser : IQuellart
+{
+    public async IAsyncEnumerable<Bon> Lausche([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct)
+    { await System.Threading.Tasks.Task.Yield(); yield break; }
+}
+public sealed class Bon_Buche_1(Bon source) : ITranslate<Bon, Buche> { public Buche Translate() => new(default); }
+public sealed class Bon_Storniere_1(Bon source) : ITranslate<Bon, Storniere> { public Storniere Translate() => new(default); }
+public sealed class Fremd_Buche_1(Fremd source) : ITranslate<Fremd, Buche> { public Buche Translate() => new(default); }
+";
+
+    [Fact]
+    public async Task Eine_App_setzt_einen_Client_um_ihre_Parameter_sind_Quellen()
+    {
+        (await Ids(Quellen + "public sealed record KassenApp : IApp<Kasse>;")).Should().BeEmpty("alles über die App");
+        (await Ids(Quellen + "public sealed record BonApp([Uebersetzt<Bon_Buche_1>] Bonleser Leser) : IApp<Kasse>;")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Eine_App_ist_ein_Record_ohne_eigene_Member_und_jeder_Parameter_eine_Quellart_mit_Uebersetzung()
+    {
+        (await Ids(Quellen + "public sealed class KassenApp : IApp<Kasse> { }")).Should().Equal("CQRS125");
+        (await Ids(Quellen + "public sealed record KassenApp : IApp<Kasse> { public int Nummer => 1; }")).Should().Equal("CQRS125");
+        (await Ids(Quellen + "public sealed record KassenApp(string Pfad) : IApp<Kasse>;")).Should().Equal(["CQRS125"], "ein Parameter ist eine Quelle");
+        (await Ids(Quellen + "public sealed record KassenApp(Bonleser Leser) : IApp<Kasse>;")).Should().Equal(["CQRS125"], "eine Quelle nennt ihre Übersetzung");
+    }
+
+    [Fact]
+    public async Task Die_Uebersetzung_einer_Quelle_kommt_aus_ihrer_Meldung_und_zielt_auf_ein_IDarf_des_Clients()
+    {
+        (await Ids(Quellen + "public sealed record KassenApp([Uebersetzt<Fremd_Buche_1>] Bonleser Leser) : IApp<Kasse>;"))
+            .Should().Equal(["CQRS126"], "der Bonleser meldet Bon, nicht Fremd");
+        (await Ids(Quellen + "public sealed record KassenApp([Uebersetzt<Bon_Storniere_1>] Bonleser Leser) : IApp<Kasse>;"))
+            .Should().Equal(["CQRS126"], "Storniere darf der Kassierer nicht");
+    }
 }

@@ -52,20 +52,20 @@ public sealed partial class Durchspielen(WerkbankServer werkbank)
         tokens = werkbank.Umgebungen.Tokens(werkbank.Aktiv).Select(t => new { token = t.Key, akteure = t.Value }).ToList(),
     };
 
-    // ── Datei in den Pfad eines Eingangs legen (ein Dateiwächter eines Clients) ──
+    // ── Datei in den Pfad einer Quelle legen (ein Dateiwächter einer App-Instanz) ──
 
-    /// <summary>Der Pfad, den der Dateiwächter des Eingangs <paramref name="eingang"/> des Clients <paramref name="client"/> in der gewählten Umgebung beobachtet.</summary>
-    public string? EingangsPfad(string client, string eingang)
-        => werkbank.Umgebungen.EingangsPfade(werkbank.Aktiv).GetValueOrDefault(Umgebungen.EingangsSchluessel(client, eingang));
+    /// <summary>Der Pfad, den der Dateiwächter der Quelle <paramref name="quelle"/> der App-Instanz <paramref name="instanz"/> in der gewählten Umgebung beobachtet.</summary>
+    public string? EingangsPfad(string instanz, string quelle)
+        => werkbank.Umgebungen.EingangsPfade(werkbank.Aktiv, werkbank.Quellart).GetValueOrDefault(Umgebungen.EingangsSchluessel(instanz, quelle));
 
     /// <summary>
-    /// Legt eine Datei in den Pfad des Eingangs — fertig geschrieben (erst daneben, dann umbenannt), damit der Dateiwächter nie eine halbe sieht.
+    /// Legt eine Datei in den Pfad der Quelle — fertig geschrieben (erst daneben, dann umbenannt), damit der Dateiwächter nie eine halbe sieht.
     /// Gemeldet wird sie vom ECHTEN Dateiwächter im Host, nicht von hier.
     /// </summary>
-    public async Task<object> LegeAbAsync(string client, string eingang, string dateiname, Stream inhalt, CancellationToken ct)
+    public async Task<object> LegeAbAsync(string instanz, string quelle, string dateiname, Stream inhalt, CancellationToken ct)
     {
-        var pfad = EingangsPfad(client, eingang) ?? throw new InvalidOperationException(
-            $"Umgebung {werkbank.Aktiv}: der Client {client} hat keinen Eingang {eingang} mit {Umgebungen.DateiQuellart} und Pfad.");
+        var pfad = EingangsPfad(instanz, quelle) ?? throw new InvalidOperationException(
+            $"Umgebung {werkbank.Aktiv}: die App-Instanz {instanz} hat keine Quelle {quelle} mit {Umgebungen.DateiQuellart} und Pfad.");
         var name = Path.GetFileName(dateiname);
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Dateiname fehlt.");
         Directory.CreateDirectory(pfad);
@@ -76,7 +76,7 @@ public sealed partial class Durchspielen(WerkbankServer werkbank)
         var ziel = Path.Combine(pfad, name);
         File.Move(zwischen, ziel, overwrite: true);
         var groesse = new FileInfo(ziel).Length;
-        var schluessel = Umgebungen.EingangsSchluessel(client, eingang);
+        var schluessel = Umgebungen.EingangsSchluessel(instanz, quelle);
         werkbank.Fortschritt.Melde("datei", new { eingang = schluessel, ziel, groesse });
         return new { ok = true, eingang = schluessel, ziel, groesse, hostLaeuft = werkbank.Host.Laeuft };
     }

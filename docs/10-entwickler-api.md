@@ -31,7 +31,7 @@ Exactly-once, Partition, offene Eingänge, Ketten, Orte), wählt der Generator a
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
 | **Funktion** | ein Knoten: je `Auf` eine Nachricht rein, gerechnet je Ankunft (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
 | **Graph** | nennt Knoten (Funktionen, Graphen, eine Funktion auch mehrfach); jede Kante als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; läuft als Instanz, je Kopf-Nachricht eine Kette; jede Kante gesichert oder verlierbar | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
-| **Quellart** | meldet, was draußen geschieht (`Lausche`, Meldungen `IMeldung`; eine Annahme `IAnnahme<Aufruf>` lauscht nicht, der Host nimmt an); nie ein Knoten — sie verwirklicht einen Akteur, eine Übersetzung der Akteur-Seite macht aus ihrer Meldung seine Nachricht (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | je lauschendem Eingang eines Clients ein Läufer, genau einmal im Cluster, auf seinem Rechner; eine Annahme nimmt jeder Host an (`POST /eingang/webhook/<Pfad>`) — §4.7 |
+| **Quellart** | meldet, was draußen geschieht (`Lausche`, Meldungen `IMeldung`; eine Annahme `IAnnahme<Aufruf>` lauscht nicht, sie nimmt an); nie ein Knoten, kein gesicherter Zustand — sie verwirklicht einen Akteur, eine Übersetzung der Akteur-Seite macht aus ihrer Meldung seine Nachricht (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | eine Quelle einer App (Parameter ihres Records); im Rechnerdienst des Rechners der App-Instanz (`Host.Rechner`) ein Läufer, der über die Leitung hineingibt; eine Annahme auf dem Port der Instanz (`POST /eingang/webhook/<Pfad>`) — §4.7 |
 | Store, Technik | Speicher hinter Projektion/Reader bzw. Technik im Konstruktor einer Funktion | – |
 | **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Verteiler je Knoten; Reaktionen über den Läufer im Client — [konzept-akteure.md](konzept-akteure.md) |
 | *eingebaut:* Uhr, Verteiler | macht aus fälligen Fristen Commands; stellt Pushes und Hinweise an Clients zu | – |
@@ -247,7 +247,8 @@ public sealed record Schadensbewertung(
 Ein Graph läuft erst als **Instanz**: eine Datei je Instanz in der Umgebung, `umgebungen/<name>/graphen/<instanz>.json`, mit `Graph`, den `Straenge`
 (so viele Ketten rechnet sie zugleich, je Host; 1 = eine nach der anderen; `Parallel` am Knoten bleibt seine Obergrenze) und je Knoten (Pfad bei inneren
 Graphen) die Felder seiner Konfig-Records sowie `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik`. Je Umgebung läuft
-ein Graph genau einmal. `Rechner` legt die Instanz auf einen Host fest (seinen `Cluster:Rechner`), etwa ein Modell auf seine GPU; mit Zustand ist er
+ein Graph genau einmal. `Rechner` legt die Instanz auf einen Rechner des Backends fest (Pool und Backend der Umgebung, [06](06-transport-multinode-betrieb.md) §6.5),
+etwa ein Modell auf seine GPU; mit Zustand ist er
 im Cluster Pflicht, ohne läuft die Instanz auf jedem Host. Den Akteur einer Kette bringt ihr Auslöser mit. Der Start prüft jede Instanz gegen ihren
 Graphen ([04](04-konsum-und-prozess-maschine.md) §4.4).
 
@@ -265,21 +266,22 @@ public sealed class DateiGefunden_LiesBild_1(DateiGefunden source) : ITranslate<
 }
 public sealed record KameraSystem : IAkteur, IDarf<LiesBild>;                 // Akteure.cs
 public sealed record Linienrechner : IClient, IVerkoerpert<KameraSystem>;     // Clients.cs
+public sealed record KameraApp([Uebersetzt<DateiGefunden_LiesBild_1>] Dateiwaechter Kamera) : IApp<Linienrechner>;   // Apps.cs
 ```
 
-Laufen tut sie als **Eingang eines Clients** in der Umgebung (`Clients:Linienrechner:Eingaenge:linie1`: `Art`, `Akteur`, `Rechner`, `Offen` und die
-Werte ihrer Konfig, flach) — je Eingang ein Läufer, der hineingibt wie eine App. Was eine Quelle meldet, steht nicht im Log; Doppeltes vermeiden und
-nach einem Neustart weitermachen regelt sie über ihren gesicherten Zustand (Gesehen-Liste, Hochwassermarke), dieselbe Kennung ergibt dieselben Ids
-([04](04-konsum-und-prozess-maschine.md) §4.7).
+Laufen tut sie als **Quelle einer App** — mit jeder Instanz der App (`umgebungen/<name>/apps/linie1.json`: `App`, `Rechner`, `Token` und je Quelle
+`Technik` und die Werte ihrer Konfig, flach), im **Rechnerdienst** des Rechners der Instanz (`Host.Rechner`): je Quelle ein Läufer, der über die
+Leitung hineingibt wie eine App, für den Akteur ihres Clients, der darf, was die Übersetzung gibt. Was eine Quelle meldet, steht nicht im Log, und das
+Framework sichert für sie nichts: eine Quellart nimmt kein `IZustand<T>` und merkt sich selbst, was sie gesehen hat; meldet sie nach einem Neustart
+erneut, ergibt dieselbe Kennung dieselben Ids, und das Backend verwirft die Wiederholung ([04](04-konsum-und-prozess-maschine.md) §4.7).
 
 Der **Webhook** lauscht nicht, er ist eine **Annahme** (`public sealed class Webhook(Webhookkonfig konfig) : IAnnahme<Aufruf>`): was sie meldet,
-steht im Typargument, und jeder Host nimmt ihre Aufrufe an — `POST /eingang/webhook/<Pfad>` auf dem Einblick-Port, Kopf `kennung` Pflicht, Kopf
-`schluessel`, wenn der Eingang einen nennt; 202 erst, wenn die Nachricht durabel ist, sonst 503 „später“ (der Absender wiederholt mit derselben
-Kennung). Ihr Eingang nennt keinen Rechner, dafür `Pfad` (je Umgebung eindeutig) und wahlweise `Schluessel`:
+steht im Typargument, und der Rechnerdienst ihrer App-Instanz nimmt ihre Aufrufe auf dem Port der Instanz an — `POST /eingang/webhook/<Pfad>`, Kopf
+`kennung` Pflicht, Kopf `schluessel`, wenn die Quelle einen nennt; 202 erst nach der Quittung, sonst 503 „später“ (der Absender wiederholt mit
+derselben Kennung). Ihre Werte nennen `Pfad` (je Umgebung eindeutig) und wahlweise `Schluessel`:
 
 ```json
-"Clients": { "Lieferportal": { "Eingaenge": { "auftraege": { "Art": "Webhook", "Akteur": "Lieferant",
-  "Pfad": "lieferant", "Schluessel": "${env:LIEFERANT_SCHLUESSEL}" } } } }
+{ "App": "LieferApp", "Quellen": { "Auftraege": { "Pfad": "lieferant", "Schluessel": "${env:LIEFERANT_SCHLUESSEL}" } } }
 ```
 
 ### 10.3.6 … Akteure und Clients
@@ -300,7 +302,18 @@ seiner Akteure, an ein Aggregat oder ohne Ziel an den Kopf eines Graphen; genau 
 Command-Ids aus Reaktion und Position, Ursache = das Event; [konzept-akteure.md](konzept-akteure.md) §5). Ohne Ausgabe ist ein Event oder Hinweis
 **Kenntnis** (verlierbar). Ein **Client** ist ein Record, der
 nur nennt, wen er verkörpert; über seine Leitung gehen genau `IDarf` und `IHoert` dieser Akteure. Wirksam ist „verkörpert ∩ Token“, für beide
-Richtungen (R17); ein C#-Client erklärt sich mit `[assembly: IstClient<X>]`. Ausführlich: [konzept-akteure.md](konzept-akteure.md).
+Richtungen (R17). Umgesetzt wird ein Client von **Apps** — der konkreten Software, gegen deren Vertrag verbindlich entwickelt wird:
+
+```csharp
+// Apps.cs bei den Akteuren — eine App ohne Parameter setzt alles selbst um, ein Parameter ist eine Quelle (Quellart mit Übersetzung der Akteur-Seite)
+public sealed record ArbeitsplatzApp : IApp<Arbeitsplatz>;
+public sealed record KameraApp([Uebersetzt<DateiGefunden_LiesBild_1>] Dateiwaechter Kamera) : IApp<Linienrechner>;
+```
+
+Je Nachricht des Clients setzt entweder die App selbst sie um oder eine Quelle; eine Nachricht mit Quelle steht nicht im Vertrag der App (CQRS125: Form,
+CQRS126: die Übersetzung kommt aus einer Meldung der Quellart und zielt auf ein `IDarf` des Clients). Am Handshake nennt sich die App
+(`GeneratedAppVertraege`, Hash je App); C#-Code erklärt sich mit `[assembly: IstApp<X>]`, Python erbt `<App>Basis`. Wo eine App läuft und welche
+Werte ihre Quellen haben, sagt je App-Instanz eine Datei der Umgebung (`apps/<instanz>.json`: Rechner, Port, Token, Start, je Quelle Werte; docs/06 §6.5). Ausführlich: [konzept-akteure.md](konzept-akteure.md).
 
 ### 10.3.7 … einen Ablauf
 
@@ -394,7 +407,7 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E1 | Geltungsbereich (Mandant, Daten-Rechte je Objekt) | nicht jetzt: im Zielbetrieb (interne Produktionsfirma) darf jeder alles; Akteur-Rechte nach Typ bleiben. Der Platz ist frei (§10.8). |
 | E2 | Direkte Abfrage eines Aggregats | ja, als eigener Lesepfad neben dem Reader (§10.3.1) |
 | E3 | Typisierte Ids | ja, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§10.4) |
-| E4 | Editor-Oberfläche | eine Fläche in sieben Spalten in der Reihenfolge des Ablaufs (Clients mit ihren Eingängen in der aktiven Umgebung, Client-Ausgang, Graphen, Übersetzungen, Aggregate, Projektionen, Client-Eingang), Domänen als Bänder, Nachrichten als Ports; Graph, Aggregat, Store, Akteure und Clients von innen als Modal; Konzept (Code) im Modal, Instanz (Konfig) auf der Fläche; gerechnet in der Sicht (§10.9) |
+| E4 | Editor-Oberfläche | eine Fläche in acht Spalten in der Reihenfolge des Ablaufs (Rechner mit ihren App-Instanzen in der aktiven Umgebung, Clients, Akteure — darf, Graphen, Übersetzungen, Aggregate, Projektionen, Akteure — hört), darüber die Karte Backend, Domänen als Bänder, Nachrichten als Ports; Graph, Aggregat, Store, Akteure und Clients von innen als Modal; Konzept (Code) im Modal, Instanz (Konfig) auf der Fläche; gerechnet in der Sicht (§10.9) |
 | E5 | Umsetzen | schrittweise, je Schritt auf Tobis Wort |
 | E6 | Darf eine Funktion Zustand haben? | ja, gekapselt, kein Domänen-Zustand (Gewichte, ein Zähler, eine Gesehen-Liste); `IZustand<T>` im Konstruktor, gesichert je Instanz und Knoten nach fertigem Lauf; Gelerntes gehört in Projektionen |
 | E7 | Was fließt zwischen Funktionen? | ein Command ohne Ziel, als Aufruf von Schritt zu Schritt, nie im Log (Invariante 6); kein eigener Nachrichten-Marker |
@@ -404,10 +417,11 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E11 | Nachrichtenarten | drei: Command (mit oder ohne Ziel), Event, Hinweis; dazu Query und Frist |
 | E12 | Empfänger eines Commands | genau einer, vom Absender aus: Ziel im Typ → Aggregat; sonst der Knoten desselben Graphen; sonst der Kopf genau eines Graphen |
 | E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter mit `[Kopf]` und `[Von(nameof(…))]` (ausdrückliche Kanten, eine Funktion auch mehrfach; aus Typen allein entsteht innen keine Kante), Ablaufformen als Formen der Ausgaben (Zusammenführen im Logik-Code); läuft als Instanz mit eigener Konfig, beliebig oft |
-| E14 | Quellen | Quellarten (`IQuellart`), nie Knoten; sie verwirklichen einen Akteur über eine Übersetzung der Akteur-Seite und laufen als Eingang eines Clients; nicht im Log, durabel über den gesicherten Zustand, Kennung eines Elements aus seinem Inhalt |
-| E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json`); je Graph eine Instanz, je Client seine Eingänge aus Quellen (Art, Akteur, Rechner, Werte), geprüft gegen Client, Akteur und Übersetzung |
+| E14 | Quellen | Quellarten (`IQuellart`), nie Knoten; sie verwirklichen einen Akteur über eine Übersetzung der Akteur-Seite und sind Quellen einer App (laufen im Rechnerdienst des Rechners ihrer Instanz, über die Leitung); nicht im Log, kein gesicherter Zustand — genau einmal aus der Kennung eines Elements aus seinem Inhalt |
+| E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json` + `apps/<instanz>.json`); je Graph eine Instanz, je App beliebig viele (Rechner, Port, Token, je Quelle Werte), geprüft gegen App, Token, Akteur und Übersetzung |
 | E17 | Funktionen und Aggregate | voneinander isoliert: Funktionen und Graphen nur in Katalogen, die Domäne rein; dazwischen steht eine Übersetzung (`ITranslate<TSource, TTarget>`, vom Editor geschrieben, Routing über den Typ) in einem eigenen Projekt der Anwendung — ohne Logik. Nur Clients und Quellen stoßen Funktionen an (konzept-akteure §5) |
-| E16 | Akteur und Client | Akteur = `IDarf` + `IHoert` (ohne Art); Client = Record, der nur verkörpert; ein C#-Client nennt ihn mit `[assembly: IstClient<X>]`; Hinweise gehen nur an Akteure |
+| E18 | Rechner und Apps | ein Pool von Rechnern (Name → Adresse), alles mit Ort nennt einen davon — die Backend-Karte (ein Rechner = Einzelknoten, mehrere = Consul), Graph-Instanzen mit Zustand, App-Instanzen (App, Port, Token); jeder Prozess kennt seinen Rechner (`--rechner`, `CQRS_RECHNER`). Quellen laufen im **Rechnerdienst** ihres Rechners (`Host.Rechner`) und geben über die Leitung hinein wie eine App, mit dem Token der Instanz; das Framework sichert für eine Quelle nichts, genau einmal kommt aus der Kennung aus dem Inhalt (Invariante 6). Kein Deploy: der Editor verteilt in der Konfig |
+| E16 | Akteur, Client, App | Akteur = `IDarf` + `IHoert` (ohne Art); Client = Record, der nur verkörpert; App = die Software eines Clients (`IApp<Client>`, Parameter = Quellen), ihr Vertrag steht an der Leitung, C#-Code nennt sie mit `[assembly: IstApp<X>]`; Hinweise gehen nur an Akteure |
 
 Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
 
@@ -415,8 +429,8 @@ Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
 - **A2** Die Zugehörigkeit zu einem Vorgang ist ein fachliches Feld im Event, keine versteckte Korrelation in den Metadaten.
 - **A3** Wiederholungsfeste Stores (Klasse 2) schreiben mit der Event-Identität im Schlüssel oder bedingt nach Position.
 - **A4** Der Neuaufbau einer Projektion geht über Generationen; Leeren ist der Sonderfall.
-- **A5** Eine Instanz mit Zustand und ein Eingang aus einer Quelle rechnen im Cluster auf genau einem Host: dem Rechner, den sie nennen
-  (`Rechner`, `Cluster:Rechner` des Hosts; Pflicht im Cluster). Fällt er aus, zieht nichts um, die durablen Eingänge warten.
+- **A5** Eine Instanz mit Zustand rechnet im Cluster auf genau einem Host: dem Rechner, den sie nennt (`Rechner`, ein Rechner des Backends; Pflicht
+  im Cluster). Fällt er aus, zieht nichts um, die durablen Eingänge warten. Eine Quelle läuft im Rechnerdienst des Rechners ihrer App-Instanz.
 - **A6** Jeder Cluster-Knoten hat von jeder Instanz einen Graph-Actor `funktionen/<instanz>` mit je Knoten einem Parent; eine Kette bleibt auf dem Rechner, der ihren Kopf annahm; ein
   Eingang geht an den eigenen Knoten, sonst reihum (Gossip).
 - **A7** Ein Hinweis trägt eine Kennung, die der Absender vergibt.
@@ -481,34 +495,48 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   `<Wurzel>.Uebersetzungen/<Bereich>/Uebersetzungen.cs` (Bereich der Domäne), nie in die Domäne. Unter den Ergebnissen eines Decide steht kein
   Command. Der Picker der Fläche legt einen Graphen nur mit erstem Knoten an — in einem Katalog (dem seines ersten Knotens, sonst dem ersten genutzten
   ); er öffnet sich danach.
-- **Clients und ihre Eingänge** (Fläche, Konfig; `flaeche.eingaenge`, `Sicht.Clients.cs`): was es gibt, ist Code (Akteur, Client, Quellart,
-  Verwirklichung — im Modal), was wo läuft, ist Konfig der Umgebung (auf der Fläche). Je Client (`IClient`) eine Karte in der Spalte Clients; darin
-  je Eingang der aktiven Umgebung (`Clients:<Client>:Eingaenge:<eingang>` in `umgebung.json`) eine Zeile — Name, Quellart, Rechner, Akteur und die
-  ersten Werte der Konfig der Quellart —, dazu „📡 App“, wenn der Client eine Leitung hat (Token, Adresse, URLs, Worker). Von jedem Eingang läuft
-  eine Kante zum Port der Nachricht, die seine Verwirklichung erzeugt, am Akteur in der Spalte daneben (z. B. `linie1` → `LiesBild` am
-  KameraSystem). Der Server rechnet das je Umgebung samt den Befunden, die der Start melden würde (dieselben Regeln wie `Eingaenge.Aus`: Client
-  und Akteur gibt es, der Client verkörpert ihn, die Art ist eine Quellart, je Meldung eine Übersetzung auf ein `IDarf` des Akteurs, im Cluster
-  ein Rechner, nur Werte der Konfig der Quellart) — ⚠ an der Zeile, Clients der Datei ohne Code im Kopf der Spalte; der Editor wählt nur die
-  aktive Umgebung. **„＋ Eingang“** an der Karte (nur dort) bietet die Quellarten, die einen verkörperten Akteur verwirklichen (bei mehreren
-  Akteuren danach der Akteur), fragt den Namen (leer) und schreibt `{Art, Akteur}`; ohne Verwirklichung verweist er ins Modal. **Doppelklick** auf
-  einen Eingang öffnet sein Formular (Machart der Instanz, Schema vom Server: `/api/werkbank/eingangschema`): Art fest, Akteur (verkörperte, die die
-  Art verwirklicht), Rechner („Pflicht im Cluster“), Offen (Standard 10 000), Wahl der Technik, die Felder der Konfig-Records mit Typ, Standard
-  und Werten. Speichern und ✕ (mit Nachfrage) sind Gesten an `umgebung.json` (`/api/werkbank/eingang/<umgebung>/<client>/<eingang>`, ↶). Im
-  Host-Rahmen (🔌 Clients) stehen nur Token, Adresse, URLs, Dateien und Worker; „Eingaenge“ verweist auf die Fläche.
+- **Rechner und App-Instanzen** (Fläche, Konfig; `flaeche.rechner`, `Sicht.Rechner.cs`, `Sicht.Clients.cs`, Regeln
+  `Abstractions/Umgebung/Rechnerregeln.cs`): was es gibt, ist Code (Akteur, Client, App, Quellart, Verwirklichung — im Modal), was wo läuft, ist
+  Konfig der Umgebung (auf der Fläche). Ganz links die Spalte **Rechner**: je Rechner des Pools der aktiven Umgebung eine Karte — Name, Adresse (wenn
+  sie vom Namen abweicht), „Backend“, ✎ ändert die Adresse, ✕ nimmt ihn aus dem Pool (gesperrt, solange ihn etwas nennt; der Tooltip sagt, was);
+  „＋“ im Spaltenkopf fragt Name, dann Adresse. In der Karte je **App-Instanz** auf dem Rechner (`apps/<instanz>.json`) eine Zeile „📦 Instanz · App
+  :Port“, darunter ihre Quellen (Name, Quellart, „↦ Nachricht · für 👤 Akteur“, die ersten Werte, „⏸ läuft erst mit dem Rechnerdienst“ außerhalb des
+  Backends) und „übrige n Commands: die App selbst“. Von der Instanz läuft eine Kante zur Karte des Clients, den die App umsetzt, von jeder Quelle eine
+  zum Port ihrer Nachricht am Akteur (z. B. `linie1/Kamera` → `LiesBild` am KameraSystem). Daneben die Spalte **Clients** (je `IClient` eine Karte
+  mit seinen Apps und, wenn er reagiert, „↻ reagiert: Klasse“) mit je verkörpertem Akteur einer Kante zu dessen Karte; die Akteure stehen ohne
+  Gruppe, je Akteur eine Zeile (links darf, rechts hört). Befunde rechnet der Server wie der Start (`Eingaenge.Aus`, `Rechnerregeln`): die App gibt
+  es, Werte nur für ihre Quellen, Token vorhanden und mit einem Akteur des Clients, Rechner im Pool, Port je Rechner einmal und nicht der des Hosts,
+  je Quelle ein Akteur, der darf, was sie gibt, eine Annahme mit eindeutigem Pfad, nur Werte der Konfig der Quellart — ⚠ an der Zeile. **„＋ App“**
+  an einer Rechner-Karte wählt eine App (aus dem Code, mit Client und Quellen), fragt den Namen der Instanz und den Port (leer = keiner), schreibt
+  `{App, Rechner, Port}` und öffnet ihr Formular. **Doppelklick** auf eine Instanz (oder eine Quelle) öffnet das Formular: App fest (Klick öffnet sie
+  im Modal), Rechner aus dem Pool, Port, Token (aus `Identitaeten`), Dateien, Start (Projekt, Skript, Python) und je Quelle Offen, Wahl der Technik
+  und die Felder der Konfig-Records (Schema vom Server: `/api/werkbank/quelleschema`). Speichern und ✕ sind Gesten an der Datei der Instanz
+  (`/api/werkbank/app/<umgebung>/<instanz>`, Felder in fester Reihenfolge, ↶). Im Host-Rahmen steht je Instanz eine Karte „📦“ mit demselben
+  Formular. Die Karte **Backend** über Graphen bis Projektionen nennt seine Rechner und, was daraus folgt (ein Rechner = Einzelknoten, mehrere =
+  Consul); ⊕ nimmt einen Rechner des Pools dazu, ✕ an einem nimmt ihn heraus (den letzten nicht; nicht, solange eine Instanz auf ihm läuft). Der Chip
+  einer Instanz am Graphen zeigt ihren Rechner („🖥 überall“ bzw. den Namen, ⚠ mit Befund); im Formular der Instanz wählt man ihn aus den Rechnern des
+  Backends. Pool und Backend sind Gesten an `umgebung.json` (`/api/werkbank/rechner/<umgebung>/<name>`, `/api/werkbank/backend/<umgebung>`, ↶). Beim
+  Durchspielen startet der Reiter „▶ Apps“ die Instanzen mit `Start` auf einem Rechner dieser Maschine (`CQRS_UMGEBUNG`, `CQRS_APP`, `CQRS_RECHNER`,
+  Token und gRPC-Adresse gesetzt); ⟳ startet nach dem Host je Rechner dieser Maschine mit App-Instanzen den Rechnerdienst (Zeile „🖥 Rechnerdienst“ im
+  selben Reiter, mit Log); „Datei ablegen“ legt eine Datei in den Pfad einer Dateiwächter-Quelle (`/api/werkbank/eingaenge/<instanz>/<quelle>`).
 - **Akteure und Clients** (Modal, `board.sicht.akteure`, `Sicht.Akteure.cs`): links die Liste — „＋ Akteur“ (`record X : IAkteur`) und „＋ Client“
   (`record X : IClient`) sind der einzige Weg, sie anzulegen —, in der Mitte das Gewählte mit derselben Mechanik wie Aggregat, Store und Katalog
   (`innenZeige`). Ein **Akteur** in vier Spalten Herkunft · hört · darf · Ziel, ein Band je Gegenüber auf der Fläche (wohin seine Nachrichten gehen,
   woher kommt, was er hört: Aggregat, Graph, Übersetzung, Reader); „＋“ im Spaltenkopf „hört“ bzw. „darf“ zeigt gestrichelt, was die Grammatik dort
   erlaubt und er noch nicht hat (ein Klick schreibt `IHoert<T>` bzw. `IDarf<T>`), ✕ am Port nimmt es heraus; im Kopf die Clients, die ihn verkörpern,
   und ✕ (löscht ihn, samt `IVerkoerpert` an den Clients). In der Spalte Herkunft stehen seine **Verwirklichungen**: je Übersetzung der
-  Akteur-Seite eine Karte „<Quellart> ↦ <Nachricht>“ mit der Klasse, „✓ alle Felder zugeordnet“ bzw. „⚠ n offen“ und den Eingängen, die sie
-  brauchen; ein Doppelklick öffnet die Feldzuordnung (dieselbe wie auf der Fläche), ✕ entfernt sie (der Löschplan nennt diese Eingänge).
+  Akteur-Seite eine Karte „<Quellart> ↦ <Nachricht>“ mit der Klasse, „✓ alle Felder zugeordnet“ bzw. „⚠ n offen“ und den Quellen der Apps, die sie
+  nennen; ein Doppelklick öffnet die Feldzuordnung (dieselbe wie auf der Fläche), ✕ entfernt sie (der Löschplan nennt diese Quellen).
   „＋ Verwirklichung“ im Spaltenkopf wählt eine Quellart (alle, bei mehreren Meldungen die Meldung) und einen Command seines `IDarf` und legt die
   Übersetzung als Code an (`{Meldung}_{Ziel}_{n}` in `<Wurzel>.Akteure/Uebersetzungen.cs`, gleiche Namen gleich zugeordnet). Werte gibt es im
   Modal nicht. Ein **Client** in vier Spalten hört · Reaktion · sendet · Ziel, ein Band je verkörpertem
   Akteur (✕ am Band: nicht mehr verkörpern); die Reaktion ist die Methode seiner Implementierung je gehörtem Fakt (Stand, ✎ Code, 🤖 Prompt — Platz
   `zusage|Client|Event@Klasse`); im Kopf „＋ verkörpert“ (links leuchten die Akteure, ein Klick schreibt `IVerkoerpert<A>`), seine Implementierungen
-  bzw. „＋ 🐍 Implementierung“, den Hinweis „Eingänge: auf der Fläche“ und ✕. Neue Nachrichten entstehen hier nicht — sie gehören einem Aggregat bzw. Katalog.
+  bzw. „＋ 🐍 Implementierung“, den Hinweis „Eingänge: auf der Fläche“, seine Apps und „＋ App“ und ✕. Eine **App** (das Modal heißt „Akteure, Clients
+  und Apps“; links eingerückt unter ihrem Client) zeigt je Command, den ihr Client sendet, wer ihn umsetzt — „App (Standard)“ oder ihre Quellen
+  (⚡ Quellart, Name, ↦ Übersetzung, Klick öffnet die Feldzuordnung, ✕ nimmt die Quelle heraus); „＋ Quelle“ bietet je Übersetzung der Akteur-Seite auf
+  diesen Command die Quellarten an, die ihre Meldung melden (`board.sicht.akteure.apps`), fragt den Namen und schreibt den Parameter. Neue Nachrichten
+  entstehen hier nicht — sie gehören einem Aggregat bzw. Katalog.
 - **Was passt und wo etwas verwendet wird, rechnet der Server** — der Editor schlägt in Fläche, Aggregat und Store nur nach (W3):
   `board.sicht.flaeche.anschluss` nennt je „＋“ der Fläche (`event|Projektion`, `uebersetzen|Typ`) die Ports,
   die die Grammatik dort erlaubt und die noch frei sind; ✕ steht an einem Port, den der Server `loesbar` nennt. `board.sicht.innen`

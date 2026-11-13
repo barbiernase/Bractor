@@ -30,7 +30,7 @@ public static class ClientVertragsPruefung
     public sealed record Ergebnis(AkteurRechte? Vertrag, string? Ablehnung, string? Warnung, ClientVertrag? Client = null);
 
     /// <summary>
-    /// Prüft den genannten Client: er muss in der generierten Tabelle stehen; wirksam ist Vertrag ∩ Akteure des Tokens (ohne Tor alle verkörperten
+    /// Prüft die genannte App: sie muss in der generierten Tabelle stehen (<c>GeneratedAppVertraege</c>); wirksam ist Vertrag ∩ Akteure des Tokens (ohne Tor alle verkörperten
     /// Akteure); ein abweichender Hash (Client gegen einen anderen Stand gebaut) ist eine Warnung — im strengen Modus eine Ablehnung.
     /// </summary>
     public static Ergebnis Pruefe(string? vertrag, string? hash, AkteurRechte? token,
@@ -38,12 +38,12 @@ public static class ClientVertragsPruefung
     {
         if (string.IsNullOrEmpty(vertrag)) return new(null, null, null);
         if (!clients.TryGetValue(vertrag, out var client))
-            return new(null, $"Client '{vertrag}' ist unbekannt — kein Client (record … : IClient) dieses Namens", null);
+            return new(null, $"App '{vertrag}' ist unbekannt — keine App (record … : IApp<Client>) dieses Namens", null);
         if (client.Rechte(rechte, token) is not { } wirksam)
-            return new(null, $"das Token verkörpert {token?.Name} — keinen der Akteure des Clients {vertrag} ({string.Join(", ", client.Verkoerpert)})", null);
+            return new(null, $"das Token verkörpert {token?.Name} — keinen der Akteure der App {vertrag} (Client {client.Client}: {string.Join(", ", client.Verkoerpert)})", null);
         if (!string.Equals(hash ?? "", client.Hash, StringComparison.Ordinal))
         {
-            var text = $"Client-Hash '{hash}' ≠ Server '{client.Hash}' ({client.Typ.Name}) — der Client ist gegen einen anderen "
+            var text = $"Vertrags-Hash '{hash}' ≠ Server '{client.Hash}' ({client.Typ.Name}) — die App ist gegen einen anderen "
                        + "Domänen-Stand gebaut (./codegen.sh --force, Client neu starten)";
             return streng ? new(null, text, null) : new(wirksam, null, text, client);
         }

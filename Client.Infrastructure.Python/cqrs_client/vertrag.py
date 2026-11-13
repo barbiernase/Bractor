@@ -12,11 +12,11 @@ Akteur und Client stehen in der Domäne (C#, eine Quelle):
     public sealed record KlassifikationsWorker : IClient,
         IVerkoerpert<Klassifizierer>;               // was über die Leitung geht: IDarf und IHoert seiner Akteure
 
-`Cqrs.Codegen` erzeugt daraus `domain_client/generated/vertraege.py` mit einer Basis je Client (`KlassifikationsWorkerBasis`). Der Worker erbt
+`Cqrs.Codegen` erzeugt daraus `domain_client/generated/vertraege.py` mit einer Basis je Client (`KlassifikationsAppBasis`). Der Worker erbt
 sie und füllt je gehörtem Event eine Methode `auf_<event>(e, ctx, state)`: ihre Reaktion — Commands aus dem IDarf der Akteure (ein Wert oder
 Stücke, yield) — oder nichts (Kenntnis):
 
-    class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
+    class ImageClassifier(KlassifikationsAppBasis[ClassifierState]):
         async def auf_image_pair_komplett(self, e, ctx, state):
             return KlassifiziereBildPaarDurchKiDto(aggregate_id=str(ctx.aggregate_id), label=0)
         async def auf_modell_aktiviert(self, e, ctx, state): ...
@@ -104,13 +104,14 @@ def _reaktion(eingang: type, methode: str):
 
 class ClientVertragBasis(CqrsClient[S], metaclass=VertragsMeta):
     """
-    Basis der generierten Client-Basen. Die generierte Unterklasse setzt:
-        CLIENT, AKTEURE, VERTRAG_HASH — Handshake-Name, verkörperte Akteure, Stand;
+    Basis der generierten App-Basen (je App `record X : IApp<Client>` eine). Die generierte Unterklasse setzt:
+        APP, CLIENT, AKTEURE, VERTRAG_HASH — Handshake-Name (die App), ihr Client, seine Akteure, Stand;
         HOERT   — Event-DTO → Methode `auf_<event>`: die Reaktion bzw. Kenntnis;
-        SPONTAN — Commands, die von sich aus hineingehen (IDarf der verkörperten Akteure);
+        SPONTAN — Commands, die von sich aus hineingehen (IDarf der verkörperten Akteure ohne die Nachrichten der Quellen der App);
         FRAGT   — die Queries (IDarf der verkörperten Akteure; leer = nicht geprüft).
     """
 
+    APP: ClassVar[str] = ""
     CLIENT: ClassVar[str] = ""
     AKTEURE: ClassVar[tuple[str, ...]] = ()
     VERTRAG_HASH: ClassVar[str] = ""
@@ -129,9 +130,9 @@ class ClientVertragBasis(CqrsClient[S], metaclass=VertragsMeta):
 
     def _build_capabilities_request(self):
         request = super()._build_capabilities_request()
-        request.vertrag = self.CLIENT
+        request.vertrag = self.APP
         request.vertrag_hash = self.VERTRAG_HASH
-        log.info("Client %s (verkörpert %s, Hash %s)", self.CLIENT, ", ".join(self.AKTEURE), self.VERTRAG_HASH)
+        log.info("App %s des Clients %s (verkörpert %s, Hash %s)", self.APP, self.CLIENT, ", ".join(self.AKTEURE), self.VERTRAG_HASH)
         return request
 
     async def query(self, query_dto):
@@ -139,7 +140,7 @@ class ClientVertragBasis(CqrsClient[S], metaclass=VertragsMeta):
         if self.FRAGT and not isinstance(query_dto, self.FRAGT):
             erlaubt = ", ".join(t.__name__ for t in self.FRAGT)
             raise VertragsVerletzung(
-                f"{type(self).__name__}: fragt {type(query_dto).__name__} — der Client {self.CLIENT} erlaubt: {erlaubt}")
+                f"{type(self).__name__}: fragt {type(query_dto).__name__} — die App {self.APP} erlaubt: {erlaubt}")
         return await super().query(query_dto)
 
 

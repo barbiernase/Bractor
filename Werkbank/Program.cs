@@ -181,6 +181,7 @@ app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.
 
 // Der Laufzeit-Host ist ein Kind der Werkbank: endet die Werkbank, endet er mit (sonst hielte ein verwaister Host Ports und Sim-DB).
 app.Lifetime.ApplicationStopping.Register(() => werkbank.Host.StoppeAsync().GetAwaiter().GetResult());
+app.Lifetime.ApplicationStopping.Register(() => werkbank.Rechnerdienste.StoppeAlleAsync().GetAwaiter().GetResult());
 var werkbankJson = new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 app.MapGet("/api/werkbank/zustand", () => Results.Json(werkbank.Zustand(), werkbankJson));
 app.MapGet("/api/werkbank/schema", async (CancellationToken ct) =>
@@ -208,33 +209,60 @@ app.MapPost("/api/werkbank/instanz/{umgebung}/{instanz}", async (string umgebung
         Werkbank.Server.Instanzen.Text(inhalt), ct)));
 app.MapDelete("/api/werkbank/instanz/{umgebung}/{instanz}", async (string umgebung, string instanz, CancellationToken ct) =>
     GestenErgebnis(await werkbank.Gesten.DateiAsync($"Instanz {umgebung}/{instanz} entfernt", instanzen.RelativeDatei(umgebung, instanz), null, ct)));
+// ── APP-INSTANZEN (docs/10 E18): je Umgebung apps/<instanz>.json — welche App auf welchem Rechner unter welchem Port läuft, Token, Start und
+//    je Quelle ihre Werte; lesen, schreiben und entfernen als Geste (Spalte Rechner der Fläche). Ihr Formular je Quelle kommt aus der Quellart.
+app.MapGet("/api/werkbank/apps/{umgebung}", (string umgebung) =>
+    Results.Content(instanzen.Liste(umgebung, Abstractions.Projektstruktur.AppsOrdner).ToJsonString(), "application/json"));
+app.MapPost("/api/werkbank/app/{umgebung}/{instanz}", async (string umgebung, string instanz, System.Text.Json.Nodes.JsonObject inhalt, CancellationToken ct) =>
+{
+    string datei;
+    try { datei = instanzen.RelativeDatei(umgebung, instanz, Abstractions.Projektstruktur.AppsOrdner); }
+    catch (ArgumentException e) { return Results.Json(new { ok = false, fehler = e.Message }); }
+    // Die Felder in ihrer festen Reihenfolge (App, Rechner, Port, Token, Start, Dateien, Quellen) — die Datei bleibt lesbar, wie auch immer sie entstand.
+    var geordnet = new System.Text.Json.Nodes.JsonObject(inhalt.OrderBy(kv => Abstractions.AppInstanzKonfig.Felder.ToList().IndexOf(kv.Key) is var i && i < 0 ? int.MaxValue : i)
+        .Select(kv => KeyValuePair.Create(kv.Key, kv.Value?.DeepClone())));
+    var a = await werkbank.Gesten.DateiAsync($"App-Instanz {umgebung}/{instanz}", datei, Werkbank.Server.Instanzen.Text(geordnet), ct);
+    if (a.Ok) werkbank.Fortschritt.Melde("umgebung", new { name = umgebung });
+    return GestenErgebnis(a);
+});
+app.MapDelete("/api/werkbank/app/{umgebung}/{instanz}", async (string umgebung, string instanz, CancellationToken ct) =>
+{
+    var a = await werkbank.Gesten.DateiAsync($"App-Instanz {umgebung}/{instanz} entfernt",
+        instanzen.RelativeDatei(umgebung, instanz, Abstractions.Projektstruktur.AppsOrdner), null, ct);
+    if (a.Ok) werkbank.Fortschritt.Melde("umgebung", new { name = umgebung });
+    return GestenErgebnis(a);
+});
+app.MapGet("/api/werkbank/quelleschema", async (string art, CancellationToken ct) =>
+{
+    await werkbank.Arbeitsbereich.LiesAsync(ct);
+    try { return Results.Content(Werkbank.Server.Instanzen.QuelleSchema(werkbank.Arbeitsbereich.Board!, art).ToJsonString(), "application/json"); }
+    catch (ArgumentException e) { return Results.Json(new { fehler = e.Message }); }
+});
 app.MapGet("/api/werkbank/instanzschema", async (string graph, CancellationToken ct) =>
 {
     await werkbank.Arbeitsbereich.LiesAsync(ct);
     try { return Results.Content(Werkbank.Server.Instanzen.Schema(werkbank.Arbeitsbereich.Board!, graph).ToJsonString(), "application/json"); }
     catch (ArgumentException e) { return Results.Json(new { fehler = e.Message }); }
 });
-// ── EINGÄNGE der Clients (docs/04 §4.7): je Umgebung Clients:<Client>:Eingaenge:<eingang> in umgebung.json — setzen und entfernen als Geste (die Spalte
-//    Clients der Fläche); ihr Formular leitet der Server aus der Quellart ab (Konfig-Felder, Wahl der Technik).
-app.MapGet("/api/werkbank/eingangschema", async (string art, CancellationToken ct) =>
+// ── RECHNER UND BACKEND (docs/06 §6.5): der Pool einer Umgebung (Name → Adresse) und die Rechner des Backends in umgebung.json — Gesten der Karten
+//    Rechner und Backend der Fläche; was dort steht und welche Befunde es gibt, rechnet die Sicht (flaeche.rechner).
+var rechnerpool = new Werkbank.Server.Rechnerpool(werkbank.Umgebungen, instanzen);
+async Task<IResult> UmgebungsGeste(string umgebung, string titel, Func<string> text, CancellationToken ct)
 {
-    await werkbank.Arbeitsbereich.LiesAsync(ct);
-    try { return Results.Content(Werkbank.Server.Instanzen.EingangSchema(werkbank.Arbeitsbereich.Board!, art).ToJsonString(), "application/json"); }
-    catch (ArgumentException e) { return Results.Json(new { fehler = e.Message }); }
-});
-async Task<IResult> EingangGeste(string umgebung, string client, string eingang, System.Text.Json.Nodes.JsonObject? inhalt, CancellationToken ct)
-{
-    string text;
-    try { text = instanzen.MitEingang(umgebung, client, eingang, inhalt); }
+    string t;
+    try { t = text(); }
     catch (ArgumentException e) { return Results.Json(new { ok = false, fehler = e.Message }); }
-    var a = await werkbank.Gesten.UmgebungAsync($"Eingang {client}/{eingang}{(inhalt == null ? " entfernt" : "")} ({umgebung})", werkbank.Umgebungen.RelativeDatei(umgebung), text, ct);
+    var a = await werkbank.Gesten.UmgebungAsync($"{titel} ({umgebung})", werkbank.Umgebungen.RelativeDatei(umgebung), t, ct);
     if (a.Ok) werkbank.Fortschritt.Melde("umgebung", new { name = umgebung });
     return GestenErgebnis(a);
 }
-app.MapPost("/api/werkbank/eingang/{umgebung}/{client}/{eingang}", (string umgebung, string client, string eingang, System.Text.Json.Nodes.JsonObject inhalt, CancellationToken ct) =>
-    EingangGeste(umgebung, client, eingang, inhalt, ct));
-app.MapDelete("/api/werkbank/eingang/{umgebung}/{client}/{eingang}", (string umgebung, string client, string eingang, CancellationToken ct) =>
-    EingangGeste(umgebung, client, eingang, null, ct));
+app.MapPost("/api/werkbank/rechner/{umgebung}/{name}", (string umgebung, string name, System.Text.Json.Nodes.JsonObject inhalt, CancellationToken ct) =>
+    UmgebungsGeste(umgebung, $"Rechner {name}", () => rechnerpool.MitRechner(umgebung, name, (string?)inhalt["Adresse"] ?? ""), ct));
+app.MapDelete("/api/werkbank/rechner/{umgebung}/{name}", (string umgebung, string name, CancellationToken ct) =>
+    UmgebungsGeste(umgebung, $"Rechner {name} entfernt", () => rechnerpool.OhneRechner(umgebung, name), ct));
+app.MapPost("/api/werkbank/backend/{umgebung}", (string umgebung, System.Text.Json.Nodes.JsonObject inhalt, CancellationToken ct) =>
+    UmgebungsGeste(umgebung, "Backend", () => rechnerpool.MitBackend(umgebung,
+        (inhalt["Rechner"] as System.Text.Json.Nodes.JsonArray ?? []).Select(x => (string?)x ?? "").ToList()), ct));
 // Wo welche Umsetzung einer Technik gewählt ist (Instanzen und Eingänge aller Umgebungen) — „gewählt in …“ im Katalog-Modal.
 app.MapGet("/api/werkbank/technikwahl", () => Results.Content(instanzen.TechnikWahl().ToJsonString(), "application/json"));
 app.MapGet("/api/werkbank/struktur", () => Results.Content(Werkbank.Server.Instanzen.Struktur().ToJsonString(), "application/json"));
@@ -294,7 +322,7 @@ app.MapPost("/api/werkbank/uhr", async (string versatz) =>
 // ── DURCHSPIELEN (CLAUDE.md W6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Datei in den Pfad eines Eingangs legen,
 //   Uhr vorstellen, externe Worker starten (die Clients, die auf Fakten reagieren). Die Formulare kommen aus dem gelesenen Code.
 var durchspielen = new Werkbank.Server.Durchspielen(werkbank);
-var worker = new Werkbank.Server.Worker(slnRoot);
+var worker = new Werkbank.Server.Worker(slnRoot, werkbank.Umgebungen.Branch);
 app.Lifetime.ApplicationStopping.Register(() => worker.StoppeAlleAsync().GetAwaiter().GetResult());
 app.MapGet("/api/werkbank/identitaeten", () => Results.Json(durchspielen.Identitaeten()));
 app.MapGet("/api/werkbank/formular", async (string typ, CancellationToken ct) =>
@@ -309,15 +337,15 @@ app.MapMethods("/api/werkbank/eingang/{**pfad}", ["GET", "POST"], async (HttpCon
     var (status, antwort) = await durchspielen.EingangAsync(ctx.Request.Method, pfad, ctx.Request.Headers["akteur-token"].FirstOrDefault(), inhalt, ct);
     return Results.Content(antwort, "application/json", System.Text.Encoding.UTF8, status);
 });
-// Ein Eingang eines Clients aus einer Quelle (Clients:<Client>:Eingaenge:<eingang>): der Pfad seines Dateiwächters, eine Datei hineinlegen.
+// Eine Quelle einer App-Instanz (apps/<instanz>.json, Quellen:<quelle>): der Pfad ihres Dateiwächters, eine Datei hineinlegen.
 //   (Eigener Präfix „eingaenge“ — unter „eingang/“ liegt der JSON-Eingang des Hosts.)
-app.MapGet("/api/werkbank/eingaenge/{client}/{eingang}", (string client, string eingang) =>
-    Results.Json(new { client, eingang, umgebung = werkbank.Aktiv, pfad = durchspielen.EingangsPfad(client, eingang) }));
-app.MapPost("/api/werkbank/eingaenge/{client}/{eingang}/datei", async (HttpContext ctx, string client, string eingang, string name, CancellationToken ct) =>
+app.MapGet("/api/werkbank/eingaenge/{instanz}/{quelle}", (string instanz, string quelle) =>
+    Results.Json(new { instanz, quelle, umgebung = werkbank.Aktiv, pfad = durchspielen.EingangsPfad(instanz, quelle) }));
+app.MapPost("/api/werkbank/eingaenge/{instanz}/{quelle}/datei", async (HttpContext ctx, string instanz, string quelle, string name, CancellationToken ct) =>
 {
     // Bilder dürfen groß sein (TIFF) — die Grenze von Kestrel (30 MB) gilt hier nicht.
     if (ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } grenze) grenze.MaxRequestBodySize = null;
-    try { return Results.Json(await durchspielen.LegeAbAsync(client, eingang, name, ctx.Request.Body, ct)); }
+    try { return Results.Json(await durchspielen.LegeAbAsync(instanz, quelle, name, ctx.Request.Body, ct)); }
     catch (Exception e) when (e is not OperationCanceledException) { return Results.Json(new { ok = false, fehler = e.Message }); }
 });
 app.MapPost("/api/werkbank/uhr/vor", async (string um) =>
@@ -327,35 +355,27 @@ app.MapPost("/api/werkbank/uhr/vor", async (string um) =>
 });
 app.MapGet("/api/werkbank/worker", () =>
 {
-    try { return Results.Json(new { umgebung = werkbank.Aktiv, worker = worker.Liste(werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv)) }); }
+    try { return Results.Json(new { umgebung = werkbank.Aktiv, worker = worker.Liste(werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv)).Concat(werkbank.Rechnerdienste.Liste()) }); }
     catch (Exception e) { return Results.Json(new { umgebung = werkbank.Aktiv, worker = Array.Empty<object>(), fehler = e.Message }); }
 });
-app.MapPost("/api/werkbank/worker/{funktion}/start", async (string funktion) =>
+app.MapPost("/api/werkbank/worker/{instanz}/start", async (string instanz) =>
 {
     try
     {
-        // Ohne Token in der Umgebung: ein Token der Umgebung, dessen Akteur die Funktion anbieten darf (IDarf<F>, aus dem Code).
-        string? StandardToken(string f)
-        {
-            var board = werkbank.Arbeitsbereich.BoardJson is { } bj ? System.Text.Json.Nodes.JsonNode.Parse(bj) : null;
-            var duerfen = (board?["akteure"] as System.Text.Json.Nodes.JsonArray ?? []).OfType<System.Text.Json.Nodes.JsonObject>()
-                .Where(a => (a["darf"] as System.Text.Json.Nodes.JsonArray ?? []).Any(x => (string?)x == f)).Select(a => (string?)a["name"]).ToHashSet();
-            return werkbank.Umgebungen.Tokens(werkbank.Aktiv).Where(kv => kv.Value.Any(duerfen.Contains)).Select(kv => kv.Key)
-                .Order(StringComparer.Ordinal).FirstOrDefault();
-        }
-        var aus = await worker.StarteAsync(funktion, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), werkbank.Host.Laeuft, StandardToken);
-        werkbank.Fortschritt.Melde("worker", new { funktion });
+        var aus = await worker.StarteAsync(instanz, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), werkbank.Host.Laeuft);
+        werkbank.Fortschritt.Melde("worker", new { instanz });
         return Results.Json(aus);
     }
-    catch (Exception e) { return Results.Json(new { ok = false, funktion, fehler = e.Message }); }
+    catch (Exception e) { return Results.Json(new { ok = false, instanz, fehler = e.Message }); }
 });
-app.MapPost("/api/werkbank/worker/{funktion}/stopp", async (string funktion) =>
+app.MapPost("/api/werkbank/worker/{instanz}/stopp", async (string instanz) =>
 {
-    await worker.StoppeAsync(funktion);
-    werkbank.Fortschritt.Melde("worker", new { funktion });
-    return Results.Json(new { ok = true, funktion });
+    await worker.StoppeAsync(instanz);
+    werkbank.Fortschritt.Melde("worker", new { instanz });
+    return Results.Json(new { ok = true, instanz });
 });
-app.MapGet("/api/werkbank/worker/{funktion}/log", (string funktion, int? max) => Results.Json(worker.Log(funktion, max ?? 200)));
+app.MapGet("/api/werkbank/worker/{instanz}/log", (string instanz, int? max) =>
+    Results.Json(werkbank.Rechnerdienste.Kennt(instanz) ? werkbank.Rechnerdienste.Log(instanz, max ?? 200) : worker.Log(instanz, max ?? 200)));
 
 // ── SPUR (docs/04 §4.9, P6): der Spiegel folgt dem laufenden Host (SSE + Cursor) und liefert Vorgänge, nummerierte Wege
 //   und den Live-Puls fertig aus — der Editor schlägt nur Karten-Ids nach.

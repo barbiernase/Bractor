@@ -9,9 +9,10 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
 | Prozess | Rolle |
 |---|---|
 | **Host.Grpc** | der einzige Cluster-tragende Prozess: Marten + ActorSystem (Einzelknoten oder Consul) + gRPC + Einblick-Port |
-| **Host.Blazor** | Beispiel-GUI der Beispieldomäne, ein gRPC-**Client** (`Arbeitsplatz`; kein ActorSystem, kein Cluster); Verbindung aus `Clients:<Name>` der Umgebung (Kapitel [08](08-frontend-blazor-client.md)) |
+| **Host.Blazor** | Beispiel-GUI der Beispieldomäne, die App `ArbeitsplatzApp` (setzt den Client `Arbeitsplatz` um; kein ActorSystem, kein Cluster); Rechner, Port, Token und Dateien aus ihrer App-Instanz (`apps/<instanz>.json`, `--app <instanz>`; Kapitel [08](08-frontend-blazor-client.md)) |
+| **Host.Rechner** | der **Rechnerdienst** (docs/10 E18): je Rechner ein Prozess (`--umgebung <u> --rechner <r>`), der die Quellen der App-Instanzen dieses Rechners trägt (Läufer, Annahme auf dem Port der Instanz) und über die Leitung hineingibt wie eine App, mit dem Token der Instanz. Kein Cluster, kein Marten; ohne Quellen auf dem Rechner endet er gleich ([04](04-konsum-und-prozess-maschine.md) §4.7) |
 | **Werkbank** | Entwurfs-Oberfläche (`dotnet run --project Werkbank`); startet den Host als eigenen Prozess (`HostProzess`), **nur in einer Sim-Umgebung** — bei Prod endet ⟳ nach dem Lesen (CLAUDE.md W6) |
-| **Worker-Clients** | ein Client, der auf Fakten reagiert (Python: `KlassifikationsWorker`, `TrainingsWorker`; .NET: `ReaktionsWorker`); meldet sich wie jeder Client am gRPC-Port an (Token, das einen seiner Akteure nennt), liest das Log ab seiner gesicherten Position und gibt die Commands seines `IDarf` hinein (docs/konzept-akteure.md §5). Gestartet über „▶ Worker“ der Werkbank (`Werkbank/Server/Worker.cs`, aus `Clients:<Name>:Worker`: Skript oder .NET-`Projekt`) oder als eigener Prozess (Kapitel [09](09-python-sdk.md)) |
+| **Worker-Clients** | ein Client, der auf Fakten reagiert (Python: `KlassifikationsWorker`, `TrainingsWorker`; .NET: `ReaktionsWorker`); meldet sich wie jeder Client am gRPC-Port an (Token, das einen seiner Akteure nennt), liest das Log ab seiner gesicherten Position und gibt die Commands seines `IDarf` hinein (docs/konzept-akteure.md §5). Gestartet über „▶ Apps“ der Werkbank (`Werkbank/Server/Worker.cs`, aus `Start` seiner App-Instanz: Skript oder .NET-`Projekt`, nur auf einem Rechner dieser Maschine) oder als eigener Prozess (Kapitel [09](09-python-sdk.md)) |
 
 ### Host.Grpc-Bootstrap (`Host.Grpc/Program.cs`)
 
@@ -25,17 +26,19 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
   `cqrs_sim_${branch}`.
 - **`AddCqrs`** (`Infrastructure/Umgebung/CqrsUmgebungExtensions.cs`) bindet der Reihe nach: Kestrel (gRPC-Port HTTP/2; Einblick-Port
   HTTP/1.1+2, 0 = aus), Umgebungs-Siegel, `AddCqrsFramework` (Werte aus der Umgebung), `IDbClock` mit Versatz, Projektions-Stand,
-  Pull-Pfade, Monitoring, Fristen, Akteure (`Identitaeten`), die Instanzen der Graphen (`BindeGraphen`), die Eingänge der Clients samt Annahme
-  (`BindeEingaenge`), Technik und Konfig-Werte je Knoten und Eingang (`BindeTechnik`), Einblick.
-- **`LaufeAsync`** mappt gRPC (`CqrsClientService`, bidirektionaler Stream `Connect`), Monitoring, Einblick, den JSON-Eingang und die Annahme der
-  Webhooks (§6.6). Mit Rolle `Migrator` legt es nur das Schema an und endet (§6.3).
+  Pull-Pfade, Monitoring, Fristen, Akteure (`Identitaeten`), die Instanzen der Graphen (`BindeGraphen`), die Prüfung der App-Instanzen
+  (`PruefeApps`, mit den Tokens aus `Identitaeten`; laufen tun ihre Quellen im Rechnerdienst), Technik und Konfig-Werte je Knoten (`BindeTechnik`),
+  Einblick.
+- **`LaufeAsync`** mappt gRPC (`CqrsClientService`, bidirektionaler Stream `Connect`), Monitoring, Einblick und den JSON-Eingang (§6.6). Mit Rolle `Migrator` legt es nur das Schema an und endet (§6.3).
 - **Umgebungs-Siegel** (`<schema>.umgebung`): ein Host startet nur gegen eine DB mit passendem Namen, passender Art und passendem Cluster-Namen;
   eine Sim-DB legt der Host bei Bedarf an. **Uhr** (`<schema>.uhr`): Versatz nur in Sim wirksam.
   Details docs/06 §6.5.
-- **Cluster:** `Cluster:Art = Einzelknoten` (Mitgliedschaft in-memory über den `TestProvider` von Proto.Cluster, kein Consul — Standard in Sim)
-  oder `Consul` (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen `PartitionIdentityLookup`. Jeder Host trägt im Cluster
-  seinen **Rechnernamen** (`Cluster:Rechner`, in `deploy-multinode` je Node `Cluster__Rechner`): eine Instanz, die ihn nennt, läuft nur dort (der
-  Dateiwächter des Linienrechners und die Bildaufbereitung auf `grpc1`); Instanzen mit Zustand und Eingänge aus Quellen nennen ihn im Cluster immer. Die Kinds werden beim
+- **Cluster:** die Art folgt aus dem **Backend** der Umgebung (§6.5): ein Rechner = Einzelknoten (Mitgliedschaft in-memory über den `TestProvider`
+  von Proto.Cluster, kein Consul), mehrere = Consul (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen
+  `PartitionIdentityLookup`. Jeder Host läuft als ein **Rechner** des Pools (`--rechner <name>` bzw. `CQRS_RECHNER`, sonst `localhost`; in
+  `deploy-multinode` je Node `CQRS_RECHNER`), der zum Backend gehören muss (Boot-Fehler sonst, `PruefeRechner`); seine Adresse aus dem Pool ist der
+  `AdvertisedHost`. Eine Instanz, die einen Rechner nennt, läuft nur dort (der Dateiwächter des Linienrechners und die Bildaufbereitung auf
+  `grpc1`); Instanzen mit Zustand und Eingänge aus Quellen nennen ihn im Cluster immer. Die Kinds werden beim
   Start aggregiert: Aggregate und alle `IClusterKindContributor` (Batch-Leser, Uhr, Zusteller); dazu
   spawnt jeder Knoten seinen Verteiler (lokaler Actor mit festem Namen `verteiler`, `VerteilerStart`) und die Wurzel seiner Funktionen (`funktionen`,
   `FunktionenStart`: je Instanz ein Graph-Actor, Orte im Gossip-Zustand). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`), danach die **Start-Sperre** (`Bereitschaft`): 32 Proben-Identitäten, die über
@@ -100,16 +103,19 @@ Antworten nur an den Knoten der Sitzungs-Id. Liest ein Client nicht nach, verwir
 
 ## 6.3 Multi-Node-Betrieb (`deploy-multinode/`)
 
-`docker-compose.yml` + `Dockerfile`. Alle Werte stehen im Ordner `umgebungen/multinode/` (`CQRS_UMGEBUNG=multinode`, `Cluster:Art =
-Consul`); je Node setzt Compose nur `Cluster__Rolle` und `Cluster__AdvertisedHost`. Topologie: ein Docker-Netz, Service-Namen als DNS.
+`docker-compose.yml` + `Dockerfile`. Alle Werte stehen im Ordner `umgebungen/multinode/` (`CQRS_UMGEBUNG=multinode`; der Pool nennt `grpc1…3` mit
+ihren Service-Namen als Adresse, alle drei bilden das Backend, also Consul); je Node setzt Compose nur `Cluster__Rolle` und `CQRS_RECHNER`.
+Topologie: ein Docker-Netz, Service-Namen als DNS.
 
 - **Infra**: `consul` (`agent -dev`), `postgres:16-alpine` — mit Healthchecks (kein Redis).
-- **Nodes**: `grpc1/2/3` (identisches Image) und ein `migrate`-Init-Node.
+- **Nodes**: `grpc1/2/3` (identisches Image) und ein `migrate`-Init-Node; daneben `rechnerdienst-grpc1` (Image aus `Host.Rechner`), der die Quellen der
+  App-Instanzen auf `grpc1` trägt und sich über `grpc1:5001` verbindet.
 - **Cold-Start über einen dedizierten Migrator**: `migrate` (`Cluster__Rolle=Migrator`) legt **alle** Marten-Objekte (inkl. der sonst lazy
   erzeugten Snapshot-Tabellen) eager und advisory-lock-gesichert an (`CqrsSchemaMigrator`), dann `exit 0`, `restart: no`. Die Nodes
   (`Cluster__Rolle=Mitglied`, AutoCreate.None) warten per `depends_on: migrate: service_completed_successfully` → kein gleichzeitiges
   `CREATE TABLE`-Race (23505).
-- **Der Multi-Node-Hebel**: `Cluster__AdvertisedHost` = eigener Service-Name je Node — nur so erreichen sich die Member über die Leitung.
+- **Der Multi-Node-Hebel**: `CQRS_RECHNER` = eigener Service-Name je Node — seine Adresse im Pool ist der AdvertisedHost, nur so erreichen sich
+  die Member über die Leitung. Der Migrator ist kein Knoten und braucht keinen Rechner.
 - **Ports**: nur `grpc1` exponiert `127.0.0.1:5001` (gRPC, h2c) und `127.0.0.1:5002` (Einblick: `/health`); grpc2/3 nur
   netzintern.
 - **Dockerfile**: Multi-Stage (sdk:9.0 → aspnet:9.0), parametrisiert über `PROJECT`/`ENTRY_DLL`; `dotnet publish` zieht nur den
@@ -132,35 +138,56 @@ kommt aus der Beispieldomäne (Bildverarbeitung), nicht aus dem Framework.
 **Veraltet:** Die Start-Skripte für Host.Blazor (`deploy/deploy.sh`, `deploy/deploy_clients.sh`, `deploy/cqrs-blazor.env`,
 `deploy-linux/start-server.sh`, `deploy-windows/start.ps1`) setzen noch `Pipeline__WatchPath`, `Blazor__Urls` und `GrpcServer__Address`;
 `deploy-linux/start-server.sh` startet beide Hosts ohne Umgebung und setzt `ConnectionStrings__EventStore`. Heute gilt: beide Hosts brauchen
-`--umgebung` bzw. `CQRS_UMGEBUNG`; Host.Blazor liest `Clients:<Name>` der Umgebung, das Verzeichnis des Dateiwächters steht im Eingang des
-Linienrechners (`umgebung.json`, `Clients:Linienrechner:Eingaenge:linie1:Pfad`).
+`--umgebung` bzw. `CQRS_UMGEBUNG`; Host.Blazor liest seine App-Instanz (`--app <instanz>`, `apps/<instanz>.json`), das Verzeichnis des
+Dateiwächters steht in der Quelle der Kamera-App (`apps/linie1.json`, `Quellen:Kamera:Pfad`). `build.sh` schreibt noch das alte Format.
 
 ## 6.5 Konfiguration: die Umgebungs-Datei
 
-Für Nutzer ist eine Umgebung **ein Ordner**: `umgebungen/<name>/umgebung.json` und je Instanz eines Graphen `graphen/<instanz>.json`. Die
+Für Nutzer ist eine Umgebung **ein Ordner**: `umgebungen/<name>/umgebung.json`, je Instanz eines Graphen `graphen/<instanz>.json` und je
+Instanz einer App `apps/<instanz>.json`. Die
 Abschnitte und Felder sind Typen in `Abstractions/Umgebung/UmgebungKonfig.cs` — **sie sind das Schema** (eine Quelle; die Werkbank rendert daraus
 das Formular):
 
 - **Backend:** `Umgebung` (Name, Art `Sim`/`Prod`, `Python`), `EventStore`, `Cluster`
-  (Art, Name, Consul, AdvertisedHost, Rolle), `Schreibpfad` (generiertes JSON, Group-Commit, Batch, Linger, Drain, Snapshot-Schwelle,
+  (Name, Consul, Rolle), `Rechner` und `Backend` (unten), `Schreibpfad` (generiertes JSON, Group-Commit, Batch, Linger, Drain, Snapshot-Schwelle,
   Inbox-Grenze), `Lebenszyklus` (Leerlauf bis zur Passivierung je Actor-Art), `Konsum` (Partitionen, Seitengröße und Takt je Partition des Batch-Konsums), `Transport` (gRPC-Port, Einblick-Port, JSON-Eingang).
-- **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Clients` (je Client Token, Adresse, Urls,
-  Dateien und `Worker` — wie die Werkbank ihn als Prozess startet: Skript, Argumente, Interpreter oder ein .NET-`Projekt` —, dazu `Eingaenge` aus
-  Quellen: je Eingang `Art`, `Akteur`, `Rechner`, `Offen`, `Technik` und die Werte der Quellart, flach), `Stores`, `Logging`.
+- **Rechner und Backend** (`Abstractions/Umgebung/Rechnerregeln.cs`, eine Regel für Start und Werkbank): `Rechner` ist der **Pool** — Name →
+  `Adresse` (IP oder Hostname, ohne Schema und Port); `Backend:Rechner` nennt die Rechner des Pools, auf denen der Server-Host läuft. Alles mit Ort
+  nennt einen Rechner daraus: eine Instanz eines Graphen einen des Backends (oder keinen — dann läuft sie auf jedem), eine App-Instanz einen des
+Pools (ohne Angabe `localhost`) samt Port, je Rechner einmal und nie der des Hosts. Daraus
+  folgt, was früher getippt wurde: ein Backend-Rechner = Einzelknoten, mehrere = Consul; der AdvertisedHost eines Hosts = die Adresse seines Rechners;
+  die gRPC-Adresse eines Clients = der erste Backend-Rechner mit `Transport:GrpcPort`. Ohne Abschnitte gilt `localhost` (Adresse `localhost`) als
+  Pool und Backend. Jeder Prozess kennt seinen Rechner über `--rechner <name>` bzw. `CQRS_RECHNER` (sonst `localhost`); ein Host startet nur auf
+  einem Rechner des Backends. In der Werkbank ist der Pool die Spalte **Rechner** der Fläche (je Rechner eine Karte mit seinen App-Instanzen), das Backend
+die Karte **Backend** (docs/10 §10.9).
+  ```json
+  "Rechner": { "server-1": { "Adresse": "10.0.1.5" }, "gpu-1": { "Adresse": "10.0.2.7" } },
+  "Backend": { "Rechner": [ "server-1", "gpu-1" ] }
+  ```
+- **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Stores`, `Logging`.
 - **Die Instanzen** (`graphen/<instanz>.json`, `GraphInstanzKonfig`): `Graph`, `Rechner`, `Straenge` (gleichzeitige Ketten je Host), je Knoten (Pfad bei inneren Graphen,
   `Aufbereitung.Verkleinern`) `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik` (Schnittstelle → Umsetzung) und die
   Felder seiner Konfig-Records ([04](04-konsum-und-prozess-maschine.md) §4.4). Ohne Datei läuft ein Graph nicht; je Umgebung läuft
   ein Graph genau einmal.
+- **Die App-Instanzen** (`apps/<instanz>.json`, `AppInstanzKonfig`, docs/10 E18): `App` (der Record `X : IApp<Client>`), `Rechner` (aus dem
+  Pool, ohne Angabe `localhost`), `Port` (eine App mit Oberfläche; je Rechner eindeutig), `Token` (aus `Identitaeten`; es nennt einen Akteur ihres
+  Clients), `Start` (wie die Werkbank sie als Prozess startet: `Skript`, `Argumente`, `Python` oder ein .NET-`Projekt`; ein Host liest es nie),
+  `Dateien` (Verzeichnisse, aus denen sie Dateien zeigt) und `Quellen` (je Quelle der App `Offen`, `Technik` und die Werte der Quellart, flach). Eine
+  App läuft beliebig oft; welche Instanz ein Prozess ist, sagt `--app <instanz>` bzw. `CQRS_APP` (ohne Angabe die einzige seiner App).
+  ```json
+  { "App": "ArbeitsplatzApp", "Rechner": "localhost", "Port": 5110, "Token": "sim-arbeitsplatz",
+    "Start": { "Projekt": "Host.Blazor" }, "Dateien": [ "${env:HOME}/cqrs-sim/${branch}/DateiErkannt" ] }
+  ```
 
-Jeder Wert lässt sich per `__`-Variable überschreiben, z. B. `Cluster__AdvertisedHost=grpc1`, ein Wert einer Instanz unter
-`Graphen__<instanz>__<Knoten>__<Feld>`. Die **Rolle** eines Knotens heißt
+Jeder Wert lässt sich per `__`-Variable überschreiben, z. B. `Rechner__grpc1__Adresse=10.0.0.4`, ein Wert einer Instanz unter
+`Graphen__<instanz>__<Knoten>__<Feld>`, einer App-Instanz unter `Apps__<instanz>__Quellen__<Quelle>__<Feld>`. Die **Rolle** eines Knotens heißt
 `Cluster__Rolle` mit den Werten `Allein` (Standard) / `Migrator` / `Mitglied`.
 
 Intern übersetzt `AddCqrs` die Umgebung in den `CqrsFrameworkBuilder` (`AddCqrsFramework`); der Builder ist kein Nutzer-Schalter. Der Typ
 `CqrsFrameworkOptions` existiert noch als toter Code (docs/13 P3-2).
 
 **Ports** (Werte der mitgelieferten Umgebungen): `prod` 5001 (gRPC/h2c) / 5002 (Einblick); `sim-main` 5101 / 5102 mit JSON-Eingang;
-Host.Blazor 5010 (`Clients:<Name>:Urls`); Postgres 5432, Consul 8500. Ohne Angabe ist der Einblick-Port 0 (aus).
+Host.Blazor 5010 bzw. 5110 (`Port` seiner App-Instanz); Postgres 5432, Consul 8500. Ohne Angabe ist der Einblick-Port 0 (aus).
 
 ### Betriebs-Kommandos
 - Infra: `docker compose -f docker-compose.infrastructure.yml up -d` (bzw. in Sim: ⟳ der Werkbank startet fehlende Container,
@@ -185,12 +212,10 @@ Beide Endpunkte sind ohne Port-Bindung gemappt; per HTTP/1.1 erreichbar sind sie
 - **JSON-Eingang** `/eingang/*` (`Infrastructure/Eingang/JsonEingang.cs`): `command`, `query`, `rechte` —
   Commands und Queries als Akteur (Header `akteur-token` → Akteur-Tor; ein Command ohne Ziel wird ein offener Eingang am Kopf der Instanz, die ihn
   nimmt). Nur mit `Transport:JsonEingang` (Sim an, Prod aus; CLAUDE.md W6).
-- **Annahme** `POST /eingang/webhook/<Pfad>` (`Infrastructure/Quellen/AnnahmeEndpunkt.cs`, Logik `Annahmen.cs`): auf JEDEM Host, sobald die
-  Umgebung einen Eingang aus einer Annahme hat (der `Webhook`, docs/04 §4.7) — unabhängig vom JSON-Eingang, also auch in Prod; ohne Einblick-Port
-  bricht der Start. Kopf `kennung` Pflicht (sonst 400), Kopf `schluessel`, wenn der Eingang einen `Schluessel` nennt (sonst 401), unbekannter Pfad
-  404; der Körper ist der Inhalt. Antwort `202 {kennung, element}` erst, wenn die Nachricht durabel ist; `503` „später“, wenn das Hineingeben
-  scheitert oder `Offen` Elemente des Eingangs offen sind (gezählt je Host) — der Absender wiederholt mit derselben Kennung. Ein Load-Balancer davor
-  kann auf jeden Host verteilen.
+Die **Annahme** eines Webhooks (`POST /eingang/webhook/<Pfad>`) nimmt nicht der Host an, sondern der Rechnerdienst der App-Instanz auf deren Port
+(`Client.Infrastructure/Quellen/Annahmen.cs`, docs/04 §4.7): Kopf `kennung` Pflicht (sonst 400), Kopf `schluessel`, wenn die Quelle einen nennt
+(sonst 401), unbekannter Pfad 404; `202 {kennung, element}` erst nach der Quittung über die Leitung, `503` „später“ ohne Verbindung oder wenn es
+scheitert — der Absender wiederholt mit derselben Kennung.
 
 Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
 

@@ -7,7 +7,7 @@ namespace Infrastructure.Funktionen;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // GRAPHEN UND INSTANZEN (docs/04 §4.4): ein Graph ist eine Blaupause (generiert aus dem Record, GeneratedGraphen) — Knoten, ihre Wegtabelle aus
 // den [Von], Köpfe. Er läuft erst als INSTANZ: eine Datei je Instanz in der Umgebung (umgebungen/<name>/graphen/<instanz>.json) mit dem Graphen, bei einem
-// Strängen und je Knoten seinen Werten. Je Umgebung läuft ein Graph genau einmal; eine Quelle ist kein Knoten, sie läuft als Eingang eines Clients.
+// Strängen und je Knoten seinen Werten. Je Umgebung läuft ein Graph genau einmal; eine Quelle ist kein Knoten, sie ist eine Quelle einer App.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>
@@ -148,7 +148,7 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle, bool ausUmg
                     Karte());
             foreach (var fremd in k.Knoten.Keys.Where(n => g.KnotenNamens(n) is null))
                 throw new BootFehler($"Instanz {name}: '{fremd}' ist kein Knoten von {g.Name} (Knoten: {string.Join(", ", g.Knoten.Select(x => x.Name))}).", Karte());
-            if (k.Rechner is { } r && (r.Length == 0 || r.Trim() != r || r.Any(c => c is ',' or '*' or '?' || char.IsWhiteSpace(c))))
+            if (k.Rechner is { } r && !Rechnerregeln.IstName(r))
                 throw new BootFehler($"Instanz {name}: Rechner '{r}' ist kein Name — ein Rechner ist genau ein Name (kein Muster, keine Liste).", Karte());
             if (k.Straenge < 0)
                 throw new BootFehler($"Instanz {name}: Straenge {k.Straenge} — eine Zahl ab 0 (0 = Standard).", Karte());

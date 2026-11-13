@@ -47,16 +47,16 @@ public sealed class Umgebungen(string slnRoot)
     public const string DateiQuellart = "Dateiwaechter";
 
     /// <summary>
-    /// Der beobachtete Pfad je Eingang eines Clients mit einem Dateiwächter (<c>Clients:&lt;Client&gt;:Eingaenge:&lt;eingang&gt;</c>, Art
-    /// <see cref="DateiQuellart"/>, Wert <c>Pfad</c>; aufgelöst) — Schlüssel ist <c>Client/Eingang</c>.
+    /// Der beobachtete Pfad je Quelle einer App-Instanz mit einem Dateiwächter (<c>apps/&lt;instanz&gt;.json</c>, Quellen:&lt;quelle&gt;:Pfad; aufgelöst) —
+    /// Schlüssel ist <c>Instanz/Quelle</c>. Welche Quellart eine Quelle ist, sagt der Code der App (<paramref name="quellart"/>: App, Quelle → Quellart).
     /// </summary>
-    public IReadOnlyDictionary<string, string> EingangsPfade(string name) => MitKonfig(name, (u, _) => u.Clients
-        .SelectMany(c => c.Value.Eingaenge.Where(e => e.Value.Art == DateiQuellart && e.Value.Werte.TryGetValue("Pfad", out var p) && !string.IsNullOrWhiteSpace(p))
-            .Select(e => (Schluessel: EingangsSchluessel(c.Key, e.Key), Pfad: e.Value.Werte["Pfad"]!)))
+    public IReadOnlyDictionary<string, string> EingangsPfade(string name, Func<string, string, string?> quellart) => MitKonfig(name, (u, _) => u.Apps
+        .SelectMany(a => a.Value.Quellen.Where(q => quellart(a.Value.App, q.Key) == DateiQuellart && q.Value.Werte.TryGetValue("Pfad", out var p) && !string.IsNullOrWhiteSpace(p))
+            .Select(q => (Schluessel: EingangsSchluessel(a.Key, q.Key), Pfad: q.Value.Werte["Pfad"]!)))
         .ToDictionary(x => x.Schluessel, x => x.Pfad, StringComparer.Ordinal));
 
-    /// <summary>Der Schlüssel eines Eingangs: <c>Client/Eingang</c> (wie in seiner Wirker-Id <c>eingang:Client/Eingang</c>).</summary>
-    public static string EingangsSchluessel(string client, string eingang) => client + "/" + eingang;
+    /// <summary>Der Schlüssel einer Quelle einer App-Instanz: <c>Instanz/Quelle</c> (wie in ihrer Wirker-Id <c>eingang:Instanz/Quelle</c>).</summary>
+    public static string EingangsSchluessel(string instanz, string quelle) => instanz + "/" + quelle;
 
     /// <summary>
     /// <c>Identitaeten:Tokens</c>: Token → Akteur(e) — gelesen wie im Host (<c>AkteurOptionen</c>: Wert oder Liste, je Eintrag

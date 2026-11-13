@@ -1,0 +1,8 @@
+{
+  "App": "TrainingsApp",
+  "Rechner": "localhost",
+  "Token": "sim-trainingssystem",
+  "Start": {
+    "Skript": "Domain.Client.Worker.Python.ML/run_train_stub.py"
+  }
+}

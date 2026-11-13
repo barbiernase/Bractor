@@ -20,22 +20,18 @@ public static class GraphInstanzExtensions
     }
 
     /// <summary>
-    /// Bindet die Eingänge aus Quellen der Clients (docs/04 §4.7, <c>Clients:&lt;Name&gt;:Eingaenge</c>), geprüft gegen Quellarten, Akteure, Clients und die
-    /// Übersetzungen der Akteur-Seite (<see cref="Infrastructure.Quellen.Eingaenge.Aus"/>). Danach bindet <c>BindeTechnik</c> auch ihre Werte und Technik.
+    /// Prüft die App-Instanzen der Umgebung (<c>umgebungen/&lt;name&gt;/apps/*.json</c>) gegen Apps, Quellarten, Akteure, Tokens und die Übersetzungen der
+    /// Akteur-Seite (<see cref="Infrastructure.Quellen.Eingaenge.Aus"/>) — ein Boot-Fehler, wenn eine nicht stimmt. Laufen tun ihre Quellen im
+    /// Rechnerdienst ihres Rechners (Host.Rechner), nicht hier.
     /// </summary>
-    public static Infrastructure.Quellen.Eingaenge BindeEingaenge(this IServiceCollection services, UmgebungKonfig u)
+    /// <param name="tokens">Token → Akteure (Abschnitt <c>Identitaeten:Tokens</c>); null = ohne Tor.</param>
+    public static Infrastructure.Quellen.Eingaenge PruefeApps(this IServiceCollection services, UmgebungKonfig u,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? tokens = null)
     {
-        var eingaenge = Infrastructure.Quellen.Eingaenge.Aus(u.Clients, Anwendung.Funktionen.Bausteine, new Uebersetzungen(Anwendung.Funktionen.Uebersetzungen),
-            Anwendung.Akteure.Rechte, Anwendung.Akteure.ClientVertraege, u.Cluster.Art == ClusterArt.Einzelknoten);
-        services.Replace(ServiceDescriptor.Singleton(eingaenge));
-        // Die Annahme (docs/04 §4.7): Eingänge aus annehmenden Quellarten nimmt jeder Host auf dem Einblick-Port an — ohne ihn gäbe es keinen Weg hinein.
-        if (eingaenge.Annehmende.FirstOrDefault() is { } annahme && u.Transport.EinblickPort <= 0)
-            throw new Infrastructure.Umgebung.BootFehler($"Clients:{annahme.Client}:Eingaenge:{annahme.Name}: {annahme.Art.Name} nimmt an "
-                + $"(POST {Annahmevertrag.Route}/{annahme.Pfad}) — dafür braucht der Host den Einblick-Port (Transport:EinblickPort).",
-                WirkerId.FuerEingang(annahme.Client, annahme.Name));
-        services.Replace(ServiceDescriptor.Singleton(sp => Infrastructure.Quellen.Annahmen.Aus(eingaenge, sp)));
+        var eingaenge = Infrastructure.Quellen.Eingaenge.Aus(u.Apps, Anwendung.Akteure.AppVertraege, Anwendung.Funktionen.Bausteine,
+            new Uebersetzungen(Anwendung.Funktionen.Uebersetzungen), Anwendung.Akteure.Rechte, tokens);
         if (eingaenge.Alle.Count > 0)
-            Console.WriteLine($"[CQRS] Eingänge: {string.Join(", ", eingaenge.Alle.Select(e => e.Ort + " (" + e.Art.Name + " für " + e.Akteur + ")"))}");
+            Console.WriteLine($"[CQRS] Quellen (im Rechnerdienst ihres Rechners): {string.Join(", ", eingaenge.Alle.Select(e => e.Ort + " auf " + e.Rechner + " (" + e.Art.Name + " für " + e.Akteur + ")"))}");
         return eingaenge;
     }
 }

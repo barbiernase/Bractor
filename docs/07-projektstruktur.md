@@ -31,7 +31,7 @@
 | `Domain.Client.Worker.Python.*` | Python-Clients: Implementierungen der generierten Client-Basen (`domain_client/`), Generate unter `domain_client/generated/` | — |
 | `Domain.Client.Modules.*` | GUI-Clients (außerhalb des Editors, W12) | Client.Infrastructure |
 | `<Name>.Katalog` | ein **Funktionskatalog** (keine Rolle *einer* Anwendung, eigene Wurzel): **die einzigen Funktionen und Graphen** — mit ihren Nachrichten (Commands ohne Ziel, Hinweise), Konfig-Records, Technik, Lese-Fähigkeiten, Wertobjekten, Enums; domänenneutral (`Guid` statt `Id<T>`), **flach** (ohne Bereichs-Ordner, §7.3); die Werkbank legt ihn an („＋ 📚 Katalog“) | Abstractions, Core, andere Kataloge |
-| `umgebungen/` | je Umgebung ein Ordner `<name>/` mit `umgebung.json` und `graphen/<instanz>.json` je Instanz (`Projektstruktur.UmgebungsOrdner`, `UmgebungsDatei`, `GraphenOrdner`) | — |
+| `umgebungen/` | je Umgebung ein Ordner `<name>/` mit `umgebung.json`, `graphen/<instanz>.json` je Instanz eines Graphen und `apps/<instanz>.json` je Instanz einer App (`Projektstruktur.UmgebungsOrdner`, `UmgebungsDatei`, `GraphenOrdner`, `AppsOrdner`) | — |
 
 **Rollen als Suffix zur Wurzel.** Die Projektnamen sind Suffixe zu einer Anwendungs-Wurzel (`""`, `.Projections`, `.Uebersetzungen`, `.Akteure`,
 `.Infrastructure`, `.Leitung`, `.Laufzeit`); die Beispielanwendung hat die Wurzel `Domain`, eine zweite Anwendung (z. B. eine Test-Domäne) eine eigene. Nicht jede Rolle muss
@@ -75,7 +75,7 @@ hören (`IHoert`); ein Client nennt nur Akteure.
 | `Domain.Projections/<Bereich>/` | `ReadModels.cs`, `Queries.cs`, `Responses.cs` | Read-Models, Queries, Antworten |
 | | `I<Store>.cs` | Store-Bündel mit seinen Fähigkeiten |
 | | `<Projektion>.cs`, `<Reader>.cs` | je Klasse eine Datei |
-| `Domain.Akteure/` | `Akteure.cs`, `Clients.cs`, `Uebersetzungen.cs` | Akteure (`record … : IAkteur`); Clients (`record … : IClient`); Übersetzungen der Akteur-Seite (Primitive `Verwirklichung`, `ITranslate<TMeldung, TZiel>`) |
+| `Domain.Akteure/` | `Akteure.cs`, `Clients.cs`, `Apps.cs`, `Uebersetzungen.cs` | Akteure (`record … : IAkteur`); Clients (`record … : IClient`); Apps (`record … : IApp<Client>`); Übersetzungen der Akteur-Seite (Primitive `Verwirklichung`, `ITranslate<TMeldung, TZiel>`) |
 | `Domain.Uebersetzungen/<Bereich>/` | `Uebersetzungen.cs` | Übersetzungen (Primitive `Uebersetzung`, `class {Quelle}_{Ziel}_{n}(TSource source) : ITranslate<TSource, TTarget>`) |
 | `Domain.Infrastructure/<Bereich>/` | `<Store>.cs`, `<Store>.Lesen.cs` | Store-Implementierung (Schreib- und Leseteil) |
 | `<Name>.Katalog/` | `<Funktion>.cs` | je Funktion eine Datei (Primitive `Funktion`, eine Klasse mit Rumpf) |

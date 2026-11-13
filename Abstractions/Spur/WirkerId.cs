@@ -29,7 +29,7 @@ static class WirkerId
     public const string Projektion = "projektion";
     public const string Akteur = "akteur";
     public const string Uebersetzung = "uebersetzung";
-    /// <summary>Ein Eingang eines Clients aus einer Quelle (<c>eingang:Client/Eingang</c>): er gibt im Namen seines Akteurs hinein, was die Quelle meldet.</summary>
+    /// <summary>Die Quelle einer App-Instanz (<c>eingang:Instanz/Quelle</c>): sie gibt im Namen eines Akteurs ihres Clients hinein, was sie meldet.</summary>
     public const string Eingang = "eingang";
 
     /// <summary>Der Wirker der Uhr des Frameworks (sie sendet fällige Fristen; eine Karte hat sie nicht).</summary>
@@ -45,7 +45,7 @@ static class WirkerId
     public static string FuerProjektion(string typ) => Projektion + ":" + typ;
     public static string FuerAkteur(string akteur) => Akteur + ":" + akteur;
     public static string FuerUebersetzung(string uebersetzung) => Uebersetzung + ":" + uebersetzung;
-    public static string FuerEingang(string client, string eingang) => Eingang + ":" + client + "/" + eingang;
+    public static string FuerEingang(string instanz, string quelle) => Eingang + ":" + instanz + "/" + quelle;
 
     /// <summary>Art und Rest einer Wirker-Id (<c>funktion:Bildeingang</c> → <c>(funktion, Bildeingang)</c>); <c>null</c>, wenn sie keine ist.</summary>
     public static bool Zerlege(string? id, out string art, out string rest)

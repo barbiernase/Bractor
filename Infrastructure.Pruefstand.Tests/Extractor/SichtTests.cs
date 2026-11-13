@@ -212,11 +212,11 @@ public class SichtTests
         Ports(F("Prognosemodell")).Should().Be("Geglaettet<Kurzfenster> || Geglaettet<Langfenster>", "zusammengeführt im Zustand, je Glättung ein Auf");
         Ports(F("Pruefungsstart")).Should().Be("Scan || Gestartet", "ein Command und die Antwort auf den eigenen Command (aus dem Event übersetzt)");
         Ports(F("Messwertannahme")).Should().Be("NimmMesswert", "am Kopf der Messkette nimmt sie einen Command des Katalogs, keine Meldung");
-        // Eine Quellart ist keine Funktion: eine eigene Liste mit dem, was sie meldet, und ihrem Konstruktor (Konfig, Zustand, Technik).
+        // Eine Quellart ist keine Funktion: eine eigene Liste mit dem, was sie meldet, und ihrem Konstruktor (Konfig, Technik).
         (board["bausteinFunktionen"] as JsonArray)!.OfType<JsonObject>().Should().NotContain(x => (string?)x["name"] == "Sensorabfrage");
         var q = (board["quellarten"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == "Sensorabfrage");
         q["meldet"]!.AsArray().Select(x => (string?)x).Should().Equal("Rohwert");
-        ((string?)q["zustand"]).Should().Be("Abfragestand");
+        q["zustand"].Should().BeNull("eine Quellart hat keinen gesicherten Zustand — was sie zählt, merkt sie sich selbst");
         q["konfigs"]!.AsArray().OfType<JsonObject>().Select(k => (string?)k["record"]).Should().Equal("SensorabfrageKonfig");
         q.ContainsKey("framework").Should().BeFalse("sie liegt in der Anwendung (ihrem Katalog), nicht im Framework");
         // Was sie meldet, ist eine Meldung (kein Command); die Übersetzung der Akteur-Seite trägt ihr Kennzeichen.
@@ -231,7 +231,7 @@ public class SichtTests
         Karte(board, qa)["akteure"]!.AsArray().Select(x => (string?)x).Should().Equal("Sensornetz");
     }
 
-    // ── Die Fläche in sieben Spalten und die Komposition eines Graphen (docs/10 §10.9) ──
+    // ── Die Fläche in acht Spalten und die Komposition eines Graphen (docs/10 §10.9) ──
 
     private static List<JsonObject> FlaechenKarten(JsonObject board) => board["sicht"]!["flaeche"]!["karten"]!.AsArray().OfType<JsonObject>().ToList();
     private static List<string> FlaechenKanten(JsonObject board) => board["sicht"]!["flaeche"]!["kanten"]!.AsArray().OfType<JsonObject>()
@@ -240,15 +240,15 @@ public class SichtTests
         ((string?)p["richtung"] == "ein" ? "◀" : "▶") + (string?)p["typ"] + ((bool?)p["eigen"] == true ? "*" : "")));
 
     [Fact]
-    public async Task Die_Flaeche_ordnet_Karten_in_sieben_Spalten_und_Nachrichten_als_Ports()
+    public async Task Die_Flaeche_ordnet_Karten_in_acht_Spalten_und_Nachrichten_als_Ports()
     {
         var board = await BoardAsync();
         var karten = FlaechenKarten(board);
         JsonObject K(string id) => karten.Single(k => (string?)k["id"] == id);
-        // Keine Spalte Quellen: eine Quelle ist kein Knoten eines Graphen, sie verwirklicht einen Akteur und läuft als Eingang eines Clients — der steht
-        //   je Umgebung an der Karte des Clients in der Spalte Clients ganz links.
+        // Keine Spalte Quellen: eine Quelle ist kein Knoten eines Graphen, sie ist eine Quelle einer App und läuft mit deren Instanzen — die stehen je
+        //   Umgebung auf den Karten der Spalte Rechner ganz links, daneben die Clients, die die Apps umsetzen.
         board["sicht"]!["flaeche"]!["spalten"]!.AsArray().Select(x => (string?)x).Should()
-            .Equal("clients", "ausgang", "graphen", "uebersetzungen", "aggregate", "projektionen", "eingang");
+            .Equal("rechner", "clients", "ausgang", "graphen", "uebersetzungen", "aggregate", "projektionen", "eingang");
         // Ein Akteur steht zweimal: links mit dem, was er darf, rechts mit dem, was zu ihm kommt — dazu die Antworten auf seine Queries.
         var theke = "akt:" + Id(board, "akteure", "name", "Theke");
         ((string?)K(theke + "|aus")["spalte"]).Should().Be("ausgang");
@@ -294,6 +294,9 @@ public class SichtTests
         kanten.Should().Contain($"agg:Leihvorgang -Ausgeliehen/kenntnis-> {archiv}|ein");
         kanten.Should().Contain(k => k.StartsWith("rdr:") && k.EndsWith($"-OffeneAusleihenAntwort/lesen-> {theke}|ein"));
         kanten.Should().Contain(k => k.StartsWith($"{theke}|aus -OffeneAusleihen/lesen-> rdr:"));
+        // Ein Client verkörpert Akteure: eine Kante von seiner Karte zu deren linker Karte; die Akteure stehen ohne Gruppe.
+        kanten.Should().Contain(k => k.StartsWith("cl:") && k.EndsWith($"/verkoerpert-> {theke}|aus"));
+        karten.Where(k => (string?)k["art"] == "akteur").Should().OnlyContain(k => k["gruppe"] == null);
         // liest: die Offenzählung der Mahnbemessung liest über eine Lese-Fähigkeit des Katalogs den Store dahinter.
         kanten.Should().Contain(k => k.StartsWith($"gr:{Id(board, "graphen", "name", "Mahnbemessung")} -IZaehleOffeneAusleihen/liest-> sto:"));
 

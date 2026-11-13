@@ -48,6 +48,7 @@
     <!-- Nur die Build-Reihenfolge: die Hosts laufen als eigene Prozesse (Black-Box), sie werden nicht geladen. -->
     <ProjectReference Include="..\Host.Grpc\Host.Grpc.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Host.Pruefdomaene\Host.Pruefdomaene.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Host.Rechner\Host.Rechner.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

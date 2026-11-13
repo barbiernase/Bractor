@@ -22,8 +22,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 4. **Keine Reflection.** Die Laufzeit nutzt generierte Tabellen/Kontexte; Werkzeuge (Codegen, Schema, Extractor) lesen über Roslyn.
 5. Der Fachcode bleibt rein: Cursor, Weckruf, Ordnung, Exactly-once, Sharding, Prozess-Maschinerie tauchen im Entwickler-Code nie auf.
 6. Persistent genau dann, wenn ein durabler Konsument abhängt. Verlierbares (Tick, Ablehnung, UI-Feedback, Kenntnis-Push an Clients) bleibt
-   auf dem schnellen Kanal. Was eine Quelle meldet, steht nicht im Log: durabel ist sie über ihren gesicherten Zustand (was sie gesehen hat),
-   gesichert, wenn die Kette des Elements fertig ist; die Kennung eines Elements kommt aus seinem Inhalt (`IMeldung`), nie aus seiner Stelle.
+   auf dem schnellen Kanal. Was eine Quelle meldet, steht nicht im Log, und das Framework sichert für sie nichts: genau einmal kommt aus der
+   Kennung eines Elements, aus seinem Inhalt (`IMeldung`), nie aus seiner Stelle — meldet sie es erneut, entstehen dieselben Ids, das Backend verwirft es.
 
 
 ## Werkbank-Leitsätze (Kurzform; das ausführliche Werkbank-Konzept liegt im Git-Verlauf, der Editor heute: docs/10 §10.9)
@@ -35,11 +35,12 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **W4** Jede Geste ist sofort ein Patch am Code; ↶ nimmt den Patch zurück.
 - **W5** Prüfen = Bauen (Analyzer, Generatoren, Boot-Guards). `DomainEditor/Grammatik.cs` ist nur Daten (⊕, `--grammatik`).
 - **W6** Keine Simulation: Durchspielen = echter Host in Umgebung `sim` gegen eine eigene, echte DB.
-- **W7** Umgebung = ein Ordner (`umgebungen/<name>/umgebung.json`, je Instanz eines Graphen `graphen/<instanz>.json`); Struktur ist Code,
-  Auswahl und Werte sind Konfig.
+- **W7** Umgebung = ein Ordner (`umgebungen/<name>/umgebung.json`, je Instanz eines Graphen `graphen/<instanz>.json`, je Instanz einer App
+  `apps/<instanz>.json`); Struktur ist Code, Auswahl und Werte sind Konfig. Orte: ein Pool von Rechnern (`Rechner`, Name → Adresse), das Backend eine Auswahl daraus; alles mit Ort nennt einen
+  Rechner aus dem Pool, jeder Prozess kennt seinen (`CQRS_RECHNER`) — docs/06 §6.5.
 - **W8** Quellen = Quellarten (`IQuellart`, Katalog des Frameworks `Core/Katalog`: `Dateiwaechter`, `Taktgeber`, `Webhook`, oder eigene im Katalog), nie
-  Knoten eines Graphen; sie verwirklichen einen Akteur (Übersetzung der Akteur-Seite) und laufen als Eingang eines Clients
-  (Werte in der Umgebung unter `Clients:<Name>:Eingaenge`).
+  Knoten eines Graphen; sie verwirklichen einen Akteur (Übersetzung der Akteur-Seite) und sind Quellen einer App (Parameter ihres Records), laufen
+  also mit deren Instanzen (Werte je Quelle in `apps/<instanz>.json`).
 - **W9** Spur: jeder Log-Eintrag trägt `ursache`, `wirker`, `ueber`, `stand`; der Wirker ist die Karten-Id.
 - **W10** Keine Reflection, auch nicht in Werkzeugen (= Inv. 4).
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
@@ -88,11 +89,15 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **Quellen** sind Quellarten (`: IQuellart` mit `Lausche(CancellationToken)`, nie Knoten: `Dateiwaechter` → `DateiGefunden`, `Taktgeber` → `Takt`,
   `Webhook` → `Aufruf`; Meldungen `IMeldung` mit `Kennung` aus dem Inhalt, kein Command, `Abstractions/Katalog.cs`). Eine Quellart **verwirklicht einen
   Akteur**: eine Übersetzung der Akteur-Seite (`ITranslate<Meldung, Ziel>` in `<Wurzel>.Akteure/Uebersetzungen.cs`) macht aus der Meldung eine
-  Nachricht, die er darf. Sie läuft als **Eingang eines Clients** (Umgebung `Clients:<Name>:Eingaenge:<e>`: Art, Akteur, Rechner, Werte); je Eingang
-  ein Läufer (`Infrastructure/Quellen/`) genau einmal im Cluster auf seinem Rechner, der hineingibt wie eine App (Aggregat-Command über den Emitter,
-  Command ohne Ziel als offener Eingang am Kopf, `Hineingabe`) und danach den Zustand der Quellart sichert; nichts im Log. Der `Webhook` lauscht nicht,
-  er ist eine **Annahme** (`: IAnnahme<Aufruf>`): jeder Host nimmt `POST /eingang/webhook/<Pfad>` an (Kopf `kennung` Pflicht, `schluessel` wenn der
-  Eingang einen nennt), gibt über dieselbe `Hineingabe` hinein und antwortet 202 erst, wenn es durabel ist; ihr Eingang hat keinen Rechner, dafür `Pfad`. **Zustand** `IZustand<T>` ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach beendeten Aufrufen mit deren Kennungen (nach einem Absturz zählt nichts doppelt).
+  Nachricht, die er darf. Sie ist eine **Quelle einer App** (`[Uebersetzt<U>] Quellart Name` im Record der App) und läuft mit jeder **App-Instanz**
+  (`apps/<instanz>.json`: App, Rechner, Port, Token, Start, je Quelle Werte; der Akteur ist der des Clients, der darf, was die Übersetzung gibt) im
+  **Rechnerdienst** ihres Rechners (`Host.Rechner --umgebung <u> --rechner <r>`, Laufzeit `Client.Infrastructure/Quellen/`): je Instanz eine
+  Verbindung über die Leitung mit ihrem Token, je Quelle ein Läufer, der hineingibt wie eine App (`Hineingabe`: Ids aus der Kennung, ein Command an ein
+  Aggregat bzw. ohne Ziel an den Kopf, `Abgabe` wartet auf die Quittung) — nichts im Log, kein gesicherter Zustand (eine Quellart nimmt kein
+  `IZustand<T>`, was sie gesehen hat, merkt sie sich selbst; nach einem Neustart meldet sie erneut, die Inbox verwirft es). Der `Webhook` lauscht nicht,
+  er ist eine **Annahme** (`: IAnnahme<Aufruf>`): der Rechnerdienst nimmt `POST /eingang/webhook/<Pfad>` auf dem Port der Instanz an (Kopf `kennung`
+  Pflicht, `schluessel` wenn die Quelle einen nennt), gibt über dieselbe `Hineingabe` hinein und antwortet 202 erst nach der Quittung; ihre Werte nennen
+  den `Pfad`. Der Host prüft die App-Instanzen beim Start, lässt sie aber nicht laufen. **Zustand** `IZustand<T>` (Funktionen) ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach beendeten Aufrufen mit deren Kennungen (nach einem Absturz zählt nichts doppelt).
 - **Eingang am Kopf:** ein Command ohne Ziel eines Clients steht nicht im Log; je Instanz, deren Graph ihn am Kopf nimmt, ein offener Eingang
   `cqrs_eingaenge` (`SitzungsActor.AnKopfAsync`), der Zusteller bringt ihn hin. Nennt der Command ein Fakt als `ursache` (`Stream:Version`), ist
   es die Herkunft des Eingangs: die Kette und ihre Commands tragen das Fakt als Ursache.
@@ -118,7 +123,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Ausgangskorb im C#-Client. Kein Broker, keine Abos.
 - **Aktivierung eines Knotens** (docs/04 §4.4): Umsetzung und Technik je Kind (DI-Bereich, geschlossen beim Stoppen; Technik lädt beim ersten
   Aufruf, Freigabe über `IAsyncDisposable`); Konfig-Werte und Technik-Wahl aus dem Knoten der Instanz (`GeneratedTechnik`); Zustand nur über
-  `IZustand<T>` (CQRS105), eine Instanz mit Zustand (und ein Eingang aus einer Quelle) läuft im Cluster auf ihrem **Rechner** (`Rechner` in der Instanz-Datei = `Cluster:Rechner` des Hosts;
+  `IZustand<T>` (CQRS105), eine Instanz mit Zustand läuft im Cluster auf ihrem **Rechner** (`Rechner` in der Instanz-Datei = ein Rechner des Backends, Pool und Backend in der Umgebung, docs/06 §6.5;
   Pflicht, keine Sperre, kein Umzug bei Ausfall; doppelte Rechnernamen erkennt der Gossip).
 - **Abläufe** sind Graphen (eine Rechnung je Auslöser: Folge, Gabel, Wahl, Je) plus ein Vorgangs-Aggregat für alles, was zusammengeführt oder
   abgewartet wird (Zählung, Kompensation, Frist im Decide); die Zugehörigkeit ist ein fachliches Feld (A2). Aggregate reden nur über Graphen und
@@ -135,17 +140,17 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 |---|---|
 | Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteur.cs`, `Funktion.cs`, `Graph.cs`, `Katalog.cs`, `Zustand.cs`, `Funktionsvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
 | Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Verteilen, Funktionen — Graph-Actor, Parent, Kette —, Eingaenge, Uhr, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
-| Quellarten des Frameworks, Läufer, Annahme, Store-Treiber | `Core/Katalog/` (`Dateiwaechter`, `Taktgeber`, `Webhook`), `Infrastructure/Quellen/` (Eingänge, `QuellLaeufer`, `Hineingabe`, `Annahmen`), `Core/` (`MartenStore`, `DateiZiel`) |
+| Quellarten des Frameworks, Rechnerdienst, Store-Treiber | `Core/Katalog/` (`Dateiwaechter`, `Taktgeber`, `Webhook`), `Infrastructure/Quellen/Eingaenge.cs` (der geprüfte Plan je App-Instanz), `Client.Infrastructure/Quellen/` (`Rechnerdienst`, `QuellLaeufer`, `Hineingabe`, `Abgabe`, `Annahmen`), `Core/` (`MartenStore`, `DateiZiel`) |
 | Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
 | Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |
 | Generatoren und Analyzer | `*.SourceGeneration/`; Codegen vor dem Build (Proto, STJ-Kontexte, Python-Basen): `Cqrs.Codegen` über das Target in `Domain.Leitung` |
 | Lesen, Sicht, Schreiben, Prüfen | `GraphExtractor.Kern/` (`Lesen`, `Sicht/`, `Schreiben/`, `Sonde/`, `ParitaetsPruefung`), CLI `GraphExtractor/` |
 | Grammatik, Scaffolder | `DomainEditor/` |
 | Werkbank | `Werkbank/` (Server `Werkbank/Server/`, Oberfläche `Werkbank/wwwroot/editor/`) |
-| Hosts | `Host.Grpc` (`AddCqrs(args)` der Komposition + `LaufeAsync`), `Host.Blazor` (Client) — beide mit `--umgebung <name>`; `Host.Pruefdomaene` (Messung S5) |
+| Hosts | `Host.Grpc` (`AddCqrs(args)` der Komposition + `LaufeAsync`), `Host.Blazor` (die App `ArbeitsplatzApp`) — beide mit `--umgebung <name>`, Host.Blazor dazu `--app <instanz>` (ohne: die einzige Instanz seiner App); `Host.Rechner` (der Rechnerdienst, `--umgebung` und `--rechner`); `Host.Pruefdomaene` (Messung S5) |
 | Beispieldomäne (Prüfling) | `Domain*`, `Domain.Uebersetzungen`, `Domain.Akteure`, `Domain.Client.*`, Kataloge `Bildvorschau.Katalog`, `Bildverarbeitung.Katalog` |
 | Prüfdomäne (zweite Anwendung, Framework-Tests) | `Pruefdomaene`, `Pruefdomaene.Projections`, `Pruefdomaene.Uebersetzungen`, `Pruefwerk.Katalog`, `Pruefdomaene.Akteure`, `Pruefdomaene.Laufzeit`, `Pruefdomaene.Integration.Tests` |
-| Umgebungen | `umgebungen/<name>/umgebung.json` und `umgebungen/<name>/graphen/<instanz>.json` |
+| Umgebungen | `umgebungen/<name>/umgebung.json`, `umgebungen/<name>/graphen/<instanz>.json` und `umgebungen/<name>/apps/<instanz>.json` |
 | Vermessung (E2E-Treiber, Ablage) | `Cqrs.Vermessung`, `scripts/vermessung-*.sh`, `vermessung/ergebnisse/` |
 
 ## Konventionen
@@ -168,8 +173,10 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **Grammatik = eine Quelle** (`DomainEditor/Grammatik.cs`): neue Regel ⇒ Analyzer + Test + Gegenstück in der Grammatik.
 - **Akteur und Client** nicht vermischen (`docs/konzept-akteure.md`): Akteur = `IDarf` für das, was er selbst hineingibt, und `IHoert` für das,
   was zu ihm kommt (Events und Hinweise), in `Akteure.cs`; Client = Record in `Clients.cs`, der nur nennt, wen er verkörpert (`IVerkoerpert<A>`) —
-  über seine Leitung gehen genau `IDarf` und `IHoert` seiner Akteure, kein eigenes Wort dafür; wirksam = verkörperte Akteure ∩ Token, C#-Client
-  per `[assembly: IstClient<Arbeitsplatz>]`.
+  über seine Leitung gehen genau `IDarf` und `IHoert` seiner Akteure, kein eigenes Wort dafür; wirksam = verkörperte Akteure ∩ Token. Umgesetzt wird
+  ein Client von **Apps** (`record X([Uebersetzt<U>] Quellart Name, …) : IApp<Client>` in `Apps.cs`): je Nachricht entweder die App selbst oder eine
+  Quelle (Parameter); ihr Vertrag ist der Handshake-Name und Hash an der Leitung (`GeneratedAppVertraege`), ohne die Ziele ihrer Quellen (CQRS125/126);
+  C#-Code per `[assembly: IstApp<ArbeitsplatzApp>]`, Python per `<App>Basis`.
 - **Graph statt Klebecode:** die Kanten stehen als `[Von(nameof(…))]` am nehmenden Knoten (kein Builder, keine Liste, keine Generics als
   Verdrahtung); passt ein Typ nicht, ist der Adapter eine eigene kleine Funktion. Technik ist, was der Konstruktor einer Funktion nimmt und weder Konfig-Record noch `ILogger<T>` noch `IZustand<T>` ist
   (CQRS089–092), ohne Marker.
@@ -213,7 +220,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   `dotnet test Werkbank.Abnahme.Tests/Werkbank.Abnahme.Tests.csproj`
 - Werkbank: `dotnet run --project Werkbank` → http://localhost:5178/editor/ (in `.claude/launch.json` als „Werkbank“). ⟳ baut und startet den echten
   Host in der gewählten Umgebung; die Fläche in sieben Spalten (mit Übersetzungen), Graph, Aggregat und Store von innen (docs/10 §10.9).
-- Hosts: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `Host.Blazor -- --umgebung sim-main` (Sim-DB `cqrs_sim_<branch>` über `CQRS_BRANCH`).
+- Hosts: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `Host.Blazor -- --umgebung sim-main --app arbeitsplatz`, der Rechnerdienst
+  `Host.Rechner -- --umgebung sim-main --rechner localhost` (⟳ der Werkbank startet ihn mit) (Sim-DB `cqrs_sim_<branch>` über `CQRS_BRANCH`).
 - Multi-Node (3 Nodes + Consul): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (`docs/06-transport-multinode-betrieb.md`).
 - Gate „frischer Checkout baut“ (vor jedem Push): `./pruefe-checkout.sh` (Worktree des Commits: ignorierte Quellen, Build, Drift, Prüfstand)
 - Editor-Parität (Code ⇄ Lesen ⇄ Karten, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
@@ -234,4 +242,4 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Offen, Schulden | `docs/13-reifegrad-schulden-bewertung.md` §13.0 |
 | Tests, Zahlen, Messwerte | `docs/12-tests-und-vermessung.md` |
 
-Gelöschte Dokumente (Werkbank-Konzept, Editor- und LLM-Konzepte samt „Funktionen im Editor“, die Pläne Pub/Sub-Neustrukturierung, Commands und Funktionsgraphen, Ausdrückliche Kanten in Graphen, Graphen ohne Lauf-Steuerung, Eine Instanz läuft auf ihrem Rechner, Katalog und Graphen sowie Ohne Pipeline) liegen im Git-Verlauf.
+Gelöschte Dokumente (Werkbank-Konzept, Editor- und LLM-Konzepte samt „Funktionen im Editor“, die Pläne Pub/Sub-Neustrukturierung, Commands und Funktionsgraphen, Ausdrückliche Kanten in Graphen, Graphen ohne Lauf-Steuerung, Eine Instanz läuft auf ihrem Rechner, Katalog und Graphen, Ohne Pipeline, Clients und Quellen sowie Rechner und Apps) liegen im Git-Verlauf.

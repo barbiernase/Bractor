@@ -14,18 +14,41 @@ public interface IAkteur { }
 /// er verkörpert (<see cref="IVerkoerpert{TAkteur}"/>):
 /// <code>public sealed record Arbeitsplatz : IClient, IVerkoerpert&lt;Inspekteur&gt;, IVerkoerpert&lt;KIOperator&gt;;</code>
 /// Was über seine Leitung geht, sind die <c>IDarf</c> und <c>IHoert</c> seiner Akteure. Wirksam ist an jeder Sitzung „verkörpert ∩ Token“, für beide
-/// Richtungen. Handshake-Name = Record-Name, der Hash folgt aus seinen Akteuren. Die client-INTERNEN Commands/Events (Intents, ClientEvents,
-/// Python-State) stehen hier nie.
+/// Richtungen. Umgesetzt wird ein Client von APPS (<see cref="IApp{TClient}"/>) — sie tragen den Vertrag an der Leitung (Handshake-Name, Hash). Die
+/// client-INTERNEN Commands/Events (Intents, ClientEvents, Python-State) stehen hier nie.
 /// </summary>
 public interface IClient { }
 
 /// <summary>
-/// Diese Client-Assembly IST der Client <typeparamref name="TClient"/> (<c>[assembly: IstClient&lt;Arbeitsplatz&gt;]</c>, docs/konzept-akteure.md §4):
-/// der Client-Generator nimmt Handshake-Name, Hash und die gehörten Typen aus den Akteuren des Clients, leitet nur die Commands weiter und stellt nur
-/// die Queries, die ein verkörperter Akteur darf. Der Analyzer hält den Client-Code dagegen (CQRS093–097).
+/// Eine APP — eine konkrete Software, die einen Client umsetzt (docs/konzept-akteure.md §4, docs/10 E18): sie ist der Vertrag, gegen den
+/// verbindlich entwickelt wird. Je Nachricht des Clients (die <c>IDarf</c> seiner Akteure) setzt sie entweder die App selbst um (der Standard) oder eine
+/// ihrer QUELLEN: jeder Parameter des Records ist eine Quellart (Name = Schlüssel ihrer Werte in der App-Instanz), <see cref="UebersetztAttribute{TUebersetzung}"/>
+/// nennt die Übersetzung der Akteur-Seite, die aus ihrer Meldung die Nachricht macht.
+/// <code>
+/// public sealed record Kameraeingang([Uebersetzt&lt;DateiGefunden_LiesBild_1&gt;] Dateiwaechter Kamera) : IApp&lt;Linienrechner&gt;;   // nur Quellen
+/// public sealed record ArbeitsplatzApp : IApp&lt;Arbeitsplatz&gt;;                                                              // alles über die App
+/// </code>
+/// Ihr Vertrag: was die Akteure des Clients hineingeben, ohne die Nachrichten ihrer Quellen, und was sie hören. Eine Nachricht mit Quelle steht nicht im
+/// Vertrag der App (je Nachricht entweder die App oder Quellen). Wo sie läuft, sagt die Umgebung.
+/// </summary>
+/// <typeparam name="TClient">Der Client, den die App umsetzt.</typeparam>
+public interface IApp<TClient> where TClient : IClient { }
+
+/// <summary>
+/// Am Parameter einer App (eine Quelle, <see cref="IApp{TClient}"/>): die Übersetzung der Akteur-Seite (<c>ITranslate&lt;TMeldung, TZiel&gt;</c>), die aus der
+/// Meldung der Quellart die Nachricht macht — ihr Ziel ist ein Command, den ein Akteur des Clients darf. Mehrere sind eine Gabel.
+/// </summary>
+/// <typeparam name="TUebersetzung">Die Übersetzung (Klasse <c>{Meldung}_{Ziel}_{n}</c> in <c>&lt;Wurzel&gt;.Akteure/Uebersetzungen.cs</c>).</typeparam>
+[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = true)]
+public sealed class UebersetztAttribute<TUebersetzung> : Attribute { }
+
+/// <summary>
+/// Diese Assembly IST die App <typeparamref name="TApp"/> (<c>[assembly: IstApp&lt;ArbeitsplatzApp&gt;]</c>, docs/konzept-akteure.md §4): der
+/// Client-Generator nimmt Handshake-Name, Hash und die gehörten Typen aus dem Vertrag der App (die Akteure ihres Clients ohne die Nachrichten ihrer
+/// Quellen), leitet nur deren Commands weiter und stellt nur deren Queries. Der Analyzer hält den Code dagegen (CQRS093–097).
 /// </summary>
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false)]
-public sealed class IstClientAttribute<TClient> : Attribute where TClient : IClient { }
+public sealed class IstAppAttribute<TApp> : Attribute { }
 
 /// <summary>Am Client (<see cref="IClient"/>): er spricht für den Akteur <typeparamref name="TAkteur"/>. Befugt ist der Akteur, nicht die Software.</summary>
 public interface IVerkoerpert<TAkteur> where TAkteur : IAkteur { }

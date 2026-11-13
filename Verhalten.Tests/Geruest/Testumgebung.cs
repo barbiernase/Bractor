@@ -27,6 +27,7 @@ public sealed class Testumgebung
     public const string TokenTrainingssystem = "verhalten-trainingssystem";
     public const string TokenDisponent = "verhalten-disponent";
     public const string TokenReaktionsWorker = "verhalten-reaktionsworker";
+    public const string TokenKamera = "verhalten-kamera";
 
     /// <summary>Der Stand des ReaktionsWorkers in dieser Umgebung (eine frische Datenbank) — über alle Hosts, auch nach einem Neustart.</summary>
     public global::Client.Infrastructure.Reaktionen.ReaktionsStandImSpeicher Reaktionsstand { get; } = new();
@@ -61,12 +62,15 @@ public sealed class Testumgebung
         await conn.OpenAsync();
         await using var cmd = new NpgsqlCommand($"drop database if exists \"{u.Datenbank}\" with (force)", conn);
         await cmd.ExecuteNonQueryAsync();
-        // Eine Umgebung ist ein Ordner (docs/06 §6.5): umgebung.json und je Instanz eines Graphen eine Datei in graphen/.
+        // Eine Umgebung ist ein Ordner (docs/06 §6.5): umgebung.json, je Instanz eines Graphen eine Datei in graphen/, je App-Instanz eine in apps/.
         var ordner = Path.Combine(u.Verzeichnis, u.Name);
         Directory.CreateDirectory(Path.Combine(ordner, "graphen"));
         await File.WriteAllTextAsync(Path.Combine(ordner, "umgebung.json"), u.Json().ToJsonString(new() { WriteIndented = true }));
         foreach (var (instanz, inhalt) in u.Instanzen())
             await File.WriteAllTextAsync(Path.Combine(ordner, "graphen", instanz + ".json"), inhalt.ToJsonString(new() { WriteIndented = true }));
+        Directory.CreateDirectory(Path.Combine(ordner, "apps"));
+        foreach (var (instanz, inhalt) in u.Apps())
+            await File.WriteAllTextAsync(Path.Combine(ordner, "apps", instanz + ".json"), inhalt.ToJsonString(new() { WriteIndented = true }));
         return u;
     }
 
@@ -80,8 +84,15 @@ public sealed class Testumgebung
             ["Umgebung"] = new JsonObject { ["Name"] = Name, ["Art"] = "Sim" },
             ["EventStore"] = new JsonObject { ["Betrieb"] = "Vorhanden", ["Verbindung"] = Verbindung, ["Datenbank"] = Datenbank, ["Schema"] = Schema },
             ["Cluster"] = ConsulCluster is { } c
-                ? new JsonObject { ["Art"] = "Consul", ["Name"] = c, ["Consul"] = "localhost:8500", ["AdvertisedHost"] = "localhost" }
-                : new JsonObject { ["Art"] = "Einzelknoten", ["Name"] = "cqrs-" + Name },
+                ? new JsonObject { ["Name"] = c, ["Consul"] = "localhost:8500" }
+                : new JsonObject { ["Name"] = "cqrs-" + Name },
+            // Der Pool (docs/06 §6.5): alle Hosts laufen auf dieser Maschine, je Host ein Rechner mit derselben Adresse. Mit Consul bilden alle das
+            //   Backend (ein Cluster), sonst nur der erste (Einzelknoten).
+            ["Rechner"] = new JsonObject(Hostlauf.Rechnernamen.Select(r => KeyValuePair.Create(r, (JsonNode?)new JsonObject { ["Adresse"] = "localhost" }))),
+            ["Backend"] = new JsonObject
+            {
+                ["Rechner"] = new JsonArray((ConsulCluster is null ? Hostlauf.Rechnernamen.Take(1) : Hostlauf.Rechnernamen).Select(r => (JsonNode)r).ToArray()),
+            },
             // Die Ports setzt jeder Host-Prozess selbst (Transport__GrpcPort/EinblickPort): zwei Knoten teilen eine Umgebung.
             ["Transport"] = new JsonObject { ["GrpcPort"] = 0, ["EinblickPort"] = 0, ["JsonEingang"] = true },
         };
@@ -98,30 +109,35 @@ public sealed class Testumgebung
                 [TokenTrainingssystem] = "TrainingsSystem",
                 [TokenDisponent] = "Disponent",
                 [TokenReaktionsWorker] = "Datensatzpfleger,Teilmelder",
-            },
-        };
-        // Der Linienrechner verkörpert das Kamerasystem: sein Eingang ist ein Dateiwächter auf dem Quell-Verzeichnis, im Cluster auf dem ersten Host
-        //   (eine Quelle lauscht genau einmal). Was er findet, gibt das Kamerasystem als LiesBild in die Bildaufbereitung.
-        json["Clients"] = new JsonObject
-        {
-            ["Linienrechner"] = new JsonObject
-            {
-                ["Eingaenge"] = new JsonObject
-                {
-                    ["linie1"] = new JsonObject
-                    {
-                        ["Art"] = "Dateiwaechter", ["Akteur"] = "KameraSystem", ["Rechner"] = Hostlauf.Rechner1,
-                        ["Pfad"] = Quellpfad, ["Muster"] = new JsonArray("*.tiff"), ["Intervall"] = "00:00:01", ["Fertig"] = "Stabil", ["Fenster"] = "00:00:01",
-                        ["Kennung"] = "NameGroesse",
-                    },
-                },
+                [TokenKamera] = "KameraSystem",
             },
         };
         return json;
     }
 
+    /// <summary>
+    /// Die App-Instanzen: die Kamera-App (sie setzt den Linienrechner um, der das Kamerasystem verkörpert) auf dem ersten Host — ihre Quelle ist ein
+    /// Dateiwächter auf dem Quell-Verzeichnis; was er findet, gibt das Kamerasystem als LiesBild in die Bildaufbereitung.
+    /// </summary>
+    private IEnumerable<(string Instanz, JsonObject Inhalt)> Apps()
+    {
+        if (Anwendung == Anwendung.Pruefdomaene) yield break;
+        yield return ("linie1", new JsonObject
+        {
+            ["App"] = "KameraApp", ["Rechner"] = Hostlauf.Rechner1, ["Token"] = TokenKamera,
+            ["Quellen"] = new JsonObject
+            {
+                ["Kamera"] = new JsonObject
+                {
+                    ["Pfad"] = Quellpfad, ["Muster"] = new JsonArray("*.tiff"), ["Intervall"] = "00:00:01", ["Fertig"] = "Stabil", ["Fenster"] = "00:00:01",
+                    ["Kennung"] = "NameGroesse",
+                },
+            },
+        });
+    }
+
     /// <summary>Die Instanzen der Graphen (je Graph eine): die Bildaufbereitung mit ihrem Ausgabe-Pfad; was der Dateiwächter findet, gibt der Eingang des
-    /// Linienrechners hinein (<see cref="Json"/>), die Arbeit der Akteure kommt ohne Datei dazu.</summary>
+    /// Linienrechners hinein (<see cref="Apps"/>), die Arbeit der Akteure kommt ohne Datei dazu.</summary>
     private IEnumerable<(string Instanz, JsonObject Inhalt)> Instanzen()
     {
         if (Anwendung == Anwendung.Pruefdomaene)

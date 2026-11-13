@@ -114,6 +114,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        {");
             sb.AppendLine("            public IReadOnlyDictionary<string, global::Infrastructure.Akteure.AkteurRechte> Rechte => global::Infrastructure.Akteure.GeneratedAkteurRechte.Alle;");
             sb.AppendLine("            public IReadOnlyDictionary<string, global::Infrastructure.Akteure.ClientVertrag> ClientVertraege => global::Infrastructure.Akteure.GeneratedClientVertraege.Alle;");
+            sb.AppendLine("            public IReadOnlyDictionary<string, global::Infrastructure.Akteure.ClientVertrag> AppVertraege => global::Infrastructure.Akteure.GeneratedAppVertraege.Alle;");
             sb.AppendLine("        }");
             sb.AppendLine();
             Tabelle(sb, "FunktionsTabelle", "IFunktionsTabelle", "global::Infrastructure.Funktionen.GeneratedFunktionsBausteine", new string[0], new[]

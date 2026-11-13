@@ -4,7 +4,7 @@
 # Zeilen: record/enum/aggregat/decide/apply/frage (Schreibseite) · funktion (Klasse mit Konstruktor; je Auf die Ports — ein Command bzw. wie
 # geschrieben —, Herkunft, Lese-Fähigkeiten, Ausgaben, Strom) · quellart (Klasse mit IQuellart: Konstruktor, Zustand, Katalog, was Lausche meldet) ·
 # technik (ohne Marker) · graph (Knoten = Parameter mit [Kopf] und [Von …]; Köpfe, Ausgänge daraus) und kante (aus den Von, aufgefaltet) · uebersetzung
-# (akteurseite: ihre Quelle ist eine Meldung) · akteur (darf | hoert) · client (verkoerpert) · verwirklicht (Akteur <- Quellart über eine Übersetzung der
+# (akteurseite: ihre Quelle ist eine Meldung) · akteur (darf | hoert) · client (verkoerpert) · app (client, quellen) · verwirklicht (Akteur <- Quellart über eine Übersetzung der
 # Akteur-Seite) · Leseseite · sicht/besitz/code (die Sicht des Editors) · lage (Projektstruktur, docs/07).
 
 # ══ LEIHWESEN ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -363,12 +363,11 @@ besitz Kundenportal.Konten.Kontostatus enum -> aggregate:Benutzer
 besitz Kundenportal.Konten.Adressschluessel code -> §begriffe
 
 # ── Anlagen (Messnetz.cs.txt, Akteure.Messnetz.cs.txt): SENSOR-STROM MIT ALARM — Zähl-Aggregat; eine EIGENE QUELLART (Katalog.Sensorabfrage.cs.txt:
-#    IQuellart mit Konfig, gesichertem Zustand und Technik) meldet Rohwerte (eine MELDUNG, Katalog.Meldungen.cs.txt); die Übersetzung der Akteur-Seite
+#    IQuellart mit Konfig und Technik, ohne gesicherten Zustand) meldet Rohwerte (eine MELDUNG, Katalog.Meldungen.cs.txt); die Übersetzung der Akteur-Seite
 #    macht daraus den Kopf der Messkette, den das Sensornetz darf (so verwirklicht die Quellart den Akteur); hinter der Annahme ein GRAPH IM GRAPHEN
 #    (aufgefaltete Kanten Aufbereitung.Plausi …); der Alarm öffnet die Störung über einen
 #    Graphen, auf die Störung alarmiert die Schichtleitung (sie reagiert auf beide Fakten) über zwei Wege nebeneinander. Die Domäne ist rein: die drei
 #    Graphen liegen im Katalog (Katalog.*.cs.txt Teil Messung, Guid statt Id), fünf Übersetzungen binden sie an Sensor, Störungsfall und Schichtleitung ──
-besitz Sondenkatalog.Katalog.Abfragestand code -> quellart:Sensorabfrage
 besitz Sondenkatalog.Katalog.Alarm command -> §begriffe
 besitz Sondenkatalog.Katalog.AlarmVerteilt command -> bausteinfunktion:Alarmverteilung
 besitz Sondenkatalog.Katalog.Alarmiere command -> §begriffe
@@ -382,7 +381,6 @@ besitz Sondenkatalog.Katalog.Plausibel command -> bausteinfunktion:Plausibilisie
 besitz Sondenkatalog.Katalog.Rohwert meldung -> quellart:Sensorabfrage
 besitz Sondenkatalog.Katalog.SensorabfrageKonfig konfig -> quellart:Sensorabfrage
 besitz Sondenkatalog.Katalog.Stoerung command -> bausteinfunktion:StoerungBeiAlarm
-code Sondenkatalog.Katalog.Abfragestand class teile=1 domaene=Sondenkatalog.Katalog block=§geteilt
 funktion Sondenkatalog.Katalog.Alarmquittung() | Auf(PerAnrufErreicht) -> Erreicht || Auf(PerFunkErreicht) -> Erreicht
 funktion Sondenkatalog.Katalog.Alarmverteilung() | Auf(Alarmiere) -> AlarmVerteilt
 funktion Sondenkatalog.Katalog.Anrufkette(telefonie:ITelefonie) | Auf(AlarmVerteilt) -> PerAnrufErreicht
@@ -390,7 +388,7 @@ funktion Sondenkatalog.Katalog.Funkruf() | Auf(AlarmVerteilt) -> PerFunkErreicht
 funktion Sondenkatalog.Katalog.Messwertannahme() | Auf(NimmMesswert) -> Messwert
 funktion Sondenkatalog.Katalog.Messwertpruefung() | Auf(Plausibel) -> Geprueft
 funktion Sondenkatalog.Katalog.Plausibilisierung() | Auf(Messwert) -> strom Plausibel
-quellart Sondenkatalog.Katalog.Sensorabfrage(konfig:SensorabfrageKonfig, stand:IZustand<Abfragestand>, bus:ISensorbus) zustand=Abfragestand katalog=Sondenkatalog.Katalog | Lausche -> strom Rohwert
+quellart Sondenkatalog.Katalog.Sensorabfrage(konfig:SensorabfrageKonfig, bus:ISensorbus) katalog=Sondenkatalog.Katalog | Lausche -> strom Rohwert
 funktion Sondenkatalog.Katalog.StoerungBeiAlarm() | Auf(Alarm) -> Stoerung
 graph Sondenkatalog.Katalog.Alarmierung | knoten Verteilung:Alarmverteilung [Kopf], Anruf:Anrufkette [Von Verteilung], Funk:Funkruf [Von Verteilung], Quittung:Alarmquittung [Von Anruf+Funk] | koepfe Alarmiere | aus Erreicht
 graph Sondenkatalog.Katalog.Messkette | knoten Annahme:Messwertannahme [Kopf], Aufbereitung:Messwertaufbereitung [Von Annahme] | koepfe NimmMesswert | aus Geprueft
@@ -551,6 +549,10 @@ verwirklicht Warenkatalog.Import.Ablage <- Webhook (framework) annahme | Aufruf_
 uebersetzung Warenkatalog.Import.Aufruf_NimmKatalogdateiAn_1 akteurseite | Aufruf -> NimmKatalogdateiAn [Feld Pfad=Inhalt+RelativerPfad=Kennung] | Pfad=Inhalt(feld), RelativerPfad=Kennung(feld)
 akteur Warenkatalog.Import.Katalogpflege | darf HoleImportstand | hoert ImportFortgeschritten, ImportAbgeschlossen
 client Warenkatalog.Import.KatalogpflegeOberflaeche | verkoerpert Katalogpflege
+# Apps (docs/10 E18): ein Record mit IApp<Client> — je Parameter eine Quelle (Quellart mit [Uebersetzt<U>]); ohne Parameter setzt die App alles selbst um
+client Warenkatalog.Import.Ablagerechner | verkoerpert Ablage
+app Warenkatalog.Import.AblageApp | client Ablagerechner | quellen Eingangsordner:Dateiwaechter[DateiGefunden_NimmKatalogdateiAn_1], Lieferant:Webhook[Aufruf_NimmKatalogdateiAn_1]
+app Warenkatalog.Import.KatalogpflegeApp | client KatalogpflegeOberflaeche | quellen -
 readmodel Warenkatalog.Import.Importstand store=IImportUebersicht | Id:Guid { get; set; }, Pfad:string="" { get; set; }, Zeilen:int { get; set; }, Fertig:bool { get; set; }
 store Warenkatalog.Import.IImportUebersicht klasse=2 | schreibt BeginneAsync(importId:Guid, pfad:string, h:Herkunft), SetzeAsync(importId:Guid, zeilen:int, fertig:bool, h:Herkunft) | liest FindeAsync(importId:Guid):Importstand?
 faehigkeit Warenkatalog.Import.IBeginneImportstand schreibt IImportUebersicht.BeginneAsync

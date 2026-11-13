@@ -27,7 +27,7 @@ from domain_client.generated import (
     KlassifiziereBildPaarDurchKiDto,
     ModellAktiviertDto,
 )
-from domain_client.generated.vertraege import KlassifikationsWorkerBasis
+from domain_client.generated.vertraege import KlassifikationsAppBasis
 
 log = logging.getLogger("stub")
 VERSION_NAMES = {0: "dc0", 1: "dc2"}
@@ -49,7 +49,7 @@ class StubState:
     events: int = 0
 
 
-class StubClassifier(KlassifikationsWorkerBasis[StubState]):
+class StubClassifier(KlassifikationsAppBasis[StubState]):
     """Derselbe Client-Vertrag wie der echte Classifier (KlassifikationsWorker) — nur ohne Modell."""
 
     async def auf_bild_verfuegbar(self, event: BildVerfuegbarDto, ctx, state: StubState):

@@ -1,8 +1,8 @@
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// Eine Anwendung im echten Host: optional frische DB (E3), Host-Prozess bereit, Lese-Strom des Logs, JSON-Eingang,
-/// Uhr-Versatz. CPU und RSS des Hosts (und seiner Worker) schreibt <see cref="Ressourcen"/> mit.
+/// Eine Anwendung im echten Host: optional frische DB (E3), Host-Prozess bereit, daneben der Rechnerdienst (Host.Rechner), wenn die Umgebung
+/// App-Instanzen hat (er trägt ihre Quellen, etwa den Dateiwächter des Bildeingangs), Lese-Strom des Logs, JSON-Eingang, Uhr-Versatz. CPU und RSS des Hosts (und seiner Worker) schreibt <see cref="Ressourcen"/> mit.
 /// </summary>
 internal sealed class Anwendungslauf : IAsyncDisposable
 {
@@ -13,6 +13,8 @@ internal sealed class Anwendungslauf : IAsyncDisposable
     public required TimeSpan Uhrversatz { get; init; }
     public required string Rolle { get; init; }
     public required Kontext Kontext { get; init; }
+    /// <summary>Der Rechnerdienst neben dem Host (null ohne App-Instanzen).</summary>
+    public HostLauf? Rechnerdienst { get; init; }
 
     /// <summary>Höchste Zahl aktiver Actors an einem Fensterende dieses Laufs (Maßstab der Passivierung, PF-5).</summary>
     public double HoechstActors { get; private set; } = double.NaN;
@@ -47,13 +49,20 @@ internal sealed class Anwendungslauf : IAsyncDisposable
         }
         var host = new HostLauf(k.HostDll(hostProjekt), u.Name, u.EinblickPort, k.LogDatei(logName), variablen);
         await host.StarteAsync();
+        // Die Quellen der App-Instanzen trägt der Rechnerdienst (docs/10 E18) — er gibt über die Leitung dieses Hosts hinein.
+        HostLauf? dienst = null;
+        if (u.Apps.Count > 0)
+        {
+            dienst = new HostLauf(k.HostDll("Host.Rechner"), u.Name, einblickPort: 0, k.LogDatei(logName + "-rechnerdienst"), variablen);
+            await dienst.StarteAsync();
+        }
         if (warmlauf) await Task.Delay(k.Optionen.Warmlauf);   // erst der warme Host wird gemessen
         k.Ressourcen.Beobachte(rolle, () => host.Prozess);
         var log = new LogStrom(db, mitDaten);
         log.Starte();
         return new Anwendungslauf
         {
-            Db = db, Host = host, Log = log, Eingang = new Eingang(u.EinblickPort), Uhrversatz = await db.UhrversatzAsync(), Rolle = rolle, Kontext = k,
+            Db = db, Host = host, Rechnerdienst = dienst, Log = log, Eingang = new Eingang(u.EinblickPort), Uhrversatz = await db.UhrversatzAsync(), Rolle = rolle, Kontext = k,
         };
     }
 
@@ -65,6 +74,7 @@ internal sealed class Anwendungslauf : IAsyncDisposable
         if (_beendet) return;
         _beendet = true;
         await Log.DisposeAsync();
+        if (Rechnerdienst is not null) await Rechnerdienst.DisposeAsync();
         await Host.DisposeAsync();
         Kontext.Ressourcen.Vergiss(Rolle);
         Eingang.Dispose();

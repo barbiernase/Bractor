@@ -1,9 +1,9 @@
-# GENERIERT von Cqrs.Codegen aus den Clients der Domäne (record X : IClient, docs/konzept-akteure.md §4).
+# GENERIERT von Cqrs.Codegen aus den Apps der Domäne (record X : IApp<Client>, docs/konzept-akteure.md §4).
 # Nicht von Hand ändern — ./codegen.sh --force erzeugt die Datei neu, ./codegen.sh --check prüft auf Drift.
 #
-# Je Client eine abstrakte Basis aus den Akteuren, die er verkörpert: je gehörtem Event oder Hinweis eine Methode `auf_<event>` —
-# die Reaktion (Commands des IDarf, gern in Stücken: yield) oder nichts (Kenntnis). Die Basis verdrahtet den Dispatch und meldet
-# Client + Hash am Handshake.
+# Je App eine abstrakte Basis aus den Akteuren ihres Clients (ohne die Nachrichten ihrer Quellen): je gehörtem Event oder Hinweis eine
+# Methode `auf_<event>` — die Reaktion (Commands des IDarf, gern in Stücken: yield) oder nichts (Kenntnis). Die Basis verdrahtet den
+# Dispatch und meldet App + Hash am Handshake.
 from __future__ import annotations
 
 from abc import abstractmethod
@@ -53,7 +53,6 @@ from . import (
     LabelBildRegionDto,
     LabelEinzelBildDto,
     LabelPhysischesProduktDto,
-    LiesBildDto,
     MarkiereAlsInspiziertDto,
     MeldeFortschrittDto,
     MeldeTeilFertigDto,
@@ -90,12 +89,13 @@ from . import (
 S = TypeVar("S")
 
 
-class ArbeitsplatzBasis(ClientVertragBasis[S]):
-    """Client Domain.Akteure.Arbeitsplatz — verkörpert Inspekteur, KIOperator, Modellfreigeber, Produktpruefer."""
+class ArbeitsplatzAppBasis(ClientVertragBasis[S]):
+    """App Domain.Akteure.ArbeitsplatzApp des Clients Arbeitsplatz — verkörpert Inspekteur, KIOperator, Modellfreigeber, Produktpruefer."""
 
+    APP: ClassVar[str] = "ArbeitsplatzApp"
     CLIENT: ClassVar[str] = "Arbeitsplatz"
     AKTEURE: ClassVar[tuple] = ("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer")
-    VERTRAG_HASH: ClassVar[str] = "095f9149cfc76d4d"
+    VERTRAG_HASH: ClassVar[str] = "a8669cadc36f99df"
     HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis
         BildPaarDurchKiKlassifiziertDto: "auf_bild_paar_durch_ki_klassifiziert",
         BildPaarGelabeltDto: "auf_bild_paar_gelabelt",
@@ -252,12 +252,25 @@ class ArbeitsplatzBasis(ClientVertragBasis[S]):
         ...
 
 
-class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
-    """Client Domain.Akteure.KlassifikationsWorker — verkörpert Klassifizierer."""
+class KameraAppBasis(ClientVertragBasis[S]):
+    """App Domain.Akteure.KameraApp des Clients Linienrechner — verkörpert KameraSystem."""
 
+    APP: ClassVar[str] = "KameraApp"
+    CLIENT: ClassVar[str] = "Linienrechner"
+    AKTEURE: ClassVar[tuple] = ("KameraSystem",)
+    VERTRAG_HASH: ClassVar[str] = "b686e16c8f020297"
+    HOERT: ClassVar[dict] = {}
+    SPONTAN: ClassVar[tuple] = ()   # IDarf der Akteure: Commands und Hinweise
+    FRAGT: ClassVar[tuple] = ()   # IDarf der Akteure: ihre Queries
+
+
+class KlassifikationsAppBasis(ClientVertragBasis[S]):
+    """App Domain.Akteure.KlassifikationsApp des Clients KlassifikationsWorker — verkörpert Klassifizierer."""
+
+    APP: ClassVar[str] = "KlassifikationsApp"
     CLIENT: ClassVar[str] = "KlassifikationsWorker"
     AKTEURE: ClassVar[tuple] = ("Klassifizierer",)
-    VERTRAG_HASH: ClassVar[str] = "e7dd2142dc11d49c"
+    VERTRAG_HASH: ClassVar[str] = "a44527faba9d7fb0"
     HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis
         BildVerfuegbarDto: "auf_bild_verfuegbar",
         ImagePairKomplettDto: "auf_image_pair_komplett",
@@ -282,23 +295,13 @@ class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
         ...
 
 
-class LinienrechnerBasis(ClientVertragBasis[S]):
-    """Client Domain.Akteure.Linienrechner — verkörpert KameraSystem."""
+class ReaktionsAppBasis(ClientVertragBasis[S]):
+    """App Domain.Akteure.ReaktionsApp des Clients ReaktionsWorker — verkörpert Datensatzpfleger, Teilmelder."""
 
-    CLIENT: ClassVar[str] = "Linienrechner"
-    AKTEURE: ClassVar[tuple] = ("KameraSystem",)
-    VERTRAG_HASH: ClassVar[str] = "60c6a9e05a08791a"
-    HOERT: ClassVar[dict] = {}
-    SPONTAN: ClassVar[tuple] = (LiesBildDto,)   # IDarf der Akteure: Commands und Hinweise
-    FRAGT: ClassVar[tuple] = ()   # IDarf der Akteure: ihre Queries
-
-
-class ReaktionsWorkerBasis(ClientVertragBasis[S]):
-    """Client Domain.Akteure.ReaktionsWorker — verkörpert Datensatzpfleger, Teilmelder."""
-
+    APP: ClassVar[str] = "ReaktionsApp"
     CLIENT: ClassVar[str] = "ReaktionsWorker"
     AKTEURE: ClassVar[tuple] = ("Datensatzpfleger", "Teilmelder")
-    VERTRAG_HASH: ClassVar[str] = "23f2d1708aa2efd3"
+    VERTRAG_HASH: ClassVar[str] = "00ea5a6761d3f9bc"
     HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis
         EinfrierenAngefordertDto: "auf_einfrieren_angefordert",
         RangeAngefordertDto: "auf_range_angefordert",
@@ -323,12 +326,13 @@ class ReaktionsWorkerBasis(ClientVertragBasis[S]):
         ...
 
 
-class TrainingsWorkerBasis(ClientVertragBasis[S]):
-    """Client Domain.Akteure.TrainingsWorker — verkörpert TrainingsSystem."""
+class TrainingsAppBasis(ClientVertragBasis[S]):
+    """App Domain.Akteure.TrainingsApp des Clients TrainingsWorker — verkörpert TrainingsSystem."""
 
+    APP: ClassVar[str] = "TrainingsApp"
     CLIENT: ClassVar[str] = "TrainingsWorker"
     AKTEURE: ClassVar[tuple] = ("TrainingsSystem",)
-    VERTRAG_HASH: ClassVar[str] = "bc9b0f0d5825ddb4"
+    VERTRAG_HASH: ClassVar[str] = "70358939e35a6d90"
     HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis
         TrainingAngefordertDto: "auf_training_angefordert",
     }
@@ -342,9 +346,9 @@ class TrainingsWorkerBasis(ClientVertragBasis[S]):
 
 
 __all__ = [
-    "ArbeitsplatzBasis",
-    "KlassifikationsWorkerBasis",
-    "LinienrechnerBasis",
-    "ReaktionsWorkerBasis",
-    "TrainingsWorkerBasis",
+    "ArbeitsplatzAppBasis",
+    "KameraAppBasis",
+    "KlassifikationsAppBasis",
+    "ReaktionsAppBasis",
+    "TrainingsAppBasis",
 ]

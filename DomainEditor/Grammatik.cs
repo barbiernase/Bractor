@@ -111,8 +111,8 @@ public static class Grammatik
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsParent.cs (je Ausgabe die Wege nachgeschlagen, gesichert mit Antwort, verlierbar ohne)")]),
         new("GR-GRAPH", "Graph: Knoten als Parameter mit [Kopf] oder [Von]", "Ein Graph ist ein Record mit IGraph; jeder Parameter ist ein Knoten (eine "
             + "Funktion — eine generische mit Typargument — oder ein anderer Graph; Name = Konfig-Schlüssel, in einem inneren Graphen mit Punkt). Eine "
-            + "Funktion darf mehrfach im Graphen stehen. Jeder Knoten trägt [Kopf], [Von(…)] oder beides; eine Quellart ist nie ein Knoten (sie läuft als "
-            + "Eingang eines Clients, GR-QUELLE). Jedes Argument von Von ist nameof eines anderen Parameters desselben Records — kein String-Literal, nicht der Knoten selbst, kein Name "
+            + "Funktion darf mehrfach im Graphen stehen. Jeder Knoten trägt [Kopf], [Von(…)] oder beides; eine Quellart ist nie ein Knoten (sie ist eine "
+            + "Quelle einer App, GR-QUELLE). Jedes Argument von Von ist nameof eines anderen Parameters desselben Records — kein String-Literal, nicht der Knoten selbst, kein Name "
             + "doppelt. Ein Graph im Graphen ist eine Schachtel: Von an ihm speist seine Köpfe, [Kopf] an ihm macht seine Köpfe zu Köpfen des äußeren, "
             + "Von(nameof(Schachtel)) meint seine Ausgänge (seine Signatur). Kein Builder, keine Liste, keine Knotenarten (docs/04 §4.4).", "error",
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Form des Graphen, eine Quellart als Knoten; Lesart Graphform)"),
@@ -161,9 +161,9 @@ public static class Grammatik
         new("GR-INSTANZ", "Graph läuft als Instanz", "Ein Graph läuft erst als Instanz: eine Datei je Instanz (umgebungen/<name>/graphen/<instanz>.json) "
             + "mit Graph, den Strängen (gleichzeitige Ketten je Host) und je Knoten Parallel, Warteschlange, Wiederholungen, Zeitlimit, "
             + "Technik und die Felder seiner Konfig-Records; einen Akteur nennt sie nicht (die Kette trägt den ihres Auslösers). Jeder Graph läuft je "
-            + "Umgebung genau einmal. Nennt die Instanz einen Rechner, läuft sie nur auf dem Host mit diesem Cluster:Rechner (ein Modell auf seiner GPU); "
-            + "mit Zustand ist der Rechner im Cluster Pflicht, fällt er aus, zieht nichts um (docs/04 §4.4). Eine Quelle ist keine Instanz: sie läuft als "
-            + "Eingang eines Clients (GR-QUELLE).", "error",
+            + "Umgebung genau einmal. Nennt die Instanz einen Rechner des Backends, läuft sie nur dort (ein Modell auf seiner GPU); "
+            + "mit Zustand ist der Rechner im Cluster Pflicht, fällt er aus, zieht nichts um (docs/04 §4.4). Eine Quelle ist keine Instanz: sie läuft mit "
+            + "der Instanz ihrer App (GR-QUELLE, GR-APP).", "error",
             [new("boot", null, "Infrastructure/Funktionen/Graph.cs (GraphInstanzen.Aus: Graph, Knoten, Stränge, je Umgebung einmal, Rechner ein Name)"),
              new("boot", null, "Infrastructure/Funktionen/Rechner.cs (Pflicht des Rechners bei Zustand im Cluster)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsWege.cs (Rechnernamen im Gossip, ein doppelter Name verdrängt den späteren)"),
@@ -231,7 +231,8 @@ public static class Grammatik
             + "Absturz zählt nichts doppelt); eine Instanz mit Zustand "
             + "rechnet im Cluster auf genau einem Knoten, ihrem Rechner (GR-INSTANZ). Was fachlich zählt, steht im Log. Felder mit Setter, "
             + "veränderliche Felder und Sammlungen hinter readonly sind verboten; eine Funktion mit Zustand darf aus einem Eingang allein lernen (Auf "
-            + "ohne Ausgabe) (R19, docs/04 §4.4).", "error",
+            + "ohne Ausgabe) (R19, docs/04 §4.4). Eine Quellart ist ausgenommen: sie hat keinen gesicherten Zustand und merkt sich selbst, was sie "
+            + "gesehen hat (GR-QUELLE).", "error",
             [An("CQRS105", "Domain.SourceGeneration/ZustandAnalyzer.cs"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (höchstens ein Zustand, eigene Klasse; Auf ohne Ausgabe nur mit Zustand)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsAktivierung.cs (je Aktivierung ihr Zustand, Technik über AktivierungsZustaende)"),
@@ -259,28 +260,29 @@ public static class Grammatik
             + "am Knoten, kein Kreis über Technik — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: fehlend, mehrdeutig, Kreis, Konfig)")]),
         new("GR-QUELLE", "Quellart meldet, ein Akteur gibt hinein", "Was draußen gefunden wird, meldet eine QUELLART: eine Klasse mit IQuellart und "
-            + "Lausche(CancellationToken), ein asynchroner Strom ihrer Meldungen (oder eine Annahme, siehe unten); ihr Konstruktor nimmt wie eine Funktion Konfig-Records, IZustand<T>, Technik "
-            + "und ILogger<T>. Sie liegt in einem Katalog (die des Frameworks — Dateiwaechter, Taktgeber, Webhook — in Core/Katalog) und ist nie ein Knoten "
-            + "eines Graphen; eine Funktion lauscht nicht. Eine MELDUNG (record … : IMeldung, in Meldungen.cs des Katalogs) ist kein Command: sie nennt die "
-            + "Kennung ihres Elements aus seinem Inhalt, kein Auf und kein Kopf nimmt sie. Eine Übersetzung der AKTEUR-SEITE (ITranslate<TMeldung, TZiel> in "
-            + "<Wurzel>.Akteure/Uebersetzungen.cs) macht aus ihr eine Nachricht, die ein Akteur darf — so verwirklicht die Quellart den Akteur; welche "
-            + "Quellarten zu einem Akteur passen, folgt aus diesen Übersetzungen. Laufen tut sie als EINGANG eines Clients, der den Akteur verkörpert: in der "
-            + "Umgebung unter Clients:<Client>:Eingaenge:<Eingang> mit Art, Akteur, Rechner, den Werten ihrer Konfig, der Wahl ihrer Technik und der Grenze "
-            + "offener Elemente; im Cluster genau einmal, auf ihrem Rechner. Was sie gesehen hat, sichert sie in ihrem Zustand; nichts davon steht im Log. "
-            + "Eine ANNAHME (IAnnahme<Aufruf>, der Webhook) lauscht nicht: jeder Host nimmt ihre Aufrufe an (POST /eingang/webhook/<Pfad> auf dem "
-            + "Einblick-Port; Schlüssel im Kopf schluessel, wenn der Eingang einen nennt; die Kennung im Kopf kennung ist Pflicht) und antwortet 202 erst, "
-            + "wenn die Nachricht durabel ist — ihr Eingang nennt keinen Rechner, dafür einen Pfad, je Umgebung eindeutig "
+            + "Lausche(CancellationToken), ein asynchroner Strom ihrer Meldungen (oder eine Annahme, siehe unten); ihr Konstruktor nimmt wie eine Funktion Konfig-Records, Technik "
+            + "und ILogger<T> — einen gesicherten Zustand (IZustand<T>) nimmt sie nicht: was sie schon gesehen hat, merkt sie sich selbst, und meldet sie ein "
+            + "Element erneut, trägt es dieselbe Kennung, das Backend verwirft es. Sie liegt in einem Katalog (die des Frameworks — Dateiwaechter, Taktgeber, "
+            + "Webhook — in Core/Katalog) und ist nie ein Knoten eines Graphen; eine Funktion lauscht nicht. Eine MELDUNG (record … : IMeldung, in Meldungen.cs "
+            + "des Katalogs) ist kein Command: sie nennt die Kennung ihres Elements aus seinem Inhalt, kein Auf und kein Kopf nimmt sie. Eine Übersetzung der "
+            + "AKTEUR-SEITE (ITranslate<TMeldung, TZiel> in <Wurzel>.Akteure/Uebersetzungen.cs) macht aus ihr eine Nachricht, die ein Akteur darf — so "
+            + "verwirklicht die Quellart den Akteur; welche Quellarten zu einem Akteur passen, folgt aus diesen Übersetzungen. Laufen tut sie als QUELLE einer "
+            + "App (ein Parameter [Uebersetzt<U>] Quellart Name ihres Records, GR-APP) mit jeder Instanz der App: in der Umgebung apps/<instanz>.json mit "
+            + "Rechner, Token und je Quelle den Werten ihrer Konfig und der Wahl ihrer Technik; im RECHNERDIENST des Rechners der Instanz (Host.Rechner), der "
+            + "über die Leitung hineingibt wie eine App — mit dem Token der Instanz, Ids aus der Kennung, bis zur Quittung. Nichts davon steht im Log. "
+            + "Eine ANNAHME (IAnnahme<Aufruf>, der Webhook) lauscht nicht: der Rechnerdienst nimmt ihre Aufrufe auf dem Port der Instanz an "
+            + "(POST /eingang/webhook/<Pfad>; Schlüssel im Kopf schluessel, wenn die Quelle einen nennt; die Kennung im Kopf kennung ist Pflicht) und "
+            + "antwortet 202 erst nach der Quittung — ihre Werte nennen einen Pfad, je Umgebung eindeutig "
             + "(docs/04 §4.7).", "error",
-            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form von Lausche: nur an einer Quellart, ihre Elemente Meldungen; Lesart Funktionsform)"),
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form von Lausche: nur an einer Quellart, ihre Elemente Meldungen; kein IZustand; Lesart Funktionsform)"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (eine Annahme: IAnnahme<Aufruf>, kein Lausche, keine Eingänge; Lesart Funktionsform)"),
              Comp("IAnnahme<TMeldung> : IQuellart where TMeldung : IMeldung (Abstractions/Quellart.cs)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (eine Quellart als Knoten eines Graphen; Lesart Graphform)"),
              An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TSource einer Übersetzung: eine Meldung ist erlaubt; Lesart Uebersetzungsform)"),
              An("CQRS098", "Domain.SourceGeneration/LageAnalyzer.cs (Quellart und Meldung im Katalog, die Übersetzung der Akteur-Seite bei den Akteuren)"),
-             new("boot", null, "Infrastructure/Quellen/Eingaenge.cs (der Client verkörpert den Akteur, die Art ist eine Quellart, eine Übersetzung passt, Werte und Rechner; eine Annahme ohne Rechner, Pfad Pflicht und eindeutig)"),
-             new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (eine Annahme braucht den Einblick-Port)"),
-             new("laufzeit", null, "Infrastructure/Quellen/QuellLaeufer.cs (je Meldung über die Hineingabe übersetzt und hineingegeben wie eine App, Zustand gesichert, Gegendruck)"),
-             new("laufzeit", null, "Infrastructure/Quellen/Annahmen.cs (Pfad, Schlüssel, Kennung Pflicht, Gegendruck je Host, 202 erst nach der durablen Hineingabe)")]),
+             new("boot", null, "Infrastructure/Quellen/Eingaenge.cs (App, Werte nur für ihre Quellen, Token mit einem Akteur des Clients, je Quelle eine Quellart und ein Akteur, der darf; eine Annahme mit Pfad, eindeutig, und Port)"),
+             new("laufzeit", null, "Client.Infrastructure/Quellen/QuellLaeufer.cs (je Meldung über die Hineingabe übersetzt und über die Leitung hineingegeben, bis zur Quittung)"),
+             new("laufzeit", null, "Client.Infrastructure/Quellen/Annahmen.cs (Pfad und Port, Schlüssel, Kennung Pflicht, 202 erst nach der Quittung)")]),
         // Bündel von Events vor einer Projektion (docs/04 §4.3.1).
         new("GR-BUENDEL", "Bündel: Events eines Schlüssels → eine Projektion", "Ein Auf einer Projektion kann ein Bündel nehmen: Buendel<A, B, …> "
             + "(2 bis 16 verschiedene, persistente Events). Es wird gerufen, sobald zum Schlüssel von jedem Typ ein Event im Log steht, und bei jedem weiteren "
@@ -330,18 +332,25 @@ public static class Grammatik
              Offen("Editor-Sicht: Rahmen „ohne Akteur“ (board.sicht); Fixpunkt im Generator (docs/konzept-akteure.md §2.3)")]),
         new("GR-CLIENT", "Client: nennt nur, wen er verkörpert", "Ein Client (record X : IClient) nennt in seiner Basisliste nur, wen er verkörpert "
             + "(IVerkoerpert<A>) — keine eigenen Member, keine client-internen Typen. Was über seine Leitung geht, sind die IDarf und IHoert seiner "
-            + "Akteure; Handshake-Name ist der Record-Name.", "error",
+            + "Akteure; umgesetzt wird er von Apps (GR-APP).", "error",
             [An("CQRS063", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form)"),
-             new("generator", null, "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (GeneratedClientVertraege, Client-Hash)"),
-             new("laufzeit", null, "Infrastructure/GrpcClient/CqrsClientService.cs (Handshake je Client, verkörpert ∩ Token)")]),
+             new("generator", null, "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (GeneratedClientVertraege)")]),
+        new("GR-APP", "App: setzt einen Client um", "Eine App (record X(…) : IApp<Client>, in Apps.cs bei den Akteuren) ist die konkrete Software eines "
+            + "Clients und sein Vertrag an der Leitung (Handshake-Name = Name der App). Je Nachricht des Clients setzt sie entweder die App selbst um oder eine "
+            + "Quelle: jeder Parameter ist eine Quellart mit [Uebersetzt<U>], U eine Übersetzung der Akteur-Seite aus einer Meldung der Quellart in einen "
+            + "Command, den ein Akteur des Clients darf; eine Nachricht mit Quelle steht nicht im Vertrag der App. Sonst nennt und deklariert sie nichts.", "error",
+            [An("CQRS125", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form: Record, Parameter = Quellarten mit Übersetzung)"),
+             An("CQRS126", "Domain.SourceGeneration/AkteurAnalyzer.cs (Übersetzung aus einer Meldung der Quellart in ein IDarf des Clients)"),
+             new("generator", null, "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (GeneratedAppVertraege, Hash je App)"),
+             new("laufzeit", null, "Infrastructure/GrpcClient/SitzungsActor.cs (Handshake je App, verkörpert ∩ Token)")]),
         new("GR-CLIENT-BEFUGT", "Client verkörpert Akteure", "Ein Client verkörpert nur konkrete Akteure (IVerkoerpert<A>); befugt ist der Akteur, nicht "
             + "die Software. Wirksam ist an jeder Sitzung verkörpert ∩ Token, für beide Richtungen (hinein wie gehört).", "error",
             [An("CQRS064", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Infrastructure/Akteure/ClientVertrag.cs (Rechte = verkörperte Akteure ∩ Token)")]),
-        new("GR-CLIENT-CODE", "Client-Code = seine Akteure", "Eine C#-Client-Assembly nennt ihren Client ([assembly: IstClient<X>]); was ihr Code an "
-            + "Commands erzeugt und an Queries stellt, muss ein verkörperter Akteur dürfen (IDarf), worauf ein Handler hört, muss einer hören (IHoert) — "
-            + "abonniert wird nur das.", "error",
-            [Gen("CQRS093", "Client.SourceGeneration/ClientVertrag.cs (Client-Assembly nennt ihren Client nicht)"),
-             An("CQRS095", "Client.SourceGeneration/ClientVertrag.cs (Command darf kein verkörperter Akteur)"),
+        new("GR-CLIENT-CODE", "App-Code = ihr Vertrag", "Eine C#-Client-Assembly nennt ihre App ([assembly: IstApp<X>]); was ihr Code an "
+            + "Commands erzeugt, muss im Vertrag der App stehen (ein Akteur ihres Clients darf es, keine Quelle der App erzeugt es), was er an Queries stellt, "
+            + "muss ein Akteur dürfen, worauf ein Handler hört, muss einer hören (IHoert) — abonniert wird nur das.", "error",
+            [Gen("CQRS093", "Client.SourceGeneration/ClientVertrag.cs (Client-Assembly nennt ihre App nicht)"),
+             An("CQRS095", "Client.SourceGeneration/ClientVertrag.cs (Command nicht im Vertrag der App)"),
              An("CQRS096", "Client.SourceGeneration/ClientVertrag.cs (Query darf kein verkörperter Akteur)"),
              An("CQRS097", "Client.SourceGeneration/ClientVertrag.cs (Server-Event nicht Kenntnis)")]),
         new("GR-MODUL-EINGANG-OFFEN", "Eingang ohne Konsument", "Ein Command oder eine Query, die niemand konsumiert — offener Eingang des Moduls.", "warning",

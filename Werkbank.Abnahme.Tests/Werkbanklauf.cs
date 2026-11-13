@@ -92,7 +92,7 @@ public sealed class Werkbanklauf : IAsyncDisposable
     }
 
     /// <summary>
-    /// <c>umgebung.abnahme.json</c> aus <c>sim-main</c>: eigene Ports, Daten-Pfade im Temp-Verzeichnis (die Clients mit ihrem Worker wie dort).
+    /// <c>umgebung.abnahme.json</c> aus <c>sim-main</c>: eigene Ports, Daten-Pfade im Temp-Verzeichnis (die Instanzen der Graphen und Apps wie dort).
     /// DB und Cluster folgen über <c>${branch}</c> dem Branch der Kopie.
     /// </summary>
     private async Task SchreibeUmgebungAsync()
@@ -106,10 +106,14 @@ public sealed class Werkbanklauf : IAsyncDisposable
         var ziel = Path.Combine(verz, Umgebung);
         Directory.CreateDirectory(Path.Combine(ziel, "graphen"));
         await File.WriteAllTextAsync(Path.Combine(ziel, "umgebung.json"), u.ToJsonString(new() { WriteIndented = true }));
-        foreach (var datei in Directory.GetFiles(Path.Combine(verz, "sim-main", "graphen"), "*.json"))
+        foreach (var ordner in new[] { "graphen", "apps" })
         {
-            var instanz = JsonNode.Parse(Lies(datei))!.AsObject();
-            await File.WriteAllTextAsync(Path.Combine(ziel, "graphen", Path.GetFileName(datei)), instanz.ToJsonString(new() { WriteIndented = true }));
+            Directory.CreateDirectory(Path.Combine(ziel, ordner));
+            foreach (var datei in Directory.GetFiles(Path.Combine(verz, "sim-main", ordner), "*.json"))
+            {
+                var instanz = JsonNode.Parse(Lies(datei))!.AsObject();
+                await File.WriteAllTextAsync(Path.Combine(ziel, ordner, Path.GetFileName(datei)), instanz.ToJsonString(new() { WriteIndented = true }));
+            }
         }
 
         _verbindung = (string)u["EventStore"]!["Verbindung"]!;

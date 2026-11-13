@@ -2,9 +2,9 @@ using Abstractions;
 using Client.Infrastructure.Reaktionen;
 using Domain.Akteure;
 
-// Dieser Client IST der ReaktionsWorker (docs/konzept-akteure.md §4): er verkörpert den Datensatzpfleger und den Teilmelder — was sie hören und
-//   dürfen, steht dort.
-[assembly: IstClient<ReaktionsWorker>]
+// Diese Assembly IST die ReaktionsApp (docs/konzept-akteure.md §4) des Clients ReaktionsWorker: er verkörpert den Datensatzpfleger und den
+//   Teilmelder — was sie hören und dürfen, steht dort.
+[assembly: IstApp<ReaktionsApp>]
 
 namespace Domain.Client.Worker;
 

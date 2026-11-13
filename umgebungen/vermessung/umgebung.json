@@ -11,11 +11,18 @@
     "Schema": "es"
   },
   "Cluster": {
-    "Art": "Consul",
     "Name": "cqrs-vermessung",
-    "Consul": "localhost:8500",
-    "AdvertisedHost": "localhost",
-    "Rechner": "messrechner"
+    "Consul": "localhost:8500"
+  },
+  "Rechner": {
+    "localhost": {
+      "Adresse": "localhost"
+    }
+  },
+  "Backend": {
+    "Rechner": [
+      "localhost"
+    ]
   },
   "Transport": {
     "GrpcPort": 5201,
@@ -30,25 +37,6 @@
       "vermessung-kioperator": "KIOperator",
       "vermessung-inspekteur": "Inspekteur",
       "vermessung-arbeitsplatz": "Inspekteur,KIOperator,Modellfreigeber,Produktpruefer"
-    }
-  },
-  "Clients": {
-    "Linienrechner": {
-      "Eingaenge": {
-        "linie1": {
-          "Art": "Dateiwaechter",
-          "Akteur": "KameraSystem",
-          "Rechner": "messrechner",
-          "Pfad": "${env:HOME}/cqrs-vermessung/DateiErkannt",
-          "Muster": [
-            "*.tiff"
-          ],
-          "Intervall": "00:00:01",
-          "Fertig": "Stabil",
-          "Fenster": "00:00:01",
-          "Kennung": "NameGroesse"
-        }
-      }
     }
   }
 }

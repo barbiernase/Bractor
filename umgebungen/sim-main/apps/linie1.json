@@ -1,0 +1,14 @@
+{
+  "App": "KameraApp",
+  "Rechner": "localhost",
+  "Token": "sim-kamerasystem",
+  "Quellen": {
+    "Kamera": {
+      "Pfad": "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
+      "Intervall": "00:00:01",
+      "Fertig": "Stabil",
+      "Fenster": "00:00:01",
+      "Kennung": "PfadGroesseZeit"
+    }
+  }
+}

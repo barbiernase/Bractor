@@ -34,7 +34,7 @@
     m.bausteinFunktionen=m.bausteinFunktionen||[];m.bausteinFunktionen.forEach(f=>{f.eingaenge=f.eingaenge||[];f.umsetzungen=f.umsetzungen||[];
       f.methoden=f.methoden||[];f.methoden.forEach(x=>{x.parameter=x.parameter||[];});f.umsetzungen.forEach(u=>{u.konstruktor=u.konstruktor||[];});});
     // Graph (docs/04 §4.4): record X(Knoten…) : IGraph — je Knoten Typ, Name, [Kopf], [Von(nameof(…))] (verlierbar je Quelle). Köpfe, Ausgänge und
-    //   Kanten liefert der Server (abgeleitet). Ein Graph kennt keine Quelle: Quellarten (IQuellart) laufen als Eingänge eines Clients.
+    //   Kanten liefert der Server (abgeleitet). Ein Graph kennt keine Quelle: Quellarten (IQuellart) sind Parameter einer App.
     m.graphen=m.graphen||[];m.graphen.forEach(g=>{if(!g._id)g._id="graph:"+g.name;g.knoten=g.knoten||[];g.knoten.forEach(k=>{k.von=k.von||[];k.verlierbar=k.verlierbar||[];});});
     m.uebersetzungen=m.uebersetzungen||[];m.uebersetzungen.forEach(u=>{if(!u._id)u._id="uebersetzung:"+u.name;u.felder=u.felder||[];});
     // Quellart (IQuellart, docs/04 §4.7): was sie meldet (IMeldung), ihr Konstruktor, ihr Katalog — framework = Core/Katalog. Kein Knoten eines Graphen.
@@ -70,7 +70,7 @@
     return MODEL.aggregate[0]?.namespace||MODEL.records[0]?.namespace||(w?w+".Neu":"Neu");}
 
   function h(tag,attrs,...kids){const e=document.createElement(tag);
-    for(const k in (attrs||{})){if(k==="class")e.className=attrs[k];else if(k.startsWith("on"))e[k]=attrs[k];else if(k==="value")e.value=attrs[k];else e.setAttribute(k,attrs[k]);}
+    for(const k in (attrs||{})){if(k==="class")e.className=attrs[k];else if(k.startsWith("on"))e[k]=attrs[k];else if(k==="value")e.value=attrs[k];else if(attrs[k]===false||attrs[k]==null)continue;else e.setAttribute(k,attrs[k]===true?"":attrs[k]);}
     for(const kid of kids)if(kid!=null)e.append(kid.nodeType?kid:document.createTextNode(kid));return e;}
   const inp=(val,on,ph)=>h("input",{value:val??"",oninput:e=>on(e.target.value),placeholder:ph||""});
   const codearea=(val,on,ph)=>{const t=h("textarea",{class:"code",oninput:e=>on(e.target.value),placeholder:ph||"",rows:Math.max(3,String(val||"").split("\n").length+1)});t.value=val??"";return t;};
@@ -116,7 +116,7 @@
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
   // Alle vergebenen Typnamen — jede Sammlung darf fehlen (das Modell kennt nicht jede in jedem Stand).
   function uniq(base){const namen=k=>(MODEL[k]||[]).map(x=>x.name);
-    const all=new Set([...["records","aggregate","enums","graphen","readModels","stores","projektionen","reader","akteure","clients"].flatMap(namen),
+    const all=new Set([...["records","aggregate","enums","graphen","readModels","stores","projektionen","reader","akteure","clients","apps"].flatMap(namen),
     ...(MODEL.bausteinFunktionen||[]).flatMap(x=>[x.name,...(x.umsetzungen||[]).map(u=>u.name)])]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
@@ -1877,41 +1877,47 @@
       btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
       h("span",{style:"margin-left:8px"},"Klick = Kette hervorheben · Doppelklick = öffnen und bearbeiten · vom Port ziehen = verbinden · Esc = fertig"));}
 
-  // ══ FLÄCHE IN SIEBEN SPALTEN (docs/10 §10.9): Clients (je Client seine Eingänge in der aktiven Umgebung) · was Akteure hineingeben · Graphen ·
-  //   Übersetzungen · Aggregate · Projektionen · was zu Akteuren kommt. Karten, Ports, Bänder und Kanten rechnet der Server (board.sicht.flaeche, die
-  //   Eingänge je Umgebung in flaeche.eingaenge); hier nur Auswahl der aktiven Umgebung, Anordnung und Zeichnen. Eine Karte der Fläche öffnet
+  // ══ FLÄCHE IN ACHT SPALTEN (docs/10 §10.9): Rechner (je Rechner der aktiven Umgebung seine App-Instanzen) · Clients · was Akteure hineingeben ·
+  //   Graphen · Übersetzungen · Aggregate · Projektionen · was zu Akteuren kommt. Karten, Ports, Bänder und Kanten rechnet der Server
+  //   (board.sicht.flaeche, Rechner und App-Instanzen je Umgebung in flaeche.rechner); hier nur Auswahl der aktiven Umgebung, Anordnung und Zeichnen. Eine Karte der Fläche öffnet
   //   (Doppelklick) die Karte der Sicht dahinter im Modal, ein Port den Typ seiner Nachricht; ein Klick hebt die Kette hervor.
-  const FL_SPALTE={clients:{t:"Clients",u:"je Client seine Eingänge in der Umgebung — ＋ Eingang an der Karte",neu:[]},
-    ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf) — je Client gruppiert",neu:[]},
+  const FL_SPALTE={rechner:{t:"Rechner",u:"je Rechner seine App-Instanzen — ＋ App an der Karte",neu:["rechner"]},
+    clients:{t:"Clients",u:"was die Apps umsetzen — wen sie verkörpern",neu:[]},
+    ausgang:{t:"Akteure — darf",u:"was Akteure hineingeben",neu:[]},
     graphen:{t:"Graphen",u:"rechnen vor dem Aggregat",neu:["graph"]},
     uebersetzungen:{t:"Übersetzungen",u:"Nachricht ↦ Command — Ausgang anklicken, dann den Command am Aggregat",neu:[]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
-    projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["store"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört) — je Client gruppiert",neu:[]}};
-  const FL_SYM={client:"🔌",akteur:"👤",graph:"⬡",uebersetzung:"↦",aggregate:"▣",projektion:"⇶",reader:"⌕",store:"🗄"};
+    projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["store"]},eingang:{t:"Akteure — hört",u:"was zu Akteuren kommt",neu:[]}};
+  const FL_SYM={rechner:"🖥",client:"🔌",akteur:"👤",graph:"⬡",uebersetzung:"↦",aggregate:"▣",projektion:"⇶",reader:"⌕",store:"🗄"};
   const FL_SORTE={command:"",event:"",hinweis:"✉ ",query:"? ",antwort:"↩ ",frist:"⏱ "};
   // Kantenarten: Farbe, Strich, leise (tritt zurück, bis eine ihrer Karten gewählt ist).
-  const FL_KANTE={reaktion:{c:"#e08a3c",d:"8 5",leise:1},schreiben:{c:"#9aa6bb"},lesen:{c:"#7aa2e0",d:"2 4",leise:1},kenntnis:{c:"#8a8f9c",d:"6 4",leise:1},
+  const FL_KANTE={app:{c:"#5fae8a"},verkoerpert:{c:"#b8a66e",d:"3 4",leise:1},schreiben:{c:"#9aa6bb"},lesen:{c:"#7aa2e0",d:"2 4",leise:1},kenntnis:{c:"#8a8f9c",d:"6 4",leise:1},
     ruecklauf:{c:"#e08a3c",d:"8 5"},liest:{c:"#a07ad6",d:"1 4",leise:1},eingang:{c:"#5fae8a"}};
-  const FL_LEER={spalten:["clients","ausgang","graphen","uebersetzungen","aggregate","projektionen","eingang"],baender:[],gruppen:[],karten:[],kanten:[]};
-  // Die aktive Umgebung (Kopfzeile) — ihre Eingänge stehen an den Client-Karten; die Kanten Eingang → Akteur kommen zu denen der Fläche dazu.
+  const FL_LEER={spalten:["rechner","clients","ausgang","graphen","uebersetzungen","aggregate","projektionen","eingang"],baender:[],gruppen:[],karten:[],kanten:[]};
+  // Die aktive Umgebung (Kopfzeile) — ihre Rechner (Spalte Rechner) samt App-Instanzen und deren Kanten kommen zu denen der Fläche dazu.
   const flUmgebung=()=>{try{return WB.umgName||(WB.zustand||{}).aktiv||null;}catch(e){return null;}};
-  const FL_EING_LEER={karten:{},kanten:[],befunde:[],cluster:false};
-  const flEing=()=>((SICHT().flaeche||{}).eingaenge||{})[flUmgebung()]||FL_EING_LEER;
+  // Rechner und Backend der aktiven Umgebung (board.sicht.flaeche.rechner, Sicht.Rechner.cs): der Pool, das Backend, je Instanz eines Graphen ihr
+  //   Rechner, die App-Instanzen (apps) und was die Fläche dazu zeichnet (karten der Spalte Rechner, kanten Rechner → Client und Quelle → Akteur).
+  const FL_RE_LEER={pool:[],backend:[],befunde:[],instanzen:{},apps:{},karten:[],kanten:[],einzelknoten:true};
+  const flRe=()=>((SICHT().flaeche||{}).rechner||{})[flUmgebung()]||FL_RE_LEER;
   let FL_CACHE={f:null,u:null,v:null};
   const FL=()=>{const f=SICHT().flaeche||FL_LEER,u=flUmgebung();if(FL_CACHE.f===f&&FL_CACHE.u===u)return FL_CACHE.v;
-    const e=(f.eingaenge||{})[u],v=e&&(e.kanten||[]).length?{...f,kanten:[...f.kanten,...e.kanten]}:f;FL_CACHE={f,u,v};return v;};
+    const r=(f.rechner||{})[u],v=r?{...f,karten:[...(r.karten||[]),...f.karten],kanten:[...f.kanten,...(r.kanten||[])]}:f;FL_CACHE={f,u,v};return v;};
   // Aggregat und Store von innen (board.sicht.innen, GraphExtractor.Kern/Sicht/Sicht.Innen.cs): Verwendungen je Typ, was an einen „＋“ passt, die
   //   Read-Models je Fähigkeit. Regeln als Daten aus der Grammatik (rahmen.grammatik: Store-Klassen, Bündel, Typname). Der Editor schlägt nur nach (W3).
   const INNEN=()=>SICHT().innen||{verwendungen:{},aggregate:{},handles:{},readModels:{}};
   const GRAM=()=>(MODEL.rahmen||{}).grammatik||{};
   const typnameMuster=()=>String(GRAM().typname||"^$");
-  const FL_KOPF=96, FL_BAND_PAD=30, FL_GAP_Y=16, FL_GR_KOPF=22, FL_GR_PAD=10;
+  const FL_KOPF=96, FL_BAND_PAD=30, FL_GAP_Y=16, FL_GR_KOPF=22, FL_GR_PAD=10, FL_RE_ZEILE=26;
+  // Unter den Spaltenköpfen ein Streifen für die Karte Backend (über Graphen bis Projektionen).
+  const flStreifen=()=>{const R=flRe();return 62+(R.befunde||[]).length*18+40;};
+  const flOben=()=>FL_KOPF+flStreifen();
   let FLGEO={spalten:{},baender:[],gruppen:new Map()}, FLKARTE=new Map();
   // Die Panel-Karte einer Flächen-Karte: die Karte der Sicht dahinter.
   function flPanelId(fk){return fk.karte||null;}
   // Ein Graph (Name) — für seine Instanz.
   function flGraphName(fk){return fk.art==="graph"?fk.name:null;}
   // Was gezeigt wird: die geladenen Domänen (Start-Dialog) — Akteure immer, sonst nach der Panel-Karte.
-  function flSichtbar(fk){if(fk.art==="akteur"||fk.art==="client"||LADEN===null)return true;const n=NODEBY.get(flPanelId(fk)||"");return !n||geladen(n);}
+  function flSichtbar(fk){if(fk.art==="akteur"||fk.art==="client"||fk.art==="rechner"||LADEN===null)return true;const n=NODEBY.get(flPanelId(fk)||"");return !n||geladen(n);}
   function flKarten(){return FL().karten.filter(flSichtbar);}
   // ── Fläche: anschließen über „＋“ am Port (nie Pfeile von Hand). Der „＋“ hebt die Ports hervor, die passen; ein Klick verbindet, Esc bricht ab.
   //   Akteur links „＋ darf“ → Eingänge (Command, Query) von Graphen, Aggregaten, Readern; Akteur rechts „＋ hört“ → Ausgänge (Event,
@@ -2006,46 +2012,66 @@
     menueFix(ev.clientX,ev.clientY,"Eingang von "+g.name,[{kopf:"Client — ein Akteur gibt hinein"},
       {t:"👤 Ein Akteur darf einen Eingang direkt … (im Modal Akteure und Clients)",fn:()=>aktOeffne(MODEL.akteure[0]?"akt:"+MODEL.akteure[0]._id:"")},
       ...ein.map(t=>({t:"↦ "+t+" aus einer Nachricht einer Domäne …",fn:()=>komKopfUebersetzung(t,ev)}))]);}
-  // ══ CLIENTS AUF DER FLÄCHE (docs/10 §10.9): je Client eine Karte, darin je Eingang der aktiven Umgebung eine Zeile (Name, Quellart, Rechner, die
-  //   wichtigsten Werte, Befunde wie beim Start) und seine App-Verbindung; von jedem Eingang eine Kante zum Akteur, für den er hineingibt. Was dort
-  //   steht, rechnet der Server (flaeche.eingaenge[Umgebung].karten); „＋ Eingang“ an der Karte (nur Quellarten, die einen verkörperten Akteur
-  //   verwirklichen), Doppelklick auf einen Eingang öffnet sein Formular, ✕ entfernt ihn — jedes eine Geste an umgebung.json (↶).
-  const eingangId=(client,name)=>"host:eing:"+client+"/"+name;
-  const eingangPfad=(client,name)=>"/api/werkbank/eingang/"+encodeURIComponent(flUmgebung()||"")+"/"+encodeURIComponent(client)+"/"+encodeURIComponent(name);
+  // ══ RECHNER UND APP-INSTANZEN AUF DER FLÄCHE (docs/10 §10.9, docs/10 E18): je Rechner des Pools der aktiven Umgebung eine Karte in der
+  //   Spalte Rechner — Adresse, ob er zum Backend gehört, je App-Instanz eine Zeile (App, Port) und darunter ihre Quellen (Quellart, ↦ Nachricht, für
+  //   welchen Akteur, die wichtigsten Werte, Befunde wie beim Start). Von der Instanz geht eine Kante zum Client, den die App umsetzt, von jeder Quelle eine
+  //   zum Akteur, für den sie hineingibt. Was dort steht, rechnet der Server (flaeche.rechner[Umgebung]); „＋ App“ an der Karte, Doppelklick auf eine
+  //   Instanz öffnet ihr Formular, ✕ entfernt sie — jedes eine Geste an apps/<instanz>.json (↶).
+  const appId=n=>"host:app:"+n;
+  const appPfad=n=>"/api/werkbank/app/"+encodeURIComponent(flUmgebung()||"")+"/"+encodeURIComponent(n);
   const clientName=fk=>{const c=aktVonKarte(fk.karte);return c?c.name:fk.name;};
-  function flClientInnen(fk){const E=(flEing().karten||{})[fk.id]||{eingaenge:[]},box=h("div",{class:"fl-cl"}),cn=clientName(fk);
+  function flRechnerInnen(fk){const R=flRe(),r=R.pool.find(x=>x.name===fk.name)||{name:fk.name,dort:[],befunde:[]},box=h("div",{class:"fl-cl"});
     ["pointerdown"].forEach(x=>box.addEventListener(x,e=>e.stopPropagation()));
-    if(E.app){const a=E.app;box.append(h("div",{class:"fl-cl-z app",title:"App-Verbindung (Clients:"+cn+" im Host-Rahmen 🔌): "+Object.entries(a).map(([k,v])=>k+" "+v).join(" · ")},
-      h("div",{class:"fl-cl-t"},"📡 App"),h("div",{class:"fl-cl-w"},a.worker?"Worker "+a.worker:a.token?"Token "+a.token:a.adresse||a.urls||"")));}
-    (E.eingaenge||[]).forEach(e=>{const bef=e.befunde||[];
-      const z=h("div",{class:"fl-cl-z"+(bef.length?" befund":""),title:"Eingang "+e.name+" · "+e.art+" für "+e.akteur+(bef.length?"\n⚠ "+bef.join("\n⚠ "):"")+"\nDoppelklick: Formular",
-        ondblclick:ev=>{ev.stopPropagation();komKarte(eingangId(cn,e.name));},onclick:ev=>ev.stopPropagation()},
-        h("div",{class:"fl-cl-t"},h("span",{},"⚡ "+e.name),h("span",{class:"fl-cl-art"},e.art),
+    const wer=(r.dort||[]).map(d=>d.art==="backend"?"das Backend":d.art==="instanz"?"⬡ Instanz "+d.name:"📦 "+d.name);
+    box.append(h("div",{class:"fl-re-z"+((r.befunde||[]).length?" befund":""),title:r.name+" · "+(r.adresse||"keine Adresse")+(wer.length?"\nhier: "+wer.join(", "):"\nnoch nichts zugewiesen")},
+      h("span",{class:"fl-re-a"},!r.adresse?"⚠ keine Adresse":r.adresse===r.name?"":"📍 "+r.adresse),r.backend?h("span",{class:"fl-re-tag"},"Backend"):null,
+      h("button",{class:"fl-re-x",title:"Adresse ändern",onclick:e=>{e.stopPropagation();reAdresse(r,e);}},"✎"),
+      h("button",{class:"fl-re-x",disabled:wer.length>0||R.pool.length<2,title:wer.length?"Wird noch genannt: "+wer.join(", "):R.pool.length<2?"Der Pool braucht mindestens einen Rechner":"Aus dem Pool nehmen",
+        onclick:async e=>{e.stopPropagation();if(!confirm("Rechner "+r.name+" aus dem Pool von „"+flUmgebung()+"“ nehmen?"))return;await instanzGeste(rechnerPfad(r.name),"DELETE",undefined,"🖥 Rechner "+r.name+" entfernt");}},"✕")));
+    (r.befunde||[]).forEach(b=>box.append(h("div",{class:"fl-re-bef"},"⚠ "+b)));
+    const apps=(r.dort||[]).filter(d=>d.art==="app");
+    apps.forEach(d=>{const A=(R.apps||{})[d.name]||{quellen:[],befunde:[]},bef=A.befunde||[];
+      const z=h("div",{class:"fl-cl-z app"+(bef.length?" befund":""),title:"App-Instanz "+d.name+" · "+(A.app||"?")+(A.client?" — setzt "+A.client+" um":"")+(A.port?" · Port "+A.port:"")
+          +(A.token?" · Token "+A.token:"")+(bef.length?"\n⚠ "+bef.join("\n⚠ "):"")+"\nDoppelklick: Formular",
+        ondblclick:ev=>{ev.stopPropagation();komKarte(appId(d.name));},onclick:ev=>ev.stopPropagation()},
+        h("div",{class:"fl-cl-t"},h("span",{},"📦 "+d.name),h("span",{class:"fl-cl-art"},(A.app||"?")+(A.port?" :"+A.port:"")),
           bef.length?h("span",{class:"gdiag warn"},"⚠ "+bef.length):null,
-          h("button",{class:"ag-los",title:"Eingang "+e.name+" entfernen",onclick:ev=>{ev.stopPropagation();
-            menueFix(ev.clientX,ev.clientY,"✕ Eingang "+e.name+" entfernen?",[{hinweis:"aus umgebungen/"+flUmgebung()+"/umgebung.json (↶ nimmt es zurück)"},
-              {t:"✕ entfernen",gefahr:1,fn:()=>instanzGeste(eingangPfad(cn,e.name),"DELETE",undefined,"⚡ Eingang "+cn+"/"+e.name+" entfernt")}]);}},"✕")),
-        h("div",{class:"fl-cl-w"},"🖥 "+(e.annahme?"jeder Host nimmt an":e.rechner||(flEing().cluster?"⚠ ohne Rechner":"auf dem Host"))+" · für 👤 "+(e.akteur||"?")),
-        ...(e.kurz||[]).map(k=>h("div",{class:"fl-cl-w leise",title:k},k)));
-      z.dataset.eingang=e.name;box.append(z);});
-    if(!E.app&&!(E.eingaenge||[]).length)box.append(h("div",{class:"fl-cl-w leise"},"in „"+(flUmgebung()||"?")+"“ ohne Eingang"));
+          h("button",{class:"ag-los",title:"App-Instanz "+d.name+" entfernen",onclick:ev=>{ev.stopPropagation();
+            menueFix(ev.clientX,ev.clientY,"✕ App-Instanz "+d.name+" entfernen?",[{hinweis:"umgebungen/"+flUmgebung()+"/apps/"+d.name+".json (↶ nimmt es zurück)"},
+              {t:"✕ entfernen",gefahr:1,fn:()=>instanzGeste(appPfad(d.name),"DELETE",undefined,"📦 App-Instanz "+d.name+" entfernt")}]);}},"✕")));
+      z.dataset.app=d.name;box.append(z);
+      (A.quellen||[]).forEach(q=>{const qb=q.befunde||[];
+        const qz=h("div",{class:"fl-cl-z quelle"+(qb.length?" befund":""),title:"Quelle "+q.name+" · "+q.quellart+(q.akteur?" für "+q.akteur:"")
+            +((q.gibt||[]).length?" · "+q.gibt.map(g=>g.uebersetzung+" ↦ "+g.typ).join(", "):"")
+            +"\nläuft im Rechnerdienst von "+(A.rechner||"?")+" und gibt über die Leitung hinein"+(qb.length?"\n⚠ "+qb.join("\n⚠ "):"")+"\nDoppelklick: Formular der Instanz",
+          ondblclick:ev=>{ev.stopPropagation();komKarte(appId(d.name));},onclick:ev=>ev.stopPropagation()},
+          h("div",{class:"fl-cl-t"},h("span",{},"⚡ "+q.name),h("span",{class:"fl-cl-art"},q.quellart),qb.length?h("span",{class:"gdiag warn"},"⚠ "+qb.length):null),
+          ...(q.gibt||[]).map(g=>h("div",{class:"fl-cl-w"},"↦ "+g.typ+(q.akteur?" · für 👤 "+q.akteur:""))),
+          ...(q.kurz||[]).map(k=>h("div",{class:"fl-cl-w leise",title:k},k)));
+        qz.dataset.eingang=d.name+"/"+q.name;box.append(qz);});
+      if(A.selbst)box.append(h("div",{class:"fl-cl-w leise fl-cl-selbst",title:"Die übrigen Commands des Clients gibt die App selbst hinein (Oberfläche, Code)"},
+        "übrige "+A.selbst+" Commands: die App selbst"));});
+    if(!apps.length)box.append(h("div",{class:"fl-cl-w leise"},"noch keine App — ＋ App"));
     return box;}
-  // ＋ Eingang: erst die Quellart (nur die, die einen verkörperten Akteur verwirklichen — der Server nennt sie), bei mehreren Akteuren der Akteur, dann der Name.
-  function flEingangNeu(fk,ev){const K=fk.kandidaten||{arten:[],ohne:[]},cn=clientName(fk),u=flUmgebung();
-    const ohne=(K.ohne||[]).map(an=>{const A=MODEL.akteure.find(x=>x.name===an);
-      return {t:"👤 "+an+": noch keine Verwirklichung — im Modal Akteure und Clients …",fn:()=>aktOeffne(A?"akt:"+A._id:fk.karte)};});
-    if(!u){deFlash("⚠ Keine Umgebung gewählt",false);return;}
-    if(!(K.arten||[]).length){menueFix(ev.clientX,ev.clientY,"＋ Eingang von "+cn,[{hinweis:"Keine Quellart verwirklicht einen Akteur von "+cn+" — eine Verwirklichung (Quellart ↦ Nachricht) legt man im Modal „Akteure und Clients“ an."},
-      ...ohne,...(ohne.length?[]:[{t:"🔌 "+cn+" im Modal öffnen …",fn:()=>aktOeffne(fk.karte)}])]);return;}
-    const benennen=(art,akteur)=>frageFix(ev.clientX,ev.clientY,"⚡ Neuer Eingang: "+art+" für "+akteur,"","Name des Eingangs in „"+u+"“ (Buchstaben, Ziffern, - und _)",n=>{
+  // Ein Client: die Apps, die ihn umsetzen (Code), und seine Reaktionen (er reagiert auf, was seine Akteure hören, mit dem, was sie dürfen).
+  function flClientInnen(fk){const box=h("div",{class:"fl-cl"});
+    (fk.apps||[]).forEach(a=>box.append(h("div",{class:"fl-cl-w",style:"cursor:pointer",title:"App "+a.name+" setzt "+fk.name+" um — Klick: im Modal",
+      onclick:ev=>{ev.stopPropagation();aktOeffne(a.karte);}},"📦 "+a.name)));
+    if(!(fk.apps||[]).length)box.append(h("div",{class:"fl-cl-w leise"},"noch keine App — ＋ App im Modal"));
+    if((fk.reagiert||[]).length)box.append(h("div",{class:"fl-cl-w leise",title:"Er reagiert auf, was seine Akteure hören, mit dem, was sie dürfen"},"↻ reagiert: "+fk.reagiert.join(", ")));
+    return box;}
+  // ＋ App an einem Rechner: erst die App (aus dem Code), dann der Name der Instanz, dann ihr Port (leer = keiner); danach öffnet ihr Formular.
+  function flAppNeu(fk,ev){const u=flUmgebung(),apps=[...(MODEL.apps||[])].sort((x,y)=>x.name.localeCompare(y.name,"de"));if(!u){deFlash("⚠ Keine Umgebung gewählt",false);return;}
+    if(!apps.length){menueFix(ev.clientX,ev.clientY,"＋ App auf "+fk.name,[{hinweis:"Noch keine App im Code — eine App legt man im Modal „Akteure, Clients und Apps“ am Client an (＋ App)."}]);return;}
+    const benennen=a=>frageFix(ev.clientX,ev.clientY,"📦 "+a.name+" auf "+fk.name,a.name.replace(/App$/,"").toLowerCase(),"Name der Instanz (Datei apps/<name>.json; Buchstaben, Ziffern, - und _)",n=>{
       if(!/^[A-Za-z0-9_-]+$/.test(n))return "Ein Name aus Buchstaben, Ziffern, - und _";
-      if(((((WB.umg||{}).Clients||{})[cn]||{}).Eingaenge||{})[n])return n+" gibt es schon";
-      instanzGeste(eingangPfad(cn,n),"POST",{Art:art,Akteur:akteur},"⚡ Eingang "+cn+"/"+n+" angelegt").then(ok=>{if(ok)komKarte(eingangId(cn,n));});});
-    const art=a=>a.akteure.length===1?benennen(a.art,a.akteure[0])
-      :menueFix(ev.clientX,ev.clientY,"⚡ "+a.art+" — für welchen Akteur?",a.akteure.map(an=>({t:"👤 "+an,fn:()=>benennen(a.art,an)})));
-    menueFix(ev.clientX,ev.clientY,"＋ Eingang von "+cn+" in „"+u+"“ — welche Quellart?",[
-      ...K.arten.map(a=>({t:"⚡ "+a.art+(a.framework?" (Framework)":"")+" · für "+a.akteure.join(", "),fn:()=>art(a)})),
-      ...(ohne.length?[{trenn:1},...ohne]:[])]);}
+      if((flRe().apps||{})[n])return n+" gibt es schon";
+      setTimeout(()=>frageFix(ev.clientX,ev.clientY,"📦 "+n+" — Port auf "+fk.name,"","Leer = keiner (eine App ohne Oberfläche)",p=>{
+        if(p&&!/^\d+$/.test(p))return "Eine Zahl oder leer";
+        const inhalt={App:a.name,Rechner:fk.name};if(p)inhalt.Port=Number(p);
+        instanzGeste(appPfad(n),"POST",inhalt,"📦 App-Instanz "+n+" auf "+fk.name).then(ok=>{if(ok)komKarte(appId(n));});return null;}),0);return null;});
+    menueFix(ev.clientX,ev.clientY,"＋ App auf "+fk.name+" in „"+u+"“ — welche App?",apps.map(a=>({t:"📦 "+a.name+" · setzt "+a.client+" um"
+      +((a.quellen||[]).length?" · Quellen: "+a.quellen.map(q=>q.name+" ("+q.quellart+")").join(", "):""),fn:()=>benennen(a)})));}
   function flKarteEl(fk){
     const pid=flPanelId(fk),n=pid?NODEBY.get(pid):null;
     const dg=n?diagFuer(n.id):[],nurWarn=dg.length>0&&dg.every(x=>x.art==="warnung");
@@ -2061,8 +2087,8 @@
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
       fk.art==="uebersetzung"?h("span",{class:"gx",title:"Die Übersetzung entfernen — was sie nimmt, ist danach wieder offen",
         onclick:e=>{e.stopPropagation();menueFix(e.clientX,e.clientY,"✕ ↦ "+fk.name,[{t:"✕ Übersetzung entfernen",gefahr:1,fn:()=>ueEntfernen(fk.karte)}]);}},"✕"):null,
-      fk.art==="client"?h("button",{class:"fl-ab-plus fl-cl-plus",title:"Ein Eingang aus einer Quelle in „"+(flUmgebung()||"?")+"“: eine Quellart, die einen Akteur dieses Clients verwirklicht",
-        onclick:e=>{e.stopPropagation();flEingangNeu(fk,e);}},"＋ Eingang"):null,
+      fk.art==="rechner"?h("button",{class:"fl-ab-plus fl-cl-plus",title:"Eine App auf "+fk.name+" in „"+(flUmgebung()||"?")+"“: welche App, ihr Name, ihr Port",
+        onclick:e=>{e.stopPropagation();flAppNeu(fk,e);}},"＋ App"):null,
       fk.art==="graph"||fk.art==="aggregate"||fk.gruppe?h("span",{class:"gx fk-kom",title:fk.art==="graph"?"Komposition öffnen (Doppelklick)":"Von innen öffnen (Doppelklick)",
         onclick:e=>{e.stopPropagation();flInnen(fk);}},"⧉"):null,
       loeschbar?h("span",{class:"gx",title:"Löschen",onclick:e=>{e.stopPropagation();delNode(n);}},"✕"):null);
@@ -2073,10 +2099,14 @@
     // Die Instanz (graphen/<instanz>.json) am Graphen — Klick öffnet sie im Panel.
     const gname=flGraphName(fk);
     if(gname){const inst=Object.keys(WB.instanzen||{}).filter(i=>((WB.instanzen[i]||{}).Graph||"")===gname).sort();
-      if(inst.length)el.append(h("div",{class:"fk-chips"},...inst.map(i=>h("button",{class:"fk-chip",title:"Instanz "+i+" — Klick: Panel",
-        onclick:e=>{e.stopPropagation();komKarte("host:inst:"+i);}},"⬡ "+i))));}
+      const RI=flRe().instanzen||{};
+      if(inst.length)el.append(h("div",{class:"fk-chips"},...inst.map(i=>{const ri=RI[i]||{},bef=ri.befunde||[];
+        return h("button",{class:"fk-chip"+(bef.length?" befund":""),title:"Instanz "+i+(ri.rechner?" — läuft auf "+ri.rechner:" — läuft auf jedem Rechner des Backends")
+            +(bef.length?"\n⚠ "+bef.join("\n⚠ "):"")+" — Klick: Formular",
+          onclick:e=>{e.stopPropagation();komKarte("host:inst:"+i);}},"⬡ "+i+" · 🖥 "+(ri.rechner||"überall")+(bef.length?" ⚠":""));})));}
     if(fk.art==="graph"){const inn=flAblaufInnen(fk);if(inn){el.classList.add("fk-ablauf");el.append(inn);}}
     if(fk.art==="client")el.append(flClientInnen(fk));
+    if(fk.art==="rechner")el.append(flRechnerInnen(fk));
     if(fk.art==="uebersetzung"){const u=ueVon(fk.karte);if(u)el.append(ueZuordnungEl(u,()=>ueOeffne(fk)));}
     const ports=h("div",{class:"fk-ports"});
     const zeile=p=>{const rid="rec:"+String(p.typ).split("<")[0],hat=NODEBY.has(rid);
@@ -2109,12 +2139,13 @@
     const nb=new Map(),dazu=(a,b)=>{let l=nb.get(a);if(!l)nb.set(a,l=[]);l.push(b);};
     FL().kanten.forEach(k=>{dazu(k.von,k.nach);dazu(k.nach,k.von);});
     const baender=FL().baender.map(b=>b.id).filter(b=>ks.some(k=>k.band===b));
-    if(ks.some(k=>k.band==null&&k.art!=="akteur"&&k.art!=="client"))baender.push(null);
-    const zellen=new Map(),zk=(b,s)=>(s==="ausgang"||s==="eingang"||s==="clients"?"§akt":String(b))+"|"+s;
+    if(ks.some(k=>k.band==null&&k.art!=="akteur"&&k.art!=="client"&&k.art!=="rechner"))baender.push(null);
+    const LINKS=["rechner","clients","ausgang","eingang"];
+    const zellen=new Map(),zk=(b,s)=>(LINKS.includes(s)?"§akt":String(b))+"|"+s;
     ks.forEach(k=>{const key=zk(k.band,k.spalte);let l=zellen.get(key);if(!l)zellen.set(key,l=[]);l.push(k);});
     const Y=new Map(),setze=(k,x,y)=>{const e=els.get(k.id);if(e){e.style.left=x+"px";e.style.top=y+"px";}Y.set(k.id,y+sz(k.id).h/2);};
     const MITTE=["graphen","uebersetzungen","aggregate","projektionen"];
-    const lege=()=>{let y=FL_KOPF;FLGEO.baender=[];FLGEO.gruppen=new Map();
+    const lege=()=>{let y=flOben();FLGEO.baender=[];FLGEO.gruppen=new Map();
       baender.forEach(b=>{const y0=y;let hmax=0;
         MITTE.forEach(s=>{let cy=y0+FL_BAND_PAD;const zelle=zellen.get(zk(b,s))||[],sx=FLGEO.spalten[s].x;
           if(s!=="projektionen")zelle.forEach(k=>{setze(k,sx,cy);cy+=sz(k.id).h+FL_GAP_Y;});
@@ -2124,18 +2155,12 @@
               if(mit){FLGEO.gruppen.set(g,{x1:sx-FL_GR_PAD,y1:gy,x2:sx+FLGEO.spalten[s].w+3*FL_GR_PAD,y2:cy-FL_GAP_Y+FL_GR_PAD});cy+=FL_GR_PAD+FL_GAP_Y;}});}
           hmax=Math.max(hmax,cy-y0);});
         const hg=Math.max(hmax+FL_BAND_PAD-FL_GAP_Y,140);FLGEO.baender.push({id:b,y:y0,h:hg});y+=hg+44;});
-      // Die Akteure links und rechts, je Client eine Gruppe (Reihenfolge des Servers); beide Seiten eines Clients auf derselben Höhe, die Karte des
-      //   Clients (Spalte Clients) daneben auf der Höhe seiner Gruppe.
-      {const basen=[];FL().gruppen.forEach(g=>{const m=/^(.*)\|(aus|ein)$/.exec(g.id);if(m&&!basen.includes(m[1]))basen.push(m[1]);});
-        const SEITEN=[["ausgang","aus"],["eingang","ein"]];let cy=FL_KOPF+FL_BAND_PAD;
-        const clK=zellen.get(zk(null,"clients"))||[];
-        basen.forEach(b=>{let hb=0;
-          const ck=clK.find(k=>k.id===b);if(ck&&FLGEO.spalten.clients){setze(ck,FLGEO.spalten.clients.x,cy);hb=sz(ck.id).h+FL_GAP_Y;}
-          SEITEN.forEach(([s,seite])=>{const drin=(zellen.get(zk(null,s))||[]).filter(k=>k.gruppe===b+"|"+seite).sort((x,y)=>x.name.localeCompare(y.name,"de"));
-            let y=cy+FL_GR_KOPF;drin.forEach(k=>{setze(k,FLGEO.spalten[s].x+FL_GR_PAD,y);y+=sz(k.id).h+FL_GAP_Y;});if(!drin.length)y+=24;hb=Math.max(hb,y-cy);});
-          SEITEN.forEach(([s,seite])=>{const sx=FLGEO.spalten[s].x;FLGEO.gruppen.set(b+"|"+seite,{x1:sx-FL_GR_PAD,y1:cy,x2:sx+FLGEO.spalten[s].w+3*FL_GR_PAD,y2:cy+hb-FL_GAP_Y+FL_GR_PAD});});
-          cy+=hb+FL_GR_PAD+FL_GAP_Y;});
-        SEITEN.forEach(([s])=>{let y=cy;(zellen.get(zk(null,s))||[]).filter(k=>!k.gruppe).forEach(k=>{setze(k,FLGEO.spalten[s].x,y);y+=sz(k.id).h+FL_GAP_Y;});});}};
+      // Links Rechner und Clients untereinander; die Akteure je eine Zeile — links was sie dürfen, rechts was sie hören, auf derselben Höhe.
+      {const oben=flOben()+FL_BAND_PAD;
+        ["rechner","clients"].forEach(s=>{const sp=FLGEO.spalten[s];if(!sp)return;let y=oben;(zellen.get(zk(null,s))||[]).forEach(k=>{setze(k,sp.x,y);y+=sz(k.id).h+FL_GAP_Y;});});
+        const rechts=new Map((zellen.get(zk(null,"eingang"))||[]).map(k=>[k.karte,k]));let y=oben;
+        (zellen.get(zk(null,"ausgang"))||[]).forEach(k=>{let hh=sz(k.id).h;setze(k,FLGEO.spalten.ausgang.x,y);
+          const r=rechts.get(k.karte);if(r){setze(r,FLGEO.spalten.eingang.x,y);hh=Math.max(hh,sz(r.id).h);}y+=hh+FL_GAP_Y;});}};
     lege();
     // Reihenfolge je Zelle (bei Projektionen je Store-Gruppe): zur mittleren Höhe der Nachbarn in anderen Zellen.
     for(let i=0;i<2;i++){
@@ -2148,13 +2173,12 @@
   // Rahmen der Fläche: Spaltenköpfe (mit ＋ und den Clients), Bänder der Domänen, Store-Gruppen.
   function flRahmen(ebene){const aus={x2:0,y2:0};
     FL().spalten.forEach(s=>{const g=FLGEO.spalten[s];if(!g)return;const d=FL_SPALTE[s];
-      const neu=e=>{e.stopPropagation();if(d.neu[0]==="store"){stoNeuAnlegen(e);return;}if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
-      // Clients: die Eingänge stehen je Umgebung — der Kopf nennt die aktive und, was die Datei nennt, das es im Code nicht gibt.
-      const bef=s==="clients"?flEing().befunde||[]:[];
-      const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),d.neu.length?h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋"):null,
-          bef.length?h("span",{class:"gdiag warn",title:bef.join("\n")}," ⚠ "+bef.length):null),
-        h("div",{class:"fl-u"},s==="clients"?"in „"+(flUmgebung()||"?")+"“ — "+d.u:d.u));
+      const neu=e=>{e.stopPropagation();if(d.neu[0]==="store"){stoNeuAnlegen(e);return;}if(d.neu[0]==="rechner"){reNeu(e);return;}if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
+      // Rechner: der Pool steht je Umgebung — der Kopf nennt die aktive.
+      const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),d.neu.length?h("button",{title:s==="rechner"?"Einen Rechner in den Pool setzen (Name, dann Adresse)":"Neu in dieser Spalte",onclick:neu},"＋"):null),
+        h("div",{class:"fl-u"},s==="rechner"?"in „"+(flUmgebung()||"?")+"“ — "+d.u:d.u));
       Object.assign(k.style,{left:g.x+"px",top:"0px",width:g.w+"px"});ebene.append(k);aus.x2=Math.max(aus.x2,g.x+g.w);});
+    flRechnerKarten(ebene,aus);
     const sq=FLGEO.spalten.graphen,sp=FLGEO.spalten.projektionen;
     if(sq&&sp)FLGEO.baender.forEach(b=>{const x1=sq.x-40,x2=sp.x+sp.w+40,name=b.id?(FL().baender.find(x=>x.id===b.id)||{}).name||b.id:"ohne Domäne";
       const fr=h("div",{class:"fl-band"},h("span",{class:"fl-band-t",title:b.id||""},name));fr.style.setProperty("--dc","hsl("+domHue(b.id||"§")+" 45% 55%)");
@@ -2163,13 +2187,46 @@
       if(b.id&&sg&&!funKatalog({namespace:b.id})){const plus=h("button",{class:"fl-band-plus",title:"Einen Graphen aus einem Katalog an "+name+" binden — eine Übersetzung dieser Domäne nimmt einen seiner Ausgänge",
         onclick:e=>{e.stopPropagation();flBandGraph(b.id,name,e);}},"＋ Graph");plus.style.left=(sg.x-x1)+"px";fr.append(plus);}
       Object.assign(fr.style,{left:x1+"px",top:b.y+"px",width:(x2-x1)+"px",height:b.h+"px"});ebene.append(fr);aus.y2=Math.max(aus.y2,b.y+b.h);});
-    FLGEO.gruppen.forEach((r,id)=>{const g=FL().gruppen.find(x=>x.id===id)||{name:id},cl=/\|(aus|ein)$/.test(id),karte=id.replace(/\|(aus|ein)$/,""),echt=karte.startsWith("cl:");
-      // Die Gruppe eines Clients (links und rechts dieselbe): Klick öffnet ihn im Modal „Akteure und Clients“; „ohne Client“ nur als Hinweis.
-      const fr=cl?h("div",{class:"fl-gruppe client"+(echt?"":" ohne")},h("span",{class:"fl-gruppe-t",title:echt?"Client "+g.name+" — Klick: im Modal öffnen":"Akteure, die noch kein Client verkörpert",
-          onclick:e=>{e.stopPropagation();if(echt)aktOeffne(karte);}},echt?"🔌 "+g.name:"ohne Client"))
-        :h("div",{class:"fl-gruppe"},h("span",{class:"fl-gruppe-t",title:"Store "+g.name+" — Klick: von innen öffnen",onclick:e=>{e.stopPropagation();komOeffne(id);}},"⧉ Store "+g.name));
+    FLGEO.gruppen.forEach((r,id)=>{const g=FL().gruppen.find(x=>x.id===id)||{name:id};
+      const fr=h("div",{class:"fl-gruppe"},h("span",{class:"fl-gruppe-t",title:"Store "+g.name+" — Klick: von innen öffnen",onclick:e=>{e.stopPropagation();komOeffne(id);}},"⧉ Store "+g.name));
       Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});ebene.append(fr);});
     return aus;}
+  // ══ RECHNER UND BACKEND (docs/06 §6.5, docs/10 §10.9): der Pool der aktiven Umgebung steht als Spalte Rechner (je Rechner eine Karte, ＋ im Kopf);
+  //   die Karte Backend über Graphen bis Projektionen nennt seine Rechner (Einzelknoten oder Consul folgt daraus). Jede Änderung ist eine Geste an
+  //   umgebung.json; was stimmt und was dort steht, rechnet der Server (W3).
+  const rechnerPfad=n=>"/api/werkbank/rechner/"+encodeURIComponent(flUmgebung()||"")+"/"+encodeURIComponent(n);
+  const backendPfad=()=>"/api/werkbank/backend/"+encodeURIComponent(flUmgebung()||"");
+  const RE_NAME=/^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+  // Unter der Karte bleibt Luft für den Titel des ersten Bands und sein „＋ Graph“.
+  function flRechnerKarten(ebene,aus){const R=flRe(),top=FL_KOPF+6,hoehe=flStreifen()-40,u=flUmgebung();
+    if(!u)return;
+    const sperr=e=>["pointerdown","dblclick","wheel"].forEach(ev=>e.addEventListener(ev,x=>x.stopPropagation()));
+    const sq=FLGEO.spalten.graphen,sp=FLGEO.spalten.projektionen;
+    if(sq&&sp){const frei=R.pool.filter(r=>!R.backend.includes(r.name));
+      const chips=h("div",{class:"fl-re-chips"},...R.backend.map(n=>h("span",{class:"fl-re-chip"},"🖥 "+n,
+          R.backend.length>1?h("button",{class:"fl-re-x",title:n+" aus dem Backend nehmen",onclick:e=>{e.stopPropagation();
+            instanzGeste(backendPfad(),"POST",{Rechner:R.backend.filter(x=>x!==n)},"⬢ Backend ohne "+n);}},"✕"):null)),
+        h("button",{class:"fl-re-plus",disabled:!frei.length,title:frei.length?"Einen Rechner des Pools zum Backend nehmen":"Alle Rechner des Pools gehören schon zum Backend",
+          onclick:e=>{e.stopPropagation();menueFix(e.clientX,e.clientY,"⬢ Backend — welcher Rechner kommt dazu?",frei.map(r=>({t:"🖥 "+r.name+" · "+(r.adresse||"?"),
+            fn:()=>instanzGeste(backendPfad(),"POST",{Rechner:[...R.backend,r.name]},"⬢ Backend mit "+r.name)})));}},"⊕"));
+      const karte=h("div",{class:"fl-re backend"},h("div",{class:"fl-re-kopf"},h("b",{},"⬢ Backend"),
+          h("span",{class:"fl-re-u"},R.einzelknoten?"ein Rechner — Einzelknoten":"Cluster über Consul ("+R.backend.length+" Rechner)"),
+          h("span",{class:"fl-re-u",style:"margin-left:auto"},"Aggregate und Projektionen verteilen sich selbst; eine Instanz mit Ort nennt einen dieser Rechner")),
+        chips,...(R.befunde||[]).map(b=>h("div",{class:"fl-re-bef"},"⚠ "+b)));
+      Object.assign(karte.style,{left:(sq.x-40)+"px",top:top+"px",width:(sp.x+sp.w+40-(sq.x-40))+"px",height:hoehe+"px"});sperr(karte);ebene.append(karte);}
+    aus.y2=Math.max(aus.y2,top+hoehe);}
+  function reNeu(ev){const u=flUmgebung();
+    frageFix(ev.clientX,ev.clientY,"🖥 Neuer Rechner in „"+u+"“","","Name (Buchstaben, Ziffern, . - _)",n=>{
+      if(!RE_NAME.test(n))return "Ein Name aus Buchstaben, Ziffern, . - _";
+      if(flRe().pool.some(r=>r.name===n))return n+" gibt es schon";
+      setTimeout(()=>frageFix(ev.clientX,ev.clientY,"🖥 "+n+" — Adresse","","IP oder Hostname, ohne Schema und Port",a=>{
+        if(!a||/\s|:\/\//.test(a))return "IP oder Hostname, ohne Schema und Port";
+        instanzGeste(rechnerPfad(n),"POST",{Adresse:a},"🖥 Rechner "+n+" angelegt");}),0);});}
+  function reAdresse(r,ev){
+    frageFix(ev.clientX,ev.clientY,"🖥 "+r.name+" — Adresse",r.adresse||"","IP oder Hostname, ohne Schema und Port",a=>{
+      if(!a||/\s|:\/\//.test(a))return "IP oder Hostname, ohne Schema und Port";
+      if(a===r.adresse)return null;
+      instanzGeste(rechnerPfad(r.name),"POST",{Adresse:a},"🖥 Rechner "+r.name+": "+a);});}
   // Der Fokus auf der Fläche: bei gewählter Karte sie und ihre Nachbarn über die Kanten (bei einem gewählten Typ nur dessen Kanten); sonst
   //   (markierte Menge, Spur) die Karten, deren Panel-Karte im Fokus liegt.
   function flFokus(){if(!FOCUS)return null;const K=flKarten(),karten=new Set(),kanten=new Set();
@@ -2199,11 +2256,11 @@
     const band=id=>{const k=FLKARTE.get(id);return k&&k.band!==undefined?FLGEO.baender.find(b=>b.id===(k.band||null)):null;};
     const ix=id=>{const k=FLKARTE.get(id);return k?SP.indexOf(k.spalte):-1;};
     FL().kanten.forEach((k,i)=>{const st=FL_KANTE[k.art]||FL_KANTE.schreiben;let d;
-      // Reaktion: von der Gruppe des Clients rechts im Bogen zurück zu seiner Gruppe links.
-      if(k.art==="reaktion"){const a=FLGEO.gruppen.get(k.von),b=FLGEO.gruppen.get(k.nach);if(!a||!b)return;
-        const A={x:a.x1+40,y:a.y1},B={x:b.x2-40,y:b.y1},top=Math.min(A.y,B.y)-40;
-        d="M"+A.x+","+A.y+" C"+A.x+","+top+" "+B.x+","+top+" "+B.x+","+B.y;}
-      // Eingang: von seiner Zeile in der Karte des Clients zum Port der Nachricht am Akteur (links an die Karte, auf die Höhe des Ports).
+      // App: von ihrer Zeile in der Karte des Rechners zum Client, den sie umsetzt.
+      if(k.art==="app"){const e=ELS.get(k.von),z=e&&e.querySelector('[data-app="'+CSS.escape(k.app)+'"]'),eb=ELS.get(k.nach);if(!e||!eb)return;
+        const A=z?{...lage(e,z,"aus",true),x:e.offsetLeft+e.offsetWidth}:{x:e.offsetLeft+e.offsetWidth,y:e.offsetTop+14},B={x:eb.offsetLeft,y:eb.offsetTop+14};
+        const c=Math.max(40,Math.abs(B.x-A.x)*0.45);d="M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y;}
+      // Quelle: von ihrer Zeile in der Karte des Rechners zum Port der Nachricht am Akteur (links an die Karte, auf die Höhe des Ports).
       else if(k.art==="eingang"){const e=ELS.get(k.von),z=e&&e.querySelector('[data-eingang="'+CSS.escape(k.eingang)+'"]'),B0=punkt(k.nach,"aus",k.typ),eb=ELS.get(k.nach);
         if(!e||!B0||!eb)return;const A=z?{...lage(e,z,"aus",true),x:e.offsetLeft+e.offsetWidth}:{x:e.offsetLeft+e.offsetWidth,y:e.offsetTop+14},B={x:eb.offsetLeft,y:B0.y};
         const c=Math.max(40,Math.abs(B.x-A.x)*0.45);d="M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y;}
@@ -2256,11 +2313,16 @@
   //   „＋ verkörpert“ lässt links die Akteure aufleuchten. Gegenüber, Kandidaten und Reaktionen rechnet der Server (board.sicht.akteure).
   const AKT=()=>SICHT().akteure||{akteure:{},clients:{}};
   // Das Gewählte steht im Pfad als „akteure:a:<Name>“ bzw. „akteure:c:<Name>“; KOM.aktId hält die Karten-Id, damit ein Umbenennen es nicht verliert.
-  function aktOeffne(id,push){const m=aktVonKarte(id),p="akteure:"+(m?(id.startsWith("akt:")?"a:":"c:")+m.name:"");
+  function aktOeffne(id,push){const m=aktVonKarte(id),p="akteure:"+(m?(id.startsWith("akt:")?"a:":id.startsWith("ap:")?"p:":"c:")+m.name:"");
     if(push&&KOM)KOM.pfad.push(p);else KOM={pfad:[p],reiter:"komposition",wahl:null};KOM.aktId=id;KOM.port=null;komZeige();}
-  const aktVonKarte=id=>id.startsWith("akt:")?MODEL.akteure.find(a=>"akt:"+a._id===id):id.startsWith("cl:")?MODEL.clients.find(c=>"cl:"+c._id===id):null;
+  const aktVonKarte=id=>id.startsWith("akt:")?MODEL.akteure.find(a=>"akt:"+a._id===id):id.startsWith("cl:")?MODEL.clients.find(c=>"cl:"+c._id===id)
+    :id.startsWith("ap:")?(MODEL.apps||[]).find(a=>"ap:"+a._id===id):null;
   function aktWaehle(art,name){KOM.pfad[KOM.pfad.length-1]="akteure:"+art+":"+name;KOM.aktId=null;KOM.port=null;KOM.wahl=null;komZeige();}
   function aktZeige(de,sel){const art=sel.slice(0,1),name=sel.slice(2);
+    // Eine App (Pfad „akteure:p:<Name>“, Karte „ap:…“): ihr Client und je Nachricht, wer sie umsetzt.
+    {const ap=KOM.aktId&&KOM.aktId.startsWith("ap:")?aktVonKarte(KOM.aktId):art==="p"?(MODEL.apps||[]).find(a=>a.name===name):null;
+      if(ap){KOM.aktId="ap:"+ap._id;KOM.pfad[KOM.pfad.length-1]="akteure:p:"+ap.name;aktAppZeige(de,ap);return;}
+      if(art==="p"&&!KOM.aktId)KOM.aktId=null;}
     let m=KOM.aktId?aktVonKarte(KOM.aktId):null,ak=m?KOM.aktId.startsWith("akt:"):art!=="c";
     if(!m)m=ak?MODEL.akteure.find(a=>a.name===name):MODEL.clients.find(c=>c.name===name);
     if(!m){m=MODEL.akteure[0]||MODEL.clients[0]||null;ak=!!MODEL.akteure[0];}
@@ -2281,8 +2343,11 @@
       onclick:e=>aktNeu(true,e)},"＋ Akteur")));
     links.append(h("div",{class:"kom-sec"},"🔌 Clients"));
     if(!MODEL.clients.length)links.append(h("div",{class:"kom-wo"},"Noch keine."));
-    nachName(MODEL.clients).forEach(x=>links.append(h("button",{class:"kom-b"+(x===m?" on":"")+(P?" leise":""),title:"Den Client in der Mitte zeigen",
-      onclick:()=>{KOM.port=null;aktWaehle("c",x.name);}},"🔌 "+clientAnzeige(x))));
+    nachName(MODEL.clients).forEach(x=>{links.append(h("button",{class:"kom-b"+(x===m?" on":"")+(P?" leise":""),title:"Den Client in der Mitte zeigen",
+      onclick:()=>{KOM.port=null;aktWaehle("c",x.name);}},"🔌 "+clientAnzeige(x)));
+      // Seine Apps (IApp<Client>) eingerückt darunter — die konkrete Software, gegen die verbindlich entwickelt wird.
+      nachName((MODEL.apps||[]).filter(a=>a.client===x.name)).forEach(a=>links.append(h("button",{class:"kom-b app"+(a===m?" on":"")+(P?" leise":""),
+        title:"Die App in der Mitte zeigen (setzt "+x.name+" um)",onclick:()=>{KOM.port=null;aktWaehle("p",a.name);}},"📱 "+a.name)));});
     links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Ein neuer Client (record X : IClient) — danach „＋ verkörpert“",
       onclick:e=>aktNeu(false,e)},"＋ Client")));
     return links;}
@@ -2365,7 +2430,7 @@
       ansicht:AKT_ANSICHT});}
   // ✕ an einer Verwirklichung: die Übersetzung fällt weg; Eingänge, die sie brauchen, starten danach nicht mehr (der Server nennt sie).
   function aktVerwirklichungPlan(a,v){return {was:"Verwirklichung "+(v.quellarten.join(" · ")||v.meldung)+" ↦ "+v.nachricht+" ("+v.uebersetzung+")",
-    folgen:v.gebraucht.map(g=>"Eingang "+g+" hat danach keine Übersetzung mehr (startet nicht)"),grund:null,
+    folgen:v.gebraucht.map(g=>"die Quelle "+g+" nennt sie ([Uebersetzt<…>]) — sie baut danach nicht"),grund:null,
     tu:()=>{MODEL.uebersetzungen=(MODEL.uebersetzungen||[]).filter(u=>"ue:"+u._id!==v.karte);}};}
   // ＋ Verwirklichung: erst die Quellart (alle), bei mehreren Meldungen die Meldung, dann ein Command seines IDarf — die Übersetzung entsteht als Code bei
   //   den Akteuren ({Meldung}_{Ziel}_{n}, gleiche Namen gleich zugeordnet); danach steht sie in der Spalte Herkunft, Doppelklick ordnet die Felder zu.
@@ -2437,7 +2502,10 @@
     const plan={was:"Client "+clientAnzeige(c),folgen:[],tu:()=>{MODEL.clients.splice(MODEL.clients.indexOf(c),1);AUF=null;KOM.aktId=null;}};
     const pk=(MODEL.rahmen||{}).pythonPaket,neu=(c.implementierungen||[]).filter(im=>im.neu);
     return h("span",{class:"kat-band"},h("b",{title:(c.namespace||"")+(c.doku?"\n"+c.doku:"")},"🔌 "+clientAnzeige(c)),
-      h("span",{class:"kat-band-wo",title:"Eingänge sind Konfig je Umgebung: auf der Fläche, Spalte Clients — ＋ Eingang an der Karte, Doppelklick öffnet einen"},"Eingänge: auf der Fläche"),
+      h("span",{class:"kat-band-wo",title:"Wo eine App läuft und mit welchen Werten ihre Quellen, ist Konfig je Umgebung: auf der Fläche, Spalte Rechner — ＋ App an der Karte"},"Instanzen: auf der Fläche"),
+      ...(MODEL.apps||[]).filter(a=>a.client===c.name).map(a=>h("button",{class:"kat-chip",title:"Die App "+a.name+" zeigen",onclick:ev=>{ev.stopPropagation();aktWaehle("p",a.name);}},"📱 "+a.name)),
+      h("button",{class:"kat-chip plus",title:"Eine App, die diesen Client umsetzt (record X : IApp<"+clientAnzeige(c)+">) — ihr Vertrag an der Leitung",
+        onclick:ev=>{ev.stopPropagation();aktAppNeu(c,ev);}},"＋ App"),
       h("button",{class:"kat-chip plus"+(an?" an":""),title:"Einen Akteur verkörpern (IVerkoerpert<A>): links leuchten die Akteure, die passen — ein Klick verbindet",
         onclick:ev=>{ev.stopPropagation();KOM.port=an?null:{art:"verkoerpert",client:id,rec:"verkoerpert"};komZeige();}},an?"Akteur links wählen … (Esc)":"＋ verkörpert"),
       ...impls.map(im=>h("span",{class:"kat-chip",title:im.datei},"🐍 "+im.klasse)),
@@ -2446,6 +2514,48 @@
         onclick:ev=>{ev.stopPropagation();const kl=clientAnzeige(c)||"Client";(c.implementierungen=c.implementierungen||[]).push({sprache:"python",klasse:kl,
           datei:pk+"/"+kl.replace(/(?<=[a-z0-9])([A-Z])|(?<=[A-Z])([A-Z][a-z])/g,"_$1$2").toLowerCase()+".py",rumpfe:[],neu:true});gTitel("🐍 "+kl);render();}},"＋ 🐍 Implementierung"):null,
       loeschKnopf(plan,"client:"+c._id));}
+
+  // ══ APPS (docs/10 E18): eine App setzt einen Client um — record X(…Quellen…) : IApp<Client>. In der Mitte je Nachricht, die der Client
+  //   sendet, wer sie umsetzt: die App selbst (Standard) oder ihre Quellen (Quellart ↦ Übersetzung der Akteur-Seite); „＋ Quelle“ bietet je
+  //   Übersetzung auf diese Nachricht die Quellarten an, die ihre Meldung melden (der Server rechnet es, board.sicht.akteure.apps). Ort und Werte einer
+  //   Quelle sind Konfig der Umgebung — hier nur die Struktur (Code).
+  function aktAppNeu(c,e){
+    frageFix(e.clientX,e.clientY,"📱 Neue App für "+clientAnzeige(c),"","public sealed record X : IApp<"+clientAnzeige(c)+">",n=>{
+      const fe=nameFehler(n);if(fe)return fe;if(uniq(n)!==n)return n+" gibt es schon";
+      (MODEL.apps=MODEL.apps||[]).push({_id:"ap"+(NID++),name:n,namespace:c.namespace,client:c.name,quellen:[],usings:[]});
+      KOM.pfad[KOM.pfad.length-1]="akteure:p:"+n;KOM.aktId=null;KOM.port=null;gTitel("📱 "+n);render();});}
+  function aktAppZeige(de,ap){const S=((AKT().apps)||{})["ap:"+ap._id]||{nachrichten:[],quellen:[]},C=MODEL.clients.find(c=>c.name===ap.client);
+    const r=komRahmen("Die App setzt "+ap.client+" um. Je Nachricht des Clients: die App selbst (Standard) oder Quellen — eine Nachricht mit Quelle steht nicht im Vertrag der App. Wo die App läuft und welche Werte ihre Quellen haben, sagt die Umgebung.");
+    const plan={was:"App "+ap.name,folgen:[],tu:()=>{MODEL.apps.splice(MODEL.apps.indexOf(ap),1);AUF=null;KOM.aktId=null;}};
+    const kopf=h("div",{class:"app-kopf"},h("b",{title:(ap.namespace||"")+(ap.doku?"\n"+ap.doku:"")},"📱 "+ap.name),
+      h("button",{class:"kat-chip",title:"Den Client zeigen",onclick:()=>{if(C)aktWaehle("c",C.name);}},"setzt 🔌 "+ap.client+" um"+(C?"":" · ⚠ kein Client")),
+      loeschKnopf(plan,"app:"+ap.name));
+    const liste=h("div",{class:"app-liste"});
+    if(!(S.nachrichten||[]).length)liste.append(h("div",{class:"kom-wo"},C?"Die Akteure von "+ap.client+" dürfen keinen Command — die App sendet nichts.":"Kein Client "+ap.client+"."));
+    (S.nachrichten||[]).forEach(nr=>{const qs=(ap.quellen||[]).filter(q=>(nr.quellen||[]).includes(q.name));
+      const zeile=h("div",{class:"app-z"},h("span",{class:"app-n"},"▣ "+nr.typ),
+        qs.length?h("span",{class:"app-wer q"},"aus "+qs.length+(qs.length===1?" Quelle":" Quellen")):h("span",{class:"app-wer"},"App (Standard)"),
+        h("button",{class:"kat-chip plus",title:(nr.angebot||[]).length?"Eine Quelle, die diese Nachricht erzeugt (Quellart + Übersetzung der Akteur-Seite)"
+            :"Keine Übersetzung der Akteur-Seite macht "+nr.typ+" — „＋ Verwirklichung“ am Akteur legt eine an",
+          onclick:ev=>{ev.stopPropagation();aktQuelleNeu(ap,nr,ev);}},"＋ Quelle"));
+      liste.append(zeile);
+      qs.forEach(q=>{const S2=(S.quellen||[]).find(x=>x.name===q.name)||{uebersetzungen:[]};
+        liste.append(h("div",{class:"app-q"},h("span",{},"⚡ "+q.quellart+" "),h("b",{},q.name),
+          ...(S2.uebersetzungen||[]).map(u=>h("button",{class:"kat-chip",title:"Übersetzung der Akteur-Seite: "+(u.meldung||"?")+" ↦ "+(u.nachricht||"?")+" — Klick: Feldzuordnung",
+            onclick:()=>{if(u.karte){const fk={karte:u.karte};ueOeffne(fk);}}},"↦ "+u.name)),
+          h("button",{class:"kat-chip-x",title:"Die Quelle aus der App nehmen — die Nachricht setzt danach wieder die App um",
+            onclick:()=>{ap.quellen=(ap.quellen||[]).filter(x=>x!==q);gTitel("📱 "+ap.name+" ohne Quelle "+q.name);render();}},"✕")));});});
+    r.append(h("div",{class:"kom-leib kat"},aktLinksEl(ap),h("div",{class:"kat-mitte"},h("div",{class:"app-innen"},kopf,liste))));de.append(r);}
+  function aktQuelleNeu(ap,nr,ev){const A=nr.angebot||[];
+    if(!A.length){menueFix(ev.clientX,ev.clientY,"＋ Quelle für "+nr.typ,[{hinweis:"Keine Übersetzung der Akteur-Seite macht "+nr.typ+" aus einer Meldung — im Akteur „＋ Verwirklichung“ legt eine an."}]);return;}
+    const benennen=a=>frageFix(ev.clientX,ev.clientY,"⚡ "+a.quellart+" ↦ "+nr.typ,"","Name der Quelle (Schlüssel ihrer Werte in der App-Instanz)",n=>{
+      if(!/^[A-Z][A-Za-z0-9]*$/.test(n))return "Ein Name wie ein Parameter: Buchstaben und Ziffern, groß beginnend";
+      if((ap.quellen||[]).some(q=>q.name===n))return n+" gibt es schon";
+      const QA=(MODEL.quellarten||[]).find(q=>q.name===a.quellart);
+      ap.quellen=[...(ap.quellen||[]),{name:n,quellart:a.quellart,uebersetzungen:[a.uebersetzung]}];
+      if(QA&&QA.namespace&&QA.namespace!==ap.namespace&&!(ap.usings||[]).includes(QA.namespace))ap.usings=[...(ap.usings||[]),QA.namespace];
+      gTitel("📱 "+ap.name+": Quelle "+n);render();});
+    menueFix(ev.clientX,ev.clientY,"＋ Quelle für "+nr.typ+" — welche Quellart?",A.map(a=>({t:"⚡ "+a.quellart+" · "+a.meldung+" ↦ "+nr.typ+" ("+a.uebersetzung+")",fn:()=>benennen(a)})));}
 
   // ══ ÜBERSETZUNG (docs/04 §4.4): eine Karte in der Spalte Übersetzungen, eine Klasse der Anwendung (ITranslate<TSource, TTarget>); ihre
   //   Feldzuordnung öffnet ein Modal (Pfad = ihre Karten-Id „ue:uebersetzung:Name“), links die Felder von TEin, rechts die Parameter von TAus.
@@ -2473,7 +2583,7 @@
     k.art==="graph"&&k.karte?{t:"⬡ eine Ebene tiefer",fn:()=>komKnotenOeffnen(k)}:k.karte?{t:"✎ bearbeiten",fn:()=>komKnotenOeffnen(k)}:null,
     {t:"✕ aus dem Graphen (die Funktion bleibt)",gefahr:1,fn:()=>komKnotenEntfernen(id,k.name)}]);}
   // Brotkrumen über alle Ansichten des Pfads: Graph, Aggregat, Store, Formular einer Karte.
-  function komKrumenText(g){if(g.startsWith("akteure:"))return "👤 Akteure und Clients";if(g.startsWith("ue:"))return "↦ "+((ueVon(g)||{}).name||g);if(g.startsWith("kat:"))return "📚 "+(g.slice(4).replace(/\.Katalog$/,"")||"Kataloge");if(g.startsWith("form:")){const n=NODEBY.get(g.slice(5));return "✎ "+(n?(NODELABEL[n.kind]||n.kind)+" "+(n.name||""):g.slice(5));}
+  function komKrumenText(g){if(g.startsWith("akteure:"))return "👤 Akteure, Clients und Apps";if(g.startsWith("ue:"))return "↦ "+((ueVon(g)||{}).name||g);if(g.startsWith("kat:"))return "📚 "+(g.slice(4).replace(/\.Katalog$/,"")||"Kataloge");if(g.startsWith("form:")){const n=NODEBY.get(g.slice(5));return "✎ "+(n?(NODELABEL[n.kind]||n.kind)+" "+(n.name||""):g.slice(5));}
     if(g.startsWith("gr:"))return "⬡ "+((komDaten(g)||{}).name||g);const n=NODEBY.get(g);
     if(g.startsWith("fb:"))return "ƒ "+(n?n.name:g);return (g.startsWith("agg:")?"▣ ":"🗄 ")+(n?n.name:g);}
   function komKrumen(){return h("div",{class:"kom-krumen"},...KOM.pfad.flatMap((g,i)=>{const b=h("button",{class:"kom-krume"+(i===KOM.pfad.length-1?" an":""),
@@ -2541,7 +2651,7 @@
       oncontextmenu:e=>{e.preventDefault();komKnotenMenue(O.id,{...k,name:O.name},e);}});
     el.dataset.knoten=k.name;
     el.append(h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:k.typ},h("span",{class:"gk"},(KOM_SYM[k.art]||"")+" "+k.name+" "),h("span",{class:"gn"},k.typ)),
-      k.kopf?h("span",{class:"kom-mark",title:"[Kopf] — nimmt von außen"},"Kopf"):null,k.art==="quellart"?h("span",{class:"kom-mark",title:"Eine Quellart ist kein Knoten — sie läuft als Eingang eines Clients"},"⚠ Quellart"):null,
+      k.kopf?h("span",{class:"kom-mark",title:"[Kopf] — nimmt von außen"},"Kopf"):null,k.art==="quellart"?h("span",{class:"kom-mark",title:"Eine Quellart ist kein Knoten — sie ist eine Quelle einer App"},"⚠ Quellart"):null,
       h("span",{class:"gx",title:"Löschen: aus dem Graphen bzw. samt Funktion",onclick:e=>{e.stopPropagation();komKnotenLoeschen(O.id,{...k,name:O.name},e);}},"✕")));
     const chips=(k.konstruktor||[]).filter(c=>c.art!=="logger");
     const funktion=k.art==="funktion"&&k.karte;
@@ -3593,8 +3703,9 @@
   const projektionVonKarte=fk=>MODEL.projektionen.find(p=>"prj:"+p._id===fk.karte);
 
   // Klick auf eine Kante: lösen, was der Code als Liste trägt (darf, hört, Auf einer Projektion); den Typ öffnen.
-  function flKanteMenue(k,ev){if(k.art==="reaktion"){aktOeffne(k.von.replace(/\|ein$/,""));return;}
-    if(k.art==="eingang"){const V=FLKARTE.get(k.von);if(V)komKarte(eingangId(clientName(V),k.eingang));return;}const V=FLKARTE.get(k.von),N=FLKARTE.get(k.nach);if(!V||!N)return;const items=[];
+  function flKanteMenue(k,ev){if(k.art==="verkoerpert"){aktOeffne(k.von);return;}
+    if(k.art==="app"){komKarte(appId(k.app));return;}
+    if(k.art==="eingang"){komKarte(appId(String(k.eingang).split("/")[0]));return;}const V=FLKARTE.get(k.von),N=FLKARTE.get(k.nach);if(!V||!N)return;const items=[];
     // Was ein Akteur darf und hört, ändert man im Modal „Akteure und Clients“ (je Absicht eine Geste).
     [V,N].filter(x=>x.art==="akteur").forEach(x=>items.push({t:"👤 "+x.name+" öffnen (darf · hört)",fn:()=>aktOeffne(x.karte)}));
     if(N.art==="projektion"&&k.art==="schreiben"){const p=projektionVonKarte(N);
@@ -3872,10 +3983,10 @@
       links.append(zeile(b,schachtelbar?plus(x.name,"Als Schachtel in "+G.d.name+" einsetzen"):null));});
     links.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Ein neuer Graph in "+kat+": Name und erste Funktion — er steht danach in der Mitte",
       onclick:e=>katGraphNeu(kat,e)},"＋ Graph")));
-    // Eigene Quellarten des Katalogs (IQuellart): keine Knoten — sie laufen als Eingang eines Clients; hier ihr Lausche.
+    // Eigene Quellarten des Katalogs (IQuellart): keine Knoten — sie sind Quellen von Apps; hier ihr Lausche.
     const qas=katQuellarten(kat);
     if(qas.length){links.append(h("div",{class:"kom-sec"},"Quellarten"));
-      qas.forEach(q=>links.append(h("button",{class:"kom-b"+(KOM.katQa===q.name?" on":""),title:"meldet "+((q.meldet||[]).join(", ")||"—")+" — läuft als Eingang eines Clients",
+      qas.forEach(q=>links.append(h("button",{class:"kom-b"+(KOM.katQa===q.name?" on":""),title:"meldet "+((q.meldet||[]).join(", ")||"—")+" — eine Quelle einer App",
         onclick:()=>{KOM.katQa=q.name;KOM.katFn=null;KOM.katGr=null;KOM.katWahl=null;KOM.port=null;KOM.wahl=null;komZeige();}},"⚡ "+q.name)));}
     return links;}
   // Die eigenen Quellarten eines Katalogs (vom Server: sicht.kataloge.je[k].quellarten), als Board-Einträge.
@@ -4274,7 +4385,7 @@
   //   geänderte/neue Karten ganz, entfernte als Schlüssel — und schickt ihn als Geste. Der Server schreibt den Patch (Schreiber, Löschen am
   //   Ort), liest warm neu und schickt das Board zurück: das ist der neue Stand. Umbenennen ist eine eigene Geste (Roslyn-Renamer), ↶ nimmt
   //   den letzten Patch zurück. Solange ein Eingabefeld den Fokus hat, wartet die Geste (sonst ein Patch je Tastendruck).
-  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","graphen","uebersetzungen","bausteinFunktionen","akteure","clients","readModels","stores","projektionen","reader"];
+  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","graphen","uebersetzungen","bausteinFunktionen","akteure","clients","apps","readModels","stores","projektionen","reader"];
   // Natürliche Schlüssel — dieselbe Regel wie der Server (GraphExtractor.KartenSchluessel).
   const GKEY=c=>c==="decider"?(d=>(d.aggregat||"")+"|"+(d.command||"")):c==="applier"?(a=>(a.aggregat||"")+"|"+(a.event||""))
     :["readModels","stores","projektionen","reader"].includes(c)?(x=>x.name||""):(x=>(x.namespace||"")+"|"+(x.name||""));
@@ -4408,17 +4519,16 @@
   //   stehen an der Karte, die sie betreffen. Alle Daten kommen fertig vom Server (Frontend-Bauregel P3): das JS kennt kein
   //   Umgebungs-Modell, nur das Schema und die Datei, wie sie ist.
   const WB={zustand:null,schema:null,umg:null,umgName:null,dirty:false,uhr:null,diag:[],boot:[],letzter:null,refs:{},ver:0,es:null};
-  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Lebenszyklus","Konsum","Transport","Identitaeten","Clients","Stores"];
-  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Lebenszyklus:"⏳",Konsum:"📥",Transport:"🔗",Identitaeten:"🪪",Clients:"🔌",Stores:"📁",Uhr:"🕰"};
+  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Lebenszyklus","Konsum","Transport","Identitaeten","Stores"];
+  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Lebenszyklus:"⏳",Konsum:"📥",Transport:"🔗",Identitaeten:"🪪",Stores:"📁",Uhr:"🕰"};
   function hostKnoten(){if(!WB.schema)return [];
     const ab=[...HOST_ORDNUNG.filter(k=>WB.schema[k]),...Object.keys(WB.schema).filter(k=>!HOST_ORDNUNG.includes(k)),"Uhr"];
     return [...ab.map(k=>({id:"host:"+k,name:(HOST_SYM[k]||"")+" "+k,kind:"host",ref:WB.refs[k]||(WB.refs[k]={abschnitt:k})})),
       // Instanzen der Graphen (docs/10 §10.3.5): je Datei graphen/<instanz>.json eine Karte, dazu eine zum Anlegen.
       ...Object.keys(WB.instanzen||{}).sort().map(i=>({id:"host:inst:"+i,name:"⬡ "+i,kind:"host",ref:WB.refs["inst:"+i]||(WB.refs["inst:"+i]={instanz:i})})),
       {id:"host:inst-neu",name:"＋ Instanz",kind:"host",ref:WB.refs["inst-neu"]||(WB.refs["inst-neu"]={instanzNeu:true})},
-      // Eingänge der Clients (docs/04 §4.7): je Eingang der Datei eine Karte — ihr Formular öffnet ein Doppelklick in der Spalte Clients der Fläche.
-      ...Object.entries((WB.umg||{}).Clients||{}).flatMap(([c,v])=>Object.keys((v||{}).Eingaenge||{}).sort().map(e=>({id:eingangId(c,e),name:"⚡ "+c+"/"+e,kind:"host",
-        ref:WB.refs["eing:"+c+"/"+e]||(WB.refs["eing:"+c+"/"+e]={eingang:{client:c,name:e}})})))];}
+      // App-Instanzen (docs/10 E18): je Datei apps/<instanz>.json eine Karte — ihr Formular öffnet ein Doppelklick in der Spalte Rechner der Fläche.
+      ...Object.keys(WB.apps||{}).sort().map(i=>({id:appId(i),name:"📦 "+i,kind:"host",ref:WB.refs["app:"+i]||(WB.refs["app:"+i]={app:i})}))];}
   const wbJson=async(url,opt)=>{const r=await fetch(url,opt);if(!r.ok)throw new Error("HTTP "+r.status);return r.json();};
   // ── Panel: EIN generischer Formular-Renderer (Schema-Knoten → Steuerelement) ──
   //   art klasse → Felder; art je → je Schlüssel eine Klasse (+ anlegen/entfernen); art frei → JSON; typ enum/bool/zahl/dauer/string/liste/map.
@@ -4480,7 +4590,7 @@
   function hostCard(body,n){if(!INSP)return;const k=n.ref.abschnitt,z=WB.zustand||{};
     if(n.ref.instanzNeu){instanzNeuPanel(body);return;}
     if(n.ref.instanz){instanzPanel(body,n.ref.instanz);return;}
-    if(n.ref.eingang){eingangPanel(body,n.ref.eingang.client,n.ref.eingang.name);return;}
+    if(n.ref.app){appPanel(body,n.ref.app);return;}
     if(k==="Uhr"){wbUhrPanel(body,z);return;}
     const sch=(WB.schema||{})[k];if(!sch||!WB.umg){body.append(h("div",{class:"gi-hint"},"Umgebung nicht geladen."));return;}
     const knopf=h("button",{class:"act go",onclick:wbSpeichern},"💾 In umgebung."+WB.umgName+".json schreiben");knopf.disabled=!WB.dirty;
@@ -4514,7 +4624,7 @@
     if(!name||!/^[A-Za-z0-9_-]+$/.test(name))return;
     if(await instanzGeste(instanzPfad(name),"POST",{Graph:graph},"⬡ Instanz "+name+" angelegt"))waehle("host:inst:"+name);}
   function instanzNeuPanel(body){
-    body.append(h("div",{class:"gi-hint"},"Welcher Graph soll in „"+(WB.umgName||"?")+"“ laufen? Je Umgebung läuft ein Graph genau einmal; Quellen sind Eingänge eines Clients (Spalte Clients der Fläche)."));
+    body.append(h("div",{class:"gi-hint"},"Welcher Graph soll in „"+(WB.umgName||"?")+"“ laufen? Je Umgebung läuft ein Graph genau einmal; Quellen gehören zu Apps (Spalte Rechner der Fläche)."));
     const box=h("div",{style:"display:flex;flex-wrap:wrap;gap:4px"}),laeuft=new Set(Object.values(WB.instanzen||{}).map(v=>(v||{}).Graph));
     (MODEL.graphen||[]).filter(g=>g.datei).forEach(g=>{const b=h("button",{class:"akt-dom",title:laeuft.has(g.name)?"läuft schon in „"+(WB.umgName||"?")+"“":"",onclick:()=>instanzAnlegen(g.name)},"⬡ "+g.name);
       b.disabled=laeuft.has(g.name);box.append(b);});
@@ -4528,42 +4638,54 @@
       oninput:e=>{const v=e.target.value;instSetze(w,f,v===""?null:/^(int|long)$/.test(typ)&&/^-?\d+$/.test(v)?Number(v):/\[\]$/.test(typ)?v.split(",").map(x=>x.trim()).filter(Boolean):v);}});}
   const instSauber=o=>{if(Array.isArray(o))return o;if(o&&typeof o==="object"){const a={};for(const [k,v] of Object.entries(o)){const b=instSauber(v);
     if(b==null||(typeof b==="object"&&!Array.isArray(b)&&!Object.keys(b).length))continue;a[k]=b;}return a;}return o;};
-  // ── Eingänge der Clients (docs/04 §4.7): Clients:<Client>:Eingaenge:<eingang> in umgebung.json — Art (fest), Akteur (unter den verkörperten, die
-  //    die Art verwirklicht), Rechner, Offen, die Wahl der Technik und die Felder der Konfig-Records der Quellart. Das Schema rechnet der Server
-  //    (/api/werkbank/eingangschema), die Akteure stehen an der Client-Karte der Fläche; Speichern und ✕ sind Gesten (↶). ──
-  function eingangPanel(body,client,name){const roh=((((WB.umg||{}).Clients||{})[client]||{}).Eingaenge||{})[name];
-    if(!roh){body.append(h("div",{class:"gi-hint"},"Einen Eingang "+client+"/"+name+" gibt es in „"+(WB.umgName||"?")+"“ nicht (mehr)."));return;}
-    const wert=JSON.parse(JSON.stringify(roh)),C=MODEL.clients.find(c=>c.name===client),fk=C?FLKARTE.get("cl:"+C._id)||FL().karten.find(k=>k.id==="cl:"+C._id):null;
-    const E=C?(((flEing().karten||{})["cl:"+C._id]||{}).eingaenge||[]).find(e=>e.name===name):null;
-    body.append(h("div",{class:"gi-hint"},"umgebungen/"+(WB.umgName||"?")+"/umgebung.json → Clients:"+client+":Eingaenge:"+name+" — leer = Standard; ${branch} und ${env:NAME} werden beim Start ersetzt. Wirksam nach ⟳."));
-    if(E&&(E.befunde||[]).length)body.append(h("div",{class:"gi-diag"},...E.befunde.map(t=>h("div",{class:"find warning"},"⚠ "+t))));
-    const box=h("div",{},h("div",{class:"gi-hint"},"lädt …"));body.append(box);
-    (async()=>{let sch;try{sch=await wbJson("/api/werkbank/eingangschema?art="+encodeURIComponent(wert.Art||""));}catch(e){sch={fehler:e.message};}
-      box.innerHTML="";const zeile=(t,el,tt)=>h("div",{class:"frow",title:tt||""},h("span",{class:"slotlbl",style:"min-width:110px"},t),el);
-      box.append(zeile("Art",h("b",{},"⚡ "+(wert.Art||"?")),"Die Quellart ist fest — ein anderer Eingang entsteht über ＋ Eingang an der Karte des Clients"));
-      if(sch.fehler){box.append(h("div",{class:"gi-hint",style:"color:#cf6f68"},sch.fehler));return;}
-      // Akteur: die verkörperten, die die Art verwirklicht (der Server nennt sie an der Client-Karte); ein anderer steht mit ⚠ dabei.
-      const passend=(((fk||{}).kandidaten||{}).arten||[]).find(a=>a.art===wert.Art),akteure=[...((passend||{}).akteure||[])];
-      if(wert.Akteur&&!akteure.includes(wert.Akteur))akteure.push(wert.Akteur);
-      const sa=h("select",{onchange:e=>instSetze(wert,"Akteur",e.target.value)},...(wert.Akteur?[]:[h("option",{value:""},"— wählen")]),
-        ...akteure.map(an=>{const o=h("option",{value:an},"👤 "+an+((passend&&passend.akteure.includes(an))?"":" ⚠ verwirklicht die Art nicht"));if(an===wert.Akteur)o.selected=true;return o;}));
-      box.append(zeile("Akteur",sa,"Für wen der Eingang hineingibt — ein Akteur, den "+client+" verkörpert und den "+wert.Art+" verwirklicht"));
-      // Eine Annahme (der Webhook) lauscht nicht: jeder Host nimmt an — kein Rechner, dafür Pfad (Pflicht) und Schlüssel (unten, Werte ihrer Konfig).
-      if(sch.annahme)box.append(zeile("Rechner",h("input",{style:"flex:1;min-width:0",value:wert.Rechner||"",placeholder:"jeder Host",oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}}),
-        "Eine Annahme nimmt jeder Host an: POST "+(sch.route||"/eingang/webhook")+"/<Pfad> auf dem Einblick-Port — leer lassen"));
-      else box.append(zeile("Rechner",h("input",{style:"flex:1;min-width:0",value:wert.Rechner||"",placeholder:"Pflicht im Cluster",oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}}),
-        "Auf welchem Rechner die Quelle lauscht (sein Cluster:Rechner) — im Cluster Pflicht: eine Quelle lauscht genau einmal"));
-      box.append(zeile("Offen",h("input",{style:"flex:1;min-width:0",value:wert.Offen??"",placeholder:"Standard "+(sch.offenStandard??""),oninput:e=>{const v=e.target.value.trim();if(/^\d+$/.test(v)&&Number(v)>0)wert.Offen=Number(v);else delete wert.Offen;}}),
-        "So viele hineingegebene Elemente dürfen offen sein, bevor die Quelle wartet"));
-      (sch.technik||[]).forEach(t=>{wert.Technik=wert.Technik||{};const s=h("select",{onchange:e=>instSetze(wert.Technik,t.schnittstelle,e.target.value||null)},h("option",{value:""},"— wählen"));
-        t.umsetzungen.forEach(u=>{const o=h("option",{value:u},u);if(wert.Technik[t.schnittstelle]===u)o.selected=true;s.append(o);});box.append(zeile("⚙ "+t.schnittstelle,s));});
-      (sch.konfigs||[]).forEach(c=>{box.append(h("div",{class:"gsec",title:c.record},"▤ "+c.record+(c.umsetzung?" ("+c.umsetzung+")":"")));
-        (c.felder||[]).forEach(f=>box.append(zeile(f.feld,instFeld(wert,f.feld,f.typ.replace(/\?$/,""),{standard:f.standard,werte:f.werte}),c.record+" · "+f.typ
-          +(sch.annahme&&f.feld==="Pfad"?" — Pflicht, je Umgebung eindeutig: POST "+(sch.route||"")+"/<Pfad>":"")
-          +(sch.annahme&&f.feld==="Schluessel"?" — ein Geheimnis: als ${env:NAME} eintragen; der Absender schickt es im Kopf „schluessel“":""))));});
-      box.append(h("div",{class:"frow"},h("button",{class:"act go",onclick:()=>instanzGeste(eingangPfad(client,name),"POST",instSauber(wert),"⚡ Eingang "+client+"/"+name)},"💾 Speichern"),
-        h("button",{class:"act",onclick:async()=>{if(!confirm("Eingang "+client+"/"+name+" aus „"+(WB.umgName||"?")+"“ entfernen?"))return;
-          if(await instanzGeste(eingangPfad(client,name),"DELETE",undefined,"⚡ Eingang "+client+"/"+name+" entfernt"))komSchliesse();}},"✕ Entfernen")));})();}
+  // ── App-Instanzen (docs/10 E18): apps/<instanz>.json — App (fest), Rechner (aus dem Pool), Port, Token, wie die Werkbank sie startet, die
+  //    Verzeichnisse, aus denen sie Dateien zeigt, und je Quelle der App die Wahl der Technik und die Felder der Konfig-Records ihrer Quellart. Das
+  //    Schema einer Quelle rechnet der Server (/api/werkbank/quelleschema), die Befunde stehen an der Karte des Rechners; Speichern und ✕ sind Gesten (↶). ──
+  function appPanel(body,name){const roh=(WB.apps||{})[name];
+    if(!roh){body.append(h("div",{class:"gi-hint"},"Eine App-Instanz "+name+" gibt es in „"+(WB.umgName||"?")+"“ nicht (mehr)."));return;}
+    const wert=JSON.parse(JSON.stringify(roh)),R=flRe(),A=(R.apps||{})[name]||{quellen:[],befunde:[]},ap=(MODEL.apps||[]).find(a=>a.name===wert.App);
+    body.append(h("div",{class:"gi-hint"},"umgebungen/"+(WB.umgName||"?")+"/apps/"+name+".json — leer = Standard; ${branch} und ${env:NAME} werden beim Start ersetzt. Wirksam nach ⟳ bzw. Neustart der App."));
+    const bef=[...(A.befunde||[]),...(A.quellen||[]).flatMap(q=>(q.befunde||[]).map(b=>q.name+": "+b))];
+    if(bef.length)body.append(h("div",{class:"gi-diag"},...bef.map(t=>h("div",{class:"find warning"},"⚠ "+t))));
+    const box=h("div",{});body.append(box);
+    const zeile=(t,el,tt)=>h("div",{class:"frow",title:tt||""},h("span",{class:"slotlbl",style:"min-width:110px"},t),el);
+    const text=(f,ph,tt)=>zeile(f,h("input",{style:"flex:1;min-width:0",value:wert[f]??"",placeholder:ph||"",oninput:e=>{const v=e.target.value.trim();if(v)wert[f]=v;else delete wert[f];}}),tt);
+    box.append(zeile("App",h("button",{class:"akt-dom",onclick:()=>ap&&aktOeffne("ap:"+ap._id)},"📦 "+(wert.App||"?")+(A.client?" · setzt "+A.client+" um":"")),
+      "Die App ist fest — eine andere ist eine neue Instanz (＋ App an der Karte eines Rechners)"));
+    // Der Rechner: einer aus dem Pool (Spalte Rechner); ein fremder steht mit ⚠ dabei.
+    {const wahl=h("div",{class:"fl-re-chips"}),aktuell=()=>wert.Rechner||"localhost";
+      const zeichne=()=>{wahl.textContent="";const alle=[...R.pool.map(r=>r.name),...(R.pool.some(r=>r.name===aktuell())?[]:[aktuell()])];
+        alle.forEach(r=>{const fremd=!R.pool.some(x=>x.name===r);
+          wahl.append(h("button",{class:"fl-re-chip wahl"+(aktuell()===r?" an":"")+(fremd?" befund":""),title:fremd?"⚠ "+r+" gibt es im Pool nicht":"Läuft auf "+r,
+            onclick:()=>{wert.Rechner=r;zeichne();}},"🖥 "+r+(fremd?" ⚠":"")));});};
+      zeichne();box.append(zeile("Rechner",wahl,"Auf welchem Rechner des Pools sie läuft"));}
+    box.append(zeile("Port",h("input",{style:"flex:1;min-width:0",value:wert.Port??"",placeholder:"keiner",oninput:e=>{const v=e.target.value.trim();if(/^\d+$/.test(v)&&Number(v)>0)wert.Port=Number(v);else delete wert.Port;}}),
+      "Unter welchem Port sie auf ihrem Rechner erreichbar ist (eine App mit Oberfläche) — je Rechner eindeutig"));
+    {const tokens=Object.keys(((WB.umg||{}).Identitaeten||{}).Tokens||{}).sort(),s=h("select",{onchange:e=>instSetze(wert,"Token",e.target.value||null)},h("option",{value:""},"— ohne"));
+      [...tokens,...(wert.Token&&!tokens.includes(wert.Token)?[wert.Token]:[])].forEach(t=>{const o=h("option",{value:t},t+(tokens.includes(t)?" · "+(((WB.umg||{}).Identitaeten||{}).Tokens||{})[t]:" ⚠ unbekannt"));if(t===wert.Token)o.selected=true;s.append(o);});
+      box.append(zeile("Token",s,"Mit welchem Akteur-Token sie sich anmeldet (Identitaeten) — es nennt Akteure ihres Clients"));}
+    box.append(zeile("Dateien",h("input",{style:"flex:1;min-width:0",value:(wert.Dateien||[]).join(", "),placeholder:"Verzeichnisse, kommagetrennt",
+      oninput:e=>{const l=e.target.value.split(",").map(x=>x.trim()).filter(Boolean);if(l.length)wert.Dateien=l;else delete wert.Dateien;}}),"Aus welchen Verzeichnissen sie Dateien zeigen darf"));
+    box.append(h("div",{class:"gsec",title:"Wie die Werkbank sie beim Durchspielen startet — nur auf einem Rechner dieser Maschine"},"▶ Start"));
+    wert.Start=wert.Start||{};
+    [["Projekt","ein .NET-Projekt, relativ zur Solution"],["Skript","ein Python-Skript, relativ zur Solution"],["Python","Interpreter (leer = der der Umgebung)"]].forEach(([f,ph])=>
+      box.append(zeile(f,h("input",{style:"flex:1;min-width:0",value:wert.Start[f]??"",placeholder:ph,oninput:e=>{const v=e.target.value.trim();if(v)wert.Start[f]=v;else delete wert.Start[f];}}))));
+    // Je Quelle der App (aus dem Code): ihr Formular aus der Quellart.
+    const quellen=(ap&&ap.quellen)||[];
+    if(!quellen.length)box.append(h("div",{class:"gi-hint"},wert.App+" hat keine Quellen — alles, was ihr Client sendet, gibt die App selbst hinein."));
+    const qboxen=quellen.map(q=>{const qb=h("div",{},h("div",{class:"gsec",title:q.quellart},"⚡ "+q.name+" · "+q.quellart),h("div",{class:"gi-hint"},"lädt …"));box.append(qb);return [q,qb];});
+    const knoepfe=h("div",{class:"frow"},h("button",{class:"act go",onclick:()=>instanzGeste(appPfad(name),"POST",instSauber(wert),"📦 App-Instanz "+name)},"💾 Speichern"),
+      h("button",{class:"act",onclick:async()=>{if(!confirm("App-Instanz "+name+" aus „"+(WB.umgName||"?")+"“ entfernen?"))return;
+        if(await instanzGeste(appPfad(name),"DELETE",undefined,"📦 App-Instanz "+name+" entfernt"))komSchliesse();}},"✕ Entfernen"));
+    box.append(knoepfe);
+    qboxen.forEach(([q,qb])=>(async()=>{let sch;try{sch=await wbJson("/api/werkbank/quelleschema?art="+encodeURIComponent(q.quellart||""));}catch(e){sch={fehler:e.message};}
+      qb.lastChild.remove();if(sch.fehler){qb.append(h("div",{class:"gi-hint",style:"color:#cf6f68"},sch.fehler));return;}
+      wert.Quellen=wert.Quellen||{};const w=wert.Quellen[q.name]=wert.Quellen[q.name]||{};
+      (sch.technik||[]).forEach(t=>{w.Technik=w.Technik||{};const s=h("select",{onchange:e=>instSetze(w.Technik,t.schnittstelle,e.target.value||null)},h("option",{value:""},"— wählen"));
+        t.umsetzungen.forEach(u=>{const o=h("option",{value:u},u);if(w.Technik[t.schnittstelle]===u)o.selected=true;s.append(o);});qb.append(zeile("⚙ "+t.schnittstelle,s));});
+      (sch.konfigs||[]).forEach(c=>(c.felder||[]).forEach(f=>qb.append(zeile(f.feld,instFeld(w,f.feld,f.typ.replace(/\?$/,""),{standard:f.standard,werte:f.werte}),c.record+" · "+f.typ
+        +(sch.annahme&&f.feld==="Pfad"?" — Pflicht, je Umgebung eindeutig: POST "+(sch.route||"")+"/<Pfad>":"")
+        +(sch.annahme&&f.feld==="Schluessel"?" — ein Geheimnis: als ${env:NAME} eintragen; der Absender schickt es im Kopf „schluessel“":"")))));})());}
   function instanzPanel(body,name){const wert=JSON.parse(JSON.stringify((WB.instanzen||{})[name]||{}));
     body.append(h("div",{class:"gi-hint"},"umgebungen/"+(WB.umgName||"?")+"/graphen/"+name+".json — leer = Standard; ${branch} und ${env:NAME} werden beim Start ersetzt. Wirksam nach ⟳."));
     const box=h("div",{},h("div",{class:"gi-hint"},"lädt …"));body.append(box);
@@ -4575,8 +4697,16 @@
       if(sch.fehler){box.append(h("div",{class:"gi-hint",style:"color:#cf6f68"},sch.fehler));return;}
       // Den Akteur einer Kette bringt ihr Auslöser mit — ein Akteur an der Instanz (alte Datei) fällt beim Schreiben weg.
       if(wert.Akteur){box.append(h("div",{class:"gi-hint",style:"color:#cf6f68"},"⚠ Akteur „"+wert.Akteur+"“ steht nicht mehr an der Instanz (den Akteur bringt der Auslöser mit) — fällt beim Schreiben weg."));delete wert.Akteur;}
-      box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Rechner"),h("input",{value:wert.Rechner||"",placeholder:sch.rechnerPflicht?"Pflicht im Cluster (Zustand)":"ohne = auf jedem Host",
-        oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}})));
+      // Der Rechner: einer des Backends (Karte Backend der Fläche) oder keiner — dann läuft die Instanz auf jedem Rechner des Backends.
+      {const R=flRe(),wahl=h("div",{class:"fl-re-chips"});
+        const zeichne=()=>{wahl.textContent="";const alle=[null,...R.backend,...(wert.Rechner&&!R.backend.includes(wert.Rechner)?[wert.Rechner]:[])];
+          alle.forEach(r=>{const fremd=r&&!R.backend.includes(r);
+            wahl.append(h("button",{class:"fl-re-chip wahl"+((wert.Rechner||null)===r?" an":"")+(fremd?" befund":""),
+              title:r==null?"Ohne Rechner: auf jedem Rechner des Backends"+(sch.rechnerPflicht&&!R.einzelknoten?" — mit Zustand im Cluster nicht erlaubt":""):fremd?"⚠ "+r+" gehört nicht zum Backend":"Nur auf "+r,
+              onclick:()=>{if(r==null)delete wert.Rechner;else wert.Rechner=r;zeichne();}},r==null?"überall":"🖥 "+r+(fremd?" ⚠":"")));});};
+        zeichne();
+        box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Rechner"),wahl,
+          sch.rechnerPflicht&&!R.einzelknoten?h("span",{class:"slotlbl",style:"opacity:.7"},"Zustand: im Cluster Pflicht"):null));}
       // Stränge: so viele Ketten rechnet die Instanz zugleich, je Host, der sie hält (1 = der Reihe nach); leer = der Standard.
       box.append(h("div",{class:"frow",title:"So viele Ketten rechnet die Instanz zugleich, je Host — 1 = eine nach der anderen; Parallel am Knoten bleibt seine Obergrenze"},
         h("span",{class:"slotlbl"},"Stränge"),h("input",{value:wert.Straenge??"",placeholder:"Standard "+(sch.straengeStandard??""),
@@ -4596,8 +4726,9 @@
   // ── Befunde an der Karte: Compiler/Analyzer (Typ + Member aus dem Syntaxbaum) und Boot-Fehler (Karte im Wirker-Format) ──
   // Die Karte zu einer stabilen Id (Werkbank P4.8): Wirker-Ids und natürliche Schlüssel liefert der Server als _id (decide:A/C, fluss:P#k,
   //   prozess:P#A→C, funktion:F, projektion:P …); Karten mit Namens-Id (rec:/agg:/enum:/saga:/host:) sind schon die Karten-Id.
-  //   Ein Eingang eines Clients (eingang:Client/Eingang) liegt an der Karte seines Clients.
-  const eingangsClient=id=>id&&id.startsWith("eingang:")?"client:"+id.slice(8).split("/")[0]:id;
+  //   Eine Quelle einer App-Instanz (eingang:Instanz/Quelle) liegt an der Karte des Clients, den die App umsetzt.
+  const eingangsClient=id=>{if(!id||!id.startsWith("eingang:"))return id;const A=(flRe().apps||{})[id.slice(8).split("/")[0]];
+    return A&&A.client?"client:"+A.client:id;};
   function karteVonId(id){if(!id)return null;if(NODEBY.has(id))return id;id=eingangsClient(id);
     const n=graphNodes().find(x=>x.ref&&x.ref._id===id&&x.kind!=="host");return n?n.id:null;}
   function wbZiel(d){
@@ -4646,6 +4777,7 @@
   async function wbLadeUmgebung(){const n=WB.zustand&&WB.zustand.aktiv;if(!n)return;
     try{WB.umg=await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(n));WB.umgName=n;WB.dirty=false;}catch(e){WB.umg=null;}
     try{WB.instanzen=await wbJson("/api/werkbank/instanzen/"+encodeURIComponent(n));}catch(e){WB.instanzen={};}
+    try{WB.apps=await wbJson("/api/werkbank/apps/"+encodeURIComponent(n));}catch(e){WB.apps={};}
     await wbLadeTechnikWahl();}
   async function wbLadeTechnikWahl(){try{WB.technikWahl=await wbJson("/api/werkbank/technikwahl");}catch(e){WB.technikWahl={};}}
   async function wbLadeUhr(){try{WB.uhr=await wbJson("/api/werkbank/uhr");}catch(e){WB.uhr=null;}}
@@ -4752,7 +4884,7 @@
       tab("vorgaenge","☰ Vorgänge"+(SP.gewaehlt?" · "+spTitel():""),"Vorgänge aus dem Log des laufenden Hosts — wählen = Spur auf dem Board"),
       tab("zeit","⏱ Zeitleiste","Bahnen je Baustein; der Schieber spielt die Aufzeichnung des gewählten Vorgangs ab"),
       tab("konsole","⌨ Konsole · als Akteur","Command oder Query als Akteur an den echten Host (Token → Akteur-Tor)"),
-      tab("worker","▶ Worker"+(wl?" ("+wl+" läuft)":""),"Externe Funktions-Worker (Laufort Extern) starten und stoppen"),
+      tab("worker","▶ Apps"+(wl?" ("+wl+" läuft)":""),"App-Instanzen dieser Maschine starten und stoppen (Start in apps/<instanz>.json)"),
       tab("meldungen","⚠ Meldungen"+(fehler?" ("+fehler+")":""),"Build- und Boot-Meldungen des letzten ⟳ — Klick führt zur Karte"),
       h("span",{class:"sp"}),
       h("button",{class:"ds-tab"+(SP.pulsAn?" an":""),title:"Live-Puls ohne gewählten Vorgang: Zähler und „zuletzt“ je Karte, Kantendicke nach Menge, Stau, nie benutzte Kanten blass",
@@ -4801,24 +4933,30 @@
 
   // ── Worker (Laufort Extern) ──
   function dsWorkerTab(box){const ws=DS.worker;
-    if(!ws.length){box.append(h("div",{class:"gi-hint"},"Keine Funktionen in „"+aktivName()+"“ gebunden."));return;}
+    if(!ws.length){box.append(h("div",{class:"gi-hint"},"Keine App-Instanzen in „"+aktivName()+"“ — ＋ App an einem Rechner der Fläche."));return;}
     const t=h("div",{class:"ds-worker"});ws.forEach(w=>t.append(dsWorkerZeile(w)));box.append(t);}
   function dsWorkerZeile(w){const z=h("div",{class:"ds-wz"});
-    z.append(h("b",{},"ƒ "+w.funktion),h("span",{class:"wb-chip"+(w.laufort==="Extern"?"":" grau")},w.laufort));
-    if(w.laufort!=="Extern"){z.append(h("span",{class:"ds-zeit"},"rechnet im Host (C#-Implementierung)"));return z;}
-    if(!w.worker){z.append(h("span",{class:"ds-zeit"},"kein Worker konfiguriert (Funktionen:"+w.funktion+":Worker)"));return z;}
-    z.append(h("code",{},w.worker));
+    // Ein Rechnerdienst (⟳ startet ihn nach dem Host): er trägt die Quellen der App-Instanzen seines Rechners.
+    if(w.dienst){z.append(h("b",{},"🖥 Rechnerdienst "+w.rechner),h("span",{class:"wb-chip grau"},"Quellen der App-Instanzen auf "+w.rechner),
+        w.laeuft?h("span",{class:"wb-chip gut"},"● läuft · PID "+w.pid):h("span",{class:"wb-chip "+(w.exitCode?"rot":"grau")},w.exitCode?"beendet (Exit "+w.exitCode+")":"○ beendet — keine Quellen"),
+        h("button",{class:"act",title:"Ausgabe des Rechnerdiensts",onclick:()=>dsWorkerLog(w.instanz)},"Log"));
+      if(w.zuletzt)z.append(h("div",{class:"ds-zeit",style:"flex-basis:100%;overflow-wrap:anywhere"},"› "+w.zuletzt));
+      return z;}
+    z.append(h("b",{},"📦 "+w.instanz),h("span",{class:"wb-chip grau"},w.app+" · 🖥 "+w.rechner+(w.port?" :"+w.port:"")));
+    if(!w.lokal){z.append(h("span",{class:"ds-zeit"},"läuft auf "+w.rechner+" — die Werkbank startet nur Apps auf dieser Maschine"));return z;}
+    if(!w.start){z.append(h("span",{class:"ds-zeit"},"kein Start — ihre Quellen trägt der Rechnerdienst von "+w.rechner+"; einen eigenen Prozess nennt apps/"+w.instanz+".json → Start"));return z;}
+    z.append(h("code",{},w.start));
     z.append(w.laeuft?h("span",{class:"wb-chip gut"},"● läuft · PID "+w.pid):w.exitCode!=null?h("span",{class:"wb-chip rot"},"beendet (Exit "+w.exitCode+")"):h("span",{class:"wb-chip grau"},"○ steht"));
-    z.append(w.laeuft?h("button",{class:"act",onclick:()=>dsWorker(w.funktion,"stopp")},"■ Stoppen"):h("button",{class:"act go",onclick:()=>dsWorker(w.funktion,"start")},"▶ Worker starten"));
-    z.append(h("button",{class:"act",title:"Ausgabe des Workers",onclick:()=>dsWorkerLog(w.funktion)},"Log"));
+    z.append(w.laeuft?h("button",{class:"act",onclick:()=>dsWorker(w.instanz,"stopp")},"■ Stoppen"):h("button",{class:"act go",onclick:()=>dsWorker(w.instanz,"start")},"▶ Starten"));
+    z.append(h("button",{class:"act",title:"Ausgabe der App",onclick:()=>dsWorkerLog(w.instanz)},"Log"));
     if(w.zuletzt)z.append(h("div",{class:"ds-zeit",style:"flex-basis:100%;overflow-wrap:anywhere"},"› "+w.zuletzt));
     return z;}
   async function dsWorker(f,aktion){let r;try{r=await wbJson("/api/werkbank/worker/"+encodeURIComponent(f)+"/"+aktion,{method:"POST"});}catch(e){r={ok:false,fehler:e.message};}
-    if(!r.ok){deFlash("⚠ Worker "+f+": "+(r.fehler||"?"),false);const out=wbOut(true);if(out){wbZeile(out,"✗ Worker "+f+": "+r.fehler,"rot");(r.log||[]).forEach(l=>wbZeile(out,l));}}
-    else deFlash(aktion==="start"?"▶ Worker "+f+" läuft (PID "+r.pid+")":"■ Worker "+f+" gestoppt",true);
+    if(!r.ok){deFlash("⚠ "+f+": "+(r.fehler||"?"),false);const out=wbOut(true);if(out){wbZeile(out,"✗ "+f+": "+r.fehler,"rot");(r.log||[]).forEach(l=>wbZeile(out,l));}}
+    else deFlash(aktion==="start"?"▶ "+f+" läuft (PID "+r.pid+")":"■ "+f+" gestoppt",true);
     await dsTakt(true);}
   async function dsWorkerLog(f){const out=wbOut(true);if(!out)return;let l=[];try{l=await wbJson("/api/werkbank/worker/"+encodeURIComponent(f)+"/log");}catch(e){}
-    wbZeile(out,"▶ Worker "+f);out.append(h("pre",{class:"wb-log"},l.length?l.join("\n"):"(keine Ausgabe)"));}
+    wbZeile(out,"▶ "+f);out.append(h("pre",{class:"wb-log"},l.length?l.join("\n"):"(keine Ausgabe)"));}
 
   // ── An den Karten: Funktion (Worker) ──
   function dsBadge(n){if(n.kind!=="funktion"||!n.ref)return null;
@@ -4848,7 +4986,7 @@
       const t=(DS.ident&&DS.ident.tokens)||[];if(!t.some(x=>x.token===DS.token))DS.token=(t.find(x=>x.token===lsHole("ds.token"))||t[0]||{}).token||null;
       DS.schemas={};await dsRechte();DS.sig="";}
     try{DS.worker=(await wbJson("/api/werkbank/worker")).worker||[];}catch(e){DS.worker=[];}
-    const sig=JSON.stringify(DS.worker.map(w=>[w.funktion,w.laufort,w.laeuft,w.exitCode,w.zuletzt]));
+    const sig=JSON.stringify(DS.worker.map(w=>[w.instanz,w.laeuft,w.exitCode,w.zuletzt]));
     if(sig===DS.sig&&erzwingen!==true)return;
     DS.sig=sig;
     // Konsole offen: nur die Reiter auffrischen (das Formular behält Fokus); sonst die ganze Leiste.
